@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+.next/
+out/
+dist/
+build/
+
+# environment files (NEVER commit these)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+pnpm-error.log*
+logs/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# runtime / tooling
+coverage/
+.vercel/
+.turbo/
+.cache/
+
+# lpc sprite assets — populated by `pnpm fetch:lpc`, kept out of git
+# to keep the repo lean and avoid bloating commits with third-party PNGs
+public/lpc/*.png
+!public/lpc/LICENSE.txt
+
+# local tooling state (opencode / anomaly skill registry cache + docs)
+.atl/

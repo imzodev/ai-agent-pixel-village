@@ -1,0 +1,3 @@
+Character sprites from the Universal LPC Spritesheet Character Generator
+https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator
+Licensed CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0. Credits to the LPC artists (Stephen Challener (Redshrike), Johannes Sjölund (wulax), bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), Matthew Krohn (makrohn), Joe White, Nila122, David Conway Jr. (JaidynReiman), Carlo Enrico Victoria (Nemisys), Thane Brimhall (pennomi), Manuel Riecke (MrBeast), Lanea Zimmerman (Sharm), and others).
