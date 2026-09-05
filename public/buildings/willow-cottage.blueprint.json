@@ -1,0 +1,835 @@
+{
+  "$schema": "thegrove-blueprint/v1",
+  "name": "Willow Cottage",
+  "slug": "willow-cottage",
+  "tileSize": 16,
+  "grid": {
+    "cols": 9,
+    "rows": 8
+  },
+  "layers": [
+    "ground",
+    "structure",
+    "roof",
+    "decor"
+  ],
+  "tilesUsed": [
+    "barrel",
+    "bush",
+    "chimney.body",
+    "chimney.top",
+    "crate",
+    "door.bottom",
+    "door.top",
+    "fence.seg",
+    "flower.red",
+    "flower.white",
+    "flower.yellow",
+    "fx.shadow.eave",
+    "grass.a",
+    "grass.b",
+    "grass.c",
+    "path.stone",
+    "roof.straw.ridge.l",
+    "roof.straw.ridge.m",
+    "roof.straw.ridge.r",
+    "roof.straw.slope.l",
+    "roof.straw.slope.m",
+    "roof.straw.slope.r",
+    "timber.post.l",
+    "timber.post.r",
+    "tree.top",
+    "tree.trunk",
+    "wall.plaster",
+    "wall.stone.base",
+    "window.shutter",
+    "window.square"
+  ],
+  "stats": {
+    "totalTiles": 128,
+    "perLayer": {
+      "ground": 72,
+      "structure": 18,
+      "roof": 18,
+      "decor": 20
+    }
+  },
+  "placements": [
+    {
+      "x": 0,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 1,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 3,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 5,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 6,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 7,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 8,
+      "y": 0,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 0,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 1,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 6,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 7,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 8,
+      "y": 1,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 1,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 6,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 7,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 8,
+      "y": 2,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 0,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 1,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 8,
+      "y": 3,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 0,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 1,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 8,
+      "y": 4,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 0,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 1,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 0,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.b"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 0,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 1,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 2,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 3,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 4,
+      "y": 7,
+      "layer": "ground",
+      "tile": "path.stone"
+    },
+    {
+      "x": 5,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 6,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.c"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 8,
+      "y": 7,
+      "layer": "ground",
+      "tile": "grass.a"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "layer": "structure",
+      "tile": "timber.post.l"
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "layer": "structure",
+      "tile": "wall.plaster"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "layer": "structure",
+      "tile": "wall.plaster"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "layer": "structure",
+      "tile": "wall.plaster"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "layer": "structure",
+      "tile": "wall.plaster"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "layer": "structure",
+      "tile": "timber.post.r"
+    },
+    {
+      "x": 2,
+      "y": 5,
+      "layer": "structure",
+      "tile": "timber.post.l"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "layer": "structure",
+      "tile": "window.shutter"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "layer": "structure",
+      "tile": "door.top"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "layer": "structure",
+      "tile": "wall.plaster"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "layer": "structure",
+      "tile": "window.square"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "layer": "structure",
+      "tile": "timber.post.r"
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "layer": "structure",
+      "tile": "timber.post.l"
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "layer": "structure",
+      "tile": "wall.stone.base"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "layer": "structure",
+      "tile": "door.bottom"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "layer": "structure",
+      "tile": "wall.stone.base"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "layer": "structure",
+      "tile": "wall.stone.base"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "layer": "structure",
+      "tile": "timber.post.r"
+    },
+    {
+      "x": 2,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.l"
+    },
+    {
+      "x": 3,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.m"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.m"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.m"
+    },
+    {
+      "x": 6,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.m"
+    },
+    {
+      "x": 7,
+      "y": 1,
+      "layer": "roof",
+      "tile": "roof.straw.ridge.r"
+    },
+    {
+      "x": 2,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.l"
+    },
+    {
+      "x": 3,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 4,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 5,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 6,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 7,
+      "y": 2,
+      "layer": "roof",
+      "tile": "roof.straw.slope.r"
+    },
+    {
+      "x": 2,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.l"
+    },
+    {
+      "x": 3,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.m"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "layer": "roof",
+      "tile": "roof.straw.slope.r"
+    },
+    {
+      "x": 6,
+      "y": 1,
+      "layer": "decor",
+      "tile": "chimney.top"
+    },
+    {
+      "x": 6,
+      "y": 2,
+      "layer": "decor",
+      "tile": "chimney.body"
+    },
+    {
+      "x": 0,
+      "y": 4,
+      "layer": "decor",
+      "tile": "tree.top"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "layer": "decor",
+      "tile": "fx.shadow.eave"
+    },
+    {
+      "x": 0,
+      "y": 5,
+      "layer": "decor",
+      "tile": "tree.trunk"
+    },
+    {
+      "x": 0,
+      "y": 7,
+      "layer": "decor",
+      "tile": "flower.white"
+    },
+    {
+      "x": 2,
+      "y": 7,
+      "layer": "decor",
+      "tile": "flower.red"
+    },
+    {
+      "x": 5,
+      "y": 7,
+      "layer": "decor",
+      "tile": "flower.yellow"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "layer": "decor",
+      "tile": "fence.seg"
+    },
+    {
+      "x": 8,
+      "y": 7,
+      "layer": "decor",
+      "tile": "fence.seg"
+    },
+    {
+      "x": 1,
+      "y": 6,
+      "layer": "decor",
+      "tile": "crate"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "layer": "decor",
+      "tile": "barrel"
+    },
+    {
+      "x": 1,
+      "y": 7,
+      "layer": "decor",
+      "tile": "bush"
+    },
+    {
+      "x": 3,
+      "y": 7,
+      "layer": "decor",
+      "tile": "flower.white"
+    },
+    {
+      "x": 6,
+      "y": 7,
+      "layer": "decor",
+      "tile": "flower.red"
+    }
+  ],
+  "meta": {
+    "generator": "Sunnyside Blueprint Atelier",
+    "inspiredBy": "Sunnyside World by DanielDiggle — https://danieldiggle.itch.io/sunnyside",
+    "note": "Origin (0,0) is the top-left cell. Layers render in order; every placement occupies one 16x16 cell.",
+    "blurb": "A storybook starter home — thatched roof, timber-post corners, shuttered windows, and a small garden of roses and berry bushes framing the cobble step, with a weathered crate on one side and a barrel tucked by the picket fence.",
+    "roof": "straw",
+    "blueprintId": "willow-cottage"
+  }
+}

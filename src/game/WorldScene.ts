@@ -5,6 +5,10 @@ import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
 import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 
+const BLD_ATLAS_URL = "/buildings/thegrove-blueprint-atlas.png";
+const BLD_LEGEND_URL = "/buildings/thegrove-tile-legend.json";
+const BLD_BLUEPRINTS_URL = "/buildings/willow-cottage.blueprint.json";
+
 type Dir = keyof typeof ROWS;
 
 type CharEnt = {
@@ -52,6 +56,12 @@ export class WorldScene extends Phaser.Scene {
 
   constructor() {
     super("world");
+  }
+
+  preload() {
+    this.load.image("bld_atlas", BLD_ATLAS_URL);
+    this.load.json("bld_legend", BLD_LEGEND_URL);
+    this.load.json("bld_blueprints", BLD_BLUEPRINTS_URL);
   }
 
   create() {
@@ -171,8 +181,9 @@ export class WorldScene extends Phaser.Scene {
       const texKey = buildingTextureKey(view);
       let ent = this.buildingImgs.get(b.key);
       if (!ent) {
-        makeBuildingTexture(this, view);
+        if (!makeBuildingTexture(this, view)) continue;
         const img = this.add.image(b.tx * TILE, (b.ty + b.th) * TILE, texKey).setOrigin(0, 1).setDepth((b.ty + b.th) * TILE - 4);
+        img.setScale(TILE / 16);
         img.setInteractive({ useHandCursor: true });
         img.on("pointerdown", () => this.select({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(buildingDoor(b).x, buildingDoor(b).y) }));
         const door = buildingDoor(b);
@@ -180,7 +191,7 @@ export class WorldScene extends Phaser.Scene {
         ent = { img, texKey, glow };
         this.buildingImgs.set(b.key, ent);
       } else if (ent.texKey !== texKey) {
-        makeBuildingTexture(this, view);
+        if (!makeBuildingTexture(this, view)) continue;
         ent.img.setTexture(texKey); ent.texKey = texKey;
       }
     }

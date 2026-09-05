@@ -1,5 +1,10 @@
 import type Phaser from "phaser";
 import { BUILDINGS, MAP_H, MAP_W, PLAZA, POND, TILE, WORLD_H, WORLD_W, buildingDoor, mulberry32 } from "@/lib/worldmap";
+import { buildingTextureKey, makeBuildingTexture } from "./buildings";
+import type { BuildingView } from "./buildings";
+
+export type { BuildingView };
+export { buildingTextureKey, makeBuildingTexture };
 
 type Scene = Phaser.Scene;
 
@@ -9,12 +14,6 @@ function canvas(w: number, h: number) {
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
   return { c, ctx };
-}
-
-function shade(hex: string, amt: number) {
-  const n = parseInt(hex.slice(1), 16);
-  const f = (v: number) => Math.max(0, Math.min(255, Math.round(v + amt)));
-  return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
 export function pixelTexture(scene: Scene, key: string, rows: string[], palette: Record<string, string>, scale = 2) {
@@ -91,69 +90,6 @@ export function makeTreeTextures(scene: Scene) {
     }
     scene.textures.addCanvas(d.key, c);
   }
-}
-
-// ---------- Buildings ----------
-export type BuildingView = { key: string; name: string; kind: string; color: string; tw: number; th: number; reservable: boolean; sponsor: { businessName: string; brandColor: string } | null };
-
-export function buildingTextureKey(b: BuildingView) {
-  return `bld_${b.key}_${b.sponsor ? b.sponsor.businessName + b.sponsor.brandColor : "none"}`.replace(/[^a-zA-Z0-9_]/g, "");
-}
-
-export function makeBuildingTexture(scene: Scene, b: BuildingView) {
-  const key = buildingTextureKey(b);
-  if (scene.textures.exists(key)) return key;
-  const W = b.tw * TILE, H = b.th * TILE, ROOF = 30;
-  const { c, ctx } = canvas(W, H + ROOF);
-  const wall = b.color;
-  // wall
-  ctx.fillStyle = wall; ctx.fillRect(2, ROOF + 18, W - 4, H - 18);
-  ctx.fillStyle = shade(wall, -25); ctx.fillRect(2, ROOF + H - 6, W - 4, 6);
-  // timber lines
-  ctx.fillStyle = shade(wall, -45);
-  for (let x = 16; x < W - 8; x += 40) ctx.fillRect(x, ROOF + 18, 3, H - 18);
-  // roof
-  const roofColor = b.sponsor ? b.sponsor.brandColor : b.kind === "townhall" ? "#8a6a8a" : "#b0563f";
-  ctx.fillStyle = shade(roofColor, -30);
-  ctx.beginPath(); ctx.moveTo(0, ROOF + 22); ctx.lineTo(10, 4); ctx.lineTo(W - 10, 4); ctx.lineTo(W, ROOF + 22); ctx.fill();
-  ctx.fillStyle = roofColor;
-  ctx.beginPath(); ctx.moveTo(4, ROOF + 18); ctx.lineTo(12, 8); ctx.lineTo(W - 12, 8); ctx.lineTo(W - 4, ROOF + 18); ctx.fill();
-  ctx.fillStyle = "rgba(0,0,0,0.12)";
-  for (let y = 12; y < ROOF + 18; y += 8) ctx.fillRect(8 + (y - 12) * 0.3, y, W - 16 - (y - 12) * 0.6, 2);
-  // chimney
-  if (["bakery", "inn", "cafe", "workshop"].includes(b.kind)) { ctx.fillStyle = "#6a5a55"; ctx.fillRect(W - 40, 0, 12, 22); }
-  // windows
-  const winY = ROOF + 34;
-  const drawWin = (x: number) => {
-    ctx.fillStyle = "#3d2b1f"; ctx.fillRect(x - 1, winY - 1, 16, 18);
-    ctx.fillStyle = "#a9d7f2"; ctx.fillRect(x, winY, 14, 16);
-    ctx.fillStyle = "#3d2b1f"; ctx.fillRect(x + 6, winY, 2, 16); ctx.fillRect(x, winY + 7, 14, 2);
-    ctx.fillStyle = "#c4d6a5"; ctx.fillRect(x - 2, winY + 16, 18, 3);
-  };
-  drawWin(18);
-  if (W > 140) drawWin(W - 34);
-  if (W > 220) drawWin(W / 2 + 24);
-  // door
-  const dx = W / 2 - 11, dy = ROOF + H - 30;
-  ctx.fillStyle = "#3d2b1f"; ctx.fillRect(dx - 2, dy - 2, 26, 32);
-  ctx.fillStyle = "#7a4a2a"; ctx.fillRect(dx, dy, 22, 30);
-  ctx.fillStyle = "#e9c46a"; ctx.fillRect(dx + 16, dy + 14, 3, 3);
-  // sign
-  const signW = Math.min(W - 24, Math.max(90, b.name.length * 7 + 20));
-  const sx = W / 2 - signW / 2, sy = ROOF + 4;
-  ctx.fillStyle = "#3d2b1f"; ctx.fillRect(sx - 2, sy - 2, signW + 4, 22);
-  ctx.fillStyle = b.sponsor ? b.sponsor.brandColor : "#c8a06a"; ctx.fillRect(sx, sy, signW, 18);
-  ctx.fillStyle = b.sponsor ? "#ffffff" : "#2b1d14";
-  ctx.font = "bold 10px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  const label = b.sponsor ? b.sponsor.businessName.toUpperCase() : b.name;
-  ctx.fillText(label.length > 22 ? label.slice(0, 21) + "…" : label, W / 2, sy + 9, signW - 8);
-  if (b.sponsor) { ctx.fillStyle = "#ffd166"; ctx.fillRect(sx + 3, sy + 3, 4, 4); ctx.fillRect(sx + signW - 7, sy + 3, 4, 4); }
-  else if (b.reservable) {
-    ctx.fillStyle = "#fff3cd"; ctx.fillRect(W - 60, ROOF + H - 40, 52, 14);
-    ctx.fillStyle = "#7a4a2a"; ctx.font = "bold 8px monospace"; ctx.fillText("FOR RENT", W - 34, ROOF + H - 33);
-  }
-  scene.textures.addCanvas(key, c);
-  return key;
 }
 
 // ---------- Ground ----------

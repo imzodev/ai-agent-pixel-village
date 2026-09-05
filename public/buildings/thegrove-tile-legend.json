@@ -1,0 +1,882 @@
+{
+  "$schema": "thegrove-blueprint/tile-legend/v1",
+  "tileSize": 16,
+  "atlas": {
+    "cols": 9,
+    "rows": 8
+  },
+  "count": 67,
+  "tiles": [
+    {
+      "id": "grass.a",
+      "name": "Grass A",
+      "category": "ground",
+      "cell": {
+        "col": 0,
+        "row": 0
+      },
+      "px": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "grass.b",
+      "name": "Grass B",
+      "category": "ground",
+      "cell": {
+        "col": 1,
+        "row": 0
+      },
+      "px": {
+        "x": 16,
+        "y": 0
+      }
+    },
+    {
+      "id": "grass.c",
+      "name": "Grass C",
+      "category": "ground",
+      "cell": {
+        "col": 2,
+        "row": 0
+      },
+      "px": {
+        "x": 32,
+        "y": 0
+      }
+    },
+    {
+      "id": "dirt",
+      "name": "Packed Dirt",
+      "category": "ground",
+      "cell": {
+        "col": 3,
+        "row": 0
+      },
+      "px": {
+        "x": 48,
+        "y": 0
+      }
+    },
+    {
+      "id": "path.stone",
+      "name": "Cobble Path",
+      "category": "ground",
+      "cell": {
+        "col": 4,
+        "row": 0
+      },
+      "px": {
+        "x": 64,
+        "y": 0
+      }
+    },
+    {
+      "id": "wall.plaster",
+      "name": "Plaster Wall",
+      "category": "wall",
+      "cell": {
+        "col": 5,
+        "row": 0
+      },
+      "px": {
+        "x": 80,
+        "y": 0
+      }
+    },
+    {
+      "id": "timber.post.l",
+      "name": "Timber Post L",
+      "category": "wall",
+      "cell": {
+        "col": 6,
+        "row": 0
+      },
+      "px": {
+        "x": 96,
+        "y": 0
+      }
+    },
+    {
+      "id": "timber.post.r",
+      "name": "Timber Post R",
+      "category": "wall",
+      "cell": {
+        "col": 7,
+        "row": 0
+      },
+      "px": {
+        "x": 112,
+        "y": 0
+      }
+    },
+    {
+      "id": "timber.x",
+      "name": "Timber Cross",
+      "category": "wall",
+      "cell": {
+        "col": 8,
+        "row": 0
+      },
+      "px": {
+        "x": 128,
+        "y": 0
+      }
+    },
+    {
+      "id": "wall.wood",
+      "name": "Wood Planks",
+      "category": "wall",
+      "cell": {
+        "col": 0,
+        "row": 1
+      },
+      "px": {
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "id": "wall.plank.red",
+      "name": "Red Barn Planks",
+      "category": "wall",
+      "cell": {
+        "col": 1,
+        "row": 1
+      },
+      "px": {
+        "x": 16,
+        "y": 16
+      }
+    },
+    {
+      "id": "wall.log",
+      "name": "Log Wall",
+      "category": "wall",
+      "cell": {
+        "col": 2,
+        "row": 1
+      },
+      "px": {
+        "x": 32,
+        "y": 16
+      }
+    },
+    {
+      "id": "wall.stone",
+      "name": "Stone Wall",
+      "category": "wall",
+      "cell": {
+        "col": 3,
+        "row": 1
+      },
+      "px": {
+        "x": 48,
+        "y": 16
+      }
+    },
+    {
+      "id": "wall.stone.base",
+      "name": "Stone Foundation",
+      "category": "wall",
+      "cell": {
+        "col": 4,
+        "row": 1
+      },
+      "px": {
+        "x": 64,
+        "y": 16
+      }
+    },
+    {
+      "id": "door.top",
+      "name": "Door · Top",
+      "category": "opening",
+      "cell": {
+        "col": 5,
+        "row": 1
+      },
+      "px": {
+        "x": 80,
+        "y": 16
+      }
+    },
+    {
+      "id": "door.bottom",
+      "name": "Door · Bottom",
+      "category": "opening",
+      "cell": {
+        "col": 6,
+        "row": 1
+      },
+      "px": {
+        "x": 96,
+        "y": 16
+      }
+    },
+    {
+      "id": "door.barn.l",
+      "name": "Barn Door L",
+      "category": "opening",
+      "cell": {
+        "col": 7,
+        "row": 1
+      },
+      "px": {
+        "x": 112,
+        "y": 16
+      }
+    },
+    {
+      "id": "door.barn.r",
+      "name": "Barn Door R",
+      "category": "opening",
+      "cell": {
+        "col": 8,
+        "row": 1
+      },
+      "px": {
+        "x": 128,
+        "y": 16
+      }
+    },
+    {
+      "id": "window.square",
+      "name": "Square Window",
+      "category": "opening",
+      "cell": {
+        "col": 0,
+        "row": 2
+      },
+      "px": {
+        "x": 0,
+        "y": 32
+      }
+    },
+    {
+      "id": "window.shutter",
+      "name": "Shuttered Window",
+      "category": "opening",
+      "cell": {
+        "col": 1,
+        "row": 2
+      },
+      "px": {
+        "x": 16,
+        "y": 32
+      }
+    },
+    {
+      "id": "window.round",
+      "name": "Round Window",
+      "category": "opening",
+      "cell": {
+        "col": 2,
+        "row": 2
+      },
+      "px": {
+        "x": 32,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.ridge.m",
+      "name": "Roof straw · Ridge",
+      "category": "roof",
+      "cell": {
+        "col": 3,
+        "row": 2
+      },
+      "px": {
+        "x": 48,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.ridge.l",
+      "name": "Roof straw · Ridge L",
+      "category": "roof",
+      "cell": {
+        "col": 4,
+        "row": 2
+      },
+      "px": {
+        "x": 64,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.ridge.r",
+      "name": "Roof straw · Ridge R",
+      "category": "roof",
+      "cell": {
+        "col": 5,
+        "row": 2
+      },
+      "px": {
+        "x": 80,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.slope.m",
+      "name": "Roof straw · Slope",
+      "category": "roof",
+      "cell": {
+        "col": 6,
+        "row": 2
+      },
+      "px": {
+        "x": 96,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.slope.l",
+      "name": "Roof straw · Slope L",
+      "category": "roof",
+      "cell": {
+        "col": 7,
+        "row": 2
+      },
+      "px": {
+        "x": 112,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.straw.slope.r",
+      "name": "Roof straw · Slope R",
+      "category": "roof",
+      "cell": {
+        "col": 8,
+        "row": 2
+      },
+      "px": {
+        "x": 128,
+        "y": 32
+      }
+    },
+    {
+      "id": "roof.red.ridge.m",
+      "name": "Roof red · Ridge",
+      "category": "roof",
+      "cell": {
+        "col": 0,
+        "row": 3
+      },
+      "px": {
+        "x": 0,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.red.ridge.l",
+      "name": "Roof red · Ridge L",
+      "category": "roof",
+      "cell": {
+        "col": 1,
+        "row": 3
+      },
+      "px": {
+        "x": 16,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.red.ridge.r",
+      "name": "Roof red · Ridge R",
+      "category": "roof",
+      "cell": {
+        "col": 2,
+        "row": 3
+      },
+      "px": {
+        "x": 32,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.red.slope.m",
+      "name": "Roof red · Slope",
+      "category": "roof",
+      "cell": {
+        "col": 3,
+        "row": 3
+      },
+      "px": {
+        "x": 48,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.red.slope.l",
+      "name": "Roof red · Slope L",
+      "category": "roof",
+      "cell": {
+        "col": 4,
+        "row": 3
+      },
+      "px": {
+        "x": 64,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.red.slope.r",
+      "name": "Roof red · Slope R",
+      "category": "roof",
+      "cell": {
+        "col": 5,
+        "row": 3
+      },
+      "px": {
+        "x": 80,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.blue.ridge.m",
+      "name": "Roof blue · Ridge",
+      "category": "roof",
+      "cell": {
+        "col": 6,
+        "row": 3
+      },
+      "px": {
+        "x": 96,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.blue.ridge.l",
+      "name": "Roof blue · Ridge L",
+      "category": "roof",
+      "cell": {
+        "col": 7,
+        "row": 3
+      },
+      "px": {
+        "x": 112,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.blue.ridge.r",
+      "name": "Roof blue · Ridge R",
+      "category": "roof",
+      "cell": {
+        "col": 8,
+        "row": 3
+      },
+      "px": {
+        "x": 128,
+        "y": 48
+      }
+    },
+    {
+      "id": "roof.blue.slope.m",
+      "name": "Roof blue · Slope",
+      "category": "roof",
+      "cell": {
+        "col": 0,
+        "row": 4
+      },
+      "px": {
+        "x": 0,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.blue.slope.l",
+      "name": "Roof blue · Slope L",
+      "category": "roof",
+      "cell": {
+        "col": 1,
+        "row": 4
+      },
+      "px": {
+        "x": 16,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.blue.slope.r",
+      "name": "Roof blue · Slope R",
+      "category": "roof",
+      "cell": {
+        "col": 2,
+        "row": 4
+      },
+      "px": {
+        "x": 32,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.ridge.m",
+      "name": "Roof green · Ridge",
+      "category": "roof",
+      "cell": {
+        "col": 3,
+        "row": 4
+      },
+      "px": {
+        "x": 48,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.ridge.l",
+      "name": "Roof green · Ridge L",
+      "category": "roof",
+      "cell": {
+        "col": 4,
+        "row": 4
+      },
+      "px": {
+        "x": 64,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.ridge.r",
+      "name": "Roof green · Ridge R",
+      "category": "roof",
+      "cell": {
+        "col": 5,
+        "row": 4
+      },
+      "px": {
+        "x": 80,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.slope.m",
+      "name": "Roof green · Slope",
+      "category": "roof",
+      "cell": {
+        "col": 6,
+        "row": 4
+      },
+      "px": {
+        "x": 96,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.slope.l",
+      "name": "Roof green · Slope L",
+      "category": "roof",
+      "cell": {
+        "col": 7,
+        "row": 4
+      },
+      "px": {
+        "x": 112,
+        "y": 64
+      }
+    },
+    {
+      "id": "roof.green.slope.r",
+      "name": "Roof green · Slope R",
+      "category": "roof",
+      "cell": {
+        "col": 8,
+        "row": 4
+      },
+      "px": {
+        "x": 128,
+        "y": 64
+      }
+    },
+    {
+      "id": "awn.red.l",
+      "name": "Awning L",
+      "category": "awning",
+      "cell": {
+        "col": 0,
+        "row": 5
+      },
+      "px": {
+        "x": 0,
+        "y": 80
+      }
+    },
+    {
+      "id": "awn.red.m",
+      "name": "Awning",
+      "category": "awning",
+      "cell": {
+        "col": 1,
+        "row": 5
+      },
+      "px": {
+        "x": 16,
+        "y": 80
+      }
+    },
+    {
+      "id": "awn.red.r",
+      "name": "Awning R",
+      "category": "awning",
+      "cell": {
+        "col": 2,
+        "row": 5
+      },
+      "px": {
+        "x": 32,
+        "y": 80
+      }
+    },
+    {
+      "id": "fx.shadow.eave",
+      "name": "Eave Shadow",
+      "category": "fx",
+      "cell": {
+        "col": 3,
+        "row": 5
+      },
+      "px": {
+        "x": 48,
+        "y": 80
+      }
+    },
+    {
+      "id": "chimney.top",
+      "name": "Chimney Top",
+      "category": "decor",
+      "cell": {
+        "col": 4,
+        "row": 5
+      },
+      "px": {
+        "x": 64,
+        "y": 80
+      }
+    },
+    {
+      "id": "chimney.body",
+      "name": "Chimney Body",
+      "category": "decor",
+      "cell": {
+        "col": 5,
+        "row": 5
+      },
+      "px": {
+        "x": 80,
+        "y": 80
+      }
+    },
+    {
+      "id": "lantern.wall",
+      "name": "Wall Lantern",
+      "category": "decor",
+      "cell": {
+        "col": 6,
+        "row": 5
+      },
+      "px": {
+        "x": 96,
+        "y": 80
+      }
+    },
+    {
+      "id": "sign.star",
+      "name": "Star Sign",
+      "category": "decor",
+      "cell": {
+        "col": 7,
+        "row": 5
+      },
+      "px": {
+        "x": 112,
+        "y": 80
+      }
+    },
+    {
+      "id": "sign.mug",
+      "name": "Tavern Sign",
+      "category": "decor",
+      "cell": {
+        "col": 8,
+        "row": 5
+      },
+      "px": {
+        "x": 128,
+        "y": 80
+      }
+    },
+    {
+      "id": "barrel",
+      "name": "Barrel",
+      "category": "decor",
+      "cell": {
+        "col": 0,
+        "row": 6
+      },
+      "px": {
+        "x": 0,
+        "y": 96
+      }
+    },
+    {
+      "id": "crate",
+      "name": "Crate",
+      "category": "decor",
+      "cell": {
+        "col": 1,
+        "row": 6
+      },
+      "px": {
+        "x": 16,
+        "y": 96
+      }
+    },
+    {
+      "id": "anvil",
+      "name": "Anvil",
+      "category": "decor",
+      "cell": {
+        "col": 2,
+        "row": 6
+      },
+      "px": {
+        "x": 32,
+        "y": 96
+      }
+    },
+    {
+      "id": "fence.seg",
+      "name": "Fence",
+      "category": "decor",
+      "cell": {
+        "col": 3,
+        "row": 6
+      },
+      "px": {
+        "x": 48,
+        "y": 96
+      }
+    },
+    {
+      "id": "post.wood",
+      "name": "Wood Post",
+      "category": "decor",
+      "cell": {
+        "col": 4,
+        "row": 6
+      },
+      "px": {
+        "x": 64,
+        "y": 96
+      }
+    },
+    {
+      "id": "counter.slab",
+      "name": "Counter Slab",
+      "category": "decor",
+      "cell": {
+        "col": 5,
+        "row": 6
+      },
+      "px": {
+        "x": 80,
+        "y": 96
+      }
+    },
+    {
+      "id": "ivy",
+      "name": "Ivy",
+      "category": "decor",
+      "cell": {
+        "col": 6,
+        "row": 6
+      },
+      "px": {
+        "x": 96,
+        "y": 96
+      }
+    },
+    {
+      "id": "flower.red",
+      "name": "Red Bloom",
+      "category": "decor",
+      "cell": {
+        "col": 7,
+        "row": 6
+      },
+      "px": {
+        "x": 112,
+        "y": 96
+      }
+    },
+    {
+      "id": "flower.yellow",
+      "name": "Sun Bloom",
+      "category": "decor",
+      "cell": {
+        "col": 8,
+        "row": 6
+      },
+      "px": {
+        "x": 128,
+        "y": 96
+      }
+    },
+    {
+      "id": "flower.white",
+      "name": "Daisy",
+      "category": "decor",
+      "cell": {
+        "col": 0,
+        "row": 7
+      },
+      "px": {
+        "x": 0,
+        "y": 112
+      }
+    },
+    {
+      "id": "bush",
+      "name": "Berry Bush",
+      "category": "decor",
+      "cell": {
+        "col": 1,
+        "row": 7
+      },
+      "px": {
+        "x": 16,
+        "y": 112
+      }
+    },
+    {
+      "id": "tree.top",
+      "name": "Tree Canopy",
+      "category": "decor",
+      "cell": {
+        "col": 2,
+        "row": 7
+      },
+      "px": {
+        "x": 32,
+        "y": 112
+      }
+    },
+    {
+      "id": "tree.trunk",
+      "name": "Tree Trunk",
+      "category": "decor",
+      "cell": {
+        "col": 3,
+        "row": 7
+      },
+      "px": {
+        "x": 48,
+        "y": 112
+      }
+    }
+  ]
+}
