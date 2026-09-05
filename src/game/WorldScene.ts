@@ -389,6 +389,13 @@ export class WorldScene extends Phaser.Scene {
       if (this.keys.W.isDown || this.keys.UP.isDown) vy -= 1;
       if (this.keys.S.isDown || this.keys.DOWN.isDown) vy += 1;
     }
+    // Snap to dominant axis so WASD is cardinal-only (matches the facing
+    // selection below). Click-to-move NPCs stay diagonal — that's correct
+    // for moving toward a specific point.
+    if (vx !== 0 && vy !== 0) {
+      if (Math.abs(vx) > Math.abs(vy)) vy = 0;
+      else vx = 0;
+    }
     if (vx || vy) { this.moveTarget = null; this.marker.setVisible(false); }
     else if (this.moveTarget) {
       const dx = this.moveTarget.x - p.sprite.x, dy = this.moveTarget.y - p.sprite.y;
