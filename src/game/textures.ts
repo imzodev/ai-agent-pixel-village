@@ -144,7 +144,10 @@ export function makeGroundTexture(scene: Scene) {
 }
 
 export function makeAllTextures(scene: Scene) {
-  makeGroundTexture(scene);
+  // The procedural `ground` canvas (plaza cobbles, paths, pond, fountain,
+  // fence pens) is no longer drawn — the Tiled chunk maps render the entire
+  // visible terrain. Trees, creatures and node textures are still needed
+  // because the chunk maps only carry static tiles.
   makeTreeTextures(scene);
   makeCreatureTextures(scene);
   makePropTextures(scene);

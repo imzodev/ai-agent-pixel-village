@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
-import { BUILDINGS, TILE, WORLD_H, WORLD_W, buildingDoor, getTrees, isWalkable, PLAZA } from "@/lib/worldmap";
+import { BUILDINGS, TILE, WORLD_H, WORLD_W, buildingDoor, isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
 import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
+import { buildTilemap, loadTilemapAssets, WORLD_PX_H, WORLD_PX_W } from "./worldTilemap";
 
 const BLD_ATLAS_URL = "/buildings/thegrove-blueprint-atlas.png";
 const BLD_LEGEND_URL = "/buildings/thegrove-tile-legend.json";
@@ -62,15 +63,12 @@ export class WorldScene extends Phaser.Scene {
     this.load.image("bld_atlas", BLD_ATLAS_URL);
     this.load.json("bld_legend", BLD_LEGEND_URL);
     this.load.json("bld_blueprints", BLD_BLUEPRINTS_URL);
+    loadTilemapAssets(this);
   }
 
   create() {
     makeAllTextures(this);
-    this.add.image(0, 0, "ground").setOrigin(0).setDepth(-10);
-    // trees
-    for (const t of getTrees()) {
-      this.add.image(t.x, t.y, `tree_${t.variant}`).setOrigin(0.5, 0.92).setDepth(t.y);
-    }
+    buildTilemap(this);
     // placeholder char texture
     if (!this.textures.exists("ph_char")) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
@@ -80,9 +78,9 @@ export class WorldScene extends Phaser.Scene {
     }
     this.marker = this.add.image(0, 0, "marker").setDepth(20000).setVisible(false);
 
-    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.setBounds(0, 0, WORLD_PX_W, WORLD_PX_H);
     this.cameras.main.setZoom(2);
-    this.cameras.main.centerOn(PLAZA.x + PLAZA.w / 2, PLAZA.y + PLAZA.h / 2);
+    this.cameras.main.centerOn(WORLD_PX_W / 2, WORLD_PX_H / 2);
     this.cameras.main.setRoundPixels(true);
 
     // overlays
