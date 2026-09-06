@@ -281,28 +281,10 @@ async function seed() {
     const bRows = await tx.select().from(buildings);
     const bByKey = new Map(bRows.map((b) => [b.key, b]));
 
-    // Demo sponsor: the bakery is reserved by a real-looking business so the
-    // "recipe + discount code in one conversation" loop works from day one.
-    const bakery = bByKey.get("bakery")!;
-    const [sp] = await tx
-      .insert(sponsors)
-      .values({
-        businessName: "Hearthstone Bakery Co.",
-        contactEmail: "hello@hearthstone.example",
-        website: "https://hearthstone.example",
-        brandColor: "#d9822b",
-        tagline: "Real bread, slow risen.",
-        pitch: "Hearthstone's weekend cinnamon knots are half price for grove villagers, and the sourdough subscription delivers every Saturday.",
-        persona: NPC_DEFS[0].persona,
-        agentName: "Marigold",
-        discountCode: "GROVE20",
-        discountText: "20% off any weekend order at Hearthstone Bakery Co.",
-        buildingId: bakery.id,
-        status: "active",
-        ownerToken: "demo-" + randomBytes(8).toString("hex"),
-      })
-      .returning();
-    await tx.update(buildings).set({ sponsorId: sp.id }).where(eq(buildings.id, bakery.id));
+    // Sponsored buildings are intentionally disabled for now — keep the
+    // schema in place but skip the demo sponsor insert so the bakery shows
+    // up unreserved during initial development.
+    void bByKey;
 
     const npcIds = new Map<string, number>();
     for (const n of NPC_DEFS) {
@@ -329,7 +311,7 @@ async function seed() {
           appearance: n.appearance,
           mood: n.mood,
           buildingId,
-          sponsorId: n.sponsored ? sp.id : null,
+          sponsorId: null,
         })
         .onConflictDoNothing()
         .returning();
@@ -342,7 +324,7 @@ async function seed() {
         .insert(missions)
         .values({
           key: m.key, npcId, title: m.title, description: m.description, offerLine: m.offerLine, completeLine: m.completeLine,
-          requirement: m.requirement, reward: m.reward, repeatable: !!m.repeatable, sponsorId: m.sponsored ? sp.id : null,
+          requirement: m.requirement, reward: m.reward, repeatable: !!m.repeatable, sponsorId: null,
         })
         .onConflictDoNothing();
     }
