@@ -51,3 +51,7 @@ public/lpc/*.png
 
 # local tooling state (opencode / anomaly skill registry cache + docs)
 .atl/
+# stray test screenshots and dev-server scratch output in the repo root
+/*.png
+dev-*.err
+dev-*.log
