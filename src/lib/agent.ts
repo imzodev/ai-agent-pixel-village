@@ -130,11 +130,28 @@ async function llmReply(input: BrainInput): Promise<BrainOutput | null> {
   return parseBrainJson(r.text, input, "llm");
 }
 
+// Common reasoning-style block tags leaked by reasoning models (MiniMax-M3
+// emits <think>...</think>; deepseek-reasoner uses others). Strip them all,
+// including orphan openers (no closing tag — model forgot to close) and
+// self-closing forms.
+const REASONING_TAGS = ["think", "reasoning", "analysis", "thought", "thinking", "reflection", "scratchpad", "plan", "inner_monologue"];
+
+function stripReasoning(text: string): string {
+  let t = text;
+  const closed = new RegExp(`<(${REASONING_TAGS.join("|")})\\b[\\s\\S]*?<\\/\\1>`, "gi");
+  t = t.replace(closed, "");
+  const selfClose = new RegExp(`<(${REASONING_TAGS.join("|")})\\b[^>]*\\/>`, "gi");
+  t = t.replace(selfClose, "");
+  // Orphan opener: drop everything from the tag to end (the JSON usually
+  // comes after; better to keep the JSON than to leave half-thought on screen).
+  const orphan = new RegExp(`<(${REASONING_TAGS.join("|")})\\b[^>]*>[\\s\\S]*$`, "gi");
+  t = t.replace(orphan, "");
+  return t.trim();
+}
+
 function parseBrainJson(raw: string, input: BrainInput, source: BrainOutput["source"]): BrainOutput | null {
   const valid = new Set(input.offers.map((o) => o.id));
-  // Strip reasoning blocks that some models (notably MiniMax-M3) emit inline
-  // before/around the JSON. They leak as visible text otherwise.
-  raw = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  raw = stripReasoning(raw);
   // Some models occasionally return plain prose instead of JSON. Don't
   // silently fall back to scripted in that case — surface the text so the
   // player still sees an in-character reply.
