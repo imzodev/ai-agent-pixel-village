@@ -1,4 +1,5 @@
 import type { characters, npcs, sponsors } from "@/db/schema";
+import { getActiveProvider, chatWithFallback, type ChatMessage } from "@/lib/llm";
 
 export type Offer =
   | { id: string; type: "mission"; missionId: number; label: string; line: string }
@@ -26,7 +27,7 @@ export async function generateReply(input: BrainInput): Promise<BrainOutput> {
     const r = await remoteReply(input).catch(() => null);
     if (r) return r;
   }
-  if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
+  if (getActiveProvider()) {
     const r = await llmReply(input).catch((e) => {
       console.error("llm error", e);
       return null;
@@ -115,44 +116,18 @@ Reply with STRICT JSON only: {"text": "<1-3 short sentences, in character>", "of
 
 async function llmReply(input: BrainInput): Promise<BrainOutput | null> {
   const sys = systemPrompt(input);
-  const msgs = [
-    ...input.history.slice(-8).map((h) => ({ role: h.role === "npc" ? "assistant" : "user", content: h.text })),
+  const role = (h: { role: string }): "user" | "assistant" => (h.role === "npc" ? "assistant" : "user");
+  const msgs: ChatMessage[] = [
+    { role: "system", content: sys },
+    ...input.history.slice(-8).map((h) => ({ role: role(h), content: h.text })),
     { role: "user", content: input.message || "(walks up and waves)" },
   ];
-  let raw = "";
-  if (process.env.OPENAI_API_KEY) {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-        messages: [{ role: "system", content: sys }, ...msgs],
-        response_format: { type: "json_object" },
-        temperature: 0.8,
-        max_tokens: 300,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`openai ${res.status}`);
-    const data = await res.json();
-    raw = data.choices?.[0]?.message?.content ?? "";
-  } else if (process.env.ANTHROPIC_API_KEY) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-latest",
-        system: sys,
-        messages: msgs,
-        max_tokens: 300,
-      }),
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`anthropic ${res.status}`);
-    const data = await res.json();
-    raw = data.content?.[0]?.text ?? "";
-  }
-  return parseBrainJson(raw, input, "llm");
+  const r = await chatWithFallback(
+    msgs,
+    { jsonMode: true, temperature: 0.8, maxTokens: 300 },
+  );
+  if (!r) return null;
+  return parseBrainJson(r.text, input, "llm");
 }
 
 function parseBrainJson(raw: string, input: BrainInput, source: BrainOutput["source"]): BrainOutput | null {
