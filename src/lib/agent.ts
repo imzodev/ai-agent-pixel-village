@@ -131,17 +131,30 @@ async function llmReply(input: BrainInput): Promise<BrainOutput | null> {
 }
 
 function parseBrainJson(raw: string, input: BrainInput, source: BrainOutput["source"]): BrainOutput | null {
+  const valid = new Set(input.offers.map((o) => o.id));
+  // Strip reasoning blocks that some models (notably MiniMax-M3) emit inline
+  // before/around the JSON. They leak as visible text otherwise.
+  raw = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  // Some models occasionally return plain prose instead of JSON. Don't
+  // silently fall back to scripted in that case — surface the text so the
+  // player still sees an in-character reply.
   const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) return null;
+  if (!match) {
+    return { text: raw.trim().slice(0, 600) || "(...)", offerIds: input.offers.filter((o) => o.type === "turnin").map((o) => o.id), source };
+  }
   try {
     const j = JSON.parse(match[0]);
-    const valid = new Set(input.offers.map((o) => o.id));
     const offerIds = Array.isArray(j.offers) ? j.offers.filter((id: unknown) => typeof id === "string" && valid.has(id)) : [];
     for (const o of input.offers) if (o.type === "turnin" && !offerIds.includes(o.id)) offerIds.push(o.id);
-    if (typeof j.text !== "string" || !j.text.trim()) return null;
+    if (typeof j.text !== "string" || !j.text.trim()) {
+      // JSON was valid but text was missing — degrade rather than fail.
+      return { text: raw.trim().slice(0, 600) || "(...)", offerIds, source };
+    }
     return { text: j.text.trim().slice(0, 600), offerIds, source };
   } catch {
-    return null;
+    // Parse error — use the raw response as text so the player isn't
+    // silently dropped back to scripted.
+    return { text: raw.trim().slice(0, 600) || "(...)", offerIds: input.offers.filter((o) => o.type === "turnin").map((o) => o.id), source };
   }
 }
 
