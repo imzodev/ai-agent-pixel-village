@@ -4,7 +4,8 @@ import { animals, buildings, characters, enemies, groundItems, inventory, npcs, 
 import { getCurrentCharacter, handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { tickWorld } from "@/lib/sim";
-import { gameHour, isWalkable } from "@/lib/worldmap";
+import { gameHour } from "@/lib/worldmap";
+import { isWalkableServer } from "@/lib/chunkCollisionServer";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
       const x = Number(body.x), y = Number(body.y);
       const facing = ["up", "down", "left", "right"].includes(body.facing) ? body.facing : me.facing;
       const patch: Partial<typeof characters.$inferInsert> = { lastSeenAt: new Date(), facing };
-      if (Number.isFinite(x) && Number.isFinite(y) && isWalkable(x, y) && Math.hypot(x - me.x, y - me.y) < 600) {
+      if (Number.isFinite(x) && Number.isFinite(y) && (await isWalkableServer(x, y)) && Math.hypot(x - me.x, y - me.y) < 600) {
         patch.x = x; patch.y = y;
       }
       await db.update(characters).set(patch).where(eq(characters.id, me.id));

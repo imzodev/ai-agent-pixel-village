@@ -1,13 +1,11 @@
 import type Phaser from "phaser";
+import { CHUNK_PX_H, CHUNK_PX_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_TILE_W, chunkRegistered, registerChunk } from "@/lib/chunkCollision";
 
-// Chunk tile geometry. The chunk world is unbounded: cx, cy ∈ ℤ, each chunk
-// is 24×15 tiles of 16 px. CHUNK_PX_W/H are derived once so every downstream
-// pixel conversion reads them consistently.
-export const CHUNK_TILE_W = 24;
-export const CHUNK_TILE_H = 15;
-export const CHUNK_TILE_PX = 16;
-export const CHUNK_PX_W = CHUNK_TILE_W * CHUNK_TILE_PX;
-export const CHUNK_PX_H = CHUNK_TILE_H * CHUNK_TILE_PX;
+// Chunk tile geometry. The chunk world is unbounded: cx, cy ∈ ℤ. The
+// constants and the cy-negated origin convention live in
+// @/lib/chunkCollision so the collision registry and the renderer can never
+// drift apart; they are re-exported here for existing importers.
+export { CHUNK_TILE_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_PX_W, CHUNK_PX_H };
 
 const TILESET_FILES: Array<{ name: string; file: string }> = [
   { name: "beginnertileset", file: "beginnertileset.png" },
@@ -239,6 +237,16 @@ export async function ensureChunks(scene: Phaser.Scene, { cx, cy }: { cx: number
     }
     const tilemap = await loadChunk(scene, c.cx, c.cy);
     if (!tilemap) continue;
+    // Register the chunk's DecorationLower tiles as the collision source so
+    // isWalkable picks them up. Skipped if already registered (cache hit).
+    // NOTE: the Tilemap cache (scene.sys.cache.tilemap) stores a
+    // { format, data } wrapper — the Tiled JSON lives under `.data`, not at
+    // the top level, and NOT in cache.json (tilemapTiledJSON never touches it).
+    if (!chunkRegistered(c.cx, c.cy)) {
+      const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
+      const json = entry?.data ?? entry;
+      if (json) registerChunk(c.cx, c.cy, json);
+    }
     state = buildChunkState(scene, tilemap);
     chunkStates.set(key, state);
     buildChunkLayers(state, c.cx, c.cy);

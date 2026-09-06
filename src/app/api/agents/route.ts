@@ -4,7 +4,8 @@ import { db } from "@/db";
 import { characters, conversations, groundItems, missions, npcs, sponsors, worldChat, type Appearance, type MissionRequirement, type MissionReward } from "@/db/schema";
 import { handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
-import { SPAWN, isWalkable } from "@/lib/worldmap";
+import { SPAWN } from "@/lib/worldmap";
+import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import { logEvent } from "@/lib/game";
 
 export const dynamic = "force-dynamic";
@@ -98,7 +99,7 @@ export async function PUT(req: Request) {
     const action = String(b.action ?? "");
     if (action === "move") {
       const x = Number(b.x), y = Number(b.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y) || !isWalkable(x, y)) return Response.json({ error: "not walkable" }, { status: 400 });
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !(await isWalkableServer(x, y))) return Response.json({ error: "not walkable" }, { status: 400 });
       await db.update(npcs).set({ targetX: x, targetY: y, x: Math.hypot(x - me.x, y - me.y) > 400 ? x : me.x, y: Math.hypot(x - me.x, y - me.y) > 400 ? y : me.y, lastSeenAt: new Date() }).where(eq(npcs.id, me.id));
       return Response.json({ ok: true });
     }

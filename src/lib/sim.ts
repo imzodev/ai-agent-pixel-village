@@ -1,7 +1,8 @@
 import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, enemies, npcs, resourceNodes, worldState, worldEvents } from "@/db/schema";
-import { WILD_ZONES, gameHour, isWalkable, type Rect } from "./worldmap";
+import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
+import { isWalkableServer } from "./chunkCollisionServer";
 import { logEvent } from "./game";
 
 const ANIMAL_SPEED = 28; // px/s
@@ -11,11 +12,11 @@ const TARGET_ENEMIES = 7;
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
-function randomPointIn(zone: Rect, tries = 12) {
+async function randomPointIn(zone: Rect, tries = 12) {
   for (let i = 0; i < tries; i++) {
     const x = zone.x + Math.random() * zone.w;
     const y = zone.y + Math.random() * zone.h;
-    if (isWalkable(x, y)) return { x, y };
+    if (await isWalkableServer(x, y)) return { x, y };
   }
   return null;
 }
@@ -85,7 +86,7 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
         if (s.arrived) { targetX = null; targetY = null; state = Math.random() < 0.5 ? "graze" : "idle"; }
         else state = "walk";
       } else if (stateExpired && Math.random() < 0.35) {
-        const p = randomPointIn(a.zone);
+        const p = await randomPointIn(a.zone);
         if (p) { targetX = p.x; targetY = p.y; state = "walk"; }
       }
     }
@@ -109,7 +110,7 @@ async function tickNpcs(dt: number, night: boolean) {
       if (s.arrived) { targetX = null; targetY = null; }
     } else if (Math.random() < (night ? 0.05 : 0.18)) {
       const r = night ? 30 : n.wanderRadius;
-      const p = randomPointIn({ x: n.homeX - r, y: n.homeY - r, w: r * 2, h: r * 2 });
+      const p = await randomPointIn({ x: n.homeX - r, y: n.homeY - r, w: r * 2, h: r * 2 });
       if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(npcs).set({ x, y, targetX, targetY, facing }).where(eq(npcs.id, n.id));
@@ -148,14 +149,14 @@ async function tickEnemies(dt: number, now: Date) {
       if (s.arrived) { targetX = null; targetY = null; }
     } else if (Math.random() < 0.25) {
       const zone = WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
-      const p = randomPointIn(zone);
+      const p = await randomPointIn(zone);
       if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(enemies).set({ x, y, targetX, targetY }).where(eq(enemies.id, e.id));
   }
   if (rows.length < TARGET_ENEMIES && Math.random() < 0.4) {
     const zone = pick(WILD_ZONES);
-    const p = randomPointIn(zone);
+    const p = await randomPointIn(zone);
     if (p) {
       const kind = Math.random() < 0.7 ? "slime" : Math.random() < 0.5 ? "bat" : "thornling";
       const hp = kind === "slime" ? 6 : kind === "bat" ? 5 : 9;

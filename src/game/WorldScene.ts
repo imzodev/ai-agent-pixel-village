@@ -4,6 +4,7 @@ import { BUILDINGS, TILE, WORLD_H, WORLD_W, buildingDoor, isWalkable } from "@/l
 import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
 import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
+import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import {
   CHUNK_PX_H,
   CHUNK_PX_W,
@@ -161,6 +162,7 @@ export class WorldScene extends Phaser.Scene {
     this.pollTimer = window.setInterval(() => void this.poll(), 1000);
     // Debug/testing hook: lets Playwright read camera + player state live.
     (window as unknown as Record<string, unknown>).__worldScene = this;
+    (window as unknown as Record<string, unknown>).__walk = { isWalkableAt, debugRegistry, chunkAtWorldPx, registerChunk, chunkRegistered };
   }
 
   // Zoom policy: the FIRST fit (before any user zoom) uses the cover ratio on
