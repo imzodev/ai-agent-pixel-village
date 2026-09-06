@@ -1,0 +1,16 @@
+{
+  "buildings": [
+    {
+      "key": "cabin_1",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin One",
+      "kind": "home",
+      "description": "A snug log cabin at the edge of the grove.",
+      "color": "#c97b63",
+      "menu": [],
+      "reservable": true,
+      "tx": 30,
+      "ty": 15
+    }
+  ]
+}

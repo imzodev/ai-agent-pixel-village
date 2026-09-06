@@ -6,6 +6,7 @@ import { ensureSeeded } from "@/lib/seed";
 import { tickWorld } from "@/lib/sim";
 import { gameHour } from "@/lib/worldmap";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
+import { getBuildingDoors } from "@/lib/buildingsServer";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ async function snapshot(meId: number | null) {
     db.select().from(worldEvents).orderBy(desc(worldEvents.id)).limit(10),
   ]);
   const spById = new Map(sponsorRows.map((s) => [s.id, s]));
+  const doors = await getBuildingDoors();
   let equipped: { itemKey: string }[] = [];
   if (meId) {
     equipped = await db.select({ itemKey: inventory.itemKey }).from(inventory).where(sql`${inventory.characterId} = ${meId} and ${inventory.equipped} = true`);
@@ -47,10 +49,12 @@ async function snapshot(meId: number | null) {
       sponsor: n.sponsorId && spById.get(n.sponsorId) ? { businessName: spById.get(n.sponsorId)!.businessName, brandColor: spById.get(n.sponsorId)!.brandColor } : null,
     })),
     animals: animalRows.map((a) => ({ id: a.id, species: a.species, name: a.name, x: a.x, y: a.y, targetX: a.targetX, targetY: a.targetY, facing: a.facing, state: a.state, mood: a.mood })),
-    buildings: buildingRows.map((b) => ({
+    buildings: await Promise.all(buildingRows.map(async (b) => ({
       id: b.id, key: b.key, name: b.name, kind: b.kind, color: b.color, tx: b.tx, ty: b.ty, tw: b.tw, th: b.th, reservable: b.reservable,
+      doorX: doors.get(b.key)?.x ?? (b.tx + b.tw / 2) * 16,
+      doorY: doors.get(b.key)?.y ?? (b.ty + b.th) * 16 + 12,
       sponsor: b.sponsorId && spById.get(b.sponsorId) ? { businessName: spById.get(b.sponsorId)!.businessName, brandColor: spById.get(b.sponsorId)!.brandColor, tagline: spById.get(b.sponsorId)!.tagline } : null,
-    })),
+    }))),
     groundItems: ground,
     nodes: nodes.map((n) => ({ id: n.id, kind: n.kind, x: n.x, y: n.y, qty: n.qty, ready: !n.respawnAt })),
     enemies: enemyRows.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, targetX: e.targetX, targetY: e.targetY, hp: e.hp, maxHp: e.maxHp })),
@@ -64,6 +68,11 @@ export async function GET() {
     await ensureSeeded();
     await tickWorld();
     const me = await getCurrentCharacter();
+    // GET is a heartbeat too: without this, a character whose lastSeenAt
+    // expired while the client had no player never re-enters the 45s players
+    // window — me comes back without id/x/y, the client can't spawn, and it
+    // never starts POSTing positions again.
+    if (me) await db.update(characters).set({ lastSeenAt: new Date() }).where(eq(characters.id, me.id));
     return Response.json(await snapshot(me?.id ?? null));
   } catch (e) {
     return handleApiError(e);

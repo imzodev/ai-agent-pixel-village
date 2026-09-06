@@ -20,8 +20,9 @@ const TILESET_FILES: Array<{ name: string; file: string }> = [
   { name: "Furniture", file: "Furniture.png" },
 ];
 
-// Render order matches the JSON layer array order, minus the Collision layer
-// (server-side only, visible:false in Tiled, no visual contribution).
+// Render order matches the JSON layer array order, minus data-only layers:
+// Collision (server-side blocking, invisible) and Interactive (door/interaction
+// markers, invisible).
 const LAYER_RENDER_ORDER: ReadonlyArray<string> = [
   "Ground",
   "GroundUpper",
@@ -36,6 +37,10 @@ const LAYER_RENDER_ORDER: ReadonlyArray<string> = [
   "DecorationUpper2",
   "Overlay",
 ];
+
+const SKIP_LAYERS = new Set(["Collision", "Interactive"]);
+
+export { LAYER_RENDER_ORDER, SKIP_LAYERS };
 
 // Depth bands. Y-sorted objects (characters, critters, items, buildings) use
 // DEPTH_CHAR_BASE + world-y so ground layers always sit under them. The
@@ -61,7 +66,7 @@ const LAYER_DEPTH: Readonly<Record<string, number>> = {
   Overlay: DEPTH_CANOPY + 3,
 };
 
-const SKIP_LAYERS = new Set(["Collision"]);
+export { LAYER_DEPTH };
 
 export function chunkKey(cx: number, cy: number): string {
   return `tilemap_${cx}_${cy}`;

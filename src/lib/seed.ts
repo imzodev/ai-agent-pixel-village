@@ -1,5 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { db } from "@/db";
 import {
   animals,
@@ -15,7 +17,9 @@ import {
   type MissionRequirement,
   type MissionReward,
 } from "@/db/schema";
-import { BUILDINGS, TILE, buildingDoor, WILD_ZONES } from "./worldmap";
+import { SPAWN, TILE, WILD_ZONES } from "./worldmap";
+import { getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { doorWorldPx, footprintOf } from "./buildingManifest";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -245,11 +249,51 @@ const MISSION_DEFS: {
 ];
 
 let seededPromise: Promise<void> | null = null;
+let lastManifestMtime = 0;
+
+// Upsert manifest buildings into the DB and drop rows no longer in the
+// manifest. Gated on the manifest file's mtime so edits land without a
+// server restart, while steady-state requests only pay one stat() call.
+async function syncBuildingsFromManifest() {
+  const manifestPath = path.join(process.cwd(), "public", "buildings", "buildings.json");
+  let mtime = 0;
+  try {
+    mtime = (await fs.stat(manifestPath)).mtimeMs;
+  } catch {
+    return;
+  }
+  if (mtime === lastManifestMtime) return;
+  lastManifestMtime = mtime;
+  const manifest = await getBuildingsManifest();
+  for (const entry of manifest.buildings) {
+    const template = await getTemplate(entry);
+    const fp = footprintOf(template);
+    const values = {
+      key: entry.key,
+      name: entry.name,
+      kind: entry.kind,
+      description: entry.description ?? "",
+      color: entry.color ?? "#d9a066",
+      tx: entry.tx,
+      ty: entry.ty,
+      tw: fp.tw,
+      th: fp.th,
+      menu: entry.menu ?? [],
+      reservable: entry.reservable ?? true,
+    };
+    await db.insert(buildings).values(values).onConflictDoUpdate({ target: buildings.key, set: values });
+  }
+  const keep = new Set(manifest.buildings.map((b) => b.key));
+  const rows = await db.select().from(buildings);
+  for (const row of rows) {
+    if (!keep.has(row.key)) await db.delete(buildings).where(eq(buildings.key, row.key));
+  }
+}
 
 /** Idempotent: creates the world if it does not exist. Safe to call on every request. */
 export function ensureSeeded() {
   if (!seededPromise) seededPromise = seed().catch((e) => { seededPromise = null; throw e; });
-  return seededPromise;
+  return seededPromise.then(() => syncBuildingsFromManifest());
 }
 
 async function seed() {
@@ -272,11 +316,42 @@ async function seed() {
         })
         .onConflictDoNothing();
     }
-    for (const b of BUILDINGS) {
+    // Interactive buildings come from the manifest (public/buildings/
+    // buildings.json); the Tiled template supplies footprint and door.
+    const manifest = await getBuildingsManifest();
+    for (const entry of manifest.buildings) {
+      const template = await getTemplate(entry);
+      const fp = footprintOf(template);
       await tx
         .insert(buildings)
-        .values({ key: b.key, name: b.name, kind: b.kind, description: b.description, color: b.color, tx: b.tx, ty: b.ty, tw: b.tw, th: b.th, menu: b.menu, reservable: b.reservable })
-        .onConflictDoNothing();
+        .values({
+          key: entry.key,
+          name: entry.name,
+          kind: entry.kind,
+          description: entry.description ?? "",
+          color: entry.color ?? "#d9a066",
+          tx: entry.tx,
+          ty: entry.ty,
+          tw: fp.tw,
+          th: fp.th,
+          menu: entry.menu ?? [],
+          reservable: entry.reservable ?? true,
+        })
+        .onConflictDoUpdate({
+          target: buildings.key,
+          set: {
+            name: entry.name,
+            kind: entry.kind,
+            description: entry.description ?? "",
+            color: entry.color ?? "#d9a066",
+            tx: entry.tx,
+            ty: entry.ty,
+            tw: fp.tw,
+            th: fp.th,
+            menu: entry.menu ?? [],
+            reservable: entry.reservable ?? true,
+          },
+        });
     }
     const bRows = await tx.select().from(buildings);
     const bByKey = new Map(bRows.map((b) => [b.key, b]));
@@ -289,14 +364,15 @@ async function seed() {
     const npcIds = new Map<string, number>();
     for (const n of NPC_DEFS) {
       let x: number, y: number, buildingId: number | null = null;
-      if (n.building) {
-        const b = bByKey.get(n.building)!;
-        const d = buildingDoor(b);
+      const manifestEntry = manifest.buildings.find((m) => m.key === n.building);
+      const dbBuilding = n.building ? bByKey.get(n.building) : undefined;
+      if (dbBuilding && manifestEntry) {
+        const d = doorWorldPx(manifestEntry, await getTemplate(manifestEntry));
         x = d.x + (n.offset?.[0] ?? 0) + 20;
         y = d.y + (n.offset?.[1] ?? 0) + 24;
-        buildingId = b.id;
+        buildingId = dbBuilding.id;
       } else {
-        [x, y] = n.pos!;
+        [x, y] = n.pos ?? [SPAWN.x, SPAWN.y];
       }
       const [row] = await tx
         .insert(npcs)

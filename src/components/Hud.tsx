@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
-import { buildingDoor } from "@/lib/worldmap";
 
 type Offer = { id: string; type: string; label: string; line: string };
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
@@ -117,7 +116,7 @@ export default function Hud() {
   const hour = snap ? clockFrom(snap) : 7;
   const hh = Math.floor(hour), mm = Math.floor((hour % 1) * 60);
   const loggedIn = !!snap?.me;
-  const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; const d = buildingDoor(b); return Math.hypot(n.x - d.x, n.y - d.y) < 200; }) ?? [] : [];
+  const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; return Math.hypot(n.x - b.doorX, n.y - b.doorY) < 200; }) ?? [] : [];
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
 
   return (
@@ -327,7 +326,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "item") { const a = snap.groundItems.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
   if (sel.type === "node") { const a = snap.nodes.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
   if (sel.type === "enemy") { const a = snap.enemies.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
-  if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? buildingDoor(b) : null; }
+  if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   return null;
 }

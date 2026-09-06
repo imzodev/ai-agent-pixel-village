@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
-import { BUILDINGS, TILE, WORLD_H, WORLD_W, buildingDoor, isWalkable } from "@/lib/worldmap";
+import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
-import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
+import { makeAllTextures } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
+import { stampBuildings } from "./buildingStamps";
+import type { BuildingManifest } from "@/lib/buildingManifest";
 import {
   DEPTH_CANOPY,
   DEPTH_CHAR_BASE,
@@ -17,10 +19,6 @@ import {
   recenterCamera,
   releaseOutside,
 } from "./worldTilemap";
-
-const BLD_ATLAS_URL = "/buildings/thegrove-blueprint-atlas.png";
-const BLD_LEGEND_URL = "/buildings/thegrove-tile-legend.json";
-const BLD_BLUEPRINTS_URL = "/buildings/willow-cottage.blueprint.json";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -60,7 +58,10 @@ export class WorldScene extends Phaser.Scene {
   private enemies = new Map<number, CritterEnt>();
   private items = new Map<number, Phaser.GameObjects.Text>();
   private nodes = new Map<number, Phaser.GameObjects.Image>();
-  private buildingImgs = new Map<string, { img: Phaser.GameObjects.Image; texKey: string; glow: Phaser.GameObjects.Arc }>();
+  // Door world-px per building key, derived from the template's Interactive
+  // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
+  private buildingDoors = new Map<string, { x: number; y: number }>();
+  private buildingZones = new Map<string, { zone: Phaser.GameObjects.Zone; glow: Phaser.GameObjects.Arc; door: { x: number; y: number } }>();
   private shownChat = new Set<number>();
   private moveTarget: { x: number; y: number } | null = null;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -87,9 +88,6 @@ export class WorldScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image("bld_atlas", BLD_ATLAS_URL);
-    this.load.json("bld_legend", BLD_LEGEND_URL);
-    this.load.json("bld_blueprints", BLD_BLUEPRINTS_URL);
     loadTilemapAssets(this);
   }
 
@@ -99,6 +97,20 @@ export class WorldScene extends Phaser.Scene {
     // player crosses a chunk boundary in updatePlayer.
     this.lastPlayerChunk = { cx: 0, cy: 0 };
     await ensureChunks(this, this.lastPlayerChunk);
+    // Stamp interactive buildings from the manifest (best-effort: a missing
+    // or broken manifest leaves the world decor-only).
+    try {
+      const res = await fetch("/buildings/buildings.json");
+      if (res.ok) {
+        const manifest = (await res.json()) as BuildingManifest;
+        const stamped = await stampBuildings(this, manifest);
+        for (const s of stamped) {
+          if (s.door) this.buildingDoors.set(s.entry.key, s.door);
+        }
+      }
+    } catch {
+      /* manifest unavailable — decor-only world */
+    }
     recenterCamera(this, this.lastPlayerChunk);
     // placeholder char texture
     if (!this.textures.exists("ph_char")) {
@@ -227,24 +239,25 @@ export class WorldScene extends Phaser.Scene {
     const first = !this.snapshot;
     this.snapshot = s;
     this.meId = s.me?.id ?? null;
-    // buildings
+    // buildings — visuals come from the stamped templates; the snapshot only
+    // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
-      const view = { key: b.key, name: b.name, kind: b.kind, color: b.color, tw: b.tw, th: b.th, reservable: b.reservable, sponsor: b.sponsor };
-      const texKey = buildingTextureKey(view);
-      let ent = this.buildingImgs.get(b.key);
+      const door = this.buildingDoors.get(b.key) ?? { x: b.doorX, y: b.doorY };
+      let ent = this.buildingZones.get(b.key);
       if (!ent) {
-        if (!makeBuildingTexture(this, view)) continue;
-        const img = this.add.image(b.tx * TILE, (b.ty + b.th) * TILE, texKey).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + (b.ty + b.th) * TILE - 4);
-        img.setScale(TILE / 16);
-        img.setInteractive({ useHandCursor: true });
-        img.on("pointerdown", () => this.select({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(buildingDoor(b).x, buildingDoor(b).y) }));
-        const door = buildingDoor(b);
+        const zone = this.add.zone(b.tx * 16, b.ty * 16, b.tw * 16, b.th * 16)
+          .setOrigin(0, 0)
+          .setDepth(DEPTH_CHAR_BASE + (b.ty + b.th) * 16);
+        zone.setInteractive({ useHandCursor: true });
+        zone.on("pointerdown", () => {
+          const s = { type: "building" as const, id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(door.x, door.y) };
+          this.select(s);
+        });
         const glow = this.add.circle(door.x, door.y - 30, 40, 0xffc866, 0.0).setDepth(DEPTH_LIGHT).setBlendMode(Phaser.BlendModes.ADD);
-        ent = { img, texKey, glow };
-        this.buildingImgs.set(b.key, ent);
-      } else if (ent.texKey !== texKey) {
-        if (!makeBuildingTexture(this, view)) continue;
-        ent.img.setTexture(texKey); ent.texKey = texKey;
+        ent = { zone, glow, door };
+        this.buildingZones.set(b.key, ent);
+      } else {
+        ent.door = door;
       }
     }
     // me
@@ -422,7 +435,7 @@ export class WorldScene extends Phaser.Scene {
     for (const e of s.enemies) cands.push({ d: this.distTo(e.x, e.y), sel: { type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) } });
     for (const i of s.groundItems) cands.push({ d: this.distTo(i.x, i.y), sel: { type: "item", id: i.id, itemKey: i.itemKey, distance: this.distTo(i.x, i.y) } });
     for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, ready: n.ready, distance: this.distTo(n.x, n.y) } });
-    for (const b of s.buildings) { const d = buildingDoor(b); cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
+    for (const b of s.buildings) { const d = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
     cands.sort((a, b) => a.d - b.d);
     if (cands[0] && cands[0].d < 110) this.select(cands[0].sel);
     else bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
@@ -571,8 +584,7 @@ export class WorldScene extends Phaser.Scene {
     if (s.weather === "rain") { if (!this.rain.emitting) this.rain.start(); } else if (this.rain.emitting) this.rain.stop();
     if (s.weather === "snow") { if (!this.snow.emitting) this.snow.start(); } else if (this.snow.emitting) this.snow.stop();
     const glowA = dark > 0.1 ? Math.min(0.28, dark * 0.5) : 0;
-    for (const b of this.buildingImgs.values()) b.glow.setAlpha(glowA);
+    for (const b of this.buildingZones.values()) b.glow.setAlpha(glowA);
   }
 }
 
-export { BUILDINGS };

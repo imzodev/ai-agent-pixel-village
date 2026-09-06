@@ -48,8 +48,28 @@ export function blockedFromChunk(json: unknown): Set<number> {
 
 const registry = new Map<string, Set<number>>();
 
+// Blocks contributed by stamped building templates, kept separate from the
+// per-chunk sets so a later chunk (re-)registration can never erase them.
+const stamped = new Map<string, Set<number>>();
+
 export function registerChunk(cx: number, cy: number, json: unknown): void {
   registry.set(chunkId(cx, cy), blockedFromChunk(json));
+}
+
+// Mark a building template's blocked tiles (layer indexes on a tileW-wide
+// grid) as solid at the template's world-pixel origin.
+export function blockStampTiles(originX: number, originY: number, tileW: number, blockedIndexes: number[]): void {
+  for (const i of blockedIndexes) {
+    const lx = i % tileW;
+    const ly = Math.floor(i / tileW);
+    const t = chunkAtWorldPx(originX + lx * CHUNK_TILE_PX, originY + ly * CHUNK_TILE_PX);
+    let set = stamped.get(chunkId(t.cx, t.cy));
+    if (!set) {
+      set = new Set();
+      stamped.set(chunkId(t.cx, t.cy), set);
+    }
+    set.add(t.ly * CHUNK_TILE_W + t.lx);
+  }
 }
 
 export function chunkRegistered(cx: number, cy: number): boolean {
@@ -57,7 +77,9 @@ export function chunkRegistered(cx: number, cy: number): boolean {
 }
 
 function isTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean {
-  return registry.get(chunkId(cx, cy))?.has(ly * CHUNK_TILE_W + lx) ?? false;
+  const idx = ly * CHUNK_TILE_W + lx;
+  const key = chunkId(cx, cy);
+  return registry.get(key)?.has(idx) === true || stamped.get(key)?.has(idx) === true;
 }
 
 // Foot box (16×10 under the character's feet): blocked if any corner lands on
