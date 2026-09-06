@@ -211,6 +211,10 @@ function buildChunkLayers(state: ChunkState, cx: number, cy: number): void {
   for (const name of LAYER_RENDER_ORDER) {
     if (SKIP_LAYERS.has(name)) continue;
     if (state.layers.has(name)) continue;
+    // Skip layer names this map doesn't define (generated chunks only carry
+    // Ground + DecorationUpper) — createLayer would warn on each miss.
+    // getLayerIndex returns null (not -1) for unknown names.
+    if (state.tilemap.getLayerIndex(name) === null) continue;
     const layer = state.tilemap.createLayer(name, state.tilesets, ox, oy);
     if (!layer) continue;
     layer.setDepth(LAYER_DEPTH[name] ?? -5);
@@ -246,10 +250,16 @@ export function releaseOutside(scene: Phaser.Scene, { cx, cy }: { cx: number; cy
   const active = new Set(chunks.map((c) => chunkKey(c.cx, c.cy)));
   for (const [key, state] of chunkStates) {
     if (active.has(key)) continue;
-    for (const layer of state.layers.values()) layer.destroy();
+    for (const layer of state.layers.values()) layer.destroy(false);
     state.layers.clear();
     // Keep state.tilemap + state.tilesets cached — re-entry only needs to
     // re-call createLayer, not re-register tilesets.
+    //
+    // destroy(false) is load-bearing: the default destroy() removes the
+    // LayerData from the tilemap's layers array, so a later createLayer(name)
+    // fails with "Invalid Tilemap Layer ID" and the chunk comes back empty.
+    // destroy(false) keeps the LayerData registered and only clears the
+    // installed tilemapLayer reference, which createLayer requires free.
   }
 }
 
