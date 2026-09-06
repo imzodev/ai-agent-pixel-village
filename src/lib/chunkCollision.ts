@@ -24,15 +24,19 @@ export function chunkAtWorldPx(x: number, y: number): { cx: number; cy: number; 
   return { cx, cy, lx: tx - cx * CHUNK_TILE_W, ly: ty + cy * CHUNK_TILE_H };
 }
 
+// Tile layers that block movement: the authored DecorationLower decoration
+// AND the dedicated Collision layer Tiled maps carry alongside it.
+const COLLISION_LAYERS = new Set(["DecorationLower", "Collision"]);
+
 // Extract the blocked-tile set (local index = ly * CHUNK_TILE_W + lx) from a
-// parsed Tiled chunk JSON. Only the DecorationLower layer contributes; chunks
-// without that layer (generated defaults) block nothing.
+// parsed Tiled chunk JSON. Chunks without any collision layer (generated
+// defaults) block nothing.
 export function blockedFromChunk(json: unknown): Set<number> {
   const blocked = new Set<number>();
   const layers = (json as { layers?: Array<{ name?: unknown; type?: unknown; data?: unknown }> })?.layers;
   if (!Array.isArray(layers)) return blocked;
   for (const layer of layers) {
-    if (layer?.type !== "tilelayer" || layer.name !== "DecorationLower") continue;
+    if (layer?.type !== "tilelayer" || !COLLISION_LAYERS.has(layer.name as string)) continue;
     if (!Array.isArray(layer.data)) continue;
     for (let i = 0; i < layer.data.length; i++) {
       const gid = layer.data[i];
