@@ -37,8 +37,15 @@ const LAYER_RENDER_ORDER: ReadonlyArray<string> = [
   "Overlay",
 ];
 
-// Per-layer depth. All tile layers stay negative so buildings (drawn with
-// positive depth at (b.ty + b.th) * TILE - 4) overlay correctly on top.
+// Depth bands. Y-sorted objects (characters, critters, items, buildings) use
+// DEPTH_CHAR_BASE + world-y so ground layers always sit under them. The
+// DecorationUpper family sits ABOVE the whole character band so canopies and
+// roofs always draw over characters; Overlay rides on top of it.
+export const DEPTH_CHAR_BASE = 100_000;
+export const DEPTH_CANOPY = 500_000;
+
+// Per-layer depth. Ground through DecorationUpperShadow stay negative (under
+// the character band); the Upper family moves into the canopy band.
 const LAYER_DEPTH: Readonly<Record<string, number>> = {
   Ground: -100,
   GroundUpper: -99,
@@ -48,10 +55,10 @@ const LAYER_DEPTH: Readonly<Record<string, number>> = {
   DecorationMiddle1: -39,
   DecorationMiddle2: -38,
   DecorationUpperShadow: -30,
-  DecorationUpper: -29,
-  DecorationUpper1: -28,
-  DecorationUpper2: -27,
-  Overlay: -5,
+  DecorationUpper: DEPTH_CANOPY,
+  DecorationUpper1: DEPTH_CANOPY + 1,
+  DecorationUpper2: DEPTH_CANOPY + 2,
+  Overlay: DEPTH_CANOPY + 3,
 };
 
 const SKIP_LAYERS = new Set(["Collision"]);

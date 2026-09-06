@@ -6,6 +6,8 @@ import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./text
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import {
+  DEPTH_CANOPY,
+  DEPTH_CHAR_BASE,
   CHUNK_PX_H,
   CHUNK_PX_W,
   chunkAtPixel,
@@ -19,6 +21,15 @@ import {
 const BLD_ATLAS_URL = "/buildings/thegrove-blueprint-atlas.png";
 const BLD_LEGEND_URL = "/buildings/thegrove-tile-legend.json";
 const BLD_BLUEPRINTS_URL = "/buildings/willow-cottage.blueprint.json";
+
+// Fixed UI/effect depths relative to the canopy band, preserving the old
+// draw order (weather over lights, bubbles on top).
+const DEPTH_MARKER = DEPTH_CHAR_BASE - 10_000; // ground click marker, under characters
+const DEPTH_LIGHT = DEPTH_CANOPY + 10;         // lantern / door glows over canopy
+const DEPTH_WEATHER = DEPTH_CANOPY + 20;
+const DEPTH_NIGHT = DEPTH_CANOPY + 30;
+const DEPTH_FOG = DEPTH_CANOPY + 31;
+const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 type Dir = keyof typeof ROWS;
 
@@ -96,7 +107,7 @@ export class WorldScene extends Phaser.Scene {
       g.fillStyle(0x8899aa, 1); g.fillRect(24, 24, 16, 30); g.fillCircle(32, 20, 8);
       g.generateTexture("ph_char", 64, 64); g.destroy();
     }
-    this.marker = this.add.image(0, 0, "marker").setDepth(20000).setVisible(false);
+    this.marker = this.add.image(0, 0, "marker").setDepth(DEPTH_MARKER).setVisible(false);
 
     this.cameras.main.setRoundPixels(true);
 
@@ -104,16 +115,16 @@ export class WorldScene extends Phaser.Scene {
     this.fitCameraToCanvas();
 
     // overlays
-    this.night = this.add.rectangle(0, 0, 10, 10, 0x0a1030, 0).setOrigin(0).setScrollFactor(0).setDepth(9000);
-    this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(9001);
+    this.night = this.add.rectangle(0, 0, 10, 10, 0x0a1030, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_NIGHT);
+    this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
       emitZone: zoneOf(new Phaser.Geom.Rectangle(-600, -40, 1200, 60)),
-    }).setDepth(8500);
+    }).setDepth(DEPTH_WEATHER);
     this.snow = this.add.particles(0, 0, "snow", {
       lifespan: 5000, speedY: { min: 30, max: 60 }, speedX: { min: -20, max: 20 }, quantity: 2, frequency: 60, alpha: { start: 0.9, end: 0.3 }, scale: { min: 0.5, max: 1 },
       emitZone: zoneOf(new Phaser.Geom.Rectangle(-600, -40, 1200, 60)),
-    }).setDepth(8500);
+    }).setDepth(DEPTH_WEATHER);
     this.rain.stop(); this.snow.stop();
     this.scale.on("resize", () => this.resizeOverlays());
     this.resizeOverlays();
@@ -223,12 +234,12 @@ export class WorldScene extends Phaser.Scene {
       let ent = this.buildingImgs.get(b.key);
       if (!ent) {
         if (!makeBuildingTexture(this, view)) continue;
-        const img = this.add.image(b.tx * TILE, (b.ty + b.th) * TILE, texKey).setOrigin(0, 1).setDepth((b.ty + b.th) * TILE - 4);
+        const img = this.add.image(b.tx * TILE, (b.ty + b.th) * TILE, texKey).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + (b.ty + b.th) * TILE - 4);
         img.setScale(TILE / 16);
         img.setInteractive({ useHandCursor: true });
         img.on("pointerdown", () => this.select({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(buildingDoor(b).x, buildingDoor(b).y) }));
         const door = buildingDoor(b);
-        const glow = this.add.circle(door.x, door.y - 30, 40, 0xffc866, 0.0).setDepth(8000).setBlendMode(Phaser.BlendModes.ADD);
+        const glow = this.add.circle(door.x, door.y - 30, 40, 0xffc866, 0.0).setDepth(DEPTH_LIGHT).setBlendMode(Phaser.BlendModes.ADD);
         ent = { img, texKey, glow };
         this.buildingImgs.set(b.key, ent);
       } else if (ent.texKey !== texKey) {
@@ -243,7 +254,7 @@ export class WorldScene extends Phaser.Scene {
         // when the server reports a position outside the chunk world.
         const spawn = chunkCenter(0, 0);
         this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a");
-        this.player.sprite.setDepth(spawn.y);
+        this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
         this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
         this.resizeOverlays();
       } else if (first || Math.hypot(this.player.sprite.x - s.me.x, this.player.sprite.y - s.me.y) > 500) {
@@ -251,7 +262,7 @@ export class WorldScene extends Phaser.Scene {
       }
       this.player.glow?.setVisible(s.me.equipped.includes("lantern"));
       if (s.me.equipped.includes("lantern") && !this.player.glow) {
-        this.player.glow = this.add.circle(s.me.x, s.me.y, 70, 0xffc866, 0.16).setDepth(8001).setBlendMode(Phaser.BlendModes.ADD);
+        this.player.glow = this.add.circle(s.me.x, s.me.y, 70, 0xffc866, 0.16).setDepth(DEPTH_LIGHT).setBlendMode(Phaser.BlendModes.ADD);
       }
     } else if (this.player) {
       this.destroyChar(this.player); this.player = null; this.cameras.main.stopFollow();
@@ -269,7 +280,7 @@ export class WorldScene extends Phaser.Scene {
     for (const it of s.groundItems) {
       seenItems.add(it.id);
       if (!this.items.has(it.id)) {
-        const t = this.add.text(it.x, it.y, ITEM_ICONS[it.itemKey] ?? "📦", { fontSize: "14px" }).setOrigin(0.5, 1).setDepth(it.y).setResolution(2);
+        const t = this.add.text(it.x, it.y, ITEM_ICONS[it.itemKey] ?? "📦", { fontSize: "14px" }).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + it.y).setResolution(2);
         t.setInteractive({ useHandCursor: true });
         t.on("pointerdown", () => this.select({ type: "item", id: it.id, itemKey: it.itemKey, distance: this.distTo(it.x, it.y) }));
         this.tweens.add({ targets: t, y: it.y - 4, duration: 900, yoyo: true, repeat: -1, ease: "Sine.inOut" });
@@ -281,7 +292,7 @@ export class WorldScene extends Phaser.Scene {
     for (const n of s.nodes) {
       let img = this.nodes.get(n.id);
       if (!img) {
-        img = this.add.image(n.x, n.y, `node_${n.kind}`).setOrigin(0.5, 1).setDepth(n.y);
+        img = this.add.image(n.x, n.y, `node_${n.kind}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
         img.setInteractive({ useHandCursor: true });
         img.on("pointerdown", () => { const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, ready: cur?.ready ?? n.ready, distance: this.distTo(n.x, n.y) }); });
         this.nodes.set(n.id, img);
@@ -367,12 +378,12 @@ export class WorldScene extends Phaser.Scene {
       seen.add(a.id);
       let ent = map.get(a.id);
       if (!ent) {
-        const sprite = this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1).setDepth(a.y);
+        const sprite = this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + a.y);
         sprite.setInteractive({ useHandCursor: true });
         sprite.on("pointerdown", () => { const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
         ent = { sprite, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
         if (a.name) ent.label = this.add.text(a.x, a.y - sprite.height - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
-        if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(a.y + 1);
+        if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
       }
       ent.tx = a.x; ent.ty = a.y; ent.state = a.state; ent.hp = a.hp; ent.maxHp = a.maxHp;
@@ -391,7 +402,7 @@ export class WorldScene extends Phaser.Scene {
     const t = this.add.text(0, 0, text, { fontFamily: "monospace", fontSize: "10px", color: "#222", wordWrap: { width: 130 }, align: "center" }).setOrigin(0.5, 1).setResolution(3);
     const bg = this.add.rectangle(0, 2, t.width + 10, t.height + 8, 0xffffff, 0.95).setOrigin(0.5, 1).setStrokeStyle(1, 0x555555);
     const tail = this.add.triangle(0, 6, 0, 0, 8, 0, 4, 5, 0xffffff).setOrigin(0.5, 0);
-    const c = this.add.container(ent.sprite.x, ent.sprite.y - 66, [bg, tail, t]).setDepth(15000);
+    const c = this.add.container(ent.sprite.x, ent.sprite.y - 66, [bg, tail, t]).setDepth(DEPTH_BUBBLE);
     ent.bubble = { c, until: this.time.now + 4000 + Math.min(5000, text.length * 40) };
   }
 
@@ -511,9 +522,9 @@ export class WorldScene extends Phaser.Scene {
 
   private placeChar(e: CharEnt) {
     const { x, y } = e.sprite;
-    e.sprite.setDepth(y);
-    e.label.setPosition(x, y - 50);
-    e.badge?.setPosition(x, y - 60);
+    e.sprite.setDepth(DEPTH_CHAR_BASE + y);
+    e.label.setPosition(x, y - 50).setDepth(DEPTH_CHAR_BASE + y + 2);
+    e.badge?.setPosition(x, y - 60).setDepth(DEPTH_CHAR_BASE + y + 3);
     if (e.bubble) {
       e.bubble.c.setPosition(x, y - (e.badge ? 72 : 62));
       if (this.time.now > e.bubble.until) { e.bubble.c.destroy(); e.bubble = undefined; }
@@ -532,13 +543,13 @@ export class WorldScene extends Phaser.Scene {
     } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
     else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
     e.sprite.setFlipX(e.facing === "left");
-    e.sprite.setDepth(e.sprite.y);
+    e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
     e.sprite.y -= 0; // keep base
     e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
     e.label?.setPosition(e.sprite.x, e.sprite.y - e.sprite.height - 4);
     e.hpBar?.setPosition(e.sprite.x, e.sprite.y);
     if (e.state === "sleep") {
-      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.sprite.height - 10, "z", { fontFamily: "monospace", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(e.sprite.y + 1);
+      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.sprite.height - 10, "z", { fontFamily: "monospace", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(DEPTH_CHAR_BASE + e.sprite.y + 1);
       e.zz.setPosition(e.sprite.x + 8, e.sprite.y - e.sprite.height - 8 - Math.abs(Math.sin(time / 500)) * 4);
     } else if (e.zz) { e.zz.destroy(); e.zz = undefined; }
   }
