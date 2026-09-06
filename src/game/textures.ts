@@ -1,5 +1,4 @@
 import type Phaser from "phaser";
-import { BUILDINGS, MAP_H, MAP_W, PLAZA, POND, TILE, WORLD_H, WORLD_W, buildingDoor, mulberry32 } from "@/lib/worldmap";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
 
@@ -90,57 +89,6 @@ export function makeTreeTextures(scene: Scene) {
     }
     scene.textures.addCanvas(d.key, c);
   }
-}
-
-// ---------- Ground ----------
-export function makeGroundTexture(scene: Scene) {
-  if (scene.textures.exists("ground")) return;
-  const { c, ctx } = canvas(WORLD_W, WORLD_H);
-  const rnd = mulberry32(99);
-  ctx.fillStyle = "#7fbf6d"; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
-  for (let i = 0; i < 26000; i++) {
-    const x = Math.floor(rnd() * MAP_W * 8) * 4, y = Math.floor(rnd() * MAP_H * 8) * 4;
-    ctx.fillStyle = rnd() < 0.5 ? "#73b463" : "#8ccb78";
-    ctx.fillRect(x, y, 4, 4);
-  }
-  for (let i = 0; i < 700; i++) {
-    ctx.fillStyle = ["#f6e58d", "#f8a5c2", "#ffffff"][Math.floor(rnd() * 3)];
-    ctx.fillRect(Math.floor(rnd() * WORLD_W), Math.floor(rnd() * WORLD_H), 3, 3);
-  }
-  // paths
-  const path = (x1: number, y1: number, x2: number, y2: number) => {
-    ctx.strokeStyle = "#d9c49a"; ctx.lineWidth = 26; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1, y2); ctx.lineTo(x2, y2); ctx.stroke();
-  };
-  const cx = PLAZA.x + PLAZA.w / 2, cy = PLAZA.y + PLAZA.h / 2;
-  for (const b of BUILDINGS) { const d = buildingDoor(b); path(d.x, d.y, cx, cy); }
-  path(cx, cy, cx, WORLD_H - 60);
-  path(cx, cy, 60, cy);
-  path(cx, cy, WORLD_W - 60, cy);
-  path(cx, cy, cx, 60);
-  ctx.fillStyle = "rgba(0,0,0,0.05)";
-  for (let i = 0; i < 1800; i++) { const x = rnd() * WORLD_W, y = rnd() * WORLD_H; ctx.fillRect(x, y, 3, 3); }
-  // plaza cobbles
-  ctx.fillStyle = "#cbbfae"; ctx.fillRect(PLAZA.x, PLAZA.y, PLAZA.w, PLAZA.h);
-  ctx.fillStyle = "#bfb2a0";
-  for (let y = PLAZA.y; y < PLAZA.y + PLAZA.h; y += 16) for (let x = PLAZA.x + ((y / 16) % 2) * 16; x < PLAZA.x + PLAZA.w; x += 32) ctx.fillRect(x + 1, y + 1, 14, 14);
-  ctx.strokeStyle = "#a89c8a"; ctx.lineWidth = 3; ctx.strokeRect(PLAZA.x + 1, PLAZA.y + 1, PLAZA.w - 2, PLAZA.h - 2);
-  // fountain
-  ctx.fillStyle = "#8d8577"; ctx.beginPath(); ctx.arc(cx, cy - 10, 30, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#5aa7d8"; ctx.beginPath(); ctx.arc(cx, cy - 10, 22, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#b8e0f7"; ctx.beginPath(); ctx.arc(cx - 6, cy - 16, 5, 0, Math.PI * 2); ctx.fill();
-  // pond
-  ctx.fillStyle = "#d8cfa8"; ctx.beginPath(); ctx.ellipse(POND.x + POND.w / 2, POND.y + POND.h / 2, POND.w / 2 + 10, POND.h / 2 + 10, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#5aa7d8"; ctx.beginPath(); ctx.ellipse(POND.x + POND.w / 2, POND.y + POND.h / 2, POND.w / 2, POND.h / 2, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#8fc9ec";
-  for (let i = 0; i < 12; i++) ctx.fillRect(POND.x + 20 + rnd() * (POND.w - 50), POND.y + 16 + rnd() * (POND.h - 40), 18, 3);
-  // animal pens (fence lines)
-  ctx.fillStyle = "#b08050";
-  const fence = (x: number, y: number, w: number, h: number) => { for (let i = 0; i <= w; i += 16) { ctx.fillRect(x + i, y, 4, 10); ctx.fillRect(x + i, y + h, 4, 10); } for (let j = 0; j <= h; j += 16) { ctx.fillRect(x, y + j, 4, 10); ctx.fillRect(x + w, y + j, 4, 10); } };
-  fence(4 * TILE, 26 * TILE, 8 * TILE, 9 * TILE);
-  fence(48 * TILE, 26 * TILE, 10 * TILE, 5 * TILE);
-  fence(14 * TILE, 16 * TILE, 6 * TILE, 4 * TILE);
-  scene.textures.addCanvas("ground", c);
 }
 
 export function makeAllTextures(scene: Scene) {

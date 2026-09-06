@@ -5,6 +5,8 @@ import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
 import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import {
+  CHUNK_PX_H,
+  CHUNK_PX_W,
   chunkAtPixel,
   chunkCenter,
   ensureChunks,
@@ -62,6 +64,11 @@ export class WorldScene extends Phaser.Scene {
   private sentFirst = false;
   private lastPlayerChunk: { cx: number; cy: number } | null = null;
   private unsub: (() => void)[] = [];
+  // Camera zoom floor: the smallest zoom at which the viewport still fits
+  // inside the loaded 5×5 chunk window. Recomputed on resize; used by the
+  // wheel handler so zooming out can never reveal the background.
+  private minZoom = 1;
+  private fitted = false;
 
   constructor() {
     super("world");
@@ -121,7 +128,7 @@ export class WorldScene extends Phaser.Scene {
     kb.on("keydown-SPACE", () => { if (!this.chatFocused) this.interactNearest(); });
     this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
       const cam = this.cameras.main;
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - Math.sign(dy) * 0.25, 1.25, 4));
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom - Math.sign(dy) * 0.25, this.minZoom, 4));
       this.resizeOverlays();
     });
     this.input.on("pointerdown", (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
@@ -152,14 +159,27 @@ export class WorldScene extends Phaser.Scene {
 
     void this.poll();
     this.pollTimer = window.setInterval(() => void this.poll(), 1000);
+    // Debug/testing hook: lets Playwright read camera + player state live.
+    (window as unknown as Record<string, unknown>).__worldScene = this;
   }
 
+  // Zoom policy: the FIRST fit (before any user zoom) uses the cover ratio on
+  // the central 3×3 chunks — the world always overflows the canvas and the
+  // camera bounds crop the overflow. Afterwards, user wheel zoom is preserved
+  // across resizes but clamped so the viewport can never exceed a 3×3 chunk
+  // area. That floor also guarantees a chunk crossing never clamp-jumps the
+  // scroll: a ≤3×3-sized viewport centered on the player always fits inside
+  // both the old and the new 5×5 loaded window.
   private fitCameraToCanvas() {
     const w = this.scale.width, h = this.scale.height;
     const cam = this.cameras.main;
-    const z = Math.max(0.25, Math.min(w / 1152, h / 720));
-    cam.setZoom(z);
-    cam.setScroll(0, 0);
+    this.minZoom = Math.max(w / (3 * CHUNK_PX_W), h / (3 * CHUNK_PX_H));
+    if (!this.fitted) {
+      cam.setZoom(this.minZoom);
+      this.fitted = true;
+    } else {
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom, this.minZoom, 4));
+    }
   }
 
   private resizeOverlays() {
@@ -425,7 +445,8 @@ export class WorldScene extends Phaser.Scene {
     this.lastPlayerChunk = cur;
     void ensureChunks(this, cur);
     releaseOutside(this, cur);
-    recenterCamera(this, cur);
+    // No recenter: the player-follow owns the framing on chunk crossings.
+    recenterCamera(this, cur, false);
   }
 
   private updatePlayer(dt: number) {
