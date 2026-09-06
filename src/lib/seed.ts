@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   animals,
   buildings,
+  enemies,
   items,
   missions,
   npcs,
@@ -15,7 +16,7 @@ import {
   type MissionRequirement,
   type MissionReward,
 } from "@/db/schema";
-import { SPAWN, TILE, WILD_ZONES } from "./worldmap";
+import { SPAWN, TILE, WILD_ZONES, tileRect, tilePoint } from "./worldmap";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 
@@ -148,15 +149,28 @@ const NPC_DEFS: {
   },
 ];
 
+// Animal roam zones in world-tile units (tileRect, ty grows downward).
+// Village species stay near the houses (chunks 1..2, south of them);
+// wild species live in the WILD_ZONES outskirts ring.
 const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: number; w: number; h: number } }[] = [
-  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: { x: 4 * TILE, y: 26 * TILE, w: 8 * TILE, h: 9 * TILE } },
-  { species: "cow", names: ["Buttercup", "Juniper"], zone: { x: 48 * TILE, y: 26 * TILE, w: 10 * TILE, h: 5 * TILE } },
-  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: { x: 14 * TILE, y: 16 * TILE, w: 6 * TILE, h: 4 * TILE } },
-  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: { x: 49 * TILE, y: 31 * TILE, w: 10 * TILE, h: 8 * TILE } },
-  { species: "rabbit", names: ["Thimble", "Moss"], zone: { x: 8 * TILE, y: 36 * TILE, w: 14 * TILE, h: 5 * TILE } },
-  { species: "fox", names: ["Ember"], zone: { x: 52 * TILE, y: 3 * TILE, w: 10 * TILE, h: 10 * TILE } },
-  { species: "cat", names: ["Marmalade"], zone: { x: 24 * TILE, y: 16 * TILE, w: 16 * TILE, h: 11 * TILE } },
-  { species: "dog", names: ["Biscuit"], zone: { x: 26 * TILE, y: 18 * TILE, w: 14 * TILE, h: 12 * TILE } },
+  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: tileRect(6, 48, 24, 21) },
+  { species: "cow", names: ["Buttercup", "Juniper"], zone: tileRect(126, -12, 24, 21) },
+  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: tileRect(24, 33, 20, 12) },
+  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 20) },
+  { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
+  { species: "fox", names: ["Ember"], zone: tileRect(36, -59, 30, 24) },
+  { species: "cat", names: ["Marmalade"], zone: tileRect(28, 18, 18, 9) },
+  { species: "dog", names: ["Biscuit"], zone: tileRect(38, 30, 20, 14) },
+];
+
+// Resource nodes scattered through the wild ring (world-tile units), all in
+// unauthored chunks so they never collide with map art.
+const NODE_DEFS: [string, string, number, number][] = [
+  ["herb_patch", "herb", 8, 54], ["herb_patch", "herb", 28, 62], ["herb_patch", "herb", 48, 51],
+  ["herb_patch", "herb", 22, -55], ["herb_patch", "herb", 44, -57],
+  ["berry_bush", "berry", 14, 49], ["berry_bush", "berry", 64, 56], ["berry_bush", "berry", 130, -21],
+  ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 56, 71],
+  ["mushroom_ring", "mushroom", -76, -15], ["mushroom_ring", "mushroom", 130, 54],
 ];
 
 const MISSION_DEFS: {
@@ -248,6 +262,32 @@ const MISSION_DEFS: {
 
 let seededPromise: Promise<void> | null = null;
 let buildingsSynced = false;
+let wildlifeSynced = false;
+
+// Adopt the chunk-world wildlife layout for an already-seeded DB: rebuild
+// resource nodes at their new spots, clear enemies (they respawn from the new
+// WILD_ZONES), and re-zone animals. Runs once per process — restart the dev
+// server after changing the layout. NPCs are deliberately untouched.
+async function syncWildlifeLayout() {
+  if (wildlifeSynced) return;
+  wildlifeSynced = true;
+  try {
+    await db.delete(resourceNodes);
+    for (const [kind, itemKey, tx, ty] of NODE_DEFS) {
+      const p = tilePoint(tx, ty);
+      await db.insert(resourceNodes).values({ kind, itemKey, x: p.x, y: p.y, qty: 3 });
+    }
+    await db.delete(enemies);
+    for (const def of ANIMAL_DEFS) {
+      await db.update(animals)
+        .set({ zone: def.zone, x: def.zone.x + def.zone.w / 2, y: def.zone.y + def.zone.h / 2, targetX: null, targetY: null })
+        .where(eq(animals.species, def.species));
+    }
+  } catch (e) {
+    wildlifeSynced = false;
+    console.warn("[seed] wildlife layout sync failed:", e instanceof Error ? e.message : e);
+  }
+}
 
 // Upsert manifest buildings into the DB and drop rows no longer in the
 // manifest. Runs once per process (i.e. once per dev-server start): edit the
@@ -290,7 +330,9 @@ async function syncBuildingsFromManifest() {
 /** Idempotent: creates the world if it does not exist. Safe to call on every request. */
 export function ensureSeeded() {
   if (!seededPromise) seededPromise = seed().catch((e) => { seededPromise = null; throw e; });
-  return seededPromise.then(() => syncBuildingsFromManifest());
+  return seededPromise
+    .then(() => syncBuildingsFromManifest())
+    .then(() => syncWildlifeLayout());
 }
 
 async function seed() {
@@ -410,13 +452,7 @@ async function seed() {
         });
       }
     }
-    const nodeDefs: [string, string, number, number][] = [
-      ["herb_patch", "herb", 6 * TILE, 20 * TILE], ["herb_patch", "herb", 10 * TILE, 30 * TILE], ["herb_patch", "herb", 56 * TILE, 16 * TILE],
-      ["herb_patch", "herb", 18 * TILE, 37 * TILE], ["herb_patch", "herb", 44 * TILE, 38 * TILE],
-      ["berry_bush", "berry", 8 * TILE, 12 * TILE], ["berry_bush", "berry", 30 * TILE, 40 * TILE], ["berry_bush", "berry", 58 * TILE, 12 * TILE],
-      ["rock", "stone", 48 * TILE, 39 * TILE], ["rock", "stone", 59 * TILE, 34 * TILE], ["rock", "stone", 47 * TILE, 31 * TILE], ["rock", "stone", 3 * TILE, 40 * TILE],
-      ["mushroom_ring", "mushroom", 4 * TILE, 5 * TILE], ["mushroom_ring", "mushroom", 60 * TILE, 40 * TILE],
-    ];
+    const nodeDefs: [string, string, number, number][] = NODE_DEFS;
     for (const [kind, itemKey, x, y] of nodeDefs) await tx.insert(resourceNodes).values({ kind, itemKey, x, y, qty: 3 });
     await tx.insert(worldEvents).values({ kind: "world", text: "The grove wakes up for the first time." });
   });

@@ -1,7 +1,7 @@
 // Shared world geometry. Used by the server (simulation, collision) and the
 // Phaser client (rendering). Keep this dependency-free.
 
-import { isWalkableAt } from "./chunkCollision";
+import { isWalkableAt, CHUNK_PX_W, CHUNK_PX_H, CHUNK_TILE_PX } from "./chunkCollision";
 
 export const TILE = 32;
 export const MAP_W = 64; // tiles
@@ -54,11 +54,32 @@ export function isWalkable(x: number, y: number) {
   return isWalkableAt(x, y);
 }
 
-/** Zones where wildlife appears (outside the village core). */
+/** Rect spanning `chunksWide × chunksHigh` chunks, top-left at chunk (cx, cy).
+ *  Chunk cy=+1 is up the screen (see chunkCollision). */
+export function chunkRect(cx: number, cy: number, chunksWide: number, chunksHigh: number): Rect {
+  return { x: cx * CHUNK_PX_W, y: -cy * CHUNK_PX_H, w: chunksWide * CHUNK_PX_W, h: chunksHigh * CHUNK_PX_H };
+}
+
+/** Rect in 16px world tiles: (tx, ty) = top-left tile, size in tiles.
+ *  Tile ty grows DOWNWARD (matches screen space — unlike chunk cy). */
+export function tileRect(tx: number, ty: number, tw: number, th: number): Rect {
+  return { x: tx * CHUNK_TILE_PX, y: ty * CHUNK_TILE_PX, w: tw * CHUNK_TILE_PX, h: th * CHUNK_TILE_PX };
+}
+
+/** World-tile center point (tx, ty), ty growing downward. */
+export function tilePoint(tx: number, ty: number): { x: number; y: number } {
+  return { x: tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2, y: ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2 };
+}
+
+/** Zones where wildlife appears. Anchored to the chunk world: the authored
+ *  town spans chunks (-1..4, -2..2), i.e. x -384..1920 / y -480..720, so the
+ *  wild ring sits just outside it — north woods, south meadow, east field and
+ *  west woods. */
 export const WILD_ZONES: Rect[] = [
-  { x: 4 * TILE, y: 36 * TILE, w: 20 * TILE, h: 6 * TILE },
-  { x: 52 * TILE, y: 2 * TILE, w: 10 * TILE, h: 12 * TILE },
-  { x: 2 * TILE, y: 26 * TILE, w: 8 * TILE, h: 10 * TILE },
+  chunkRect(0, 4, 3, 2),   // north woods (chunks 0..2, cy 3..4)
+  chunkRect(0, -4, 3, 2),  // south meadow (chunks 0..2, cy -4..-3)
+  chunkRect(5, 2, 2, 5),   // east field (chunks 5..6, cy -2..2)
+  chunkRect(-4, 2, 2, 5),  // west woods (chunks -4..-3, cy -2..2)
 ];
 
 /** Game clock: 1 game day = dayLengthMinutes real minutes. Returns 0..24 hours. */
