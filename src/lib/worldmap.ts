@@ -1,4 +1,4 @@
-﻿// Shared world geometry. Used by the server (simulation, collision) and the
+// Shared world geometry. Used by the server (simulation, collision) and the
 // Phaser client (rendering). Keep this dependency-free.
 
 import { isWalkableAt } from "./chunkCollision";
@@ -44,10 +44,6 @@ export function buildingRects(): (Rect & { key: string })[] {
     w: b.tw * TILE,
     h: b.th * TILE,
   }));
-}
-
-export function buildingDoor(b: { tx: number; ty: number; tw: number; th: number }) {
-  return { x: (b.tx + b.tw / 2) * TILE, y: (b.ty + b.th) * TILE + 12 };
 }
 
 /** Is a character (feet point) allowed at (x, y)?

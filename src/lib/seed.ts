@@ -1,7 +1,5 @@
 import { eq, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { db } from "@/db";
 import {
   animals,
@@ -249,44 +247,43 @@ const MISSION_DEFS: {
 ];
 
 let seededPromise: Promise<void> | null = null;
-let lastManifestMtime = 0;
+let buildingsSynced = false;
 
 // Upsert manifest buildings into the DB and drop rows no longer in the
-// manifest. Gated on the manifest file's mtime so edits land without a
-// server restart, while steady-state requests only pay one stat() call.
+// manifest. Runs once per process (i.e. once per dev-server start): edit the
+// manifest and restart to sync.
 async function syncBuildingsFromManifest() {
-  const manifestPath = path.join(process.cwd(), "public", "buildings", "buildings.json");
-  let mtime = 0;
+  if (buildingsSynced) return;
+  buildingsSynced = true;
   try {
-    mtime = (await fs.stat(manifestPath)).mtimeMs;
-  } catch {
-    return;
-  }
-  if (mtime === lastManifestMtime) return;
-  lastManifestMtime = mtime;
-  const manifest = await getBuildingsManifest();
-  for (const entry of manifest.buildings) {
-    const template = await getTemplate(entry);
-    const fp = footprintOf(template);
-    const values = {
-      key: entry.key,
-      name: entry.name,
-      kind: entry.kind,
-      description: entry.description ?? "",
-      color: entry.color ?? "#d9a066",
-      tx: entry.tx,
-      ty: entry.ty,
-      tw: fp.tw,
-      th: fp.th,
-      menu: entry.menu ?? [],
-      reservable: entry.reservable ?? true,
-    };
-    await db.insert(buildings).values(values).onConflictDoUpdate({ target: buildings.key, set: values });
-  }
-  const keep = new Set(manifest.buildings.map((b) => b.key));
-  const rows = await db.select().from(buildings);
-  for (const row of rows) {
-    if (!keep.has(row.key)) await db.delete(buildings).where(eq(buildings.key, row.key));
+    const manifest = await getBuildingsManifest();
+    for (const entry of manifest.buildings) {
+      const template = await getTemplate(entry);
+      const fp = footprintOf(template);
+      const values = {
+        key: entry.key,
+        name: entry.name,
+        kind: entry.kind,
+        description: entry.description ?? "",
+        color: entry.color ?? "#d9a066",
+        tx: entry.tx,
+        ty: entry.ty,
+        tw: fp.tw,
+        th: fp.th,
+        menu: entry.menu ?? [],
+        reservable: entry.reservable ?? true,
+      };
+      await db.insert(buildings).values(values).onConflictDoUpdate({ target: buildings.key, set: values });
+    }
+    const keep = new Set(manifest.buildings.map((b) => b.key));
+    const rows = await db.select().from(buildings);
+    for (const row of rows) {
+      if (!keep.has(row.key)) await db.delete(buildings).where(eq(buildings.key, row.key));
+    }
+  } catch (e) {
+    // A broken manifest must not take the world API down.
+    buildingsSynced = false;
+    console.warn("[seed] building manifest sync failed:", e instanceof Error ? e.message : e);
   }
 }
 

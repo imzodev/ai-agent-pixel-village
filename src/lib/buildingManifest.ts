@@ -53,10 +53,12 @@ export function doorTileOf(template: unknown): { dx: number; dy: number } | null
   return null;
 }
 
-/** Bounding box of the Collision layer (tile units), 1×1 fallback. */
-export function footprintOf(template: unknown): { tw: number; th: number } {
+/** Bounding box of the Collision layer in template tile units, including its
+ *  offset from the template's top-left corner (buildings are usually drawn
+ *  off-center, so x/y are NOT zero). 1×1 fallback at the template origin. */
+export function footprintOf(template: unknown): { x: number; y: number; tw: number; th: number } {
   const data = layerByName(template, "Collision");
-  if (!data) return { tw: 1, th: 1 };
+  if (!data) return { x: 0, y: 0, tw: 1, th: 1 };
   let minX = BUILDING_TEMPLATE_W, minY = BUILDING_TEMPLATE_H, maxX = -1, maxY = -1;
   for (let i = 0; i < data.length; i++) {
     if (!(typeof data[i] === "number" && data[i] > 0)) continue;
@@ -67,8 +69,8 @@ export function footprintOf(template: unknown): { tw: number; th: number } {
     if (x > maxX) maxX = x;
     if (y > maxY) maxY = y;
   }
-  if (maxX < 0) return { tw: 1, th: 1 };
-  return { tw: maxX - minX + 1, th: maxY - minY + 1 };
+  if (maxX < 0) return { x: 0, y: 0, tw: 1, th: 1 };
+  return { x: minX, y: minY, tw: maxX - minX + 1, th: maxY - minY + 1 };
 }
 
 /** World pixel of the door for a placed building; falls back to the
@@ -79,5 +81,5 @@ export function doorWorldPx(entry: BuildingManifestEntry, template: unknown): { 
     return { x: (entry.tx + door.dx) * BUILDING_TILE_PX + 8, y: (entry.ty + door.dy) * BUILDING_TILE_PX + 12 };
   }
   const fp = footprintOf(template);
-  return { x: (entry.tx + fp.tw / 2) * BUILDING_TILE_PX, y: (entry.ty + fp.th) * BUILDING_TILE_PX + 12 };
+  return { x: (entry.tx + fp.x + fp.tw / 2) * BUILDING_TILE_PX, y: (entry.ty + fp.y + fp.th) * BUILDING_TILE_PX + 12 };
 }

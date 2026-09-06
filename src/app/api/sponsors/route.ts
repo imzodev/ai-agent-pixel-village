@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { buildings, characters, leads, missions, npcs, sponsors, type Appearance } from "@/db/schema";
 import { handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
-import { buildingDoor } from "@/lib/worldmap";
+import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
 
 export const dynamic = "force-dynamic";
@@ -64,8 +64,9 @@ export async function POST(req: Request) {
       .returning();
     await db.update(buildings).set({ sponsorId: sp.id }).where(eq(buildings.id, building.id));
 
-    // Spawn the agent at the building door.
-    const door = buildingDoor(building);
+    // Spawn the agent at the building door (derived from the template's
+    // Interactive layer; falls back to footprint bottom-center).
+    const door = (await getBuildingDoor(building.key)) ?? { x: (building.tx + building.tw / 2) * 16, y: (building.ty + building.th) * 16 + 12 };
     const appearance: Appearance = {
       body: b.appearance?.body === "female" ? "female" : "male",
       skin: hex(b.appearance?.skin, "#f1c9a5"),

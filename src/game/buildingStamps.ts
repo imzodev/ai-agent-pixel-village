@@ -5,7 +5,7 @@
 // first non-zero tile is the door / interaction anchor.
 import type Phaser from "phaser";
 import { blockStampTiles, blockedFromChunk } from "@/lib/chunkCollision";
-import { doorTileOf, type BuildingManifest, type BuildingManifestEntry } from "@/lib/buildingManifest";
+import { doorTileOf, footprintOf, type BuildingManifest, type BuildingManifestEntry } from "@/lib/buildingManifest";
 import { CHUNK_TILE_PX, LAYER_DEPTH, LAYER_RENDER_ORDER, SKIP_LAYERS } from "./worldTilemap";
 
 export type StampedBuilding = {
@@ -13,6 +13,8 @@ export type StampedBuilding = {
   originX: number;
   originY: number;
   door: { x: number; y: number } | null;
+  /** Interactive/selection rect in world px (collision bbox offset inside the template). */
+  zone: { x: number; y: number; w: number; h: number };
 };
 
 // Load a template's Tiled JSON into the Tilemap cache. Mirrors loadChunk's
@@ -60,7 +62,12 @@ export async function stampBuildings(
     const originY = entry.ty * CHUNK_TILE_PX;
     createStampLayers(scene, tilemap, key, originX, originY);
     registerStampCollision(scene, tilemap, key, originX, originY);
-    const doorTile = doorTileOf(scene.sys.cache.tilemap.get(key) as unknown);
+    // The Tilemap cache stores a { format, data } wrapper — unwrap before
+    // handing the Tiled JSON to the pure helpers.
+    const cacheEntry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
+    const json = cacheEntry?.data ?? cacheEntry;
+    const doorTile = doorTileOf(json);
+    const fp = footprintOf(json);
     out.push({
       entry,
       originX,
@@ -68,6 +75,7 @@ export async function stampBuildings(
       door: doorTile
         ? { x: originX + doorTile.dx * CHUNK_TILE_PX + 8, y: originY + doorTile.dy * CHUNK_TILE_PX + 12 }
         : null,
+      zone: { x: originX + fp.x * CHUNK_TILE_PX, y: originY + fp.y * CHUNK_TILE_PX, w: fp.tw * CHUNK_TILE_PX, h: fp.th * CHUNK_TILE_PX },
     });
   }
   return out;

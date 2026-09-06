@@ -61,6 +61,8 @@ export class WorldScene extends Phaser.Scene {
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
+  // Selection/click rect per building key (collision bbox inside the template).
+  private buildingZonesRects = new Map<string, { x: number; y: number; w: number; h: number }>();
   private buildingZones = new Map<string, { zone: Phaser.GameObjects.Zone; glow: Phaser.GameObjects.Arc; door: { x: number; y: number } }>();
   private shownChat = new Set<number>();
   private moveTarget: { x: number; y: number } | null = null;
@@ -106,6 +108,7 @@ export class WorldScene extends Phaser.Scene {
         const stamped = await stampBuildings(this, manifest);
         for (const s of stamped) {
           if (s.door) this.buildingDoors.set(s.entry.key, s.door);
+          this.buildingZonesRects.set(s.entry.key, s.zone);
         }
       }
     } catch {
@@ -243,11 +246,12 @@ export class WorldScene extends Phaser.Scene {
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
       const door = this.buildingDoors.get(b.key) ?? { x: b.doorX, y: b.doorY };
+      const rect = this.buildingZonesRects.get(b.key) ?? { x: b.tx * 16, y: b.ty * 16, w: b.tw * 16, h: b.th * 16 };
       let ent = this.buildingZones.get(b.key);
       if (!ent) {
-        const zone = this.add.zone(b.tx * 16, b.ty * 16, b.tw * 16, b.th * 16)
+        const zone = this.add.zone(rect.x, rect.y, rect.w, rect.h)
           .setOrigin(0, 0)
-          .setDepth(DEPTH_CHAR_BASE + (b.ty + b.th) * 16);
+          .setDepth(DEPTH_CHAR_BASE + rect.y + rect.h);
         zone.setInteractive({ useHandCursor: true });
         zone.on("pointerdown", () => {
           const s = { type: "building" as const, id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(door.x, door.y) };

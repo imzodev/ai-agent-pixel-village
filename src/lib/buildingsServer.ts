@@ -1,6 +1,7 @@
 // Server-side loader for the buildings manifest and their Tiled templates.
-// Results are cached per process — restart the dev server after editing the
-// manifest or templates (client always fetches fresh).
+// Cached per process — after editing buildings.json or any template, restart
+// the dev server. (Deliberately no mtime polling: the manifest never changes
+// at runtime in production, and this keeps the hot request path free of I/O.)
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { doorWorldPx, type BuildingManifest, type BuildingManifestEntry } from "./buildingManifest";
@@ -9,9 +10,11 @@ let cachedManifest: BuildingManifest | null = null;
 const cachedTemplates = new Map<string, unknown>();
 const cachedDoors = new Map<string, { x: number; y: number }>();
 
+const manifestPath = path.join(process.cwd(), "public", "buildings", "buildings.json");
+
 export async function getBuildingsManifest(): Promise<BuildingManifest> {
   if (cachedManifest) return cachedManifest;
-  const buf = await fs.readFile(path.join(process.cwd(), "public", "buildings", "buildings.json"), "utf8");
+  const buf = await fs.readFile(manifestPath, "utf8");
   cachedManifest = JSON.parse(buf) as BuildingManifest;
   return cachedManifest;
 }
