@@ -4,7 +4,14 @@ import { BUILDINGS, TILE, WORLD_H, WORLD_W, buildingDoor, isWalkable } from "@/l
 import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
 import { buildingTextureKey, makeAllTextures, makeBuildingTexture } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
-import { buildTilemap, loadTilemapAssets, WORLD_PX_H, WORLD_PX_W } from "./worldTilemap";
+import {
+  chunkAtPixel,
+  chunkCenter,
+  ensureChunks,
+  loadTilemapAssets,
+  recenterCamera,
+  releaseOutside,
+} from "./worldTilemap";
 
 const BLD_ATLAS_URL = "/buildings/thegrove-blueprint-atlas.png";
 const BLD_LEGEND_URL = "/buildings/thegrove-tile-legend.json";
@@ -53,6 +60,7 @@ export class WorldScene extends Phaser.Scene {
   private chatFocused = false;
   private marker!: Phaser.GameObjects.Image;
   private sentFirst = false;
+  private lastPlayerChunk: { cx: number; cy: number } | null = null;
   private unsub: (() => void)[] = [];
 
   constructor() {
@@ -66,9 +74,13 @@ export class WorldScene extends Phaser.Scene {
     loadTilemapAssets(this);
   }
 
-  create() {
+  async create() {
     makeAllTextures(this);
-    buildTilemap(this);
+    // Initial chunk window: central chunk (0, 0). Streaming kicks in once the
+    // player crosses a chunk boundary in updatePlayer.
+    this.lastPlayerChunk = { cx: 0, cy: 0 };
+    await ensureChunks(this, this.lastPlayerChunk);
+    recenterCamera(this, this.lastPlayerChunk);
     // placeholder char texture
     if (!this.textures.exists("ph_char")) {
       const g = this.make.graphics({ x: 0, y: 0 }, false);
@@ -78,10 +90,10 @@ export class WorldScene extends Phaser.Scene {
     }
     this.marker = this.add.image(0, 0, "marker").setDepth(20000).setVisible(false);
 
-    this.cameras.main.setBounds(0, 0, WORLD_PX_W, WORLD_PX_H);
-    this.cameras.main.setZoom(2);
-    this.cameras.main.centerOn(WORLD_PX_W / 2, WORLD_PX_H / 2);
     this.cameras.main.setRoundPixels(true);
+
+    this.scale.on("resize", () => this.fitCameraToCanvas());
+    this.fitCameraToCanvas();
 
     // overlays
     this.night = this.add.rectangle(0, 0, 10, 10, 0x0a1030, 0).setOrigin(0).setScrollFactor(0).setDepth(9000);
@@ -142,7 +154,16 @@ export class WorldScene extends Phaser.Scene {
     this.pollTimer = window.setInterval(() => void this.poll(), 1000);
   }
 
+  private fitCameraToCanvas() {
+    const w = this.scale.width, h = this.scale.height;
+    const cam = this.cameras.main;
+    const z = Math.max(0.25, Math.min(w / 1152, h / 720));
+    cam.setZoom(z);
+    cam.setScroll(0, 0);
+  }
+
   private resizeOverlays() {
+    this.fitCameraToCanvas();
     const w = this.scale.width, h = this.scale.height;
     this.night.setSize(w, h); this.fog.setSize(w, h);
     const zone = new Phaser.Geom.Rectangle(-w / this.cameras.main.zoom / 2 - 100, -40, w / this.cameras.main.zoom + 200, 60);
@@ -196,10 +217,12 @@ export class WorldScene extends Phaser.Scene {
     // me
     if (s.me) {
       if (!this.player) {
-        this.player = this.makeChar(s.me.x, s.me.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a");
-        this.player.sprite.setDepth(s.me.y);
+        // Spawn inside the central chunk so the player appears on screen even
+        // when the server reports a position outside the chunk world.
+        const spawn = chunkCenter(0, 0);
+        this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a");
+        this.player.sprite.setDepth(spawn.y);
         this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
-        this.cameras.main.setZoom(2.5);
         this.resizeOverlays();
       } else if (first || Math.hypot(this.player.sprite.x - s.me.x, this.player.sprite.y - s.me.y) > 500) {
         this.player.sprite.setPosition(s.me.x, s.me.y);
@@ -375,7 +398,10 @@ export class WorldScene extends Phaser.Scene {
   // ---------- update loop ----------
   update(time: number, deltaMs: number) {
     const dt = Math.min(0.05, deltaMs / 1000);
-    if (this.player) this.updatePlayer(dt);
+    if (this.player) {
+      this.updatePlayer(dt);
+      this.syncStreamingChunks();
+    }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);
     for (const e of this.animals.values()) this.moveCritter(e, dt, time);
@@ -387,6 +413,19 @@ export class WorldScene extends Phaser.Scene {
       cam.scrollX += Math.sin(time / 9000) * 0.15;
       cam.scrollY += Math.cos(time / 11000) * 0.1;
     }
+  }
+
+  // Streaming: only when the player crosses a chunk boundary, load the new
+  // surrounding chunks, release the ones outside the window, and recompute
+  // camera bounds.
+  private syncStreamingChunks(): void {
+    if (!this.player) return;
+    const cur = chunkAtPixel(this.player.sprite.x, this.player.sprite.y);
+    if (this.lastPlayerChunk && this.lastPlayerChunk.cx === cur.cx && this.lastPlayerChunk.cy === cur.cy) return;
+    this.lastPlayerChunk = cur;
+    void ensureChunks(this, cur);
+    releaseOutside(this, cur);
+    recenterCamera(this, cur);
   }
 
   private updatePlayer(dt: number) {

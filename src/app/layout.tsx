@@ -11,7 +11,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, maxi
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-stone-100 text-stone-900 antialiased">{children}</body>
+      <body className="bg-[#6fae5f] text-stone-900 antialiased">{children}</body>
     </html>
   );
 }

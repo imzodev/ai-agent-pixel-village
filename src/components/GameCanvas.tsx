@@ -28,5 +28,5 @@ export default function GameCanvas() {
       game?.destroy(true);
     };
   }, []);
-  return <div ref={ref} className="absolute inset-0 h-full w-full" />;
+  return <div ref={ref} className="absolute inset-0 h-full w-full overflow-hidden" style={{ backgroundColor: "#6fae5f" }} />;
 }
