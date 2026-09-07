@@ -16,7 +16,7 @@ import {
   type MissionRequirement,
   type MissionReward,
 } from "@/db/schema";
-import { SPAWN, TILE, WILD_ZONES, tileRect, tilePoint } from "./worldmap";
+import { TILE, WILD_ZONES, tilePoint, tileRect } from "./worldmap";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 
@@ -54,35 +54,32 @@ const NPC_DEFS: {
   role: string;
   persona: string;
   greeting: string;
-  building?: string;
-  offset?: [number, number];
-  pos?: [number, number];
+  /** Chunk-world tile units (ty grows down). Converted to pixels via tilePoint. */
+  tilePos: [number, number];
   wanderRadius: number;
   appearance: Appearance;
   mood: string;
-  sponsored?: boolean;
 }[] = [
   {
     key: "baker",
     name: "Marigold",
-    role: "Baker",
+    role: "Cabin Dweller",
     persona:
-      "Marigold runs Hearthstone Bakery. Warm, flour-dusted, talks with her hands, calls everyone 'love'. Proud of her sourdough and her weekend cinnamon knots. Gives recipe cards to anyone who helps her gather ingredients.",
+      "Marigold is a warm, flour-dusted cabin dweller who calls everyone 'love'. She keeps a tidy cabin, bakes out of habit more than trade, and is happier talking than selling. Loves sharing a warm bun.",
     greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
-    building: "bakery",
+    tilePos: [48, 16],
     wanderRadius: 90,
     appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#c94f2a", shirtColor: "#f7e7d3", pantsColor: "#7a4a2a" },
     mood: "cheerful",
-    sponsored: true,
   },
   {
     key: "innkeeper",
     name: "Bram",
-    role: "Innkeeper",
+    role: "Cabin Dweller",
     persona:
-      "Bram keeps The Sleepy Fox Inn. Big laugh, bigger beard, remembers every guest's name. Loves a good story and a bowl of root stew.",
-    greeting: "Welcome, traveler! Stew's on. Sit, sit — tell me where you've been.",
-    building: "inn",
+      "Bram is a jolly cabin dweller with a big laugh and an even bigger beard. Remembers every neighbor's name. Loves a good story by the fire and a bowl of root stew on a cold night.",
+    greeting: "Welcome, neighbor! Stew's on. Sit, sit — tell me where you've been.",
+    tilePos: [4, 40],
     wanderRadius: 80,
     appearance: { body: "male", skin: "#d9a066", hair: "messy1", hairColor: "#3b2a1a", shirtColor: "#7a3e2e", pantsColor: "#2e2e3a" },
     mood: "jolly",
@@ -90,11 +87,11 @@ const NPC_DEFS: {
   {
     key: "shopkeeper",
     name: "Pip",
-    role: "Shopkeeper",
+    role: "Cabin Dweller",
     persona:
-      "Pip runs the Bramble General Store. Quick, curious, always counting something. Trades in odds and ends and is delighted by rocks.",
-    greeting: "Ah! A customer! Or a browser. Both welcome. Do you have any interesting rocks?",
-    building: "store",
+      "Pip is a quick, curious cabin dweller who collects interesting rocks and odds. Trades small favours for small stories and is delighted by anything shiny.",
+    greeting: "Ah! A visitor. Or a neighbor. Both welcome. Do you have any interesting rocks?",
+    tilePos: [16, 8],
     wanderRadius: 70,
     appearance: { body: "male", skin: "#f1c9a5", hair: "spiked", hairColor: "#e8c14a", shirtColor: "#4a7c59", pantsColor: "#3a3a3a" },
     mood: "curious",
@@ -102,11 +99,11 @@ const NPC_DEFS: {
   {
     key: "herbalist",
     name: "Wren",
-    role: "Wandering Herbalist",
+    role: "Wandering Cabin Dweller",
     persona:
-      "Wren is a soft-spoken wandering herbalist who never stays in one place. Knows every plant in the grove by name. Trades knowledge for herbs.",
+      "Wren is a soft-spoken cabin dweller who never stays put. Knows every plant in the grove by name and prefers quiet corners to crowds. Trades plant knowledge for the herbs themselves.",
     greeting: "Shh — do you hear that? The mint is blooming. Bring me herbs and I'll teach you something.",
-    pos: [14 * TILE, 28 * TILE],
+    tilePos: [16, 56],
     wanderRadius: 260,
     appearance: { body: "female", skin: "#c68e5a", hair: "long", hairColor: "#2f4f3f", shirtColor: "#6b8f71", pantsColor: "#5a4632" },
     mood: "serene",
@@ -114,11 +111,11 @@ const NPC_DEFS: {
   {
     key: "elder",
     name: "Elder Oswin",
-    role: "Village Elder",
+    role: "Cabin Elder",
     persona:
-      "Elder Oswin has lived in the grove longer than anyone. Slow, kind, endlessly patient, remembers when the plaza was a meadow. Gives small tasks that bind the village together.",
+      "Elder Oswin has lived in the grove longer than anyone. Slow, kind, endlessly patient. Remembers when the cabin site was a meadow. Gives small tasks that bind the village together and tells stories about the old days.",
     greeting: "Ah, a new face. Or an old one I've forgotten — forgive me. Sit with me a moment.",
-    building: "townhall",
+    tilePos: [12, 12],
     wanderRadius: 60,
     appearance: { body: "male", skin: "#e8c39e", hair: "buzzcut", hairColor: "#dcdcdc", shirtColor: "#8a7f9e", pantsColor: "#4a4a5a" },
     mood: "calm",
@@ -128,9 +125,9 @@ const NPC_DEFS: {
     name: "Tobin",
     role: "Village Kid",
     persona:
-      "Tobin is a small kid who lives at the inn and mostly just wants someone to talk to. Full of questions, collects feathers, afraid of the fox but also wants to be its friend.",
+      "Tobin is a small kid who lives at one of the cabins and mostly just wants someone to talk to. Full of questions, collects feathers, afraid of the fox but also wants to be its friend.",
     greeting: "Hi! Hi. Do you want to see my feather collection? It's mostly one feather.",
-    pos: [30 * TILE, 27 * TILE],
+    tilePos: [22, 18],
     wanderRadius: 200,
     appearance: { body: "male", skin: "#f1c9a5", hair: "cowlick", hairColor: "#6b4226", shirtColor: "#e9c46a", pantsColor: "#264653" },
     mood: "lonely",
@@ -138,11 +135,11 @@ const NPC_DEFS: {
   {
     key: "tinker",
     name: "Greta",
-    role: "Tinker",
+    role: "Cabin Dweller",
     persona:
-      "Greta runs the workshop. Goggles on forehead, soot on cheeks, finishes your sentences. Builds furniture from whatever you bring her.",
-    greeting: "Don't touch that, it's — okay, it's fine, it only sparks a little. What do you need built?",
-    building: "workshop",
+      "Greta is a focused cabin dweller with a workshop corner. Clanking, whirring, the occasional small explosion. Always glad to show a working gadget and trade repair work for firewood.",
+    greeting: "Careful with that wrench — the small explosion was on purpose. Need something fixed?",
+    tilePos: [50, 32],
     wanderRadius: 80,
     appearance: { body: "female", skin: "#d9a066", hair: "bangs", hairColor: "#222222", shirtColor: "#a07a4a", pantsColor: "#3d3d3d" },
     mood: "focused",
@@ -263,6 +260,31 @@ const MISSION_DEFS: {
 let seededPromise: Promise<void> | null = null;
 let buildingsSynced = false;
 let wildlifeSynced = false;
+let npcSynced = false;
+
+// Move seeded NPCs to their chunk-world cabin-village positions and update
+// role/persona/greeting for any existing rows. Runs once per process — edit
+// NPC_DEFS and restart the dev server to re-apply.
+async function syncNpcLayout() {
+  if (npcSynced) return;
+  npcSynced = true;
+  try {
+    for (const n of NPC_DEFS) {
+      const p = tilePoint(n.tilePos[0], n.tilePos[1]);
+      await db.update(npcs)
+        .set({
+          x: p.x, y: p.y, homeX: p.x, homeY: p.y,
+          role: n.role, persona: n.persona, greeting: n.greeting,
+          mood: n.mood, wanderRadius: n.wanderRadius,
+          buildingId: null, sponsorId: null,
+        })
+        .where(eq(npcs.key, n.key));
+    }
+  } catch (e) {
+    npcSynced = false;
+    console.warn("[seed] NPC layout sync failed:", e instanceof Error ? e.message : e);
+  }
+}
 
 // Adopt the chunk-world wildlife layout for an already-seeded DB: rebuild
 // resource nodes at their new spots, clear enemies (they respawn from the new
@@ -332,7 +354,8 @@ export function ensureSeeded() {
   if (!seededPromise) seededPromise = seed().catch((e) => { seededPromise = null; throw e; });
   return seededPromise
     .then(() => syncBuildingsFromManifest())
-    .then(() => syncWildlifeLayout());
+    .then(() => syncWildlifeLayout())
+    .then(() => syncNpcLayout());
 }
 
 async function seed() {
@@ -402,17 +425,9 @@ async function seed() {
 
     const npcIds = new Map<string, number>();
     for (const n of NPC_DEFS) {
-      let x: number, y: number, buildingId: number | null = null;
-      const manifestEntry = manifest.buildings.find((m) => m.key === n.building);
-      const dbBuilding = n.building ? bByKey.get(n.building) : undefined;
-      if (dbBuilding && manifestEntry) {
-        const d = doorWorldPx(manifestEntry, await getTemplate(manifestEntry));
-        x = d.x + (n.offset?.[0] ?? 0) + 20;
-        y = d.y + (n.offset?.[1] ?? 0) + 24;
-        buildingId = dbBuilding.id;
-      } else {
-        [x, y] = n.pos ?? [SPAWN.x, SPAWN.y];
-      }
+      const p = tilePoint(n.tilePos[0], n.tilePos[1]);
+      const x = p.x;
+      const y = p.y;
       const [row] = await tx
         .insert(npcs)
         .values({
@@ -425,7 +440,7 @@ async function seed() {
           wanderRadius: n.wanderRadius,
           appearance: n.appearance,
           mood: n.mood,
-          buildingId,
+          buildingId: null,
           sponsorId: null,
         })
         .onConflictDoNothing()
