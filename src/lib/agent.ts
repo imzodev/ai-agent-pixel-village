@@ -16,6 +16,10 @@ export type BrainInput = {
   offers: Offer[];
   hour: number;
   weather: string;
+  /** Skip the LLM and scripted brain entirely (e.g. remote agent). */
+  skipLocalBrain?: boolean;
+  /** Force the scripted path (e.g. rate-limited). */
+  forceScripted?: boolean;
 };
 
 export type BrainOutput = { text: string; offerIds: string[]; source: "scripted" | "llm" | "remote" };
@@ -23,11 +27,12 @@ export type BrainOutput = { text: string; offerIds: string[]; source: "scripted"
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
 export async function generateReply(input: BrainInput): Promise<BrainOutput> {
-  if (input.npc.kind === "remote" && input.npc.webhookUrl) {
+  if (input.skipLocalBrain) return scriptedReply(input);
+  if (!input.forceScripted && input.npc.kind === "remote" && input.npc.webhookUrl) {
     const r = await remoteReply(input).catch(() => null);
     if (r) return r;
   }
-  if (getActiveProvider()) {
+  if (!input.forceScripted && getActiveProvider()) {
     const r = await llmReply(input).catch((e) => {
       console.error("llm error", e);
       return null;

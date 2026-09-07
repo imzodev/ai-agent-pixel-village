@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { conversations, npcs, worldChat, worldState } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { generateReply } from "@/lib/agent";
+import { npcLlmLimiter } from "@/lib/rateLimit";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
 import { gameHour } from "@/lib/worldmap";
@@ -51,7 +52,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));
     const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes);
 
-    const reply = await generateReply({ npc, sponsor, character, message, history, offers, hour, weather: ws.weather });
+    // Soft rate limit on LLM-powered replies per character. The player
+    // still gets an answer (scripted) once the cap is hit — this protects
+    // the bill, not the gameplay.
+    const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString());
+
+    const reply = await generateReply({ npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted });
 
     if (message) {
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "player", text: message });

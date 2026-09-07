@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
+import type { ConversationSource, TalkLine } from "@/lib/types";
 
 type Offer = { id: string; type: string; label: string; line: string };
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
@@ -22,7 +23,7 @@ export default function Hud() {
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
-  const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: { role: string; text: string }[]; offers: Offer[]; busy: boolean } | null>(null);
+  const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [building, setBuilding] = useState<{ key: string; name: string } | null>(null);
   const [auth, setAuth] = useState<"login" | null>(null);
@@ -82,17 +83,17 @@ export default function Hud() {
     setTalk({ npcId, name, role, sponsor: null, lines: [], offers: [], busy: true });
     setSel(null);
     const hist = await api<{ history: { role: string; text: string }[] }>(`/api/npc/${npcId}/talk`);
-    const r = await api<{ text: string; offers: Offer[]; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
     if (r.error) { toast(r.error, "bad"); setTalk(null); return; }
-    setTalk({ npcId, name, role, sponsor: r.npc.sponsor, lines: [...(hist.history ?? []).slice(-6), { role: "npc", text: r.text }], offers: r.offers, busy: false });
+    setTalk({ npcId, name, role, sponsor: r.npc.sponsor, lines: [...(hist.history ?? []).slice(-6).map((h) => ({ role: h.role as "player" | "npc", text: h.text })), { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
     setTimeout(() => talkInput.current?.focus(), 50);
   };
   const sendTalk = async (message: string) => {
     if (!talk || talk.busy) return;
     setTalk({ ...talk, lines: [...talk.lines, { role: "player", text: message }], busy: true });
-    const r = await api<{ text: string; offers: Offer[] }>(`/api/npc/${talk.npcId}/talk`, { message });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource }>(`/api/npc/${talk.npcId}/talk`, { message });
     if (r.error) { toast(r.error, "bad"); setTalk((t) => t && { ...t, busy: false }); return; }
-    setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text }], offers: r.offers, busy: false });
+    setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
   };
   const acceptOffer = async (offerId: string) => {
     if (!talk) return;
@@ -215,7 +216,12 @@ export default function Hud() {
           <div className="max-h-52 space-y-1.5 overflow-y-auto px-3 py-2">
             {talk.lines.map((l, i) => (
               <div key={i} className={`flex ${l.role === "player" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 ${l.role === "player" ? "bg-emerald-200 text-emerald-950" : l.text.startsWith("(") ? "bg-transparent italic text-stone-500" : "bg-white shadow"}`}>{l.text}</div>
+                <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 ${l.role === "player" ? "bg-emerald-200 text-emerald-950" : l.text.startsWith("(") ? "bg-transparent italic text-stone-500" : "bg-white shadow"}`}>
+                  <div className="flex items-start gap-1.5">
+                    <span className="flex-1">{l.text}</span>
+                    {l.role === "npc" && l.source && <SourceBadge source={l.source} />}
+                  </div>
+                </div>
               </div>
             ))}
             {talk.busy && <div className="text-stone-400">…</div>}
@@ -316,6 +322,20 @@ function selTitle(sel: Selection) {
 }
 function TopBtn({ children, on, active }: { children: React.ReactNode; on: () => void; active?: boolean }) {
   return <button onClick={on} className={`rounded-lg px-2 py-1 ${active ? "bg-amber-300 text-amber-900" : "bg-black/40 hover:bg-black/60"}`}>{children}</button>;
+}
+
+const SOURCE_LABEL: Record<ConversationSource, string> = {
+  llm: "AI",
+  scripted: "script",
+  remote: "webhook",
+};
+const SOURCE_TINT: Record<ConversationSource, string> = {
+  llm: "bg-violet-200 text-violet-900",
+  scripted: "bg-stone-200 text-stone-700",
+  remote: "bg-sky-200 text-sky-900",
+};
+function SourceBadge({ source }: { source: ConversationSource }) {
+  return <span title={source} className={`mt-0.5 inline-flex shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SOURCE_TINT[source]}`}>{SOURCE_LABEL[source]}</span>;
 }
 function Btn({ children, on, subtle, disabled }: { children: React.ReactNode; on: () => void; subtle?: boolean; disabled?: boolean }) {
   return <button disabled={disabled} onClick={on} className={`rounded-lg px-3 py-1.5 font-bold shadow disabled:opacity-40 ${subtle ? "bg-stone-200 text-stone-800 hover:bg-stone-300" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}>{children}</button>;
