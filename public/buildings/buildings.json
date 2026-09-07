@@ -11,6 +11,66 @@
       "reservable": true,
       "tx": 30,
       "ty": 15
+    },
+    {
+      "key": "cabin_2",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Two",
+      "kind": "home",
+      "description": "A neighbour cabin, snugly tucked by the path.",
+      "color": "#a07a4a",
+      "menu": [],
+      "reservable": true,
+      "tx": -15,
+      "ty": 18
+    },
+    {
+      "key": "cabin_3",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Three",
+      "kind": "home",
+      "description": "The cabin with the green shutters, near the plaza.",
+      "color": "#5a4632",
+      "menu": [],
+      "reservable": true,
+      "tx": 8,
+      "ty": 15
+    },
+    {
+      "key": "cabin_4",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Four",
+      "kind": "home",
+      "description": "The east cabin, with a clear view of the meadow.",
+      "color": "#7a4a2a",
+      "menu": [],
+      "reservable": true,
+      "tx": 38,
+      "ty": 23
+    },
+    {
+      "key": "cabin_5",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Five",
+      "kind": "home",
+      "description": "The north cabin, catching the morning sun.",
+      "color": "#e9b384",
+      "menu": [],
+      "reservable": true,
+      "tx": 22,
+      "ty": 8
+    },
+    {
+      "key": "cabin_6",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Six",
+      "kind": "home",
+      "description": "The far cabin, hidden between two maples.",
+      "color": "#d9a066",
+      "menu": [],
+      "reservable": true,
+      "tx": 55,
+      "ty": 12
     }
   ]
 }
