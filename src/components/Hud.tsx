@@ -51,6 +51,16 @@ export default function Hud() {
     return () => u.forEach((f) => f());
   }, [toast, refreshMe]);
   useEffect(() => { if (snap?.me && !me?.me) void refreshMe(); }, [snap?.me, me?.me, refreshMe]);
+
+  // Close the talk panel when the NPC drifts out of range (e.g. they walked
+  // away, or you did) — without waiting for the next failed send.
+  useEffect(() => {
+    if (!talk || !snap) return;
+    const n = snap.npcs.find((x) => x.id === talk.npcId);
+    if (!n) return;
+    const dist = Math.hypot(n.x - (snap.me?.x ?? 0), n.y - (snap.me?.y ?? 0));
+    if (dist > 160) setTalk(null);
+  }, [snap, talk]);
   // keep the selection's distance live as the player walks
   useEffect(() => {
     if (!snap?.me || !sel) return;
@@ -92,7 +102,14 @@ export default function Hud() {
     if (!talk || talk.busy) return;
     setTalk({ ...talk, lines: [...talk.lines, { role: "player", text: message }], busy: true });
     const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource }>(`/api/npc/${talk.npcId}/talk`, { message });
-    if (r.error) { toast(r.error, "bad"); setTalk((t) => t && { ...t, busy: false }); return; }
+    if (r.error) {
+      toast(r.error, "bad");
+      // Walked out of range? Close the panel — the conversation is no longer
+      // reachable and an open panel hides the toast behind itself.
+      if (/closer first/i.test(r.error)) setTalk(null);
+      else setTalk((t) => t && { ...t, busy: false });
+      return;
+    }
     setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
   };
   const acceptOffer = async (offerId: string) => {
