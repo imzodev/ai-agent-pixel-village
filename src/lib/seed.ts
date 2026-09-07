@@ -17,6 +17,7 @@ import {
   type MissionReward,
 } from "@/db/schema";
 import { TILE, WILD_ZONES, tilePoint, tileRect } from "./worldmap";
+import { isWalkableServer } from "./chunkCollisionServer";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 
@@ -67,7 +68,7 @@ const NPC_DEFS: {
     persona:
       "Marigold is a warm, flour-dusted cabin dweller who calls everyone 'love'. She keeps a tidy cabin, bakes out of habit more than trade, and is happier talking than selling. Loves sharing a warm bun.",
     greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
-    tilePos: [48, 16],
+    tilePos: [44, 14],
     wanderRadius: 90,
     appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#c94f2a", shirtColor: "#f7e7d3", pantsColor: "#7a4a2a" },
     mood: "cheerful",
@@ -264,16 +265,26 @@ let npcSynced = false;
 
 // Move seeded NPCs to their chunk-world cabin-village positions and update
 // role/persona/greeting for any existing rows. Runs once per process — edit
-// NPC_DEFS and restart the dev server to re-apply.
+// NPC_DEFS and restart the dev server to re-apply. If the configured tile
+// sits on a Collision tile, snap to the nearest walkable neighbour so NPCs
+// stay reachable (the player can't walk to them otherwise, and the world
+// heartbeat would reject any teleport to their feet).
 async function syncNpcLayout() {
   if (npcSynced) return;
   npcSynced = true;
   try {
     for (const n of NPC_DEFS) {
       const p = tilePoint(n.tilePos[0], n.tilePos[1]);
+      let x = p.x;
+      let y = p.y;
+      if (!(await isWalkableServer(x, y))) {
+        const snap = await nearestWalkable(n.tilePos[0], n.tilePos[1]);
+        x = snap.x;
+        y = snap.y;
+      }
       await db.update(npcs)
         .set({
-          x: p.x, y: p.y, homeX: p.x, homeY: p.y,
+          x, y, homeX: x, homeY: y,
           role: n.role, persona: n.persona, greeting: n.greeting,
           mood: n.mood, wanderRadius: n.wanderRadius,
           buildingId: null, sponsorId: null,
@@ -284,6 +295,24 @@ async function syncNpcLayout() {
     npcSynced = false;
     console.warn("[seed] NPC layout sync failed:", e instanceof Error ? e.message : e);
   }
+}
+
+async function nearestWalkable(tx: number, ty: number): Promise<{ x: number; y: number }> {
+  // Spiral search within a small radius; chicken-zones are big enough that
+  // almost any random tile around a village core is reachable.
+  for (let r = 1; r <= 8; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const p = tilePoint(tx + dx, ty + dy);
+        if (await isWalkableServer(p.x, p.y)) return p;
+      }
+    }
+  }
+  // Fallback to the original position (should be unreachable for the rest
+  // of this process since the chunk is fully walled — caller will see the
+  // NPC but can't interact).
+  return tilePoint(tx, ty);
 }
 
 // Adopt the chunk-world wildlife layout for an already-seeded DB: rebuild

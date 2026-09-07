@@ -2,9 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
-import type { ConversationSource, TalkLine } from "@/lib/types";
+import type { ConversationSource, Offer, TalkLine } from "@/lib/types";
 
-type Offer = { id: string; type: string; label: string; line: string };
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
 type Me = { me: { id: number; name: string; coins: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number };
@@ -246,7 +245,7 @@ export default function Hud() {
           {talk.offers.length > 0 && (
             <div className="flex flex-wrap gap-2 px-3 pb-2">
               {talk.offers.map((o) => (
-                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`rounded-lg px-3 py-1.5 font-bold text-white shadow hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "turnin" ? "bg-emerald-600" : o.type === "mission" ? "bg-sky-600" : "bg-violet-600"}`}>
+                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`rounded-lg px-3 py-1.5 font-bold text-white shadow hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "sell" ? "bg-yellow-600" : o.type === "turnin" ? "bg-emerald-600" : o.type === "mission" ? "bg-sky-600" : "bg-violet-600"}`}>
                   {o.type === "discount" ? "🎟️ " : o.type === "turnin" ? "✅ " : o.type === "mission" ? "📜 " : "🎁 "}{o.label}
                 </button>
               ))}

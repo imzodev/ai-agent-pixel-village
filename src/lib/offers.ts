@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characterMissions, conversations, inventory, missions, npcs, sponsors, type characters } from "@/db/schema";
 import { missionProgressFor, requirementTarget } from "./game";
-import type { Offer } from "./agent";
+import type { Offer } from "./types";
 
 type Npc = typeof npcs.$inferSelect;
 type Character = typeof characters.$inferSelect;
@@ -11,6 +11,14 @@ const FIRST_MEETING_GIFTS: Record<string, { itemKey: string; line: string }> = {
   herbalist: { itemKey: "herb", line: "Here — a sprig of mint, so you know what you're looking for." },
   baker: { itemKey: "honey_bun", line: "First visit? Then this honey bun is on the house." },
   orphan: { itemKey: "berry", line: "You can have one of my berries. I have lots. Well, some." },
+};
+
+/** Per-NPC trade offers: each entry is "buy `qty` of `itemKey` from the
+ *  player for `price` coins". Add to this map as you author NPCs and items. */
+const TRADES: Record<string, Array<{ itemKey: string; qty: number; price: number; line: string }>> = {
+  baker: [
+    { itemKey: "egg", qty: 1, price: 1, line: "Hand it here, love. A copper for a fresh egg, same as ever." },
+  ],
 };
 
 export async function loadSponsor(npc: Npc) {
@@ -37,6 +45,16 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
       offeredOne = true;
     }
   }
+
+  // Sell offers: NPCs that buy from the player.
+  const trades = TRADES[npc.key] ?? [];
+  for (const t of trades) {
+    const have = await countItemInBag(character.id, t.itemKey);
+    if (have >= t.qty) {
+      offers.push({ id: `sell:${t.itemKey}`, type: "sell", itemKey: t.itemKey, qty: t.qty, price: t.price, label: `Sell 1 ${t.itemKey.replace("_", " ")} for ${t.price} coin`, line: t.line });
+    }
+  }
+
   const sponsor = await loadSponsor(npc);
   if (sponsor) {
     const [has] = await db
@@ -56,4 +74,12 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
     if (!c || c.n === 0) offers.push({ id: `gift:${gift.itemKey}`, type: "gift", itemKey: gift.itemKey, label: `Accept ${gift.itemKey.replace("_", " ")}`, line: gift.line });
   }
   return offers;
+}
+
+async function countItemInBag(characterId: number, itemKey: string): Promise<number> {
+  const [r] = await db
+    .select({ n: sql<number>`coalesce(sum(${inventory.qty}), 0)::int` })
+    .from(inventory)
+    .where(and(eq(inventory.characterId, characterId), eq(inventory.itemKey, itemKey)));
+  return r?.n ?? 0;
 }

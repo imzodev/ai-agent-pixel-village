@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { characterMissions, conversations, missions, npcs } from "@/db/schema";
+import { characters, characterMissions, conversations, missions, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { addItem, emitLead, grantReward, logEvent, removeItem } from "@/lib/game";
@@ -45,6 +45,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       await logEvent("mission", `${character.name} completed "${m.title}" for ${npc.name}.`, "npc", npc.id, npc.x, npc.y);
       if (m.sponsorId) await emitLead({ sponsorId: m.sponsorId, characterId: character.id, npcId: npc.id, kind: "mission_completed", note: m.title });
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Mission complete: ${m.title})` });
+    } else if (offer.type === "sell") {
+      const ok = await removeItem(character.id, offer.itemKey, offer.qty);
+      if (!ok) return Response.json({ error: "You don't have that anymore." }, { status: 400 });
+      const newCoins = (character.coins ?? 0) + offer.price;
+      await db.update(characters).set({ coins: newCoins }).where(eq(characters.id, character.id));
+      gained.push({ itemKey: "coins", qty: offer.price, label: `${offer.price} coin` });
+      text = `${npc.name} counts out ${offer.price} coin and tucks the ${offer.itemKey.replace("_", " ")} away. "${offer.line}"`;
+      await logEvent("trade", `${character.name} sold ${offer.qty} ${offer.itemKey} to ${npc.name} for ${offer.price} coin.`, "npc", npc.id, npc.x, npc.y);
+      await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Bought ${offer.qty} ${offer.itemKey} for ${offer.price} coin)` });
     } else if (offer.type === "discount") {
       const sponsor = await loadSponsor(npc);
       if (!sponsor) return Response.json({ error: "Sponsor inactive." }, { status: 400 });

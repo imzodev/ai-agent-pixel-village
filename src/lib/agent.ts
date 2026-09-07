@@ -1,11 +1,8 @@
 import type { characters, npcs, sponsors } from "@/db/schema";
 import { getActiveProvider, chatWithFallback, type ChatMessage } from "@/lib/llm";
+import type { Offer } from "@/lib/types";
 
-export type Offer =
-  | { id: string; type: "mission"; missionId: number; label: string; line: string }
-  | { id: string; type: "turnin"; missionId: number; label: string; line: string }
-  | { id: string; type: "discount"; label: string; line: string }
-  | { id: string; type: "gift"; itemKey: string; label: string; line: string };
+export type { Offer } from "@/lib/types";
 
 export type BrainInput = {
   npc: typeof npcs.$inferSelect;

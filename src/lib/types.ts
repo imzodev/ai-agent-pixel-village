@@ -18,3 +18,14 @@ export type RateLimitConfig = {
   /** Window size in milliseconds. */
   windowMs: number;
 };
+
+/** An action an NPC can offer right now. Each kind carries the data its
+ *  accept handler needs; the `id` is opaque to clients. */
+export type Offer =
+  | { id: string; type: "mission"; missionId: number; label: string; line: string }
+  | { id: string; type: "turnin"; missionId: number; label: string; line: string }
+  | { id: string; type: "discount"; label: string; line: string }
+  | { id: string; type: "gift"; itemKey: string; label: string; line: string }
+  /** The NPC buys `qty` of `itemKey` from the player for `price` coins. */
+  | { id: string; type: "sell"; itemKey: string; qty: number; price: number; label: string; line: string };
+

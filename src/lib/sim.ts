@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, enemies, npcs, resourceNodes, worldState, worldEvents } from "@/db/schema";
+import { animals, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
 import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { logEvent } from "./game";
@@ -92,6 +92,19 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
     }
     const petFresh = a.lastPettedAt && now.getTime() - a.lastPettedAt.getTime() < 10 * 60_000;
     const mood = hunger > 70 ? "hungry" : state === "sleep" ? "sleepy" : petFresh ? "delighted" : hunger < 30 ? "content" : "peckish";
+
+    // Chickens sometimes lay an egg at their feet (separate from pet bonuses).
+    // Skip if there's already an egg nearby so they don't pile up.
+    if (a.species === "chicken" && state !== "sleep" && Math.random() < 0.04) {
+      const [nearby] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(groundItems)
+        .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 24} AND ${x + 24}`, sql`${groundItems.y} BETWEEN ${y - 24} AND ${y + 24}`));
+      if (!nearby || nearby.n === 0) {
+        await db.insert(groundItems).values({ itemKey: "egg", qty: 1, x, y: y + 4 });
+      }
+    }
+
     await db
       .update(animals)
       .set({ x, y, targetX, targetY, facing, state, hunger, mood, stateUntil: new Date(now.getTime() + 2000 + Math.random() * 6000) })
