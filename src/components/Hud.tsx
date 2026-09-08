@@ -254,8 +254,8 @@ export default function Hud() {
               <>
                 <Btn on={() => startTalk(sel.id, sel.name, sel.role)}>💬 Talk</Btn>
                 {recipes.length > 0 && (
-                  <Btn on={() => npcKey && openCraft(sel.id, sel.name, npcKey)} disabled={!craftable}>
-                    📜 Craft{craftable ? "" : " (no inputs)"}
+                  <Btn on={() => npcKey && openCraft(sel.id, sel.name, npcKey)}>
+                    📜 Craft
                   </Btn>
                 )}
                 {sellable && (
