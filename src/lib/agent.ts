@@ -86,6 +86,9 @@ export function scriptedReply(input: BrainInput): BrainOutput {
   if (missionOffer) { parts.push(missionOffer.line); offerIds.push(missionOffer.id); }
   // Gifts
   for (const o of offers) if (o.type === "gift") { parts.push(o.line); offerIds.push(o.id); }
+  // Sells (NPC is the buyer) — surface so the line can mention them when
+  // the player asks what to trade.
+  for (const o of offers) if (o.type === "sell") { parts.push(o.line); offerIds.push(o.id); }
   // The pitch — the reason a sponsored NPC exists, woven in as something the character would say anyway.
   const discount = offers.find((o) => o.type === "discount");
   if (discount && sponsor) {
