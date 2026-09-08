@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
-import type { ConversationSource, Offer, TalkLine, TradeItem } from "@/lib/types";
+import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import { TRADES } from "@/lib/trade";
+import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
@@ -25,6 +26,7 @@ export default function Hud() {
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
+  const [craft, setCraft] = useState<{ npcId: number; npcName: string; recipes: Recipe[] } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [building, setBuilding] = useState<{ key: string; name: string } | null>(null);
   const [auth, setAuth] = useState<"login" | null>(null);
@@ -154,6 +156,20 @@ export default function Hud() {
       return updated.length === 0 ? null : { ...cur, rows: updated };
     });
   };
+
+  const openCraft = (npcId: number, npcName: string, npcKey: string) => {
+    const recipes = recipesForNpc(npcKey);
+    if (recipes.length === 0) return;
+    setCraft({ npcId, npcName, recipes });
+  };
+
+  const performCraft = async (recipeKey: string, qty: number) => {
+    if (!craft) return;
+    const r = await api<{ ok?: boolean; error?: string; crafted?: number; outputQty?: number }>("/api/craft", { recipeKey, qty, crafterNpcId: craft.npcId });
+    if (r.error || !r.ok) { toast(r.error ?? "Craft failed.", "bad"); return; }
+    toast(`Crafted ${r.crafted} × ${recipeKey.replace(/_/g, " ")}!`, "good");
+    void refreshMe();
+  };
   const invAction = async (body: Record<string, unknown>, method = "POST") => {
     const r = await api<{ message?: string }>("/api/items", body, method);
     if (r.error) toast(r.error, "bad"); else { if (r.message) toast(r.message, "good"); void refreshMe(); bus.emit("poke", undefined); }
@@ -230,11 +246,18 @@ export default function Hud() {
           {loggedIn && sel.type === "npc" && (() => {
             const npcKey: string | undefined = snap?.npcs?.find((n) => n.id === sel.id)?.key;
             const trades: TradeItem[] = (npcKey ? TRADES[npcKey] : undefined) ?? [];
+            const recipes: Recipe[] = (npcKey ? recipesForNpc(npcKey) : undefined) ?? [];
             const inv = me?.inventory ?? [];
             const sellable = trades.some((t: TradeItem) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
+            const craftable = recipes.some((r: Recipe) => canCraft(r, inv));
             const Buttons = (
               <>
                 <Btn on={() => startTalk(sel.id, sel.name, sel.role)}>💬 Talk</Btn>
+                {recipes.length > 0 && (
+                  <Btn on={() => npcKey && openCraft(sel.id, sel.name, npcKey)} disabled={!craftable}>
+                    📜 Craft{craftable ? "" : " (no inputs)"}
+                  </Btn>
+                )}
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell</Btn>
                 )}
@@ -271,6 +294,11 @@ export default function Hud() {
       {/* Trade modal — dedicated sell flow, no conversation required. */}
       {trade && (
         <TradeModal trade={trade} performTrade={performTrade} onClose={() => setTrade(null)} />
+      )}
+
+      {/* Craft modal — per-NPC recipes. */}
+      {craft && (
+        <CraftModal craft={craft} me={me} performCraft={performCraft} onClose={() => setCraft(null)} />
       )}
 
       {/* Dialogue */}
@@ -459,6 +487,98 @@ function BagPanel({ me, onAction }: { me: Me | null; onAction: (b: Record<string
 }
 function Sm({ children, on }: { children: React.ReactNode; on: () => void }) {
   return <button onClick={on} className="rounded bg-stone-200 px-2 py-0.5 text-[11px] font-bold hover:bg-stone-300">{children}</button>;
+}
+
+function CraftModal({ craft, me, performCraft, onClose }: {
+  craft: { npcId: number; npcName: string; recipes: Recipe[] };
+  me: Me | null;
+  performCraft: (recipeKey: string, qty: number) => void;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const closeIfEsc = useCallback((e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }, [onClose]);
+  useEffect(() => {
+    document.addEventListener("keydown", closeIfEsc);
+    return () => document.removeEventListener("keydown", closeIfEsc);
+  }, [closeIfEsc]);
+
+  const doCraft = async (recipe: Recipe, qty: number) => {
+    if (busy) return;
+    setBusy(true);
+    await performCraft(recipe.key, qty);
+    setBusy(false);
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,560px)] rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <div className="text-lg font-bold text-amber-900">📜 Craft with {craft.npcName}</div>
+            {craft.recipes[0]?.line && <div className="mt-1 text-[12px] italic text-stone-600">"{craft.recipes[0].line}"</div>}
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {craft.recipes.map((r) => (
+            <CraftRow key={r.key} recipe={r} me={me} busy={busy} onCraft={(qty) => doCraft(r, qty)} />
+          ))}
+        </div>
+        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null; busy: boolean; onCraft: (qty: number) => void }) {
+  const [qty, setQty] = useState(1);
+  const bag = me?.inventory ?? [];
+  const haveMap = new Map<string, number>();
+  for (const i of bag) haveMap.set(i.itemKey, (haveMap.get(i.itemKey) ?? 0) + i.qty);
+  const max = Math.max(0, maxCraftable(recipe, bag));
+  useEffect(() => { setQty((q) => Math.min(Math.max(1, q), Math.max(1, max))); }, [max]);
+  const canMake = max >= 1;
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+      <span className="text-xl">{recipe.icon}</span>
+      <div className="flex-1">
+        <div className="font-bold">{recipe.name}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+          {recipe.inputs.map((i) => {
+            const have = haveMap.get(i.itemKey) ?? 0;
+            const need = i.qty * qty;
+            const ok = have >= need;
+            return (
+              <span key={i.itemKey} className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${ok ? "bg-emerald-100 text-emerald-800" : "bg-stone-100 text-stone-500 line-through"}`}>
+                {ITEM_ICONS[i.itemKey] ?? "📦"} {i.itemKey.replace(/_/g, " ")} {have}/{need}
+              </span>
+            );
+          })}
+          <span className="text-stone-500">→</span>
+          <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-900">
+            {ITEM_ICONS[recipe.output.itemKey] ?? "📦"} {recipe.output.itemKey.replace(/_/g, " ")} ×{recipe.output.qty * qty}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button disabled={busy || qty <= 1} onClick={() => setQty(Math.max(1, qty - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">−</button>
+        <input
+          type="number"
+          min={1}
+          max={max || 1}
+          value={qty}
+          onChange={(e) => setQty(Math.max(1, Math.min(max || 1, Number(e.target.value) || 1)))}
+          className="w-12 rounded border border-stone-300 px-1 py-0.5 text-center text-sm"
+          disabled={busy}
+        />
+        <button disabled={busy || qty >= max} onClick={() => setQty((q) => Math.min(max || 1, q + 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">+</button>
+      </div>
+      <div className="flex flex-col gap-1">
+        <button disabled={busy || !canMake} onClick={() => onCraft(qty)} className="rounded bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft {qty}</button>
+        <button disabled={busy || !canMake} onClick={() => onCraft(max)} className="rounded bg-yellow-600 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft all ({max})</button>
+      </div>
+    </div>
+  );
 }
 
 function TradeModal({ trade, performTrade, onClose }: {

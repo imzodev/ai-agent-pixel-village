@@ -35,4 +35,26 @@ export type TradeItem = { itemKey: string; qty: number; price: number; line: str
 /** Per-NPC buy lists, keyed by `npc.key`. Open for extension: add a new
  *  trader = add an entry; add new items via the items seed + a TRADES row. */
 export type TradeConfig = Record<string, TradeItem[]>;
+/** One input slot for a crafting recipe. */
+export type RecipeInput = { itemKey: string; qty: number };
+
+/** A crafting recipe: each recipe belongs to ONE NPC (the crafter). The
+ *  player must stand near that NPC to use it — that's the discovery game. */
+export type Recipe = {
+  /** Stable id used by the API and persisted in client state. */
+  key: string;
+  /** Display name in the modal. */
+  name: string;
+  /** Emoji or short string shown in the row. */
+  icon: string;
+  /** The NPC.key that crafts this recipe. */
+  crafterKey: string;
+  inputs: RecipeInput[];
+  output: { itemKey: string; qty: number };
+  /** Optional flavor line shown in the modal header. */
+  line?: string;
+  /** Future gating hooks — the route checks these against the character. */
+  requires?: { level?: number; itemKey?: string; qty?: number };
+};
+
 

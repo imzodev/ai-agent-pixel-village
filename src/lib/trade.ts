@@ -13,6 +13,10 @@ export const TRADES: TradeConfig = {
   baker: [
     { itemKey: "egg", qty: 1, price: 1, line: "Hand it here, love. A copper for a fresh egg, same as ever." },
   ],
+  // Different character sells the crafted good — keeps the economy moving.
+  tinker: [
+    { itemKey: "bread", qty: 1, price: 5, line: "My bread, back so soon? Lovely." },
+  ],
   // Future examples:
   //   grocer:   [{ itemKey: "grapes", ... }, { itemKey: "oranges", ... }, { itemKey: "strawberries", ... }],
   //   herbalist: [{ itemKey: "herb", ... }, { itemKey: "grapes", ... }],
