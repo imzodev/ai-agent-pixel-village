@@ -17,6 +17,12 @@ export const TRADES: TradeConfig = {
   tinker: [
     { itemKey: "bread", qty: 1, price: 5, line: "My bread, back so soon? Lovely." },
   ],
+  // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
+  // a 1:1 grind; the miller charges 1 copper for the service.
+  miller: [
+    { itemKey: "wheat", qty: 1, price: 1, line: "I'll buy your wheat for a copper." },
+    { itemKey: "flour", qty: 1, price: 2, line: "Flour for your baking — two coppers." },
+  ],
   // Future examples:
   //   grocer:   [{ itemKey: "grapes", ... }, { itemKey: "oranges", ... }, { itemKey: "strawberries", ... }],
   //   herbalist: [{ itemKey: "herb", ... }, { itemKey: "grapes", ... }],

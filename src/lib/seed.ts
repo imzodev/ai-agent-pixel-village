@@ -27,6 +27,7 @@ export const ITEM_DEFS = [
   { key: "stone", name: "River Stone", kind: "material", icon: "🪨", description: "Smooth and cool.", value: 1 },
   { key: "mushroom", name: "Speckled Mushroom", kind: "material", icon: "🍄", description: "Probably edible.", value: 4 },
   { key: "flour", name: "Bag of Flour", kind: "material", icon: "🌾", description: "Milled fresh.", value: 3 },
+  { key: "wheat", name: "Sheaf of Wheat", kind: "material", icon: "🌾", description: "Golden and ready to mill.", value: 1 },
   { key: "egg", name: "Fresh Egg", kind: "material", icon: "🥚", description: "Still warm.", value: 2 },
   { key: "wool", name: "Tuft of Wool", kind: "material", icon: "🧶", description: "Soft and springy.", value: 3 },
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
@@ -146,6 +147,18 @@ const NPC_DEFS: {
     appearance: { body: "female", skin: "#d9a066", hair: "bangs", hairColor: "#222222", shirtColor: "#a07a4a", pantsColor: "#3d3d3d" },
     mood: "focused",
   },
+  {
+    key: "miller",
+    name: "Hollis",
+    role: "Miller",
+    persona:
+      "Hollis is a steady, methodical miller who runs the windmill just north of the wheat field. Proud of the grain. Knows everyone's name in the village and never lets a baker run out of flour.",
+    greeting: "Sheaf of wheat, eh? Good haul. Bring it here, I'll get it ground.",
+    tilePos: [40, -48],
+    wanderRadius: 80,
+    appearance: { body: "male", skin: "#f1c9a5", hair: "buzzcut", hairColor: "#5a4632", shirtColor: "#c8a06a", pantsColor: "#3a3a3a" },
+    mood: "steady",
+  },
 ];
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
@@ -170,6 +183,7 @@ const NODE_DEFS: [string, string, number, number][] = [
   ["berry_bush", "berry", 14, 49], ["berry_bush", "berry", 64, 56], ["berry_bush", "berry", 130, -21],
   ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 56, 71],
   ["mushroom_ring", "mushroom", -76, -15], ["mushroom_ring", "mushroom", 130, 54],
+  ["wheat_field", "wheat", 38, -45], ["wheat_field", "wheat", 44, -47], ["wheat_field", "wheat", 32, -42],
 ];
 
 const MISSION_DEFS: {
@@ -291,6 +305,26 @@ async function syncNpcLayout() {
           buildingId: null, sponsorId: null,
         })
         .where(eq(npcs.key, n.key));
+    }
+    // Ensure every NPC_DEFS entry has a row — catches new NPCs added since
+    // the initial seed (seed() early-returns when worldState exists, so new
+    // NPCs only land via this once-per-process upsert).
+    for (const n of NPC_DEFS) {
+      const p = tilePoint(n.tilePos[0], n.tilePos[1]);
+      let x = p.x;
+      let y = p.y;
+      if (!(await isWalkableServer(x, y))) {
+        const snap = await nearestWalkable(n.tilePos[0], n.tilePos[1]);
+        x = snap.x;
+        y = snap.y;
+      }
+      await db.insert(npcs).values({
+        key: n.key, name: n.name, role: n.role,
+        persona: n.persona, greeting: n.greeting,
+        x, y, homeX: x, homeY: y,
+        appearance: n.appearance, mood: n.mood, wanderRadius: n.wanderRadius,
+        buildingId: null, sponsorId: null, active: true,
+      }).onConflictDoNothing();
     }
   } catch (e) {
     npcSynced = false;
