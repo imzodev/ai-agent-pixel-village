@@ -10,7 +10,7 @@
       "menu": [],
       "reservable": true,
       "tx": 30,
-      "ty": 15
+      "ty": 18
     },
     {
       "key": "cabin_2",
@@ -34,7 +34,7 @@
       "menu": [],
       "reservable": true,
       "tx": 56,
-      "ty": 4
+      "ty": 6
     },
     {
       "key": "cabin_4",
@@ -45,8 +45,8 @@
       "color": "#7a4a2a",
       "menu": [],
       "reservable": true,
-      "tx": 80,
-      "ty": 28
+      "tx": 76,
+      "ty": 20
     },
     {
       "key": "cabin_5",
@@ -57,8 +57,8 @@
       "color": "#e9b384",
       "menu": [],
       "reservable": true,
-      "tx": -10,
-      "ty": -15
+      "tx": -18,
+      "ty": -10
     },
     {
       "key": "cabin_6",
@@ -70,7 +70,7 @@
       "menu": [],
       "reservable": true,
       "tx": 55,
-      "ty": 38
+      "ty": 32
     }
   ]
 }
