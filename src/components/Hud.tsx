@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
-import type { ConversationSource, Offer, TalkLine } from "@/lib/types";
+import type { ConversationSource, Offer, TalkLine, TradeItem } from "@/lib/types";
+import { TRADES } from "@/lib/trade";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
@@ -23,6 +24,7 @@ export default function Hud() {
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
+  const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [building, setBuilding] = useState<{ key: string; name: string } | null>(null);
   const [auth, setAuth] = useState<"login" | null>(null);
@@ -120,6 +122,38 @@ export default function Hud() {
     void refreshMe();
     toast(offerId.startsWith("discount") ? "Discount code added to your bag 🎟️" : offerId.startsWith("mission") ? "Mission accepted" : offerId.startsWith("turnin") ? "Mission complete!" : "Received", "good");
   };
+
+  const openTrade = (npcId: number, npcName: string, npcKey: string) => {
+    const trades = TRADES[npcKey] ?? [];
+    if (trades.length === 0) return;
+    const inv = me?.inventory ?? [];
+    const rows = trades
+      .map((t) => ({ trade: t, have: inv.filter((i) => i.itemKey === t.itemKey).reduce((s, i) => s + i.qty, 0) }))
+      .filter((r) => r.have > 0);
+    if (rows.length === 0) {
+      toast(`You have nothing ${npcName} buys.`, "info");
+      return;
+    }
+    setTrade({ npcId, npcName, npcKey, rows });
+  };
+
+  const performTrade = async (itemKey: string, qty: number) => {
+    if (!trade) return;
+    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
+    if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return; }
+    toast(`Sold ${qty} ${itemKey.replace(/_/g, " ")} for ${r.gained} 🪙.`, "good");
+    void refreshMe();
+    // Refresh modal contents from the updated `me` (state set by refreshMe).
+    setTrade((cur) => {
+      if (!cur) return null;
+      const fresh = (typeof me === "object" && me !== null ? me : { inventory: [] }).inventory ?? [];
+      const trades = TRADES[cur.npcKey] ?? [];
+      const updated = trades
+        .map((t) => ({ trade: t, have: fresh.filter((i) => i.itemKey === t.itemKey).reduce((s, i) => s + i.qty, 0) }))
+        .filter((r) => r.have > 0);
+      return updated.length === 0 ? null : { ...cur, rows: updated };
+    });
+  };
   const invAction = async (body: Record<string, unknown>, method = "POST") => {
     const r = await api<{ message?: string }>("/api/items", body, method);
     if (r.error) toast(r.error, "bad"); else { if (r.message) toast(r.message, "good"); void refreshMe(); bus.emit("poke", undefined); }
@@ -193,7 +227,21 @@ export default function Hud() {
             <div className="font-bold text-amber-900">{selTitle(sel)}</div>
             <div className="text-[11px] text-stone-500">{sel.distance < 9000 ? `${Math.round(sel.distance / 32)} tiles away` : "spectating"}</div>
           </div>
-          {loggedIn && sel.type === "npc" && (sel.distance <= 160 ? <Btn on={() => startTalk(sel.id, sel.name, sel.role)}>💬 Talk</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "npc" && (() => {
+            const npcKey: string | undefined = snap?.npcs?.find((n) => n.id === sel.id)?.key;
+            const trades: TradeItem[] = (npcKey ? TRADES[npcKey] : undefined) ?? [];
+            const inv = me?.inventory ?? [];
+            const sellable = trades.some((t: TradeItem) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
+            const Buttons = (
+              <>
+                <Btn on={() => startTalk(sel.id, sel.name, sel.role)}>💬 Talk</Btn>
+                {sellable && (
+                  <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell</Btn>
+                )}
+              </>
+            );
+            return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
+          })()}
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => act({ action: "pet", id: sel.id })}>🤚 Pet</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => invAction({ action: "pickup", groundItemId: sel.id }).then(() => setSel(null))}>🫳 Pick up</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "node" && (sel.distance <= 90 ? <Btn on={() => act({ action: "gather", id: sel.id })} disabled={!sel.ready}>🧺 Gather</Btn> : <WalkBtn snap={snap} sel={sel} />)}
@@ -219,6 +267,11 @@ export default function Hud() {
         {toasts.map((t) => <div key={t.id} className={`rounded-lg border-2 px-3 py-1.5 shadow ${t.kind === "bad" ? "border-red-800/50 bg-red-100 text-red-900" : t.kind === "good" ? "border-emerald-800/50 bg-emerald-100 text-emerald-900" : "border-stone-500/50 bg-stone-100"}`}>{t.text}</div>)}
         {gained.map((g) => <div key={g.id} className="animate-bounce rounded-lg bg-amber-300 px-3 py-1 font-bold text-amber-900 shadow">{g.text}</div>)}
       </div>
+
+      {/* Trade modal — dedicated sell flow, no conversation required. */}
+      {trade && (
+        <TradeModal trade={trade} performTrade={performTrade} onClose={() => setTrade(null)} />
+      )}
 
       {/* Dialogue */}
       {talk && (
@@ -406,6 +459,85 @@ function BagPanel({ me, onAction }: { me: Me | null; onAction: (b: Record<string
 }
 function Sm({ children, on }: { children: React.ReactNode; on: () => void }) {
   return <button onClick={on} className="rounded bg-stone-200 px-2 py-0.5 text-[11px] font-bold hover:bg-stone-300">{children}</button>;
+}
+
+function TradeModal({ trade, performTrade, onClose }: {
+  trade: { npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] };
+  performTrade: (itemKey: string, qty: number) => void;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const closeIfEsc = useCallback((e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }, [onClose]);
+  useEffect(() => {
+    document.addEventListener("keydown", closeIfEsc);
+    return () => document.removeEventListener("keydown", closeIfEsc);
+  }, [closeIfEsc]);
+
+  const doSell = async (row: { trade: TradeItem; have: number }, qty: number) => {
+    if (busy) return;
+    setBusy(true);
+    await performTrade(row.trade.itemKey, qty);
+    setBusy(false);
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,520px)] rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <div className="text-lg font-bold text-amber-900">💰 Trade with {trade.npcName}</div>
+            {trade.rows.length > 0 && <div className="mt-1 text-[12px] italic text-stone-600">"{trade.rows[0].trade.line}"</div>}
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {trade.rows.length === 0 && (
+            <div className="rounded bg-stone-100 p-3 text-center text-stone-500">You have nothing {trade.npcName} buys right now.</div>
+          )}
+          {trade.rows.map((r) => (
+            <TradeRow key={r.trade.itemKey} row={r} busy={busy} onSell={(qty) => doSell(r, qty)} />
+          ))}
+        </div>
+        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function TradeRow({ row, busy, onSell }: { row: { trade: TradeItem; have: number }; busy: boolean; onSell: (qty: number) => void }) {
+  const [qty, setQty] = useState(1);
+  const total = qty * row.trade.price;
+  useEffect(() => { setQty((q) => Math.min(Math.max(1, q), row.have)); }, [row.have]);
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+      <span className="text-xl">{ITEM_ICONS[row.trade.itemKey] ?? "📦"}</span>
+      <div className="flex-1">
+        <div className="font-bold capitalize">{row.trade.itemKey.replace(/_/g, " ")}</div>
+        <div className="text-[11px] text-stone-500">you have {row.have}</div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button disabled={busy || qty <= 1} onClick={() => setQty((q) => Math.max(1, q - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">−</button>
+        <input
+          type="number"
+          min={1}
+          max={row.have}
+          value={qty}
+          onChange={(e) => setQty(Math.max(1, Math.min(row.have, Number(e.target.value) || 1)))}
+          className="w-12 rounded border border-stone-300 px-1 py-0.5 text-center text-sm"
+          disabled={busy}
+        />
+        <button disabled={busy || qty >= row.have} onClick={() => setQty((q) => Math.min(row.have, q + 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">+</button>
+      </div>
+      <div className="w-20 text-right">
+        <div className="text-[11px] text-stone-500">= {total} 🪙</div>
+        <div className="text-[11px] text-stone-500">{row.trade.price} ea</div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <button disabled={busy || qty < 1} onClick={() => onSell(qty)} className="rounded bg-yellow-600 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell {qty}</button>
+        <button disabled={busy} onClick={() => onSell(row.have)} className="rounded bg-amber-700 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell all ({row.have})</button>
+      </div>
+    </div>
+  );
 }
 function MissionsPanel({ me, snap }: { me: Me | null; snap: Snapshot | null }) {
   if (!me) return <div>Loading…</div>;

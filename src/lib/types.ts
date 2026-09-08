@@ -29,3 +29,10 @@ export type Offer =
   /** The NPC buys `qty` of `itemKey` from the player for `price` coins. */
   | { id: string; type: "sell"; itemKey: string; qty: number; price: number; label: string; line: string };
 
+/** A single buyable item a trader NPC will pay for. */
+export type TradeItem = { itemKey: string; qty: number; price: number; line: string };
+
+/** Per-NPC buy lists, keyed by `npc.key`. Open for extension: add a new
+ *  trader = add an entry; add new items via the items seed + a TRADES row. */
+export type TradeConfig = Record<string, TradeItem[]>;
+

@@ -57,6 +57,14 @@ export async function removeItem(characterId: number, itemKey: string, qty: numb
   return remaining === 0;
 }
 
+export async function addCoins(characterId: number, amount: number) {
+  if (!amount) return;
+  await db
+    .update(characters)
+    .set({ coins: sql`coalesce(${characters.coins}, 0) + ${amount}` })
+    .where(eq(characters.id, characterId));
+}
+
 export async function grantReward(characterId: number, reward: MissionReward) {
   for (const it of reward.items ?? []) await addItem(characterId, it.itemKey, it.qty);
   if (reward.coins || reward.xp) {

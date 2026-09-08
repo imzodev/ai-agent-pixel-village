@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { characterMissions, conversations, inventory, missions, npcs, sponsors, type characters } from "@/db/schema";
 import { missionProgressFor, requirementTarget } from "./game";
 import type { Offer } from "./types";
+import { TRADES } from "./trade";
 
 type Npc = typeof npcs.$inferSelect;
 type Character = typeof characters.$inferSelect;
@@ -11,14 +12,6 @@ const FIRST_MEETING_GIFTS: Record<string, { itemKey: string; line: string }> = {
   herbalist: { itemKey: "herb", line: "Here — a sprig of mint, so you know what you're looking for." },
   baker: { itemKey: "honey_bun", line: "First visit? Then this honey bun is on the house." },
   orphan: { itemKey: "berry", line: "You can have one of my berries. I have lots. Well, some." },
-};
-
-/** Per-NPC trade offers: each entry is "buy `qty` of `itemKey` from the
- *  player for `price` coins". Add to this map as you author NPCs and items. */
-const TRADES: Record<string, Array<{ itemKey: string; qty: number; price: number; line: string }>> = {
-  baker: [
-    { itemKey: "egg", qty: 1, price: 1, line: "Hand it here, love. A copper for a fresh egg, same as ever." },
-  ],
 };
 
 export async function loadSponsor(npc: Npc) {
