@@ -40,7 +40,7 @@ type CharEnt = {
   bubble?: { c: Phaser.GameObjects.Container; until: number };
   glow?: Phaser.GameObjects.Arc;
 };
-type CritterEnt = { sprite: Phaser.GameObjects.Image; tx: number; ty: number; facing: string; state: string; speed: number; label?: Phaser.GameObjects.Text; zz?: Phaser.GameObjects.Text; hpBar?: Phaser.GameObjects.Graphics; hp: number; maxHp: number; phase: number };
+type CritterEnt = { sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; kind: string; tx: number; ty: number; facing: string; state: string; speed: number; label?: Phaser.GameObjects.Text; zz?: Phaser.GameObjects.Text; hpBar?: Phaser.GameObjects.Graphics; hp: number; maxHp: number; phase: number };
 
 const PLAYER_SPEED = 120;
 
@@ -91,9 +91,10 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     loadTilemapAssets(this);
-    // Animated fox sprite (12-frame walking sheet, 3 cols × 4 rows of 16×16).
+    // Animated fox sprite — the sheet is a 3x-scaled export: 144×256 total,
+    // 3 cols × 4 rows of 48×64 frames (up / right / down / left).
     // See public/assets/ATTRIBUTION.md for licensing.
-    this.load.spritesheet("cr_fox", "/assets/animals/fox-NESW.png", { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet("cr_fox", "/assets/animals/fox-NESW.png", { frameWidth: 48, frameHeight: 64 });
   }
 
   async create() {
@@ -407,16 +408,23 @@ export class WorldScene extends Phaser.Scene {
       seen.add(a.id);
       let ent = map.get(a.id);
       if (!ent) {
-        const sprite = this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + a.y);
+        // Foxes use an animated spritesheet — they need a real Sprite to
+        // play walk animations (Images are static).
+        const sprite = a.kind === "fox"
+          ? this.add.sprite(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1).setScale(1)
+          : this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1);
+        sprite.setDepth(DEPTH_CHAR_BASE + a.y);
         sprite.setInteractive({ useHandCursor: true });
         sprite.on("pointerdown", () => { const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
-        ent = { sprite, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
+        ent = { sprite, kind: a.kind, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
         if (a.name) ent.label = this.add.text(a.x, a.y - sprite.height - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
       }
       ent.tx = a.x; ent.ty = a.y; ent.state = a.state; ent.hp = a.hp; ent.maxHp = a.maxHp;
-      if (a.facing === "left" || a.facing === "right") ent.facing = a.facing;
+      // Fox has 4-direction art — accept every facing from the server.
+      // Other critters only have left/right art.
+      if (a.kind === "fox" ? ["up", "down", "left", "right"].includes(a.facing) : (a.facing === "left" || a.facing === "right")) ent.facing = a.facing;
       if (Math.hypot(ent.sprite.x - a.x, ent.sprite.y - a.y) > 300) ent.sprite.setPosition(a.x, a.y);
       if (ent.hpBar) {
         ent.hpBar.clear();
@@ -564,29 +572,30 @@ export class WorldScene extends Phaser.Scene {
     const dx = e.tx - e.sprite.x, dy = e.ty - e.sprite.y;
     const d = Math.hypot(dx, dy);
     let bob = 0;
-    const isFox = (e as any).kind === "fox";
     if (d > 0.5) {
       const step = Math.min(d, Math.max(e.speed * dt, d * 2.5 * dt));
       e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
-      if (Math.abs(dx) > 1) e.facing = dx > 0 ? "right" : "left";
+      // Fox has 4-direction art — pick facing from the dominant axis.
+      // Other critters only have left/right art, so horizontal-only.
+      if (e.kind === "fox") e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+      else if (Math.abs(dx) > 1) e.facing = dx > 0 ? "right" : "left";
       bob = Math.abs(Math.sin(time / 90 + e.phase)) * 2;
     } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
     else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
     // Fox sprite has real per-direction frames — never mirror with setFlipX.
-    if (!isFox) e.sprite.setFlipX(e.facing === "left");
+    if (e.kind !== "fox") e.sprite.setFlipX(e.facing === "left");
     e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
     e.sprite.y -= 0; // keep base
     e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
     // Play the matching walk animation when the fox is moving, freeze on frame 0 when stopped.
-    if (isFox) {
-      const dir = d > 0.5 ? e.facing : e.facing;
-      const key = `cr_fox_walk_${dir}`;
-      const sprite = e.sprite as unknown as { anims: { currentAnim?: { key: string }; isPlaying: boolean }; play: (k: string, b?: boolean) => void; stop: () => void; setFrame: (f: number) => void };
+    if (e.kind === "fox") {
+      const key = `cr_fox_walk_${d > 0.5 ? e.facing : e.facing}`;
+      const sprite = e.sprite as Phaser.GameObjects.Sprite;
       if (d > 0.5) {
         if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key, true);
       } else {
         sprite.stop();
-        sprite.setFrame(dir === "up" ? 0 : dir === "right" ? 3 : dir === "down" ? 6 : 9);
+        sprite.setFrame(e.facing === "up" ? 0 : e.facing === "right" ? 3 : e.facing === "down" ? 6 : 9);
       }
     }
     e.label?.setPosition(e.sprite.x, e.sprite.y - e.sprite.height - 4);

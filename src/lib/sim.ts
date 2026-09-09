@@ -75,7 +75,20 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
     // hunger rises ~1 point / 2 minutes
     if (Math.random() < elapsedSec / 120) hunger = Math.min(100, hunger + Math.ceil(elapsedSec / 120));
     const stateExpired = !a.stateUntil || a.stateUntil < now;
-    if (night && a.species !== "fox" && a.species !== "cat" && state !== "sleep" && Math.random() < 0.3) {
+
+    // ─── Fox raid states ───
+    // "raid": walking toward the coop target. On arrival, steal a nearby
+    // ground egg (if any survived the trip) and head home.
+    // "return": walking home. On arrival, back to normal idle life.
+    const raiding = a.species === "fox" && (state === "raid" || state === "return");
+    if (raiding && stateExpired) {
+      // Raid window lapsed (egg was picked up by a player, etc.) — go home.
+      state = "return";
+      const home = await randomPointIn(a.zone);
+      targetX = home?.x ?? null; targetY = home?.y ?? null;
+    }
+
+    if (night && a.species !== "fox" && a.species !== "cat" && state !== "sleep" && !raiding && Math.random() < 0.3) {
       state = "sleep";
       targetX = null; targetY = null;
     } else if (state === "sleep" && (!night || Math.random() < 0.05)) {
@@ -83,21 +96,49 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
     }
     if (state !== "sleep") {
       if (targetX != null && targetY != null) {
-        const s = stepToward(x, y, targetX, targetY, ANIMAL_SPEED * dt);
+        // Raiding foxes hustle — 60 px/s vs the normal 28.
+        const speed = raiding ? 60 : ANIMAL_SPEED;
+        const s = stepToward(x, y, targetX, targetY, speed * dt);
         x = s.x; y = s.y; facing = s.facing;
-        if (s.arrived) { targetX = null; targetY = null; state = Math.random() < 0.5 ? "graze" : "idle"; }
-        else state = "walk";
-      } else if (stateExpired && Math.random() < 0.35) {
+        if (s.arrived) {
+          targetX = null; targetY = null;
+          if (state === "raid") {
+            // Steal the nearest ground egg at the coop, then head home.
+            const rowsE = await db
+              .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
+              .from(groundItems)
+              .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 60} AND ${x + 60}`, sql`${groundItems.y} BETWEEN ${y - 60} AND ${y + 60}`))
+              .limit(1);
+            const stolen = rowsE[0];
+            if (stolen) {
+              await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
+              await logEvent("event", "The fox made off with an egg!", undefined, a.id, x, y);
+            } else {
+              await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, x, y);
+            }
+            state = "return";
+            const home = await randomPointIn(a.zone);
+            targetX = home?.x ?? null; targetY = home?.y ?? null;
+          } else if (state === "return") {
+            state = "idle";
+          } else {
+            state = Math.random() < 0.5 ? "graze" : "idle";
+          }
+        }
+        else state = state === "raid" || state === "return" ? state : "walk";
+      } else if (stateExpired && (a.species === "fox" || Math.random() < 0.35)) {
+        // Foxes are restless hunters — always roam when idle. Other animals
+        // wander occasionally (35% per window).
         const p = await randomPointIn(a.zone);
         if (p) { targetX = p.x; targetY = p.y; state = "walk"; }
       }
     }
     const petFresh = a.lastPettedAt && now.getTime() - a.lastPettedAt.getTime() < 10 * 60_000;
-    const mood = hunger > 70 ? "hungry" : state === "sleep" ? "sleepy" : petFresh ? "delighted" : hunger < 30 ? "content" : "peckish";
+    const mood = raiding ? "sly" : hunger > 70 ? "hungry" : state === "sleep" ? "sleepy" : petFresh ? "delighted" : hunger < 30 ? "content" : "peckish";
 
     // Chickens sometimes lay an egg at their feet (separate from pet bonuses).
     // Skip if there's already an egg nearby so they don't pile up.
-    if (a.species === "chicken" && state !== "sleep" && Math.random() < 0.04) {
+    if (a.species === "chicken" && state !== "sleep" && !raiding && Math.random() < 0.04) {
       const [nearby] = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(groundItems)
@@ -109,7 +150,13 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
 
     await db
       .update(animals)
-      .set({ x, y, targetX, targetY, facing, state, hunger, mood, stateUntil: new Date(now.getTime() + 2000 + Math.random() * 6000) })
+      .set({
+        x, y, targetX, targetY, facing, state, hunger, mood,
+        // While a fox raid is underway, keep the raid's own stateUntil (set
+        // by the event) — the generic 2-8s window would expire the raid
+        // almost immediately and collapse the whole flow.
+        stateUntil: raiding ? (a.stateUntil ?? new Date(now.getTime() + 120_000)) : new Date(now.getTime() + 2000 + Math.random() * 6000),
+      })
       .where(eq(animals.id, a.id));
   }
 }
@@ -158,20 +205,7 @@ async function tickEnemies(dt: number, now: Date) {
   const rows = await db.select().from(enemies);
   for (const e of rows) {
     let { x, y, targetX, targetY } = e;
-    // Event-spawned fox despawns ~20 sim seconds after spawning so the player
-    // sees it visit, then it wanders off.
-    if (e.kind === "fox") {
-      const ageSec = (now.getTime() - e.spawnedAt.getTime()) / 1000;
-      if (ageSec > 20) {
-        await db.delete(enemies).where(eq(enemies.id, e.id));
-        continue;
-      }
-    }
     if (targetX != null && targetY != null) {
-      const s = stepToward(x, y, targetX, targetY, ENEMY_SPEED * dt);
-      x = s.x; y = s.y;
-      if (s.arrived) { targetX = null; targetY = null; }
-    } else if (Math.random() < 0.25) {
       const zone = WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
       const p = await randomPointIn(zone);
       if (p) { targetX = p.x; targetY = p.y; }

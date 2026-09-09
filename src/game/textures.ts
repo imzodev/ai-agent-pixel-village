@@ -37,7 +37,8 @@ const CREATURES: Record<string, { rows: string[]; palette: Record<string, string
   chicken: { rows: ["....rr..", "...wwwo.", "...www..", ".wwwwww.", "wwwwwww.", ".wwwww..", "..www...", "..y.y...", "..y.y..."], palette: { r: "#d94a3a", w: "#fbf7f0", o: "#f0a020", y: "#f0a020" } },
   duck: { rows: ["...gg....", "...ggo...", "...gg....", ".wwwww...", "wwwwwww..", ".wwwwww..", "..wwww...", "...o.o..."], palette: { g: "#3f8a4a", o: "#f0a020", w: "#e7dcc6" } },
   rabbit: { rows: ["..t.t...", "..t.t...", "..ttt...", ".ttttt..", ".tttttt.", ".tttttt.", ".ttttt.t", "..t.t..."], palette: { t: "#d9b38c" } },
-  fox: { rows: ["..o.......o.", "..oo.....oo.", ".ooooooooooo", ".oowooooooo.", ".oooooooooow", "..ooooooooww", "..o..o..o.ww", "..k..k..k..."], palette: { o: "#e07b39", w: "#fbf2e6", k: "#3a2a20" } },
+  // fox: rendered from the fox-NESW spritesheet (WorldScene preload) — do
+  // NOT add a procedural cr_fox here, it would overwrite the sheet frames.
   cat: { rows: [".g.g......", ".ggg......", ".gggggggg.", ".gggggggg.", ".ggggggg.g", "..g.g..g.g", "..g.g..gg."], palette: { g: "#e8985a" } },
   dog: { rows: ["..b.........", "..bb........", ".bbbbbbbbbb.", ".bbbbbbbbbbb", ".bbbbbbbbbb.", "..bbbbbbbb..", "..b..b..b.b.", "..b..b..b..."], palette: { b: "#a5682a" } },
   slime: { rows: ["...gggg...", "..gggggg..", ".gggggggg.", ".gkggggkg.", ".gggggggg.", "gggggggggg", "gggggggggg", ".gggggggg."], palette: { g: "#6ccf7a", k: "#1e3a22" } },
