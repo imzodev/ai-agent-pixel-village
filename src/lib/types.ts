@@ -57,4 +57,27 @@ export type Recipe = {
   requires?: { level?: number; itemKey?: string; qty?: number };
 };
 
+/** One world-driven random event. Adding a new event = pushing one entry
+ *  into the `simEvents` registry in src/lib/events.ts — no other edits. */
+export type RandomEvent = {
+  /** Unique id, used for cooldowns and logs. */
+  key: string;
+  /** Higher = more likely to fire per eligible tick. */
+  weight: number;
+  /** Minimum ms between two fires of THIS event (global per-key). */
+  cooldownMs: number;
+  /** Optional gate against world state (hour, weather, player count, etc.). */
+  when?: (ctx: SimCtx) => boolean | Promise<boolean>;
+  /** The effect — mutates world state, emits world events. */
+  fire: (ctx: SimCtx) => void | Promise<void>;
+};
+
+/** World context passed to every random event — read-only view of the sim. */
+export type SimCtx = {
+  db: typeof import("@/db/index").db;
+  hour: number;
+  weather: string;
+  now: Date;
+};
+
 

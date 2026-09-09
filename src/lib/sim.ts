@@ -4,6 +4,7 @@ import { animals, enemies, npcs, resourceNodes, worldState, worldEvents, groundI
 import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { logEvent } from "./game";
+import { runRandomEvents } from "./events";
 
 const ANIMAL_SPEED = 28; // px/s
 const NPC_SPEED = 38;
@@ -62,6 +63,7 @@ export async function tickWorld() {
     tickResources(now),
     tickEnemies(moveDt, now),
   ]);
+  await runRandomEvents({ db, hour, weather: ws.weather, now });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);
 }
 
