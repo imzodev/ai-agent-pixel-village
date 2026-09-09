@@ -158,6 +158,15 @@ async function tickEnemies(dt: number, now: Date) {
   const rows = await db.select().from(enemies);
   for (const e of rows) {
     let { x, y, targetX, targetY } = e;
+    // Event-spawned fox despawns ~20 sim seconds after spawning so the player
+    // sees it visit, then it wanders off.
+    if (e.kind === "fox") {
+      const ageSec = (now.getTime() - e.spawnedAt.getTime()) / 1000;
+      if (ageSec > 20) {
+        await db.delete(enemies).where(eq(enemies.id, e.id));
+        continue;
+      }
+    }
     if (targetX != null && targetY != null) {
       const s = stepToward(x, y, targetX, targetY, ENEMY_SPEED * dt);
       x = s.x; y = s.y;

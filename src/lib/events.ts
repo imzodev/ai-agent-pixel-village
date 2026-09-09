@@ -55,7 +55,7 @@ simEvents.push({
     return n >= 1;
   },
   fire: async (ctx) => {
-    // Snatch a random egg and run off with it.
+    // 1. Pick a random ground egg (the fox's target).
     const rows = await ctx.db
       .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
       .from(groundItems)
@@ -64,8 +64,22 @@ simEvents.push({
       .limit(1);
     const target = rows[0];
     if (!target) return;
+
+    // 2. Snatch the egg (fox got there first).
     await ctx.db.delete(groundItems).where(eq(groundItems.id, target.id));
     const { logEvent } = await import("./game");
     await logEvent("event", "A fox darted through the chicken yard and snatched an egg!", undefined, undefined, target.x, target.y);
+
+    // 3. Spawn a fox enemy entity — it walks in from off-target and lingers
+    //    ~20 sim seconds before despawning. tickEnemies handles the cleanup.
+    await ctx.db.execute(sql`
+      INSERT INTO enemies (kind, x, y, target_x, target_y, hp, max_hp, spawned_at)
+      VALUES (
+        'fox',
+        ${target.x + 120}, ${target.y - 80},
+        ${target.x}, ${target.y},
+        9, 9, NOW()
+      )
+    `);
   },
 });

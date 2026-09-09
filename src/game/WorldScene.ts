@@ -91,10 +91,22 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     loadTilemapAssets(this);
+    // Animated fox sprite (12-frame walking sheet, 3 cols × 4 rows of 16×16).
+    // See public/assets/ATTRIBUTION.md for licensing.
+    this.load.spritesheet("cr_fox", "/assets/animals/fox-NESW.png", { frameWidth: 16, frameHeight: 16 });
   }
 
   async create() {
     makeAllTextures(this);
+    // Fox walk animations — 4 directions × 3 frames each (see ATTRIBUTION.md).
+    for (const [dir, frames] of [["up", [0, 1, 2] as number[]], ["right", [3, 4, 5] as number[]], ["down", [6, 7, 8] as number[]], ["left", [9, 10, 11] as number[]]] as const) {
+      this.anims.create({
+        key: `cr_fox_walk_${dir}`,
+        frames: this.anims.generateFrameNumbers("cr_fox", { frames }),
+        frameRate: 7,
+        repeat: -1,
+      });
+    }
     // Initial chunk window: central chunk (0, 0). Streaming kicks in once the
     // player crosses a chunk boundary in updatePlayer.
     this.lastPlayerChunk = { cx: 0, cy: 0 };
@@ -552,6 +564,7 @@ export class WorldScene extends Phaser.Scene {
     const dx = e.tx - e.sprite.x, dy = e.ty - e.sprite.y;
     const d = Math.hypot(dx, dy);
     let bob = 0;
+    const isFox = (e as any).kind === "fox";
     if (d > 0.5) {
       const step = Math.min(d, Math.max(e.speed * dt, d * 2.5 * dt));
       e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
@@ -559,10 +572,23 @@ export class WorldScene extends Phaser.Scene {
       bob = Math.abs(Math.sin(time / 90 + e.phase)) * 2;
     } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
     else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
-    e.sprite.setFlipX(e.facing === "left");
+    // Fox sprite has real per-direction frames — never mirror with setFlipX.
+    if (!isFox) e.sprite.setFlipX(e.facing === "left");
     e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
     e.sprite.y -= 0; // keep base
     e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
+    // Play the matching walk animation when the fox is moving, freeze on frame 0 when stopped.
+    if (isFox) {
+      const dir = d > 0.5 ? e.facing : e.facing;
+      const key = `cr_fox_walk_${dir}`;
+      const sprite = e.sprite as unknown as { anims: { currentAnim?: { key: string }; isPlaying: boolean }; play: (k: string, b?: boolean) => void; stop: () => void; setFrame: (f: number) => void };
+      if (d > 0.5) {
+        if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key, true);
+      } else {
+        sprite.stop();
+        sprite.setFrame(dir === "up" ? 0 : dir === "right" ? 3 : dir === "down" ? 6 : 9);
+      }
+    }
     e.label?.setPosition(e.sprite.x, e.sprite.y - e.sprite.height - 4);
     e.hpBar?.setPosition(e.sprite.x, e.sprite.y);
     if (e.state === "sleep") {
