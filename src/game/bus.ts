@@ -37,6 +37,7 @@ type Events = {
   moveTo: { x: number; y: number };
   poke: undefined;
   chatFocus: boolean;
+  toggle: "bag" | "shop" | "map" | "quests" | "friends";
 };
 
 type Handler<T> = (payload: T) => void;

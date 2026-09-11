@@ -78,6 +78,8 @@ function Dashboard() {
           <Stat label="This month" v={`$${(d.billing.totalCents / 100).toFixed(2)}`} sub={`$${(d.billing.rentCents / 100).toFixed(0)} rent + $${(d.billing.leadFeesCents / 100).toFixed(2)} leads`} />
         </div>
 
+        <AttributionWidget token={token} />
+
         <div className="mt-4 grid gap-4 md:grid-cols-[1fr_380px]">
           <section className="rounded-xl border-4 border-amber-900/50 bg-amber-50 p-3">
             <div className="text-lg font-bold text-amber-900">Lead feed</div>
@@ -130,4 +132,34 @@ function Stat({ label, v, sub }: { label: string; v: string; sub?: string }) {
 }
 function F({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block text-[11px] font-bold uppercase text-amber-800">{label}<div className="mt-0.5 normal-case">{children}</div></label>;
+}
+
+function AttributionWidget({ token }: { token: string }) {
+  const [data, setData] = useState<{ totals: Record<string, number>; recent: { id: number; type: string; createdAt: string }[] } | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    const load = async () => {
+      const r = await fetch(`/api/sponsor/attribution?token=${encodeURIComponent(token)}`);
+      if (r.ok) setData(await r.json());
+    };
+    void load();
+    const i = setInterval(load, 8000);
+    return () => clearInterval(i);
+  }, [token]);
+  if (!data) return null;
+  const order = ["impression", "approach", "dialogue_start", "mission_accept", "discount_claimed", "lead_submitted"];
+  const totals = data.totals ?? {};
+  return (
+    <section className="mt-3 rounded-xl border-4 border-stone-300 bg-white p-3">
+      <div className="text-lg font-bold">Last 7 days — attribution</div>
+      <div className="mt-1 grid grid-cols-3 gap-1 sm:grid-cols-6">
+        {order.map((t) => (
+          <div key={t} className="rounded bg-stone-50 p-2 text-center">
+            <div className="text-[10px] uppercase text-stone-500">{t.replace("_", " ")}</div>
+            <div className="text-xl font-bold">{totals[t] ?? 0}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }

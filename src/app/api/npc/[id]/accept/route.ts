@@ -4,6 +4,8 @@ import { characters, characterMissions, conversations, missions, npcs } from "@/
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { addItem, emitLead, grantReward, logEvent, removeItem } from "@/lib/game";
+import { getContainer } from "@/lib/container";
+import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const [m] = await db.select().from(missions).where(eq(missions.id, offer.missionId));
       text = `${npc.name} nods. "${m.description}"`;
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(You accepted: ${m.title})` });
+      if (m.sponsorId) {
+        const c = getContainer();
+        await recordSponsorEvent({ attribution: c.services.sponsorAttribution }, { sponsorId: m.sponsorId, characterId: character.id, type: "mission_accept", meta: { missionId: m.id } });
+      }
     } else if (offer.type === "turnin") {
       const [m] = await db.select().from(missions).where(eq(missions.id, offer.missionId));
       const [cm] = await db
@@ -71,6 +77,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       text = `${npc.name} scribbles on a scrap of paper and presses it into your hand. "${sponsor.discountCode} — ${sponsor.discountText} Don't lose it, love."`;
       await logEvent("lead", `${character.name} took a ${sponsor.businessName} code from ${npc.name}.`, "npc", npc.id, npc.x, npc.y);
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Gave you code ${sponsor.discountCode}${lead ? "" : " — sponsor paused"})` });
+      const c = getContainer();
+      await recordSponsorEvent({ attribution: c.services.sponsorAttribution }, { sponsorId: sponsor.id, characterId: character.id, type: "discount_claimed", meta: { code: sponsor.discountCode } });
     } else if (offer.type === "gift") {
       await addItem(character.id, offer.itemKey, 1);
       gained.push({ itemKey: offer.itemKey, qty: 1 });

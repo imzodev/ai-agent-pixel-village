@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import Stripe from "stripe";
 import { db } from "@/db";
-import { buildings, characters, leads, missions, npcs, sponsors, type Appearance } from "@/db/schema";
+import { buildings, characters, cosmeticItems, leads, missions, npcs, sponsors, type Appearance } from "@/db/schema";
 import { handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { getBuildingDoor } from "@/lib/buildingsServer";
@@ -75,6 +75,19 @@ export async function POST(req: Request) {
       shirtColor: hex(b.appearance?.shirtColor, sp.brandColor),
       pantsColor: hex(b.appearance?.pantsColor, "#3a3a4a"),
     };
+    // Create the brand hat cosmetic item so the auto-grant on first visit works.
+    await db.insert(cosmeticItems).values({
+      key: `hat_brand_${sp.id}`,
+      name: `${businessName} Hat`,
+      slot: "hat",
+      assetRef: "/lpc/hair_plain.png",
+      tintColor: sp.brandColor,
+      rarity: "rare",
+      coinPrice: 0,
+      gemPrice: 0,
+      sponsorGrantedOnly: true,
+      sponsorId: sp.id,
+    }).onConflictDoNothing();
     // Retire any previous agent for this building
     await db.update(npcs).set({ active: false }).where(eq(npcs.buildingId, building.id));
     const [agent] = await db

@@ -2,8 +2,10 @@ import { eq, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import {
+  activities,
   animals,
   buildings,
+  cosmeticItems,
   enemies,
   items,
   missions,
@@ -419,8 +421,57 @@ export function ensureSeeded() {
   return seededPromise
     .then(() => syncBuildingsFromManifest())
     .then(() => syncWildlifeLayout())
-    .then(() => syncNpcLayout());
+    .then(() => syncNpcLayout())
+    .then(() => seedCosmetics())
+    .then(() => seedActivities());
 }
+
+async function seedActivities() {
+  const [any] = await db.select().from(activities).limit(1);
+  if (any) return;
+  // Fishing dock — south of the pond, near the trees. 2-player co-op.
+  await db.insert(activities).values({
+    kind: "fishing_dock",
+    status: "live",
+    x: 1080, y: 1100,
+    config: { capacity: 2, durationSec: 60, rewardCoins: 25, rewardXp: 12 },
+  });
+}
+
+async function seedCosmetics() {
+  const [any] = await db.select().from(cosmeticItems).limit(1);
+  if (any) return;
+  for (const it of COSMETIC_CATALOG) {
+    await db.insert(cosmeticItems).values({
+      key: it.key,
+      name: it.name,
+      slot: it.slot,
+      assetRef: it.assetRef,
+      tintColor: it.tintColor,
+      rarity: it.rarity,
+      coinPrice: it.coinPrice,
+      gemPrice: it.gemPrice,
+      sponsorGrantedOnly: it.sponsorGrantedOnly,
+      sponsorId: it.sponsorId,
+      availableFrom: it.availableFrom,
+      availableUntil: it.availableUntil,
+    }).onConflictDoNothing();
+  }
+}
+
+const COSMETIC_CATALOG = [
+  { key: "hat_straw", name: "Straw Hat", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#d9b676", rarity: "common", coinPrice: 200, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "hat_crown", name: "Forest Crown", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#ffd166", rarity: "rare", coinPrice: 0, gemPrice: 250, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "hat_party", name: "Party Cone", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#ff5e8a", rarity: "uncommon", coinPrice: 350, gemPrice: 50, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "glasses_round", name: "Round Specs", slot: "glasses", assetRef: "/cosmetics/glasses_round.png", tintColor: null, rarity: "common", coinPrice: 300, gemPrice: 30, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "outfit_apron", name: "Baker's Apron", slot: "outfit", assetRef: "/cosmetics/outfit_apron.png", tintColor: "#e76f51", rarity: "uncommon", coinPrice: 600, gemPrice: 80, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "back_pet_chick", name: "Chick Pal", slot: "pet", assetRef: "/cosmetics/pet_chick.png", tintColor: null, rarity: "epic", coinPrice: 0, gemPrice: 500, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+  { key: "hair_long", name: "Long Hair", slot: "hair", assetRef: "/lpc/hair_long.png", tintColor: "#5a3a1a", rarity: "common", coinPrice: 150, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
+] satisfies Array<{
+  key: string; name: string; slot: string; assetRef: string; tintColor: string | null;
+  rarity: string; coinPrice: number; gemPrice: number; sponsorGrantedOnly: boolean;
+  sponsorId: number | null; availableFrom: Date | null; availableUntil: Date | null;
+}>;
 
 async function seed() {
   const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));

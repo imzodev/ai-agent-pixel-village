@@ -19,6 +19,7 @@ import {
   recenterCamera,
   releaseOutside,
 } from "./worldTilemap";
+import type { Action, InputState } from "@/types/input";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -46,6 +47,10 @@ const PLAYER_SPEED = 120;
 
 function zoneOf(rect: Phaser.Geom.Rectangle): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
   return { type: "random", source: rect as unknown as Phaser.Types.GameObjects.Particles.RandomZoneSource };
+}
+
+function touchDist(t: TouchList): number {
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 }
 
 export class WorldScene extends Phaser.Scene {
@@ -84,6 +89,7 @@ export class WorldScene extends Phaser.Scene {
   // wheel handler so zooming out can never reveal the background.
   private minZoom = 1;
   private fitted = false;
+  private mobileInput: { getState(): InputState } | null = null;
 
   constructor() {
     super("world");
@@ -171,6 +177,24 @@ export class WorldScene extends Phaser.Scene {
       cam.setZoom(Phaser.Math.Clamp(cam.zoom - Math.sign(dy) * 0.25, this.minZoom, 4));
       this.resizeOverlays();
     });
+    // iOS Safari does not fire "wheel" for pinch — sample two-finger distance.
+    let lastPinchDist: number | null = null;
+    this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
+      const ev = p.event as unknown as { touches?: TouchList };
+      if (ev?.touches && ev.touches.length === 2) {
+        lastPinchDist = touchDist(ev.touches);
+      }
+    });
+    this.input.on("pointermove", (p: Phaser.Input.Pointer) => {
+      const ev = p.event as unknown as { touches?: TouchList };
+      if (!ev?.touches || ev.touches.length !== 2 || lastPinchDist === null) return;
+      const dist = touchDist(ev.touches);
+      const cam = this.cameras.main;
+      cam.setZoom(Phaser.Math.Clamp(cam.zoom + (dist - lastPinchDist) * 0.01, this.minZoom, 4));
+      lastPinchDist = dist;
+      this.resizeOverlays();
+    });
+    this.input.on("pointerup", () => { lastPinchDist = null; });
     this.input.on("pointerdown", (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length > 0) return;
       this.dragging = false;
@@ -465,6 +489,30 @@ export class WorldScene extends Phaser.Scene {
     else bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
   }
 
+  /** Public hook for the React layer to attach the mobile input source. */
+  public attachInput(src: { getState(): InputState }): void {
+    this.mobileInput = src;
+  }
+
+  /** Public hook for the React layer to forward action button presses. */
+  public handleAction(a: Action): void {
+    if (this.chatFocused) return;
+    switch (a) {
+      case "interact":
+        this.interactNearest();
+        break;
+      case "bag":
+        bus.emit("toggle", "bag");
+        break;
+      case "shop":
+        bus.emit("toggle", "shop");
+        break;
+      case "map":
+        bus.emit("toggle", "map");
+        break;
+    }
+  }
+
   // ---------- update loop ----------
   update(time: number, deltaMs: number) {
     const dt = Math.min(0.05, deltaMs / 1000);
@@ -503,10 +551,17 @@ export class WorldScene extends Phaser.Scene {
     const p = this.player!;
     let vx = 0, vy = 0;
     if (!this.chatFocused) {
-      if (this.keys.A.isDown || this.keys.LEFT.isDown) vx -= 1;
-      if (this.keys.D.isDown || this.keys.RIGHT.isDown) vx += 1;
-      if (this.keys.W.isDown || this.keys.UP.isDown) vy -= 1;
-      if (this.keys.S.isDown || this.keys.DOWN.isDown) vy += 1;
+      // Touch / joystick input takes priority when present.
+      const touch = this.mobileInput?.getState();
+      if (touch && !touch.textFocused && (touch.axisX !== 0 || touch.axisY !== 0)) {
+        vx = touch.axisX;
+        vy = touch.axisY;
+      } else {
+        if (this.keys.A.isDown || this.keys.LEFT.isDown) vx -= 1;
+        if (this.keys.D.isDown || this.keys.RIGHT.isDown) vx += 1;
+        if (this.keys.W.isDown || this.keys.UP.isDown) vy -= 1;
+        if (this.keys.S.isDown || this.keys.DOWN.isDown) vy += 1;
+      }
     }
     // Snap to dominant axis so WASD is cardinal-only (matches the facing
     // selection below). Click-to-move NPCs stay diagonal — that's correct

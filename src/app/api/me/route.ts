@@ -4,6 +4,7 @@ import { characterMissions, characters, homeDecor, inventory, items, leads, miss
 import { getCurrentCharacter, handleApiError } from "@/lib/auth";
 import { missionProgressFor, requirementTarget } from "@/lib/game";
 import { ensureSeeded } from "@/lib/seed";
+import { getContainer } from "@/lib/container";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,9 @@ export async function GET() {
       const progress = cm.status === "active" ? await missionProgressFor(me.id, m.requirement, cm.progress) : requirementTarget(m.requirement);
       missionList.push({ id: cm.id, missionId: m.id, title: m.title, description: m.description, status: cm.status, progress, target: requirementTarget(m.requirement), npcName, npcId: m.npcId, requirement: m.requirement, reward: m.reward, sponsored: !!m.sponsorId });
     }
+    // Lazy-create today's 3 daily quests on first login of the day.
+    const c = getContainer();
+    await c.services.quest.getOrCreateTodaysQuests(me.id);
     return Response.json({
       me,
       inventory: inv.map((i) => ({ ...i, def: defs.get(i.itemKey) ?? null })),

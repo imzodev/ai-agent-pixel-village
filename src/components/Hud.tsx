@@ -8,7 +8,7 @@ import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -22,7 +22,7 @@ export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | null>(null);
+  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -49,6 +49,21 @@ export default function Hud() {
       bus.on("select", setSel),
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
+      bus.on("toggle", (which) => {
+        if (which === "shop") {
+          window.location.href = "/shop";
+          return;
+        }
+        // The mobile action buttons emit "map" / "quests" / "friends" too —
+        // map those to existing panels when possible.
+        const target: "bag" | "missions" | "log" | "home" | "quests" | "friends" | null =
+          which === "bag" ? "bag" :
+          which === "map" ? "log" :
+          which === "quests" ? "quests" :
+          which === "friends" ? "friends" :
+          null;
+        if (target) setPanel((p) => (p === target ? null : target));
+      }),
     ];
     void refreshMe();
     return () => u.forEach((f) => f());
@@ -198,14 +213,17 @@ export default function Hud() {
           <div className="flex items-center gap-2 rounded-lg bg-black/40 px-2 py-1">
             <span className="font-bold text-amber-200">{me.me.name}</span> <span>Lv {me.me.level}</span>
             <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * (snap?.me?.hp ?? me.me.hp)) / (snap?.me?.maxHp ?? me.me.maxHp)}%` }} /></span>
-            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span>
+            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
           </div>
         )}
         {loggedIn ? (
           <>
             <TopBtn on={() => setPanel(panel === "bag" ? null : "bag")} active={panel === "bag"}>🎒 Bag</TopBtn>
             <TopBtn on={() => setPanel(panel === "missions" ? null : "missions")} active={panel === "missions"}>📜 Missions{me?.missions.some((m) => m.status === "active" && m.progress >= m.target) ? " ✓" : ""}</TopBtn>
+            <TopBtn on={() => setPanel(panel === "quests" ? null : "quests")} active={panel === "quests"}>⚡ Quests</TopBtn>
+            <TopBtn on={() => setPanel(panel === "friends" ? null : "friends")} active={panel === "friends"}>👥 Friends</TopBtn>
             <TopBtn on={() => setPanel(panel === "home" ? null : "home")} active={panel === "home"}>🏡 Home</TopBtn>
+            <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
           </>
         ) : null}
         <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📖 World</TopBtn>
@@ -345,6 +363,8 @@ export default function Hud() {
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : "📖 The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
+          {panel === "quests" && <DailyQuestsPanel />}
+          {panel === "friends" && <FriendsPanel />}
           {panel === "home" && me && <HomePanel me={me} onAction={invAction} onTheme={async (t) => { await api("/api/me", { homeTheme: t }, "PATCH"); void refreshMe(); }} />}
           {panel === "log" && (
             <div className="space-y-2">
@@ -707,6 +727,104 @@ function HomePanel({ me, onAction, onTheme }: { me: Me; onAction: (b: Record<str
         {placeables.length === 0 && <div className="text-[12px] text-stone-500">None yet — Pip and Greta trade furniture for stones and slime gel.</div>}
         {placeables.map((i) => <button key={i.id} onClick={() => setPlacing(placing === i.id ? null : i.id)} className={`rounded-lg border-2 bg-white px-2 py-1 ${placing === i.id ? "border-emerald-500" : "border-transparent"}`}>{i.def?.icon} {i.def?.name} ×{i.qty}</button>)}
       </div>
+    </div>
+  );
+}
+
+function DailyQuestsPanel() {
+  type Quest = {
+    id: number;
+    title: string;
+    description: string;
+    requirement: { type: string; [k: string]: unknown };
+    reward: { coins?: number; gems?: number; xp?: number };
+    progress: number;
+    status: string;
+  };
+  type Streak = { current: number; longest: number; lastCompletedOn: string | null };
+  const [data, setData] = useState<{ quests: Quest[]; streak: Streak | null } | null>(null);
+  const load = async () => {
+    const r = await fetch("/api/quests/today");
+    if (r.ok) setData(await r.json());
+  };
+  useEffect(() => { void load(); }, []);
+  if (!data) return <div className="text-stone-500">loading…</div>;
+  const targetOf = (q: Quest) => {
+    const r = q.requirement as Record<string, unknown>;
+    return Number(r.qty ?? r.amount ?? 1);
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-bold text-amber-900">Today's quests</div>
+        {data.streak && <div className="rounded-full bg-orange-200 px-2 py-0.5 text-[10px] font-bold text-orange-900">🔥 {data.streak.current}-day streak</div>}
+      </div>
+      {data.quests.map((q) => {
+        const tgt = targetOf(q);
+        const done = q.status === "completed" || q.progress >= tgt;
+        return (
+          <div key={q.id} className={`rounded-lg border-2 bg-white/80 p-2 ${done ? "border-emerald-500" : "border-stone-300"}`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-[13px] font-bold">{q.title}</div>
+                <div className="text-[11px] text-stone-600">{q.description}</div>
+              </div>
+              <div className="text-right text-[10px] text-stone-500">
+                {q.reward.coins && <>🪙{q.reward.coins}<br /></>}
+                {q.reward.gems && <>💎{q.reward.gems}<br /></>}
+                {q.reward.xp && <>✨{q.reward.xp}</>}
+              </div>
+            </div>
+            <div className="mt-1 h-2 overflow-hidden rounded bg-stone-200">
+              <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (100 * q.progress) / tgt)}%` }} />
+            </div>
+            <div className="mt-0.5 text-[10px] text-stone-500">{q.progress}/{tgt} {done ? "✓" : ""}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FriendsPanel() {
+  type Incoming = { id: number; fromUserId: number; from: { username: string; characterName: string | null } | null };
+  type Friend = { username: string; characterName: string; status: "online" | "away" | "offline" };
+  const [data, setData] = useState<{ incoming: Incoming[]; friends: Friend[] } | null>(null);
+  const load = async () => {
+    const r = await fetch("/api/friends");
+    if (r.ok) setData(await r.json());
+  };
+  useEffect(() => { void load(); const i = setInterval(load, 15_000); return () => clearInterval(i); }, []);
+  const respond = async (id: number, decision: "accept" | "decline") => {
+    await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: decision, requestId: id }) });
+    await load();
+  };
+  if (!data) return <div className="text-stone-500">loading…</div>;
+  return (
+    <div className="space-y-2">
+      <div className="text-sm font-bold text-amber-900">Friend requests</div>
+      {data.incoming.length === 0 && <div className="text-[12px] text-stone-500">No new requests.</div>}
+      {data.incoming.map((r) => (
+        <div key={r.id} className="flex items-center gap-2 rounded-lg border-2 border-stone-300 bg-white/80 p-2">
+          <div className="flex-1">
+            <div className="text-[13px] font-bold">@{r.from?.username ?? "?"}</div>
+            <div className="text-[11px] text-stone-600">{r.from?.characterName ?? "no character"}</div>
+          </div>
+          <button onClick={() => respond(r.id, "accept")} className="rounded bg-emerald-500 px-2 py-1 text-[12px] text-white">accept</button>
+          <button onClick={() => respond(r.id, "decline")} className="rounded bg-stone-300 px-2 py-1 text-[12px]">decline</button>
+        </div>
+      ))}
+      <div className="text-sm font-bold text-amber-900">Friends</div>
+      {data.friends.length === 0 && <div className="text-[12px] text-stone-500">No friends yet. Share your username so they can add you.</div>}
+      {data.friends.map((f) => (
+        <div key={f.username} className="flex items-center gap-2 rounded-lg border-2 border-stone-300 bg-white/80 p-2">
+          <span className={`inline-block h-2 w-2 rounded-full ${f.status === "online" ? "bg-emerald-500" : f.status === "away" ? "bg-yellow-400" : "bg-stone-400"}`} />
+          <div className="flex-1">
+            <div className="text-[13px] font-bold">{f.characterName}</div>
+            <div className="text-[11px] text-stone-600">@{f.username} · {f.status}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

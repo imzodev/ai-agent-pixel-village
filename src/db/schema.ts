@@ -10,6 +10,35 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
+import type {
+  Appearance,
+  HomeTheme,
+  ItemKind,
+  MissionRequirement,
+  MissionReward,
+} from "@/types/domain";
+import type {
+  CosmeticItem,
+  CosmeticOwnership,
+  CharacterEquipped,
+  GemTransaction,
+} from "@/types/cosmetic";
+import type { SponsorEvent } from "@/types/sponsor";
+import type { FriendRequest, Friendship } from "@/types/social";
+import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
+import type { Activity, ActivityParticipant } from "@/types/activity";
+
+// Re-export domain types so existing imports of `import type { Appearance }
+// from "@/db/schema"` keep working. New code should import from
+// `@/types/domain` (and from `@/types/cosmetic` etc. for new concepts).
+export type {
+  Appearance,
+  Character,
+  HomeTheme,
+  ItemKind,
+  MissionRequirement,
+  MissionReward,
+} from "@/types/domain";
 
 // ---------- Accounts ----------
 export const users = pgTable("users", {
@@ -26,14 +55,6 @@ export const sessions = pgTable("sessions", {
 });
 
 // ---------- Player characters ----------
-export type Appearance = {
-  body: "male" | "female";
-  skin: string; // hex tint
-  hair: string; // hair style key
-  hairColor: string;
-  shirtColor: string;
-  pantsColor: string;
-};
 
 export const characters = pgTable("characters", {
   id: serial("id").primaryKey(),
@@ -44,6 +65,7 @@ export const characters = pgTable("characters", {
   y: real("y").notNull().default(760),
   facing: text("facing").notNull().default("down"),
   coins: integer("coins").notNull().default(20),
+  gems: integer("gems").notNull().default(0),
   hp: integer("hp").notNull().default(20),
   maxHp: integer("max_hp").notNull().default(20),
   xp: integer("xp").notNull().default(0),
@@ -151,15 +173,7 @@ export const animals = pgTable("animals", {
 });
 
 // ---------- Items ----------
-export type ItemKind =
-  | "material"
-  | "consumable"
-  | "tool"
-  | "furniture"
-  | "discount"
-  | "recipe"
-  | "hat"
-  | "trophy";
+// ItemKind re-exported above
 
 export const items = pgTable("items", {
   id: serial("id").primaryKey(),
@@ -207,18 +221,7 @@ export const homeDecor = pgTable("home_decor", {
 });
 
 // ---------- Missions ----------
-export type MissionRequirement =
-  | { type: "collect"; itemKey: string; qty: number }
-  | { type: "pet"; species: string; qty: number }
-  | { type: "defeat"; enemyKind: string; qty: number }
-  | { type: "visit"; buildingKey: string }
-  | { type: "talk"; npcKey: string };
-
-export type MissionReward = {
-  coins?: number;
-  xp?: number;
-  items?: { itemKey: string; qty: number }[];
-};
+// MissionRequirement / MissionReward re-exported above
 
 export const missions = pgTable("missions", {
   id: serial("id").primaryKey(),
@@ -342,5 +345,154 @@ export const webhookLogs = pgTable("webhook_logs", {
   detail: text("detail").notNull().default(""),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ---------- Cosmetics + gem economy ----------
+export const cosmeticItems = pgTable("cosmetic_items", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  slot: text("slot").notNull(),
+  assetRef: text("asset_ref").notNull(),
+  tintColor: text("tint_color"),
+  rarity: text("rarity").notNull().default("common"),
+  coinPrice: integer("coin_price").notNull().default(0),
+  gemPrice: integer("gem_price").notNull().default(0),
+  sponsorGrantedOnly: boolean("sponsor_granted_only").notNull().default(false),
+  sponsorId: integer("sponsor_id"),
+  availableFrom: timestamp("available_from"),
+  availableUntil: timestamp("available_until"),
+});
+
+export const cosmeticOwnerships = pgTable(
+  "cosmetic_ownerships",
+  {
+    characterId: integer("character_id").notNull(),
+    itemKey: text("item_key").notNull(),
+    acquiredAt: timestamp("acquired_at").defaultNow().notNull(),
+    source: text("source").notNull().default("coin"),
+  },
+  (t) => [index("cosmetic_owner_idx").on(t.characterId)],
+);
+
+export const characterEquipped = pgTable(
+  "character_equipped",
+  {
+    characterId: integer("character_id").notNull(),
+    slot: text("slot").notNull(),
+    itemKey: text("item_key").notNull(),
+    equippedAt: timestamp("equipped_at").defaultNow().notNull(),
+  },
+  (t) => [index("equipped_char_idx").on(t.characterId)],
+);
+
+export const gemTransactions = pgTable("gem_transactions", {
+  id: serial("id").primaryKey(),
+  characterId: integer("character_id").notNull(),
+  delta: integer("delta").notNull(),
+  source: text("source").notNull(),
+  packKey: text("pack_key"),
+  stripeSessionId: text("stripe_session_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ---------- Sponsor attribution ----------
+export const sponsorEvents = pgTable(
+  "sponsor_events",
+  {
+    id: serial("id").primaryKey(),
+    sponsorId: integer("sponsor_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    type: text("type").notNull(),
+    utmSource: text("utm_source"),
+    utmCampaign: text("utm_campaign"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("sponsor_events_sponsor_idx").on(t.sponsorId)],
+);
+
+// ---------- Friends ----------
+export const friendRequests = pgTable(
+  "friend_requests",
+  {
+    id: serial("id").primaryKey(),
+    fromUserId: integer("from_user_id").notNull(),
+    toUserId: integer("to_user_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+  },
+  (t) => [index("friend_requests_to_idx").on(t.toUserId)],
+);
+
+export const friendships = pgTable(
+  "friendships",
+  {
+    userA: integer("user_a").notNull(),
+    userB: integer("user_b").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("friendships_a_idx").on(t.userA), index("friendships_b_idx").on(t.userB)],
+);
+
+// ---------- Daily quests ----------
+export const dailyQuests = pgTable(
+  "daily_quests",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    forDate: text("for_date").notNull(),
+    templateKey: text("template_key").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    requirement: jsonb("requirement").$type<QuestRequirement>().notNull(),
+    reward: jsonb("reward").$type<QuestReward>().notNull(),
+    progress: integer("progress").notNull().default(0),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (t) => [index("daily_quests_char_date_idx").on(t.characterId, t.forDate)],
+);
+
+export const streakStates = pgTable("streak_states", {
+  characterId: integer("character_id").primaryKey(),
+  current: integer("current").notNull().default(0),
+  longest: integer("longest").notNull().default(0),
+  lastCompletedOn: text("last_completed_on"),
+  graceUsedOn: text("grace_used_on"),
+});
+
+// ---------- Activities ----------
+export const activities = pgTable("activities", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("live"),
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  sponsorId: integer("sponsor_id"),
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const activityParticipants = pgTable(
+  "activity_participants",
+  {
+    activityId: integer("activity_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+    state: jsonb("state").$type<Record<string, unknown>>().notNull().default({}),
+    score: integer("score"),
+  },
+  (t) => [index("activity_part_activity_idx").on(t.activityId)],
+);
+
+// Cosmetic / Sponsor / Friend type aliases re-exported for clarity
+export type { CosmeticItem, CosmeticOwnership, CharacterEquipped, GemTransaction };
+export type { SponsorEvent };
+export type { FriendRequest, Friendship };
+export type { DailyQuest, StreakState };
+export type { Activity, ActivityParticipant };
 
 export const _drizzleHelpers = { uniqueIndex };

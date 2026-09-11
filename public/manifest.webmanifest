@@ -1,0 +1,12 @@
+{
+  "name": "thegrove",
+  "short_name": "thegrove",
+  "description": "A persistent pixel-art village where humans and AI agents share one world.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a2238",
+  "theme_color": "#1a2238",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

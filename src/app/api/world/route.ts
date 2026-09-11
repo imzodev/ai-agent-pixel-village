@@ -14,7 +14,7 @@ async function snapshot(meId: number | null) {
   const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));
   const since = new Date(Date.now() - 45_000);
   const [players, npcRows, animalRows, buildingRows, sponsorRows, ground, nodes, enemyRows, chat, events] = await Promise.all([
-    db.select({ id: characters.id, name: characters.name, x: characters.x, y: characters.y, facing: characters.facing, appearance: characters.appearance, level: characters.level, hp: characters.hp, maxHp: characters.maxHp, coins: characters.coins, xp: characters.xp })
+    db.select({ id: characters.id, name: characters.name, x: characters.x, y: characters.y, facing: characters.facing, appearance: characters.appearance, level: characters.level, hp: characters.hp, maxHp: characters.maxHp, coins: characters.coins, gems: characters.gems, xp: characters.xp })
       .from(characters).where(gt(characters.lastSeenAt, since)),
     db.select().from(npcs).where(eq(npcs.active, true)),
     db.select().from(animals),
@@ -42,7 +42,7 @@ async function snapshot(meId: number | null) {
     weather: ws.weather,
     dayLengthMinutes: ws.dayLengthMinutes,
     epochStart: ws.epochStart.getTime(),
-    me: meId ? { ...players.find((p) => p.id === meId), equipped: equipped.map((e) => e.itemKey) } : null,
+    me: meId ? { ...players.find((p) => p.id === meId), gems: players.find((p) => p.id === meId)?.gems ?? 0, equipped: equipped.map((e) => e.itemKey) } : null,
     players: players.map((p) => ({ ...p, equipped: equippedAll.filter((e) => e.characterId === p.id).map((e) => e.itemKey) })),
     npcs: npcRows.map((n) => ({
       id: n.id, key: n.key, name: n.name, role: n.role, x: n.x, y: n.y, targetX: n.targetX, targetY: n.targetY, facing: n.facing, appearance: n.appearance, mood: n.mood, kind: n.kind,

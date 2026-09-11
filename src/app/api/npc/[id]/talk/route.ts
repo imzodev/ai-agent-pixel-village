@@ -8,6 +8,8 @@ import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
 import { gameHour } from "@/lib/worldmap";
 import { ensureSeeded } from "@/lib/seed";
+import { getContainer } from "@/lib/container";
+import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +71,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Talking counts for "talk to X" missions.
     await progressMissions(character.id, (r) => r.type === "talk" && r.npcKey === npc.key);
+    // Daily quest: talk event.
+    const c = getContainer();
+    await c.services.quest.recordEvent(character.id, { kind: "talk", payload: { npcKey: npc.key } });
+    // Sponsor attribution: approach + dialogue_start + grant brand hat on first visit.
+    if (sponsor) {
+      await recordSponsorEvent({ attribution: c.services.sponsorAttribution }, {
+        sponsorId: sponsor.id,
+        characterId: character.id,
+        type: history.length === 0 ? "approach" : "dialogue_start",
+      });
+      if (history.length === 0) {
+        const hatKey = `hat_brand_${sponsor.id}`;
+        await c.services.cosmetic.grantSponsorHat(character.id, sponsor.id, hatKey, character.userId);
+      }
+    }
     // First conversation with a sponsored agent is a (free) conversation lead.
     if (sponsor && history.length === 0) {
       await emitLead({ sponsorId: sponsor.id, characterId: character.id, npcId: npc.id, kind: "conversation", note: `${character.name} met ${npc.name}` });
