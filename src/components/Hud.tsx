@@ -213,7 +213,7 @@ export default function Hud() {
           <div className="flex items-center gap-2 rounded-lg bg-black/40 px-2 py-1">
             <span className="font-bold text-amber-200">{me.me.name}</span> <span>Lv {me.me.level}</span>
             <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * (snap?.me?.hp ?? me.me.hp)) / (snap?.me?.maxHp ?? me.me.maxHp)}%` }} /></span>
-            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
+            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span><span>✨ {(snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp}</span>
           </div>
         )}
         {loggedIn ? (
