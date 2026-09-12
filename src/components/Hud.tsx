@@ -79,6 +79,10 @@ export default function Hud() {
     const dist = Math.hypot(n.x - (snap.me?.x ?? 0), n.y - (snap.me?.y ?? 0));
     if (dist > 160) setTalk(null);
   }, [snap, talk]);
+  // Tell the canvas when a modal is open so Phaser can ignore clicks behind it.
+  useEffect(() => {
+    bus.emit("modalOpen", !!talk);
+  }, [talk]);
   // keep the selection's distance live as the player walks
   useEffect(() => {
     if (!snap?.me || !sel) return;
@@ -319,9 +323,17 @@ export default function Hud() {
         <CraftModal craft={craft} me={me} performCraft={performCraft} onClose={() => setCraft(null)} />
       )}
 
-      {/* Dialogue */}
+      {/* Dialogue — wrapped in a full-screen pointer-events-auto backdrop so
+          clicks on the canvas (Phaser) underneath don't fire when the
+          player taps an offer button that's drawn over a building/zone. */}
       {talk && (
-        <div className="pointer-events-auto absolute bottom-3 left-1/2 w-[min(94vw,560px)] -translate-x-1/2 rounded-xl border-4 border-amber-900/70 bg-amber-50 shadow-2xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => { setTalk(null); bus.emit("chatFocus", false); }}
+          className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
+        >
+        <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,560px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 shadow-2xl">
           <div className="flex items-center gap-2 border-b-2 border-amber-900/20 px-3 py-2">
             <div className="font-bold text-amber-900">{talk.name}</div><div className="text-stone-500">{talk.role}</div>
             {talk.sponsor && <span className="rounded px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ sponsored by {talk.sponsor.businessName}</span>}
@@ -354,6 +366,7 @@ export default function Hud() {
             <input ref={talkInput} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} placeholder={`Say something to ${talk.name}…`} className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none focus:border-amber-700" maxLength={300} />
             <button className="rounded-lg bg-amber-700 px-3 text-white" disabled={talk.busy}>Send</button>
           </form>
+        </div>
         </div>
       )}
 

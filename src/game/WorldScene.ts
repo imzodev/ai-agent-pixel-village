@@ -90,6 +90,7 @@ export class WorldScene extends Phaser.Scene {
   private minZoom = 1;
   private fitted = false;
   private mobileInput: { getState(): InputState } | null = null;
+  private modalOpen = false;
 
   constructor() {
     super("world");
@@ -196,6 +197,7 @@ export class WorldScene extends Phaser.Scene {
     });
     this.input.on("pointerup", () => { lastPinchDist = null; });
     this.input.on("pointerdown", (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
+      if (this.modalOpen) return;
       if (over.length > 0) return;
       this.dragging = false;
       if (this.player) {
@@ -219,6 +221,7 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
     this.unsub.push(bus.on("chatFocus", (f) => { this.chatFocused = f; if (f) kb.disableGlobalCapture(); else kb.enableGlobalCapture(); }));
+    this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
     this.events.on("shutdown", () => { this.unsub.forEach((u) => u()); if (this.pollTimer) window.clearInterval(this.pollTimer); });
 
     void this.poll();
@@ -291,6 +294,7 @@ export class WorldScene extends Phaser.Scene {
           .setDepth(DEPTH_CHAR_BASE + rect.y + rect.h);
         zone.setInteractive({ useHandCursor: true });
         zone.on("pointerdown", () => {
+          if (this.modalOpen) return;
           const s = { type: "building" as const, id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(door.x, door.y) };
           this.select(s);
         });
@@ -336,7 +340,7 @@ export class WorldScene extends Phaser.Scene {
       if (!this.items.has(it.id)) {
         const t = this.add.text(it.x, it.y, ITEM_ICONS[it.itemKey] ?? "📦", { fontSize: "14px" }).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + it.y).setResolution(2);
         t.setInteractive({ useHandCursor: true });
-        t.on("pointerdown", () => this.select({ type: "item", id: it.id, itemKey: it.itemKey, distance: this.distTo(it.x, it.y) }));
+        t.on("pointerdown", () => { if (this.modalOpen) return; this.select({ type: "item", id: it.id, itemKey: it.itemKey, distance: this.distTo(it.x, it.y) }); });
         this.tweens.add({ targets: t, y: it.y - 4, duration: 900, yoyo: true, repeat: -1, ease: "Sine.inOut" });
         this.items.set(it.id, t);
       }
@@ -348,7 +352,7 @@ export class WorldScene extends Phaser.Scene {
       if (!img) {
         img = this.add.image(n.x, n.y, `node_${n.kind}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
         img.setInteractive({ useHandCursor: true });
-        img.on("pointerdown", () => { const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, ready: cur?.ready ?? n.ready, distance: this.distTo(n.x, n.y) }); });
+        img.on("pointerdown", () => { if (this.modalOpen) return; const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, ready: cur?.ready ?? n.ready, distance: this.distTo(n.x, n.y) }); });
         this.nodes.set(n.id, img);
       }
       img.setAlpha(n.ready ? 1 : 0.35);
@@ -409,7 +413,7 @@ export class WorldScene extends Phaser.Scene {
       if (!ent) {
         ent = this.makeChar(p.x, p.y, p.name, p.appearance, speed, labelColor);
         const created = ent;
-        ent.sprite.on("pointerdown", () => { const s = sel(p); s.distance = this.distTo(created.sprite.x, created.sprite.y); this.select(s); });
+        ent.sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(p); s.distance = this.distTo(created.sprite.x, created.sprite.y); this.select(s); });
         if (badge) {
           const txt = badge(p);
           ent.badge = this.add.text(p.x, p.y - 62, txt, { fontFamily: "monospace", fontSize: "9px", color: txt.startsWith("★") ? "#ffd166" : "#cfe8cf", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
@@ -439,7 +443,7 @@ export class WorldScene extends Phaser.Scene {
           : this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1);
         sprite.setDepth(DEPTH_CHAR_BASE + a.y);
         sprite.setInteractive({ useHandCursor: true });
-        sprite.on("pointerdown", () => { const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
+        sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
         ent = { sprite, kind: a.kind, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
         if (a.name) ent.label = this.add.text(a.x, a.y - sprite.height - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);

@@ -38,6 +38,8 @@ type Events = {
   poke: undefined;
   chatFocus: boolean;
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
+  /** True while any modal is open that should block canvas interaction. */
+  modalOpen: boolean;
 };
 
 type Handler<T> = (payload: T) => void;
