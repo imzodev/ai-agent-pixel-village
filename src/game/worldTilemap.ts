@@ -1,5 +1,13 @@
 import type Phaser from "phaser";
-import { CHUNK_PX_H, CHUNK_PX_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_TILE_W, chunkRegistered, registerChunk } from "@/lib/chunkCollision";
+import {
+  CHUNK_PX_H,
+  CHUNK_PX_W,
+  CHUNK_TILE_H,
+  CHUNK_TILE_PX,
+  CHUNK_TILE_W,
+  chunkRegistered,
+  registerChunk,
+} from "@/lib/chunkCollision";
 
 // Chunk tile geometry. The chunk world is unbounded: cx, cy ∈ ℤ. The
 // constants and the cy-negated origin convention live in
@@ -7,61 +15,64 @@ import { CHUNK_PX_H, CHUNK_PX_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_TILE_W, chun
 // drift apart; they are re-exported here for existing importers.
 export { CHUNK_TILE_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_PX_W, CHUNK_PX_H };
 
+// World-pixel origin of a chunk. (0, 0) is the top-left of chunk (0, 0). Y
+// is negated because Phaser's screen-y grows downward while the chunk
+// convention has cy=+1 pointing up.
+export type ChunkOrigin = { x: number; y: number };
+
+// One tile lifted out of a SORTED_LAYERS layer for Y-sort rendering.
+type LiftedTile = { layerName: string; tileIndex: number; gid: number };
+
+// Per-column depth anchor: the bottom-most tile-y in ANCHOR_LAYERS for each
+// chunk column. -1 means "no anchor" (fall back to the tile's own y).
+type ColumnAnchors = Int32Array;
+
+// Result of loading a chunk: the parsed tilemap plus the data needed to
+// (re-)instantiate Y-sorted sprites from the SORTED_LAYERS layers.
+type ChunkLoadResult = {
+  tilemap: Phaser.Tilemaps.Tilemap | null;
+  sortedTiles: LiftedTile[];
+  baseAnchorY: ColumnAnchors;
+};
+
 // Layers that should be Y-sorted against the player instead of drawn at a
 // fixed depth. Every tile in these layers is lifted out of the static
-// tilemap and rendered as an individual GameObject with depth
-// DEPTH_CHAR_BASE + baseAnchorY.
+// tilemap and rendered as an individual GameObject. The depth of every
+// lifted tile is DEPTH_CHAR_BASE + (baseAnchorY[tx] + 1) * TILE_PX — i.e.
+// the bottom of the column's anchor (see ANCHOR_LAYERS) — with a fallback
+// to the tile's own bottom when the column has no anchor.
 //
-// baseAnchorY is the bottom tile-y in the same chunk column across the
-// MIDDLE layer (the "base" layer). For a tree with its trunk in
-// DecorationMiddle and canopy in DecorationUpper, every canopy tile in
-// the same column sorts at the trunk's bottom y — so the player walking
-// south of the trunk stays behind the entire tree, and walking north of
-// the trunk stays in front. For a light post / banner / signpost placed
-// in just DecorationUpper with no DecorationMiddle base, baseAnchorY
-// falls back to the tile's own y.
-//
-// The rule is purely layer-driven: every tile in DecorationUpper* is
-// sorted against the player; the depth is "DEPTH_CHAR_BASE + the bottom
-// of the column in DecorationMiddle, or the tile's own y if no Middle
-// tile exists." Trees happen to use it naturally (canopy follows trunk),
-// but the rule doesn't depend on knowing that the layer contains trees.
+// Why this is the right rule: a tree's trunk lives in DecorationMiddle and
+// its canopy in DecorationUpper; without column anchoring, the canopy
+// tiles sort at their own (small) y and the player walking south of the
+// trunk renders in front of the canopy above, breaking the illusion. With
+// anchoring, every canopy tile sorts at the trunk's bottom y, so the
+// player stays behind the whole tree. Light posts, banners, signposts —
+// whatever future content lands in these layers — gets the same treatment
+// automatically.
 const SORTED_LAYERS: ReadonlySet<string> = new Set([
   "DecorationUpper",
   "DecorationUpper1",
   "DecorationUpper2",
 ]);
 
-// Layers scanned only to compute the per-column anchor for SORTED_LAYERS
-// tiles. Tiles in these layers are NOT lifted — they stay on their static
-// layer rendered behind the character band. We just read their y position
-// to find each column's "base" depth anchor.
+// Layers scanned only to compute the per-column depth anchor for
+// SORTED_LAYERS tiles. Tiles in these layers are NOT lifted; they stay on
+// their static layer rendered behind the character band. We just read
+// their y position to find each column's "base" depth anchor.
 const ANCHOR_LAYERS: ReadonlySet<string> = new Set([
   "DecorationMiddle",
   "DecorationMiddle1",
   "DecorationMiddle2",
 ]);
 
-const TILESET_FILES: Array<{ name: string; file: string }> = [
-  { name: "beginnertileset", file: "beginnertileset.png" },
-  { name: "Floors", file: "Floors.png" },
-  { name: "Props", file: "Props.png" },
-  { name: "Roofs", file: "Roofs.png" },
-  { name: "Shadows", file: "Shadows.png" },
-  { name: "Walls", file: "Walls.png" },
-  { name: "Floors_Tiles", file: "Floors_Tiles.png" },
-  { name: "Rocks", file: "Rocks.png" },
-  { name: "Trees_Size_03", file: "Trees_Size_03.png" },
-  { name: "Furniture", file: "Furniture.png" },
-];
+// Layers that exist as data-only markers (server-side collision,
+// interaction anchors) — never rendered.
+const SKIP_LAYERS: ReadonlySet<string> = new Set(["Collision", "Interactive"]);
 
-// Render order matches the JSON layer array order, minus data-only layers:
-// Collision (server-side blocking, invisible) and Interactive (door/interaction
-// markers, invisible). The Y-sorted canopy layers (DecorationUpper*) are
-// skipped here — they are lifted into per-tile sprites in buildChunkLayers
-// so they sort with the character band. DecorationMiddle* stays in this
-// list: those tiles are pinned behind the character band (see LAYER_DEPTH)
-// and never Y-sort, matching the standard top-down RPG convention.
+// Render order matches the JSON layer array order, minus the data-only
+// SKIP_LAYERS and minus SORTED_LAYERS (whose tiles are lifted to
+// per-tile sprites so they sort with the character band).
 const LAYER_RENDER_ORDER: ReadonlyArray<string> = [
   "Ground",
   "GroundUpper",
@@ -74,21 +85,22 @@ const LAYER_RENDER_ORDER: ReadonlyArray<string> = [
   "Overlay",
 ];
 
-const SKIP_LAYERS = new Set(["Collision", "Interactive"]);
-
 export { LAYER_RENDER_ORDER, SKIP_LAYERS, SORTED_LAYERS };
 
 // Depth bands. Y-sorted objects (characters, critters, items, buildings,
-// lifted canopy tiles) use DEPTH_CHAR_BASE + world-y so ground layers always
-// sit under them. The canopies no longer pin to a static depth band — they
-// sort per-tile instead.
+// lifted canopy tiles) use DEPTH_CHAR_BASE + world-y so ground layers
+// always sit under them.
 export const DEPTH_CHAR_BASE = 100_000;
 export const DEPTH_CANOPY = 500_000;
 
+// Fallback depth for any static layer missing from LAYER_DEPTH (defensive
+// only — every layer in LAYER_RENDER_ORDER should have an entry).
+const FALLBACK_LAYER_DEPTH = -5;
+
 // Per-layer depth for the static layers. DecorationMiddle* sits BELOW the
 // character band so the player always renders in front of trunks and low
-// decor. DecorationUpper* is intentionally absent — those layers are
-// Y-sorted, see SORTED_LAYERS / instantiateSortedTile.
+// decor. SORTED_LAYERS entries are intentionally absent — see
+// instantiateSortedTile for their Y-sort rule.
 const LAYER_DEPTH: Readonly<Record<string, number>> = {
   Ground: -100,
   GroundUpper: -99,
@@ -103,30 +115,40 @@ const LAYER_DEPTH: Readonly<Record<string, number>> = {
 
 export { LAYER_DEPTH };
 
+const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
+  { name: "beginnertileset", file: "beginnertileset.png" },
+  { name: "Floors", file: "Floors.png" },
+  { name: "Props", file: "Props.png" },
+  { name: "Roofs", file: "Roofs.png" },
+  { name: "Shadows", file: "Shadows.png" },
+  { name: "Walls", file: "Walls.png" },
+  { name: "Floors_Tiles", file: "Floors_Tiles.png" },
+  { name: "Rocks", file: "Rocks.png" },
+  { name: "Trees_Size_03", file: "Trees_Size_03.png" },
+  { name: "Furniture", file: "Furniture.png" },
+];
+
+// 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,
+// because the chunk world extends to ±Infinity. Radius 2 (not 1) so the
+// loaded area always overflows the camera viewport at the minimum allowed
+// zoom.
+const WINDOW_RADIUS = 2;
+
 export function chunkKey(cx: number, cy: number): string {
   return `tilemap_${cx}_${cy}`;
 }
 
-// Pixel origin (top-left) of chunk (cx, cy). World (0, 0) is the top-left of
-// chunk (0, 0). cx / cy are unbounded integers, so this function works for
-// any (cx, cy) — no clamp, no lookup table.
-//
-// Y is NEGATED on purpose: Phaser's screen y grows downward, but the chunk
-// convention is cy=+1 → up (top of screen), cy=-1 → down. The old bounded
-// renderer did this via a CHUNK_ROWS = [1, 0, -1] index lookup; the unbounded
-// refactor must keep the same visual result with arithmetic instead.
-export function chunkOrigin(cx: number, cy: number): { x: number; y: number } {
+export function chunkOrigin(cx: number, cy: number): ChunkOrigin {
   return { x: cx * CHUNK_PX_W, y: -cy * CHUNK_PX_H };
 }
 
-export function chunkCenter(cx: number, cy: number): { x: number; y: number } {
+export function chunkCenter(cx: number, cy: number): ChunkOrigin {
   const { x, y } = chunkOrigin(cx, cy);
   return { x: x + CHUNK_PX_W / 2, y: y + CHUNK_PX_H / 2 };
 }
 
 // Convert world pixel coords into a chunk coord. Unbounded: any (x, y) maps
-// to a unique (cx, cy) ∈ ℤ×ℤ. cy is negated to match chunkOrigin (cy=+1 is
-// up, i.e. negative y on screen).
+// to a unique (cx, cy) ∈ ℤ×ℤ.
 export function chunkAtPixel(x: number, y: number): { cx: number; cy: number } {
   return {
     cx: Math.floor(x / CHUNK_PX_W),
@@ -134,10 +156,14 @@ export function chunkAtPixel(x: number, y: number): { cx: number; cy: number } {
   };
 }
 
-// Infinite extent — the chunk world has no edges. Camera bounds are clamped
-// here only when a caller wants a finite view; recenterCamera deliberately
-// does not, so it grows with the player.
-export function worldExtent(): { minX: number; minY: number; maxX: number; maxY: number } {
+// Camera bounds are clamped only when a caller wants a finite view;
+// recenterCamera deliberately does not, so the world grows with the player.
+export function worldExtent(): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
   return {
     minX: Number.NEGATIVE_INFINITY,
     minY: Number.NEGATIVE_INFINITY,
@@ -146,103 +172,114 @@ export function worldExtent(): { minX: number; minY: number; maxX: number; maxY:
   };
 }
 
-// Preload the tileset PNGs. Chunk JSONs are streamed lazily via loadChunk so
-// any (cx, cy) can be added without changing the preload queue.
+export function getActiveWindow(
+  _scene: Phaser.Scene,
+  { cx, cy }: { cx: number; cy: number },
+): { chunks: Array<{ cx: number; cy: number }> } {
+  const chunks: Array<{ cx: number; cy: number }> = [];
+  for (let dx = -WINDOW_RADIUS; dx <= WINDOW_RADIUS; dx++) {
+    for (let dy = -WINDOW_RADIUS; dy <= WINDOW_RADIUS; dy++) {
+      chunks.push({ cx: cx + dx, cy: cy + dy });
+    }
+  }
+  return { chunks };
+}
+
+// Preload the tileset PNGs. Chunk JSONs are streamed lazily via loadChunk
+// so any (cx, cy) can be added without changing the preload queue.
 export function loadTilemapAssets(scene: Phaser.Scene): void {
   for (const ts of TILESET_FILES) {
     scene.load.image(ts.name, `/assets/${ts.file}`);
   }
 }
 
-// Streaming state. The tilemap + tilesets are kept cached per chunk so that
-// re-entering a chunk only re-creates the layers (cheap), not the tileset
-// registration (which warns on duplicate adds). Layers are destroyed on
-// releaseOutside and re-created on ensureChunks.
-//
-// `sortedSprites` holds the Y-sorted GameObjects for the SORTED_LAYERS tiles
-// of this chunk. Each tile becomes one Image; the lifecycle matches the
-// static layers (created in buildChunkLayers, destroyed in releaseOutside).
-//
-// `baseAnchorY` is the bottom-most tile-y per chunk column in ANCHOR_LAYERS
-// (DecorationMiddle*). Every lifted upper-layer tile in column `tx` sorts
-// at baseAnchorY[tx] (or its own y if that column has no Middle tile).
+// Streaming state. The tilemap + tilesets are kept cached per chunk so
+// re-entry only re-creates the layers (cheap), not the tileset registration
+// (which warns on duplicate adds).
 type ChunkState = {
   tilemap: Phaser.Tilemaps.Tilemap;
   tilesets: Phaser.Tilemaps.Tileset[];
   layers: Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>;
   sortedSprites: Phaser.GameObjects.Image[];
-  sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-  baseAnchorY: Int32Array;
+  sortedTiles: LiftedTile[];
+  baseAnchorY: ColumnAnchors;
 };
 
 const chunkStates = new Map<string, ChunkState>();
 
-// In-flight lazy loads keyed by cache key. Concurrent callers awaiting the same
-// chunk share one Promise and one network request.
-const inFlightLoads = new Map<
-  string,
-  Promise<{
-    tilemap: Phaser.Tilemaps.Tilemap | null;
-    sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-    baseAnchorY: Int32Array;
-  }>
->();
+// In-flight lazy loads keyed by cache key. Concurrent callers awaiting the
+// same chunk share one Promise and one network request.
+const inFlightLoads = new Map<string, Promise<ChunkLoadResult>>();
+
+// Run the one-pass extractor on a cached JSON. The pass:
+//   - lifts every non-zero tile from a SORTED_LAYERS entry (recording it
+//     and zeroing the GID in the JSON so the static layer draws nothing),
+//   - records the bottom-most tile-y per chunk column across
+//     ANCHOR_LAYERS, used by every lifted upper-layer tile's sort depth.
+//
+// We work on the raw JSON rather than parsed LayerData because Phaser 4's
+// LayerData.data is a Tile[][] — by the time the Tilemap exists, the
+// original GID array is gone. Mutating the JSON before
+// scene.make.tilemap({ key }) is the only window where we still have it.
+//
+// Idempotent: the second call sees all-zero SORTED_LAYERS GIDs (because
+// we zeroed them on the first call) and produces an empty sortedTiles list,
+// so a cache-hit loadChunk behaves like the network path on re-entry.
+function readChunkJson(scene: Phaser.Scene, key: string): ChunkLoadResult {
+  const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
+  const json = entry?.data ?? entry;
+  if (!json) {
+    return {
+      tilemap: null,
+      sortedTiles: [],
+      baseAnchorY: emptyColumnAnchors(),
+    };
+  }
+  const { sortedTiles, baseAnchorY } = extractFromChunkJson(json);
+  const tilemap = scene.make.tilemap({ key }) ?? null;
+  return { tilemap, sortedTiles, baseAnchorY };
+}
+
+function emptyColumnAnchors(): ColumnAnchors {
+  return new Int32Array(CHUNK_TILE_W).fill(-1);
+}
 
 // Stream a single chunk's Tiled JSON via the on-demand API. The API serves a
 // hand-authored file when present and otherwise generates a default empty
 // chunk, so every (cx, cy) is reachable without a static asset on disk.
-// Idempotent: a chunk already in the tilemap cache short-circuits and re-uses
-// the cached JSON (the lift pass is idempotent because GIDs are zeroed on
-// first run).
-//
-// Returns the parsed Tilemap, the lifted-tile list, AND the per-column
-// base anchor (bottom-most Middle tile-y per column) used by every lifted
-// upper-layer tile's sort depth.
+// Idempotent: a chunk already in the tilemap cache short-circuits and
+// re-uses the cached JSON.
 export function loadChunk(
   scene: Phaser.Scene,
   cx: number,
   cy: number,
-): Promise<{
-  tilemap: Phaser.Tilemaps.Tilemap | null;
-  sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-  baseAnchorY: Int32Array;
-}> {
+): Promise<ChunkLoadResult> {
   const key = chunkKey(cx, cy);
-  const emptyAnchor = new Int32Array(CHUNK_TILE_W).fill(-1);
   if (scene.sys.cache.tilemap.exists(key)) {
-    const { sortedTiles, baseAnchorY } = extractFromCachedJson(scene, cx, cy);
-    const tm = scene.make.tilemap({ key });
-    return Promise.resolve({ tilemap: tm ?? null, sortedTiles, baseAnchorY });
+    return Promise.resolve(readChunkJson(scene, key));
   }
-  const existing = inFlightLoads.get(key);
-  if (existing) return existing;
+  const inflight = inFlightLoads.get(key);
+  if (inflight) return inflight;
 
-  const url = `/api/chunks/${cx}/${cy}`;
-  const promise = new Promise<{
-    tilemap: Phaser.Tilemaps.Tilemap | null;
-    sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-    baseAnchorY: Int32Array;
-  }>((resolve) => {
-    const cleanup = () => {
-      scene.load.off("filecomplete", onComplete);
-      scene.load.off("loaderror", onError);
-    };
+  const promise = new Promise<ChunkLoadResult>((resolve) => {
     const onComplete = (loadedKey: string) => {
       if (loadedKey !== key) return;
       cleanup();
-      const { sortedTiles, baseAnchorY } = extractFromCachedJson(scene, cx, cy);
-      const tm = scene.make.tilemap({ key });
-      resolve({ tilemap: tm ?? null, sortedTiles, baseAnchorY });
+      resolve(readChunkJson(scene, key));
     };
     const onError = (file: { key?: string } | undefined) => {
       if (!file || file.key !== key) return;
       cleanup();
-      console.warn(`[worldTilemap] failed to load chunk ${key} (url=${url})`);
-      resolve({ tilemap: null, sortedTiles: [], baseAnchorY: emptyAnchor });
+      console.warn(`[worldTilemap] failed to load chunk ${key} (url=${`/api/chunks/${cx}/${cy}`})`);
+      resolve({ tilemap: null, sortedTiles: [], baseAnchorY: emptyColumnAnchors() });
+    };
+    const cleanup = () => {
+      scene.load.off("filecomplete", onComplete);
+      scene.load.off("loaderror", onError);
     };
     scene.load.on("filecomplete", onComplete);
     scene.load.on("loaderror", onError);
-    scene.load.tilemapTiledJSON(key, url);
+    scene.load.tilemapTiledJSON(key, `/api/chunks/${cx}/${cy}`);
     if (!scene.load.isLoading()) scene.load.start();
   });
   inFlightLoads.set(key, promise);
@@ -250,56 +287,44 @@ export function loadChunk(
   return promise;
 }
 
-// Pull the cached chunk JSON and run the one-pass extractor (lift SORTED
-// tiles + scan ANCHOR layers). Two effects from a single JSON walk:
-//   1. SORTED_LAYERS tiles are recorded + their GIDs zeroed so the static
-//      layer won't draw them.
-//   2. ANCHOR_LAYERS tiles contribute their y to per-column baseAnchorY,
-//      used by every lifted upper-layer tile's sort depth.
-//
-// We work on the raw JSON rather than parsed LayerData because Phaser 4's
-// LayerData.data is a Tile[][] — by the time the Tilemap exists, the
-// original GID array is gone. Mutating the JSON before
-// scene.make.tilemap({ key }) is the only window where we still have it.
-function extractFromCachedJson(
-  scene: Phaser.Scene,
-  cx: number,
-  cy: number,
-): {
-  sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-  baseAnchorY: Int32Array;
-} {
-  const key = chunkKey(cx, cy);
-  const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
-  const json = entry?.data ?? entry;
-  if (!json) return { sortedTiles: [], baseAnchorY: new Int32Array(CHUNK_TILE_W).fill(-1) };
-  return extractFromJson(json, CHUNK_TILE_W);
-}
-
-// 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,
-// because the chunk world extends to ±Infinity. The radius is 2 (not 1) so the
-// loaded area always overflows the camera viewport at the minimum allowed
-// zoom: the camera can pan anywhere inside the window without ever revealing
-// the background, and the window only shifts (invisibly, while the player is
-// ≥ 2 chunks from its edges) when the player crosses a chunk boundary.
-const WINDOW_RADIUS = 2;
-
-export function getActiveWindow(
-  _scene: Phaser.Scene,
-  { cx, cy }: { cx: number; cy: number },
-): { chunks: Array<{ cx: number; cy: number }> } {
-  const list: Array<{ cx: number; cy: number }> = [];
-  for (let dx = -WINDOW_RADIUS; dx <= WINDOW_RADIUS; dx++) {
-    for (let dy = -WINDOW_RADIUS; dy <= WINDOW_RADIUS; dy++) {
-      list.push({ cx: cx + dx, cy: cy + dy });
+function extractFromChunkJson(
+  json: unknown,
+): { sortedTiles: LiftedTile[]; baseAnchorY: ColumnAnchors } {
+  const layers = (json as { layers?: unknown })?.layers;
+  const sortedTiles: LiftedTile[] = [];
+  const baseAnchorY = emptyColumnAnchors();
+  if (!Array.isArray(layers)) return { sortedTiles, baseAnchorY };
+  for (const layer of layers) {
+    const typed = layer as { name?: unknown; type?: unknown; data?: unknown };
+    if (typeof typed.name !== "string" || typed.type !== "tilelayer") continue;
+    const lift = SORTED_LAYERS.has(typed.name);
+    const anchor = ANCHOR_LAYERS.has(typed.name);
+    if (!lift && !anchor) continue;
+    const data = typed.data;
+    if (!Array.isArray(data)) continue;
+    for (let i = 0; i < data.length; i++) {
+      const gid = data[i] & 0x1fffffff; // strip Tiled flip/rotate flags
+      if (gid <= 0) continue;
+      const tx = i % CHUNK_TILE_W;
+      const ty = (i - tx) / CHUNK_TILE_W;
+      if (anchor && ty > baseAnchorY[tx]) baseAnchorY[tx] = ty;
+      if (lift) {
+        sortedTiles.push({ layerName: typed.name, tileIndex: i, gid });
+        // Zero so Phaser's parse produces an empty cell there.
+        data[i] = 0;
+      }
     }
   }
-  return { chunks: list };
+  return { sortedTiles, baseAnchorY };
 }
 
-function buildChunkState(scene: Phaser.Scene, tilemap: Phaser.Tilemaps.Tilemap, sortedTiles: ChunkState["sortedTiles"], baseAnchorY: Int32Array): ChunkState {
-  // Only register the tilesets this particular map references — Phaser warns
-  // when addTilesetImage cannot find a matching tileset entry. Default
+function buildChunkState(
+  tilemap: Phaser.Tilemaps.Tilemap,
+  sortedTiles: LiftedTile[],
+  baseAnchorY: ColumnAnchors,
+): ChunkState {
+  // Only register the tilesets this particular map references — Phaser
+  // warns when addTilesetImage cannot find a matching tileset entry. Default
   // generated chunks only use beginnertileset.
   const tilesets: Phaser.Tilemaps.Tileset[] = [];
   const referenced = new Set(tilemap.tilesets.map((t) => t.name));
@@ -308,147 +333,114 @@ function buildChunkState(scene: Phaser.Scene, tilemap: Phaser.Tilemaps.Tilemap, 
     const t = tilemap.addTilesetImage(ts.name);
     if (t) tilesets.push(t);
   }
-  return { tilemap, tilesets, layers: new Map(), sortedSprites: [], sortedTiles, baseAnchorY };
+  return {
+    tilemap,
+    tilesets,
+    layers: new Map(),
+    sortedSprites: [],
+    sortedTiles,
+    baseAnchorY,
+  };
 }
 
-function buildChunkLayers(state: ChunkState, cx: number, cy: number): void {
-  const { x: ox, y: oy } = chunkOrigin(cx, cy);
-  // Static layers first — SORTED_LAYERS entries are skipped because their
-  // tiles were zeroed in the JSON before Tilemap parsed it, so createLayer
-  // produces empty layers for them anyway. We keep them out of
-  // LAYER_RENDER_ORDER so they don't even appear as keys.
+function buildChunkLayers(state: ChunkState, origin: ChunkOrigin): void {
+  // Static layers first — SORTED_LAYERS entries were zeroed in the JSON
+  // before Tilemap parsed it, so createLayer produces empty cells for
+  // them anyway. They're omitted from LAYER_RENDER_ORDER so we don't even
+  // iterate them here.
   for (const name of LAYER_RENDER_ORDER) {
     if (SKIP_LAYERS.has(name)) continue;
     if (state.layers.has(name)) continue;
     if (state.tilemap.getLayerIndex(name) === null) continue;
-    const layer = state.tilemap.createLayer(name, state.tilesets, ox, oy);
+    const layer = state.tilemap.createLayer(name, state.tilesets, origin.x, origin.y);
     if (!layer) continue;
-    layer.setDepth(LAYER_DEPTH[name] ?? -5);
-    layer.name = `chunk_${cx}_${cy}_${name}`;
+    layer.setDepth(LAYER_DEPTH[name] ?? FALLBACK_LAYER_DEPTH);
+    layer.name = `chunk_${name}`;
     state.layers.set(name, layer);
   }
-  // Y-sorted upper-layer sprites — one Image per lifted tile. Every tile
-  // sorts at DEPTH_CHAR_BASE + baseAnchorY[tx], where baseAnchorY[tx] is the
-  // bottom-most tile-y in the same chunk column across ANCHOR_LAYERS (the
-  // "base" layer). This is the standard top-down RPG convention: every tile
-  // in the upper layer shares one depth anchor = the base of its column.
-  // Trees get the right behavior because their trunks live in
-  // DecorationMiddle and their canopies in DecorationUpper; light posts /
-  // banners / walls / signposts get the same treatment for free, with no
-  // code change needed when those are added.
+  // Y-sorted sprites: one Image per lifted upper-layer tile. Every tile
+  // sorts at the bottom-y of its column's anchor (or its own bottom if no
+  // anchor exists). See SORTED_LAYERS comment for the rationale.
   const scene = state.tilemap.scene as Phaser.Scene;
-  for (const lifted of state.sortedTiles) {
-    const sprite = instantiateSortedTile(scene, lifted, ox, oy, state.tilesets, state.baseAnchorY);
+  for (const tile of state.sortedTiles) {
+    const sprite = instantiateSortedTile(scene, tile, state.tilesets, state.baseAnchorY, origin);
     if (sprite) state.sortedSprites.push(sprite);
   }
 }
 
-// Walk the raw chunk JSON once. For each layer:
-//   - If it's a SORTED_LAYERS entry, lift every non-zero tile (record it
-//     and zero the GID in the JSON so the static layer draws nothing).
-//   - If it's an ANCHOR_LAYERS entry, scan its tile y positions and update
-//     baseAnchorY[tx] = max(baseAnchorY[tx], ty) for each filled cell.
-//   - Otherwise, leave it alone (it'll be rendered as a normal static layer).
-//
-// ANCHOR_LAYERS tiles are NOT lifted — they stay on their static layer
-// rendered behind the character band. We only read their y positions to
-// give every upper-layer sprite in the same column a consistent sort depth.
-function extractFromJson(
-  json: unknown,
-  chunkTileW: number,
-): {
-  sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }>;
-  baseAnchorY: Int32Array;
-} {
-  const layers = (json as { layers?: unknown })?.layers;
-  const sortedTiles: Array<{ layerName: string; tileIndex: number; gid: number }> = [];
-  const baseAnchorY = new Int32Array(chunkTileW).fill(-1);
-  if (!Array.isArray(layers)) return { sortedTiles, baseAnchorY };
-  for (const layer of layers) {
-    const typed = layer as { name?: unknown; type?: unknown; data?: unknown };
-    if (typeof typed.name !== "string" || typed.type !== "tilelayer") continue;
-    const isSorted = SORTED_LAYERS.has(typed.name);
-    const isAnchor = ANCHOR_LAYERS.has(typed.name);
-    if (!isSorted && !isAnchor) continue;
-    const data = typed.data;
-    if (!Array.isArray(data)) continue;
-    for (let i = 0; i < data.length; i++) {
-      const raw = data[i] | 0;
-      const gid = raw & 0x1fffffff; // strip Tiled flip/rotate flags
-      if (gid <= 0) continue;
-      const tx = i % chunkTileW;
-      const ty = Math.floor(i / chunkTileW);
-      if (isAnchor && ty > baseAnchorY[tx]) baseAnchorY[tx] = ty;
-      if (isSorted) {
-        sortedTiles.push({ layerName: typed.name, tileIndex: i, gid });
-        data[i] = 0;
-      }
-    }
-  }
-  return { sortedTiles, baseAnchorY };
-}
-
-// Instantiate one Y-sorted tile. Every lifted tile is rendered as a 16×16
-// Image. The display position is the tile's own center (so the sprite shows
-// up where Tiled painted it). The depth is DEPTH_CHAR_BASE +
-// (baseAnchorY[tx] + 1) * TILE_PX — i.e. the bottom of the base tile in the
-// same column. When the column has no base (no ANCHOR_LAYERS tile), we fall
-// back to the tile's own bottom.
-//
-// GID → source rect: standard Tiled math. Pick the tileset with the
-// largest firstgid ≤ gid, then localId = gid - firstgid, srcX = (localId %
-// columns) * tileWidth, srcY = floor(localId / columns) * tileHeight.
-const sortedTextureCache = new Map<string, Phaser.Textures.Texture>();
-function instantiateSortedTile(
-  scene: Phaser.Scene,
-  lifted: { layerName: string; tileIndex: number; gid: number },
-  ox: number,
-  oy: number,
+// Find the tileset that owns a given GID. Tiled packs GIDs as
+// firstgid + localId, so the owner is the tileset with the largest
+// firstgid ≤ gid. Returns null when no tileset matches (an unknown GID —
+// should not happen for tiles lifted from a known layer, but we guard
+// against it rather than throw).
+function findTilesetForGid(
+  gid: number,
   tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
-  baseAnchorY: Int32Array,
-): Phaser.GameObjects.Image | null {
-  if (tilesets.length === 0) return null;
+): Phaser.Tilemaps.Tileset | null {
   let owner: Phaser.Tilemaps.Tileset | null = null;
   for (const ts of tilesets) {
-    if (ts.firstgid <= lifted.gid && (!owner || ts.firstgid > owner.firstgid)) owner = ts;
+    if (ts.firstgid <= gid && (!owner || ts.firstgid > owner.firstgid)) owner = ts;
   }
-  if (!owner) return null;
-  const localId = lifted.gid - owner.firstgid;
-  const cols = owner.columns || 1;
+  return owner;
+}
+
+// Cache of one canvas-texture per unique source-tile. Two lifted tiles that
+// reference the same (tileset, sourceX, sourceY) share the canvas.
+const sortedTextureCache = new Map<string, Phaser.Textures.Texture>();
+
+function getOrCreateTileTexture(
+  scene: Phaser.Scene,
+  owner: Phaser.Tilemaps.Tileset,
+  srcX: number,
+  srcY: number,
+): Phaser.Textures.Texture | null {
+  const texKey = `lifted_${owner.name}_${srcX}_${srcY}`;
+  const cached = sortedTextureCache.get(texKey);
+  if (cached) return cached;
+  const srcTex = scene.textures.get(owner.name);
+  if (!srcTex) return null;
   const tileW = owner.tileWidth;
   const tileH = owner.tileHeight;
-  const srcX = (localId % cols) * tileW;
-  const srcY = Math.floor(localId / cols) * tileH;
-  const texKey = `lifted_${owner.name}_${srcX}_${srcY}`;
-  let tex = sortedTextureCache.get(texKey);
-  if (!tex) {
-    const srcTex = scene.textures.get(owner.name);
-    if (!srcTex) return null;
-    const canvas = document.createElement("canvas");
-    canvas.width = tileW;
-    canvas.height = tileH;
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-    const srcCanvas = srcTex.getSourceImage() as HTMLImageElement;
-    ctx.drawImage(srcCanvas, srcX, srcY, tileW, tileH, 0, 0, tileW, tileH);
-    const added = scene.textures.addCanvas(texKey, canvas);
-    // addCanvas returns null when the key is already taken (e.g. a prior
-    // scene restart). Fall back to the existing texture so we never crash.
-    tex = added ?? scene.textures.get(texKey) ?? null;
-    if (tex) sortedTextureCache.set(texKey, tex);
-  }
+  const canvas = document.createElement("canvas");
+  canvas.width = tileW;
+  canvas.height = tileH;
+  const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(srcTex.getSourceImage() as HTMLImageElement, srcX, srcY, tileW, tileH, 0, 0, tileW, tileH);
+  // addCanvas returns null when the key is already taken (e.g. a prior
+  // scene restart). Fall back to the existing texture so we never crash.
+  const tex = scene.textures.addCanvas(texKey, canvas) ?? scene.textures.get(texKey) ?? null;
+  if (tex) sortedTextureCache.set(texKey, tex);
+  return tex;
+}
+
+// Instantiate one Y-sorted tile as a 16×16 Image. Display position = the
+// tile's own center (so the sprite shows up where Tiled painted it). Depth
+// = the bottom of the column's anchor (ANCHOR_LAYERS), or the tile's own
+// bottom if no anchor exists in the column.
+function instantiateSortedTile(
+  scene: Phaser.Scene,
+  tile: LiftedTile,
+  tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
+  baseAnchorY: ColumnAnchors,
+  origin: ChunkOrigin,
+): Phaser.GameObjects.Image | null {
+  if (tilesets.length === 0) return null;
+  const owner = findTilesetForGid(tile.gid, tilesets);
+  if (!owner) return null;
+  const localId = tile.gid - owner.firstgid;
+  const cols = owner.columns || 1;
+  const srcX = (localId % cols) * owner.tileWidth;
+  const srcY = Math.floor(localId / cols) * owner.tileHeight;
+  const tex = getOrCreateTileTexture(scene, owner, srcX, srcY);
   if (!tex) return null;
-  const tx = lifted.tileIndex % CHUNK_TILE_W;
-  const ty = Math.floor(lifted.tileIndex / CHUNK_TILE_W);
-  const worldX = ox + tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
-  // Display: tile's own center.
-  const worldY = oy + ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
-  // Depth: bottom of the column's base tile (DecorationMiddle*), or the
-  // tile's own bottom if no base tile exists in the column.
+  const tx = tile.tileIndex % CHUNK_TILE_W;
+  const ty = (tile.tileIndex - tx) / CHUNK_TILE_W;
+  const displayY = origin.y + ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
   const anchorTy = baseAnchorY[tx];
   const sortTy = anchorTy >= 0 ? anchorTy : ty;
-  const sortY = oy + (sortTy + 1) * CHUNK_TILE_PX;
-  const img = scene.add.image(worldX, worldY, texKey);
+  const sortY = origin.y + (sortTy + 1) * CHUNK_TILE_PX;
+  const img = scene.add.image(origin.x + tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2, displayY, tex.key);
   img.setOrigin(0.5, 0.5);
   img.setDepth(DEPTH_CHAR_BASE + sortY);
   img.disableInteractive();
@@ -456,72 +448,83 @@ function instantiateSortedTile(
 }
 
 // Make sure every chunk in the active window around (cx, cy) is loaded and
-// rendered. Chunks already in `chunkStates` re-create layers only; chunks not
-// yet seen are streamed via loadChunk. If a chunk's JSON is missing (e.g.
-// 404) the chunk is silently skipped so the camera can keep streaming the
+// rendered. Chunks already in `chunkStates` re-create layers only; chunks
+// not yet seen are streamed via loadChunk. A chunk whose JSON fails to
+// load (e.g. 404) is silently skipped so the camera can keep streaming the
 // remaining ones.
-export async function ensureChunks(scene: Phaser.Scene, { cx, cy }: { cx: number; cy: number }): Promise<void> {
+export async function ensureChunks(
+  scene: Phaser.Scene,
+  { cx, cy }: { cx: number; cy: number },
+): Promise<void> {
   const { chunks } = getActiveWindow(scene, { cx, cy });
   for (const c of chunks) {
-    const key = chunkKey(c.cx, c.cy);
-    let state = chunkStates.get(key);
+    const state = chunkStates.get(chunkKey(c.cx, c.cy));
     if (state) {
-      buildChunkLayers(state, c.cx, c.cy);
+      buildChunkLayers(state, chunkOrigin(c.cx, c.cy));
       continue;
     }
     const { tilemap, sortedTiles, baseAnchorY } = await loadChunk(scene, c.cx, c.cy);
     if (!tilemap) continue;
-    // Register the chunk's DecorationLower tiles as the collision source so
-    // isWalkable picks them up. Skipped if already registered (cache hit).
-    // NOTE: the Tilemap cache (scene.sys.cache.tilemap) stores a
-    // { format, data } wrapper — the Tiled JSON lives under `.data`, not at
-    // the top level, and NOT in cache.json (tilemapTiledJSON never touches it).
-    if (!chunkRegistered(c.cx, c.cy)) {
-      const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
-      const json = entry?.data ?? entry;
-      if (json) registerChunk(c.cx, c.cy, json);
-    }
-    // loadChunk already lifted the SORTED_LAYERS tiles out of the cached
-    // JSON (they're zeroed there now) and computed the per-column base
-    // anchor from ANCHOR_LAYERS. buildChunkState stores both so
-    // buildChunkLayers can reinstantiate sprites on chunk re-entry.
-    state = buildChunkState(scene, tilemap, sortedTiles, baseAnchorY);
-    chunkStates.set(key, state);
-    buildChunkLayers(state, c.cx, c.cy);
+    registerCollisionIfNeeded(scene, c.cx, c.cy);
+    const fresh = buildChunkState(tilemap, sortedTiles, baseAnchorY);
+    chunkStates.set(chunkKey(c.cx, c.cy), fresh);
+    buildChunkLayers(fresh, chunkOrigin(c.cx, c.cy));
   }
 }
 
-export function releaseOutside(scene: Phaser.Scene, { cx, cy }: { cx: number; cy: number }): void {
-  const { chunks } = getActiveWindow(scene, { cx, cy });
-  const active = new Set(chunks.map((c) => chunkKey(c.cx, c.cy)));
+// Register the chunk's DecorationLower tiles as the collision source so
+// isWalkable picks them up. Skipped if already registered.
+// NOTE: the Tilemap cache (scene.sys.cache.tilemap) stores a
+// { format, data } wrapper — the Tiled JSON lives under `.data`, not at
+// the top level, and NOT in cache.json (tilemapTiledJSON never touches it).
+function registerCollisionIfNeeded(scene: Phaser.Scene, cx: number, cy: number): void {
+  if (chunkRegistered(cx, cy)) return;
+  const key = chunkKey(cx, cy);
+  const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
+  const json = entry?.data ?? entry;
+  if (json) registerChunk(cx, cy, json);
+}
+
+export function releaseOutside(
+  scene: Phaser.Scene,
+  { cx, cy }: { cx: number; cy: number },
+): void {
+  const active = new Set(getActiveWindow(scene, { cx, cy }).chunks.map((c) => chunkKey(c.cx, c.cy)));
   for (const [key, state] of chunkStates) {
     if (active.has(key)) continue;
-    for (const layer of state.layers.values()) layer.destroy(false);
-    state.layers.clear();
-    for (const sprite of state.sortedSprites) sprite.destroy();
-    state.sortedSprites = [];
+    destroyChunkLayers(state);
+    destroySortedSprites(state);
     // Keep state.tilemap + state.tilesets cached — re-entry only needs to
     // re-call createLayer, not re-register tilesets.
-    //
-    // destroy(false) is load-bearing: the default destroy() removes the
-    // LayerData from the tilemap's layers array, so a later createLayer(name)
-    // fails with "Invalid Tilemap Layer ID" and the chunk comes back empty.
-    // destroy(false) keeps the LayerData registered and only clears the
-    // installed tilemapLayer reference, which createLayer requires free.
   }
+}
+
+function destroyChunkLayers(state: ChunkState): void {
+  for (const layer of state.layers.values()) layer.destroy(false);
+  state.layers.clear();
+}
+
+function destroySortedSprites(state: ChunkState): void {
+  for (const sprite of state.sortedSprites) sprite.destroy();
+  state.sortedSprites = [];
 }
 
 // Clamp the camera to the loaded 5×5 chunk window centered on (cx, cy) so
-// panning can never reveal the background. Zoom is deliberately NOT touched
-// here — WorldScene.fitCameraToCanvas owns it; resetting it on every chunk
-// crossing would stomp the user's wheel zoom and break the cover fit.
+// panning can never reveal the background. Zoom is deliberately NOT
+// touched here — WorldScene.fitCameraToCanvas owns it; resetting it on
+// every chunk crossing would stomp the user's wheel zoom and break the
+// cover fit.
 //
-// centerOn defaults to true for the initial framing (spectator / first load).
-// During streaming the camera MUST NOT recenter: the player just crossed the
-// chunk edge, so snapping toward the chunk center teleports the view and then
-// the follow-lerp glides it back — the "refocus glitch". The camera-follow
-// keeps framing the player; only the bounds change here.
-export function recenterCamera(scene: Phaser.Scene, { cx, cy }: { cx: number; cy: number }, centerOn = true): void {
+// centerOn defaults to true for the initial framing (spectator / first
+// load). During streaming the camera MUST NOT recenter: the player just
+// crossed the chunk edge, so snapping toward the chunk center teleports
+// the view and then the follow-lerp glides it back — the "refocus glitch".
+// The camera-follow keeps framing the player; only the bounds change.
+export function recenterCamera(
+  scene: Phaser.Scene,
+  { cx, cy }: { cx: number; cy: number },
+  centerOn = true,
+): void {
   const cam = scene.cameras.main;
   const { x: ox, y: oy } = chunkOrigin(cx, cy);
   const bx = ox - WINDOW_RADIUS * CHUNK_PX_W;
