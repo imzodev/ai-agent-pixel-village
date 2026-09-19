@@ -21,15 +21,15 @@ export { CHUNK_TILE_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_PX_W, CHUNK_PX_H };
 export type ChunkOrigin = { x: number; y: number };
 
 // One tile lifted out of a SORTED_LAYERS layer for Y-sort rendering.
-type LiftedTile = { layerName: string; tileIndex: number; gid: number };
+export type LiftedTile = { layerName: string; tileIndex: number; gid: number };
 
 // Per-column depth anchor: the bottom-most tile-y in ANCHOR_LAYERS for each
 // chunk column. -1 means "no anchor" (fall back to the tile's own y).
-type ColumnAnchors = Int32Array;
+export type ColumnAnchors = Int32Array;
 
 // Result of loading a chunk: the parsed tilemap plus the data needed to
 // (re-)instantiate Y-sorted sprites from the SORTED_LAYERS layers.
-type ChunkLoadResult = {
+export type ChunkLoadResult = {
   tilemap: Phaser.Tilemaps.Tilemap | null;
   sortedTiles: LiftedTile[];
   baseAnchorY: ColumnAnchors;
@@ -95,7 +95,7 @@ export const DEPTH_CANOPY = 500_000;
 
 // Fallback depth for any static layer missing from LAYER_DEPTH (defensive
 // only — every layer in LAYER_RENDER_ORDER should have an entry).
-const FALLBACK_LAYER_DEPTH = -5;
+export const FALLBACK_LAYER_DEPTH = -5;
 
 // Per-layer depth for the static layers. DecorationMiddle* sits BELOW the
 // character band so the player always renders in front of trunks and low
@@ -225,7 +225,10 @@ const inFlightLoads = new Map<string, Promise<ChunkLoadResult>>();
 // Idempotent: the second call sees all-zero SORTED_LAYERS GIDs (because
 // we zeroed them on the first call) and produces an empty sortedTiles list,
 // so a cache-hit loadChunk behaves like the network path on re-entry.
-function readChunkJson(scene: Phaser.Scene, key: string): ChunkLoadResult {
+//
+// Exported so buildingStamps.ts can apply the same lift/anchor pass to
+// building template JSONs (which use the same layer schema as chunks).
+export function parseCachedTilemap(scene: Phaser.Scene, key: string): ChunkLoadResult {
   const entry = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
   const json = entry?.data ?? entry;
   if (!json) {
@@ -256,7 +259,7 @@ export function loadChunk(
 ): Promise<ChunkLoadResult> {
   const key = chunkKey(cx, cy);
   if (scene.sys.cache.tilemap.exists(key)) {
-    return Promise.resolve(readChunkJson(scene, key));
+    return Promise.resolve(parseCachedTilemap(scene, key));
   }
   const inflight = inFlightLoads.get(key);
   if (inflight) return inflight;
@@ -265,7 +268,7 @@ export function loadChunk(
     const onComplete = (loadedKey: string) => {
       if (loadedKey !== key) return;
       cleanup();
-      resolve(readChunkJson(scene, key));
+      resolve(parseCachedTilemap(scene, key));
     };
     const onError = (file: { key?: string } | undefined) => {
       if (!file || file.key !== key) return;
@@ -323,19 +326,9 @@ function buildChunkState(
   sortedTiles: LiftedTile[],
   baseAnchorY: ColumnAnchors,
 ): ChunkState {
-  // Only register the tilesets this particular map references — Phaser
-  // warns when addTilesetImage cannot find a matching tileset entry. Default
-  // generated chunks only use beginnertileset.
-  const tilesets: Phaser.Tilemaps.Tileset[] = [];
-  const referenced = new Set(tilemap.tilesets.map((t) => t.name));
-  for (const ts of TILESET_FILES) {
-    if (!referenced.has(ts.name)) continue;
-    const t = tilemap.addTilesetImage(ts.name);
-    if (t) tilesets.push(t);
-  }
   return {
     tilemap,
-    tilesets,
+    tilesets: registerReferencedTilesets(tilemap, PRELOADED_TILESET_NAMES),
     layers: new Map(),
     sortedSprites: [],
     sortedTiles,
@@ -343,29 +336,92 @@ function buildChunkState(
   };
 }
 
+// Register the tilesets this particular map references. Phaser warns on
+// addTilesetImage when the named tileset isn't already loaded, so we
+// only register the ones the map actually uses. Chunks filter against
+// the preload-time TILESET_FILES list (so we never try to register a
+// tileset that wasn't preloaded); buildings register whatever the
+// template references directly.
+export function registerReferencedTilesets(
+  tilemap: Phaser.Tilemaps.Tilemap,
+  allow?: ReadonlySet<string>,
+): Phaser.Tilemaps.Tileset[] {
+  const referenced = new Set(tilemap.tilesets.map((t) => t.name));
+  const names = allow ? [...referenced].filter((n) => allow.has(n)) : [...referenced];
+  const tilesets: Phaser.Tilemaps.Tileset[] = [];
+  for (const name of names) {
+    const t = tilemap.addTilesetImage(name);
+    if (t) tilesets.push(t);
+  }
+  return tilesets;
+}
+
+const PRELOADED_TILESET_NAMES = new Set(TILESET_FILES.map((ts) => ts.name));
+
 function buildChunkLayers(state: ChunkState, origin: ChunkOrigin): void {
-  // Static layers first — SORTED_LAYERS entries were zeroed in the JSON
-  // before Tilemap parsed it, so createLayer produces empty cells for
-  // them anyway. They're omitted from LAYER_RENDER_ORDER so we don't even
-  // iterate them here.
+  createStaticLayers(
+    state.tilemap,
+    state.tilesets,
+    origin,
+    "chunk",
+    state.layers,
+  );
+  instantiateSortedSprites(
+    state.tilemap.scene as Phaser.Scene,
+    state.tilesets,
+    state.sortedTiles,
+    state.baseAnchorY,
+    origin,
+    state.sortedSprites,
+  );
+}
+
+// Create the static layers from LAYER_RENDER_ORDER, skipping layers whose
+// GIDs were already zeroed (SORTED_LAYERS) or marked data-only
+// (SKIP_LAYERS). Exported so buildingStamps.ts can render templates with
+// the same depth scheme as chunks.
+export function createStaticLayers(
+  tilemap: Phaser.Tilemaps.Tilemap,
+  tilesets: Phaser.Tilemaps.Tileset[],
+  origin: ChunkOrigin,
+  layerNamePrefix: string,
+  out?: Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>,
+): void {
   for (const name of LAYER_RENDER_ORDER) {
     if (SKIP_LAYERS.has(name)) continue;
-    if (state.layers.has(name)) continue;
-    if (state.tilemap.getLayerIndex(name) === null) continue;
-    const layer = state.tilemap.createLayer(name, state.tilesets, origin.x, origin.y);
+    if (out?.has(name)) continue;
+    if (tilemap.getLayerIndex(name) === null) continue;
+    const layer = tilemap.createLayer(name, tilesets, origin.x, origin.y);
     if (!layer) continue;
     layer.setDepth(LAYER_DEPTH[name] ?? FALLBACK_LAYER_DEPTH);
-    layer.name = `chunk_${name}`;
-    state.layers.set(name, layer);
+    layer.name = `${layerNamePrefix}_${name}`;
+    out?.set(name, layer);
   }
-  // Y-sorted sprites: one Image per lifted upper-layer tile. Every tile
-  // sorts at the bottom-y of its column's anchor (or its own bottom if no
-  // anchor exists). See SORTED_LAYERS comment for the rationale.
-  const scene = state.tilemap.scene as Phaser.Scene;
-  for (const tile of state.sortedTiles) {
-    const sprite = instantiateSortedTile(scene, tile, state.tilesets, state.baseAnchorY, origin);
-    if (sprite) state.sortedSprites.push(sprite);
+}
+
+// Instantiate one Y-sorted sprite per lifted upper-layer tile at `origin`.
+// Sprites are appended to `out`. Exported so buildingStamps.ts can render
+// template roofs / awnings with the same depth rule as chunk canopies.
+export function instantiateSortedSprites(
+  scene: Phaser.Scene,
+  tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
+  liftedTiles: ReadonlyArray<LiftedTile>,
+  baseAnchorY: ColumnAnchors,
+  origin: ChunkOrigin,
+  out: Phaser.GameObjects.Image[],
+): void {
+  for (const tile of liftedTiles) {
+    const sprite = instantiateSortedTile(scene, tile, tilesets, baseAnchorY, origin);
+    if (sprite) out.push(sprite);
   }
+}
+
+// Convert a (tx, ty) tile-grid coordinate into world-pixel origin. Used by
+// building stamping, which places templates at (tx, ty) tile positions
+// expressed in a flat world tile grid (not chunk indices). Distinct from
+// chunkOrigin, which converts chunk indices into the world chunk grid.
+export function tileOrigin(tx: number, ty: number): ChunkOrigin {
+  return { x: tx * CHUNK_TILE_PX, y: ty * CHUNK_TILE_PX };
 }
 
 // Find the tileset that owns a given GID. Tiled packs GIDs as
