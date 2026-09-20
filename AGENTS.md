@@ -1,5 +1,14 @@
 # thegrove - agent notes
 
+## NEVER commit unless explicitly told
+
+**Do not run `git commit` (or `git add` followed by commit, amend, push,
+or create a PR) unless the user explicitly asks for it in that message.**
+A phrase like "before you commit", "once you're done", or "then commit"
+is NOT permission to commit now — it means the user will tell you when.
+When in doubt, stop after making the changes and wait. If you already
+committed by mistake, say so; do not touch history further.
+
 ## Types live in shared type files
 
 **Interfaces and type aliases MUST be declared in shared type modules, never
