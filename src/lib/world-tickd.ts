@@ -20,8 +20,7 @@
 //
 // Run: `pnpm dev:tickd` (or `node --import tsx src/lib/world-tickd.ts`).
 
-import { sql } from "drizzle-orm";
-import { db, pool } from "@/db";
+import { pool } from "@/db";
 import { tickWorld } from "./sim";
 import { initRedis } from "./redis";
 
@@ -31,14 +30,16 @@ const LOCK_POLL_MS = 250;
 const ADVISORY_LOCK_KEY = 42;
 
 async function tryAcquireAdvisoryLock(): Promise<boolean> {
-  const result = await db.execute(sql`SELECT pg_try_advisory_lock(${ADVISORY_LOCK_KEY}) AS locked`);
-  const rows = result as unknown as { rows: Array<{ locked: boolean }> };
-  return rows.rows[0]?.locked === true;
+  const result = await pool.query<{ locked: boolean }>(
+    "SELECT pg_try_advisory_lock($1) AS locked",
+    [ADVISORY_LOCK_KEY],
+  );
+  return result.rows[0]?.locked === true;
 }
 
 async function releaseAdvisoryLock(): Promise<void> {
   try {
-    await db.execute(sql`SELECT pg_advisory_unlock(${ADVISORY_LOCK_KEY})`);
+    await pool.query("SELECT pg_advisory_unlock($1)", [ADVISORY_LOCK_KEY]);
   } catch {
     // Connection may already be gone; lock auto-released.
   }

@@ -1,5 +1,4 @@
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
+import { pool } from "@/db";
 import { redisDegraded } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +7,6 @@ type Health = {
   ok: boolean;
   db: boolean;
   redis: { configured: boolean; degraded: boolean };
-  // WS connection count is reported via a separate WS-side getter; we
-  // don't import the ws module here to keep this endpoint dependency-light.
 };
 
 export async function GET() {
@@ -22,8 +19,11 @@ export async function GET() {
     },
   };
 
+  // Ping the raw connection pool rather than going through Drizzle — this
+  // is a connectivity check for the socket itself, and it keeps this
+  // endpoint independent of the ORM's query builder.
   try {
-    await db.execute(sql`select 1`);
+    await pool.query("SELECT 1");
     health.db = true;
   } catch {
     health.db = false;
