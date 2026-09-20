@@ -1,7 +1,9 @@
-// Minimal service worker. Cache-first for static assets, network-first for
-// API + HTML. Registered by the layout's client component.
+// Minimal service worker. Cache-first for immutable static assets,
+// network-first for API + HTML. Registered only in production (see
+// ClientShell.tsx) — in dev a worker would serve stale Turbopack chunks
+// and break the module graph.
 
-const CACHE_NAME = "grove-v1";
+const CACHE_NAME = "grove-v2";
 const STATIC_ASSETS = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -23,16 +25,22 @@ self.addEventListener("fetch", (event) => {
   if (event.request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
       fetch(event.request).then((res) => {
-        const clone = res.clone();
-        caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
+        // Never store responses the server marked no-store (e.g. anything
+        // served during a hot rebuild).
+        if (res.ok && !/no-store/i.test(res.headers.get("cache-control") ?? "")) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
+        }
         return res;
       }).catch(() => caches.match(event.request).then((r) => r ?? caches.match("/"))),
     );
     return;
   }
-  // Cache-first for everything else.
+  // Cache-first for immutable, content-hashed assets. Restrict to
+  // /_next/static/ so we never cache HMR / dev runtime modules.
   event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request).then((res) => {
-    if (res.ok && (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/lpc/") || url.pathname.startsWith("/cosmetics/"))) {
+    const immutable = url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/lpc/") || url.pathname.startsWith("/cosmetics/");
+    if (res.ok && immutable && !/no-store/i.test(res.headers.get("cache-control") ?? "")) {
       const clone = res.clone();
       caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
     }
