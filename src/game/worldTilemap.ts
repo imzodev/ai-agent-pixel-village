@@ -23,49 +23,58 @@ export type ChunkOrigin = { x: number; y: number };
 // One tile lifted out of a SORTED_LAYERS layer for Y-sort rendering.
 export type LiftedTile = { layerName: string; tileIndex: number; gid: number };
 
-// Per-column depth anchor: one entry per chunk column, holding the
-// bottom-most tile-y in ANCHOR_LAYERS for that column. -1 means "no
-// anchor in this column" — lifted tiles fall back to sorting at their
-// own row.
+// Per-tile depth anchor grid, indexed by `tx + ty * CHUNK_TILE_W`. Each
+// cell holds the bottom-most tile-y in ANCHOR_LAYERS for that chunk
+// position, or -1 if no anchor tile exists there.
 //
-// Per-column is the right granularity because the standard authoring
-// convention for a vertically-split decoration is to stack its layers in
-// the same columns: rock body in DecorationMiddle with rock top in
-// DecorationUpper at the same X, tree trunk below its canopy, wall
-// below its roof. The per-column lookup captures that relationship
-// mechanically — no object-specific code, no shape inference, no
-// GID/tileset hardcoding. New decorations (lamp posts, big containers,
-// walls, banners, anything) work without code changes.
+// ANCHOR_LAYERS covers DecorationLower* and DecorationMiddle* (see the
+// constant's comment for why). The lookup for a lifted DecorationUpper*
+// tile (see findAnchorYForLiftedTile) walks down the same column first,
+// then falls back to the chunk-wide max y when no same-column anchor
+// exists. This handles both authoring conventions:
 //
-// For tiles whose column has no anchor (orphan eaves overhanging past
-// a wall, lone decor on empty grass), the fallback to own-y produces
-// correct walk-over behavior — the player walking past sees the prop
-// at its own screen position.
-export type ColumnAnchors = Int32Array;
+//   - Same-column bodies (rock body+top, tree trunk+canopy,
+//     wall+central roof): the same-column anchor is the right depth.
+//   - Asymmetric decorations (cabin eaves overhanging past the wall,
+//     big container lid wider than its base, banner top overhanging
+//     past its post): the lifted tile is in a column with no anchor;
+//     the chunk-wide max anchors to the deepest object in the chunk.
+//
+// No shape inference, no GID/tileset hardcoding, no heuristic radius
+// search. New decorations work without code changes.
+export type AnchorGrid = Int32Array;
 
 // Result of loading a chunk: the parsed tilemap plus the data needed to
 // (re-)instantiate Y-sorted sprites from the SORTED_LAYERS layers.
 export type ChunkLoadResult = {
   tilemap: Phaser.Tilemaps.Tilemap | null;
   sortedTiles: LiftedTile[];
-  columnAnchors: ColumnAnchors;
+  anchorGrid: AnchorGrid;
 };
 
 // Layers that should be Y-sorted against the player instead of drawn at a
 // fixed depth. Every tile in these layers is lifted out of the static
 // tilemap and rendered as an individual GameObject whose depth is
-// derived from ColumnAnchors — see that type's comment for the rule.
+// derived from AnchorGrid — see that type's comment for the rule.
 const SORTED_LAYERS: ReadonlySet<string> = new Set([
   "DecorationUpper",
   "DecorationUpper1",
   "DecorationUpper2",
 ]);
 
-// Layers scanned to compute ColumnAnchors. Tiles in these layers are
-// NOT lifted; they stay on their static layer rendered behind the
-// character band. We just read their y position to find each column's
-// "base" depth anchor.
+// Layers scanned to compute AnchorGrid. Tiles in these layers are NOT
+// lifted; they stay on their static layer rendered behind the character
+// band. We just read their y position to find each chunk cell's "base"
+// depth anchor.
+//
+// We include both DecorationMiddle* (wall tier — tree trunks, building
+// walls, cabin walls) and DecorationLower* (ground tier — rock bodies,
+// low walls, fence posts) so vertically-split decorations at any height
+// pair correctly. DecorationLowerShadow is excluded because shadows are
+// ground-level effects that don't represent a "base" for any Upper-layer
+// object — the shadow is just a visual cue under the player.
 const ANCHOR_LAYERS: ReadonlySet<string> = new Set([
+  "DecorationLower",
   "DecorationMiddle",
   "DecorationMiddle1",
   "DecorationMiddle2",
@@ -207,7 +216,7 @@ type ChunkState = {
   layers: Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>;
   sortedSprites: Phaser.GameObjects.Image[];
   sortedTiles: LiftedTile[];
-  columnAnchors: ColumnAnchors;
+  anchorGrid: AnchorGrid;
 };
 
 const chunkStates = new Map<string, ChunkState>();
@@ -219,8 +228,9 @@ const inFlightLoads = new Map<string, Promise<ChunkLoadResult>>();
 // Run the one-pass extractor on a cached JSON. The pass:
 //   - lifts every non-zero tile from a SORTED_LAYERS entry (recording it
 //     and zeroing the GID in the JSON so the static layer draws nothing),
-//   - tracks the bottom-most tile-y in ANCHOR_LAYERS per chunk column,
-//     producing the columnAnchors every lifted tile sorts against.
+//   - records the bottom-most tile-y in ANCHOR_LAYERS at each chunk
+//     cell, producing the AnchorGrid each lifted tile uses to find its
+//     sort anchor.
 //
 // We work on the raw JSON rather than parsed LayerData because Phaser 4's
 // LayerData.data is a Tile[][] — by the time the Tilemap exists, the
@@ -240,16 +250,16 @@ export function parseCachedTilemap(scene: Phaser.Scene, key: string): ChunkLoadR
     return {
       tilemap: null,
       sortedTiles: [],
-      columnAnchors: emptyColumnAnchors(),
+      anchorGrid: emptyAnchorGrid(),
     };
   }
-  const { sortedTiles, columnAnchors } = extractFromChunkJson(json);
+  const { sortedTiles, anchorGrid } = extractFromChunkJson(json);
   const tilemap = scene.make.tilemap({ key }) ?? null;
-  return { tilemap, sortedTiles, columnAnchors };
+  return { tilemap, sortedTiles, anchorGrid };
 }
 
-function emptyColumnAnchors(): ColumnAnchors {
-  return new Int32Array(CHUNK_TILE_W).fill(-1);
+function emptyAnchorGrid(): AnchorGrid {
+  return new Int32Array(CHUNK_TILE_W * CHUNK_TILE_H).fill(-1);
 }
 
 // Stream a single chunk's Tiled JSON via the on-demand API. The API serves a
@@ -279,7 +289,7 @@ export function loadChunk(
       if (!file || file.key !== key) return;
       cleanup();
       console.warn(`[worldTilemap] failed to load chunk ${key} (url=${`/api/chunks/${cx}/${cy}`})`);
-      resolve({ tilemap: null, sortedTiles: [], columnAnchors: emptyColumnAnchors() });
+      resolve({ tilemap: null, sortedTiles: [], anchorGrid: emptyAnchorGrid() });
     };
     const cleanup = () => {
       scene.load.off("filecomplete", onComplete);
@@ -297,11 +307,11 @@ export function loadChunk(
 
 function extractFromChunkJson(
   json: unknown,
-): { sortedTiles: LiftedTile[]; columnAnchors: ColumnAnchors } {
+): { sortedTiles: LiftedTile[]; anchorGrid: AnchorGrid } {
   const layers = (json as { layers?: unknown })?.layers;
   const sortedTiles: LiftedTile[] = [];
-  const columnAnchors = emptyColumnAnchors();
-  if (!Array.isArray(layers)) return { sortedTiles, columnAnchors };
+  const anchorGrid = emptyAnchorGrid();
+  if (!Array.isArray(layers)) return { sortedTiles, anchorGrid };
   for (const layer of layers) {
     const typed = layer as { name?: unknown; type?: unknown; data?: unknown };
     if (typeof typed.name !== "string" || typed.type !== "tilelayer") continue;
@@ -313,9 +323,10 @@ function extractFromChunkJson(
     for (let i = 0; i < data.length; i++) {
       const gid = data[i] & 0x1fffffff; // strip Tiled flip/rotate flags
       if (gid <= 0) continue;
-      const tx = i % CHUNK_TILE_W;
-      const ty = (i - tx) / CHUNK_TILE_W;
-      if (anchor && ty > columnAnchors[tx]) columnAnchors[tx] = ty;
+      const idx = i;
+      if (anchor && (anchorGrid[idx] < 0 || tyFromIndex(i) > anchorGrid[idx])) {
+        anchorGrid[idx] = tyFromIndex(i);
+      }
       if (lift) {
         sortedTiles.push({ layerName: typed.name, tileIndex: i, gid });
         // Zero so Phaser's parse produces an empty cell there.
@@ -323,13 +334,17 @@ function extractFromChunkJson(
       }
     }
   }
-  return { sortedTiles, columnAnchors };
+  return { sortedTiles, anchorGrid };
+}
+
+function tyFromIndex(i: number): number {
+  return (i - (i % CHUNK_TILE_W)) / CHUNK_TILE_W;
 }
 
 function buildChunkState(
   tilemap: Phaser.Tilemaps.Tilemap,
   sortedTiles: LiftedTile[],
-  columnAnchors: ColumnAnchors,
+  anchorGrid: AnchorGrid,
 ): ChunkState {
   return {
     tilemap,
@@ -337,7 +352,7 @@ function buildChunkState(
     layers: new Map(),
     sortedSprites: [],
     sortedTiles,
-    columnAnchors,
+    anchorGrid,
   };
 }
 
@@ -375,7 +390,7 @@ function buildChunkLayers(state: ChunkState, origin: ChunkOrigin): void {
     state.tilemap.scene as Phaser.Scene,
     state.tilesets,
     state.sortedTiles,
-    state.columnAnchors,
+    state.anchorGrid,
     origin,
     state.sortedSprites,
   );
@@ -411,12 +426,12 @@ export function instantiateSortedSprites(
   scene: Phaser.Scene,
   tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
   liftedTiles: ReadonlyArray<LiftedTile>,
-  columnAnchors: ColumnAnchors,
+  anchorGrid: AnchorGrid,
   origin: ChunkOrigin,
   out: Phaser.GameObjects.Image[],
 ): void {
   for (const tile of liftedTiles) {
-    const sprite = instantiateSortedTile(scene, tile, tilesets, columnAnchors, origin);
+    const sprite = instantiateSortedTile(scene, tile, tilesets, anchorGrid, origin);
     if (sprite) out.push(sprite);
   }
 }
@@ -475,19 +490,53 @@ function getOrCreateTileTexture(
   return tex;
 }
 
+// Find the lifted tile's sort anchor y, in two passes:
+//
+//   1. SAME-COLUMN anchor at or BELOW the lifted tile's row. The
+//      vertically-split decoration convention puts the body's
+//      DecorationLower*/Middle* tile directly below the lifted Upper
+//      tile in the same column (rock body + top, tree trunk + canopy,
+//      wall + central roof). When the column has such an anchor, it's
+//      the right depth — every tile in the same column belongs to the
+//      same object and sorts at the object's base.
+//
+//   2. CHUNK-WIDE MAX y (fallback for orphaned lifted tiles — e.g.,
+//      cabin eaves overhanging past the wall into columns with no
+//      Middle tile, or trees whose canopy extends past the trunk in
+//      some direction). The deepest anchor in the chunk is treated as
+//      "this object's base" because a lifted tile without its own
+//      column anchor is geometrically part of an adjacent object that
+//      does have one.
+//
+// Pass 1 prevents a small object (rock, single-tree) inside a chunk
+// with deeper anchors (cabin walls, big trees) from inheriting that
+// deep depth and occluding wrongly. Pass 2 keeps the rule universal:
+// every lifted tile gets an anchor, and the chunk's natural "deepest
+// thing" provides the depth for tiles that don't have one locally.
+//
+// Returns -1 only when the chunk has no anchor at all (orphan decor on
+// empty ground); callers fall back to the lifted tile's own row.
+function findAnchorYForLiftedTile(tx: number, ty: number, grid: AnchorGrid): number {
+  // Pass 1: same-column anchor at or below ty.
+  for (let row = ty; row < grid.length / CHUNK_TILE_W; row++) {
+    const idx = row * CHUNK_TILE_W + tx;
+    if (grid[idx] >= 0) return grid[idx];
+  }
+  // Pass 2: chunk-wide max y. Skip if it's the lifted tile's own row
+  // (would be the same as the fallback below).
+  let max = -1;
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] > max) max = grid[i];
+  }
+  return max;
+}
+
 // Instantiate one Y-sorted tile as a 16×16 Image. Display position =
 // the tile's own center (so the sprite shows up where Tiled painted
-// it). Depth = DEPTH_CHAR_BASE + sortY, where sortY is the bottom edge
-// of the column's anchor (the deepest ANCHOR_LAYERS tile y in the same
-// chunk column) — or the tile's own bottom edge when the column has no
-// anchor.
-//
-// Per-column lookup captures the standard authoring convention where a
-// vertically-split decoration (rock body + top, tree trunk + canopy,
-// wall + roof) puts its layers in the same columns. Tiles without a
-// column anchor (orphan eaves overhanging past a wall, lone decor on
-// empty grass) fall back to sorting at their own y, which produces
-// correct walk-over behavior for those isolated props.
+// it). Depth = DEPTH_CHAR_BASE + sortY, where sortY is the bottom
+// edge of the anchor found by findAnchorYForLiftedTile (same-column
+// first, chunk-wide fallback). When the chunk has no anchor at all,
+// fall back to the tile's own row.
 //
 // GID → source rect: standard Tiled math. Pick the tileset with the
 // largest firstgid ≤ gid, then localId = gid - firstgid, srcX =
@@ -497,7 +546,7 @@ function instantiateSortedTile(
   scene: Phaser.Scene,
   tile: LiftedTile,
   tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
-  columnAnchors: ColumnAnchors,
+  anchorGrid: AnchorGrid,
   origin: ChunkOrigin,
 ): Phaser.GameObjects.Image | null {
   if (tilesets.length === 0) return null;
@@ -513,8 +562,8 @@ function instantiateSortedTile(
   const ty = (tile.tileIndex - tx) / CHUNK_TILE_W;
   const worldX = origin.x + tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
   const displayY = origin.y + ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
-  const anchorTy = columnAnchors[tx];
-  const sortTy = anchorTy >= 0 ? anchorTy : ty;
+  const baseY = findAnchorYForLiftedTile(tx, ty, anchorGrid);
+  const sortTy = baseY >= 0 ? baseY : ty;
   const sortY = origin.y + (sortTy + 1) * CHUNK_TILE_PX;
   const img = scene.add.image(worldX, displayY, tex.key);
   img.setOrigin(0.5, 0.5);
@@ -539,10 +588,10 @@ export async function ensureChunks(
       buildChunkLayers(state, chunkOrigin(c.cx, c.cy));
       continue;
     }
-    const { tilemap, sortedTiles, columnAnchors } = await loadChunk(scene, c.cx, c.cy);
+    const { tilemap, sortedTiles, anchorGrid } = await loadChunk(scene, c.cx, c.cy);
     if (!tilemap) continue;
     registerCollisionIfNeeded(scene, c.cx, c.cy);
-    const fresh = buildChunkState(tilemap, sortedTiles, columnAnchors);
+    const fresh = buildChunkState(tilemap, sortedTiles, anchorGrid);
     chunkStates.set(chunkKey(c.cx, c.cy), fresh);
     buildChunkLayers(fresh, chunkOrigin(c.cx, c.cy));
   }
