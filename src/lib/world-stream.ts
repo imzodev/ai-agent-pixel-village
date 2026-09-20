@@ -33,25 +33,20 @@ import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
 import { WORLD_CHANGE_CHANNEL } from "@/lib/sim";
 import type { WorldChange } from "@/lib/protocol";
+import type { Connection } from "@/types/websocket";
 
 const WS_PATH = "/ws";
 
 const DELTA_COALESCE_MS = 100;
 const COOKIE_NAME = "grove_session";
 
-type Connection = {
-  ws: WebSocket;
-  playerId: number;
-  homeCx: number;
-  homeCy: number;
-  homePx: number;
-  homePy: number;
-  // Last snapshot version we sent this connection. Used for reconnect.
-  lastVersion: number;
-  // Pending delta hint: chunk (cx, cy) the client should refetch.
-  pendingDeltas: Set<string>;
-  flushTimer: NodeJS.Timeout | null;
-};
+// How often a connected player's position is written to Postgres/Redis.
+// Heartbeats arrive much more often than this; the in-memory throttle
+// keeps downstream writes bounded.
+const PRESENCE_WRITE_INTERVAL_MS = Math.max(
+  1000,
+  Number(process.env.PRESENCE_WRITE_INTERVAL_MS ?? 10_000),
+);
 
 const connections = new Map<number, Connection>();
 
@@ -106,6 +101,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     homeCy: cy,
     homePx: auth.x,
     homePy: auth.y,
+    lastPresenceAt: 0,
     lastVersion: 0,
     pendingDeltas: new Set(),
     flushTimer: null,
@@ -138,7 +134,10 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     // connection dropped, lastSeenAt could be >45 s old and the snapshot
     // would exclude the local player entirely. (This is the path that
     // triggered the "respawn" symptom before the WorldScene fix.)
-    await refreshLastSeen(conn.playerId);
+    // force: true — this is the first write of the connection, so skip
+    // the Redis throttle gate.
+    await refreshLastSeen(conn.playerId, undefined, { force: true });
+    conn.lastPresenceAt = Date.now();
     const snap = await getSnapshot(conn.playerId, auth.x, auth.y);
     conn.lastVersion = snap.version;
     try {
@@ -173,21 +172,27 @@ function onMessage(conn: Connection, raw: string): void {
   }
 if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "number") {
     const facing = ["up","down","left","right"].includes(msg.facing ?? "") ? msg.facing! : "down";
-    // Catch refresh errors so they don't become unhandled rejections that
-    // silently drop the player from the 45 s presence window. A failed
-    // DB write still leaves the Redis throttle key in place, so the next
-    // heartbeat will retry.
-    refreshLastSeen(conn.playerId, { x: msg.x, y: msg.y, facing }).catch((err) => {
-      console.error(`[ws] refreshLastSeen failed for player ${conn.playerId}:`, err);
-    });
-    // Update home chunk so future world_change events go to the right
-    // proximity set. Cheap; happens every client heartbeat.
+    // Update home chunk so subsequent refreshes use the right bbox. Cheap;
+    // happens every client heartbeat.
     const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
     conn.homePx = msg.x;
     conn.homePy = msg.y;
     if (cx !== conn.homeCx || cy !== conn.homeCy) {
       conn.homeCx = cx;
       conn.homeCy = cy;
+    }
+
+    // Persist presence at most once per PRESENCE_WRITE_INTERVAL_MS. The
+    // in-memory throttle means heartbeats cost no Redis command; only the
+    // occasional actual write does (DB UPDATE + presence SET + ping SET).
+    // `force: true` skips refreshLastSeen's own Redis EXISTS gate, which
+    // would otherwise add a command per heartbeat.
+    const now = Date.now();
+    if (now - conn.lastPresenceAt >= PRESENCE_WRITE_INTERVAL_MS) {
+      conn.lastPresenceAt = now;
+      refreshLastSeen(conn.playerId, { x: msg.x, y: msg.y, facing }, { force: true }).catch((err) => {
+        console.error(`[ws] refreshLastSeen failed for player ${conn.playerId}:`, err);
+      });
     }
     return;
   }

@@ -4,8 +4,10 @@
 // guarantees shape parity at compile time.
 
 import type { Appearance } from "@/types/domain";
+import type { Facing } from "@/types/world";
 
-export type Facing = "left" | "right" | "up" | "down";
+// Re-exported for callers that already import protocol types together.
+export type { Facing };
 
 export type WsClientMessage =
   | { type: "hello"; sessionId?: string; lastVersion?: number }

@@ -1,28 +1,15 @@
 // Shared movement primitives used by both the client (WorldScene player
 // movement) and the server (NPC / animal / enemy ticks). Kept dependency-
 // free so it can be imported from either side without dragging in `db`.
+//
+// Types live in @/types/world; this module is logic only.
 
-export type Facing = "left" | "right" | "up" | "down";
-
-export type Point = { x: number; y: number };
-
-export type StepResult = Point & {
-  arrived: boolean;
-  facing: Facing;
-  /**
-   * True when the step couldn't make any forward progress (diagonal and both
-   * single-axis alternatives blocked). Callers use this to abandon a pinned
-   * target and re-roll a walkable destination.
-   */
-  stuck: boolean;
-};
+import type { Facing, StepResult, WalkableChecker } from "@/types/world";
 
 export function facingOf(dx: number, dy: number): Facing {
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left";
   return dy > 0 ? "down" : "up";
 }
-
-export type WalkableChecker = (x: number, y: number) => Promise<boolean> | boolean;
 
 /**
  * Axis-separated step that respects chunk collision: try the full diagonal

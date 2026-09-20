@@ -1,32 +1,9 @@
-import type { WorldSnapshot } from "@/lib/protocol";
+import type { Handler, Events } from "@/types/bus";
+import type { Snapshot } from "@/types/snapshot";
+import type { Selection } from "@/types/world";
 
-export type Snapshot = WorldSnapshot;
-
-export type Selection =
-  | { type: "npc"; id: number; name: string; role: string; sponsored: boolean; distance: number }
-  | { type: "animal"; id: number; name: string; species: string; distance: number }
-  | { type: "building"; id: number; key: string; name: string; reservable: boolean; hasSponsor: boolean; distance: number }
-  | { type: "player"; id: number; name: string; distance: number }
-  | { type: "item"; id: number; itemKey: string; distance: number }
-  | { type: "node"; id: number; kind: string; ready: boolean; distance: number }
-  | { type: "enemy"; id: number; kind: string; hp: number; maxHp: number; distance: number };
-
-type Events = {
-  snapshot: Snapshot;
-  select: Selection | null;
-  toast: { text: string; kind?: "info" | "good" | "bad" };
-  enterBuilding: { key: string; name: string };
-  focus: { x: number; y: number };
-  refreshMe: undefined;
-  moveTo: { x: number; y: number };
-  poke: undefined;
-  chatFocus: boolean;
-  toggle: "bag" | "shop" | "map" | "quests" | "friends";
-  /** True while any modal is open that should block canvas interaction. */
-  modalOpen: boolean;
-};
-
-type Handler<T> = (payload: T) => void;
+// Re-exported so existing subscribers can import them from the bus.
+export type { Events, Handler, Selection, Snapshot };
 
 class Bus {
   private handlers = new Map<string, Set<Handler<unknown>>>();

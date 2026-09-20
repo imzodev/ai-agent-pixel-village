@@ -1,7 +1,5 @@
 // Client-side input. Phaser scene reads; touch/keyboard adapters write.
 
-export type Facing = "up" | "down" | "left" | "right";
-
 export type InputState = {
   /** Normalized -1..1 for each axis. Keyboard snaps to cardinal; joystick is continuous. */
   axisX: number;

@@ -48,21 +48,30 @@ items for the player and leads for the business.
 │  src/server.ts │  │ world-tickd.ts │
 │  Next.js + WS  │  │   sim worker   │
 │  on :3000      │  │   1 Hz tick    │
-│  /ws upgrade   │  │                │
-└───────┬────────┘  └────────┬───────┘
+│  /ws upgrade   │  │  view refresh  │
+└───────┬────────┘  └───────┬────────┘
         │                    │
+        │ reads              │ writes
         ▼                    ▼
-┌──────────────────────────────────────┐
-│  Upstash Redis (HTTP pub/sub)        │
-│  world_changes channel               │
-│  sim publishes → ws subscribes        │
-└──────────────────────────────────────┘
+┌──────────────────┐  ┌──────────────────┐
+│ Read replica     │  │ Postgres primary │
+│ (optional)       │◄─│ online_players   │
+│                  │  │ materialized view│
+└──────────────────┘  └──────────────────┘
+        ▲
+        │ presence + snapshot cache
+┌───────┴────────┐
+│ Upstash Redis  │
+└────────────────┘
 ```
 
-With Upstash wired, world_change events fan out from the tickd to the WS
-server in real time. Without Upstash (single-process dev), the WS server
-falls back to an in-process memory pub/sub plus a 1500 ms periodic
-snapshot refresh.
+The WS server pushes a fresh snapshot to each client every
+`WS_REFRESH_MS` (default 5 s). Reads go through the replica when
+`DATABASE_REPLICA_URL` is set; writes always hit the primary. The sim
+worker refreshes the `online_players` materialized view every
+`ONLINE_PLAYERS_REFRESH_MS` (default 5 s), and the snapshot reads online
+players from that view (falling back to a direct `characters` query if
+the view is unavailable).
 
 Run locally:
 ```
@@ -76,7 +85,8 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `DATABASE_URL` (required) — Postgres on `127.0.0.1:5432`, db `app_db`, user/pass `postgres`/`postgres`.
   - If port 5432 is free: `docker compose up -d`, then `pnpm db:push`.
   - If port 5432 is already taken by another local Postgres, just `CREATE DATABASE app_db;` on it (or run `docker compose up -d` after remapping the host port in `docker-compose.yml`).
-- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (recommended for production) — cross-process pub/sub for WS push. Without these, the app still works in single-process dev mode but two-process prod mode loses cross-process event delivery.
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (recommended) — snapshot cache, presence mirror, and the `world:version` counter. Without these the app falls back to an in-process memory cache and still works in single-process dev mode.
+- `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
 - `OPENAI_API_KEY` (+ `OPENAI_MODEL`) or `ANTHROPIC_API_KEY` (+ `ANTHROPIC_MODEL`) — LLM-driven NPC dialogue. Without them the scripted brain runs.
 

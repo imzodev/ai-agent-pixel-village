@@ -9,20 +9,11 @@
 // attempt, capped at 8 s, plus random jitter to spread reconnect storms
 // after a server restart.
 
-import type { WsClientMessage, WsServerMessage, Facing } from "@/lib/protocol";
+import type { WsClientMessage, WsServerMessage } from "@/lib/protocol";
+import type { Facing } from "@/types/world";
+import type { StreamHandlers, WorldStreamOptions } from "@/types/websocket";
 
-export type StreamHandlers = {
-  onSnapshot: (data: import("@/lib/protocol").WorldSnapshot) => void;
-  onDelta: () => void;
-  onOpen?: () => void;
-  onClose?: () => void;
-};
-
-export type WorldStreamOptions = {
-  url: string;
-  handlers: StreamHandlers;
-  heartbeatIntervalMs?: number;
-};
+export type { StreamHandlers, WorldStreamOptions };
 
 export class WorldStream {
   private ws: WebSocket | null = null;

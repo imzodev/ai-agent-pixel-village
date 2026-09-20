@@ -23,11 +23,16 @@
 import { pool } from "@/db";
 import { tickWorld } from "./sim";
 import { initRedis } from "./redis";
+import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 
 const TICK_INTERVAL_MS = Number(process.env.WORLD_TICK_INTERVAL_MS ?? 1000);
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
 const ADVISORY_LOCK_KEY = 42;
+// The materialized "online players" view is refreshed on this cadence.
+// Snapshot reads hit the view, so this bounds how stale the online window
+// can be. 5s keeps `me` fresh enough while staying cheap.
+const VIEW_REFRESH_MS = Number(process.env.ONLINE_PLAYERS_REFRESH_MS ?? 5000);
 
 async function tryAcquireAdvisoryLock(): Promise<boolean> {
   const result = await pool.query<{ locked: boolean }>(
@@ -66,8 +71,21 @@ async function main(): Promise<void> {
   }
   console.log(`[tickd] acquired advisory lock; ticking every ${TICK_INTERVAL_MS} ms`);
 
+  // Create the online_players view if it doesn't exist, then refresh it on
+  // its own cadence. Best-effort: if the DB user can't manage views the
+  // snapshot falls back to querying characters directly.
+  await ensureOnlinePlayersView();
+
   let running = true;
   let inFlight: Promise<void> | null = null;
+  let lastViewRefresh = 0;
+
+  const maybeRefreshView = async (): Promise<void> => {
+    const now = Date.now();
+    if (now - lastViewRefresh < VIEW_REFRESH_MS) return;
+    lastViewRefresh = now;
+    await refreshOnlinePlayers();
+  };
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`[tickd] received ${signal}, draining`);
@@ -91,6 +109,7 @@ async function main(): Promise<void> {
         inFlight = null;
       });
     await inFlight;
+    await maybeRefreshView();
     const elapsed = Date.now() - start;
     const sleepMs = Math.max(0, TICK_INTERVAL_MS - elapsed);
     if (sleepMs > 0) await new Promise((r) => setTimeout(r, sleepMs));

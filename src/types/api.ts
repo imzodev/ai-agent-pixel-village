@@ -96,11 +96,6 @@ export type Snapshot = {
   serverTime: number;
 };
 
-export type Selection =
-  | { type: "player"; id: number; name: string; distance: number }
-  | { type: "npc"; id: number; name: string; role: string; sponsored: boolean; distance: number }
-  | { type: "animal"; id: number; name: string; species: string; distance: number }
-  | { type: "enemy"; id: number; kind: string; hp: number; maxHp: number; distance: number }
-  | { type: "item"; id: number; itemKey: string; distance: number }
-  | { type: "node"; id: number; kind: string; ready: boolean; distance: number }
-  | { type: "building"; id: number; key: string; name: string; reservable: boolean; hasSponsor: boolean; distance: number };
+// Selection moved to @/types/world — re-exported here for callers that
+// still import it from the api types module.
+export type { Selection } from "@/types/world";

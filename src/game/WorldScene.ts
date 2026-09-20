@@ -21,6 +21,8 @@ import {
   releaseOutside,
 } from "./worldTilemap";
 import type { Action, InputState } from "@/types/input";
+import type { Facing } from "@/types/world";
+import type { CharEnt, CritterEnt } from "@/types/game";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -31,18 +33,6 @@ const DEPTH_NIGHT = DEPTH_CANOPY + 30;
 const DEPTH_FOG = DEPTH_CANOPY + 31;
 const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
-type Dir = keyof typeof ROWS;
-
-type CharEnt = {
-  sprite: Phaser.GameObjects.Sprite;
-  label: Phaser.GameObjects.Text;
-  badge?: Phaser.GameObjects.Text;
-  tx: number; ty: number; facing: Dir; speed: number;
-  texKey: string | null; appKey: string;
-  bubble?: { c: Phaser.GameObjects.Container; until: number };
-  glow?: Phaser.GameObjects.Arc;
-};
-type CritterEnt = { sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; kind: string; tx: number; ty: number; facing: string; state: string; speed: number; label?: Phaser.GameObjects.Text; zz?: Phaser.GameObjects.Text; hpBar?: Phaser.GameObjects.Graphics; hp: number; maxHp: number; phase: number };
 
 const PLAYER_SPEED = 120;
 
@@ -429,7 +419,7 @@ export class WorldScene extends Phaser.Scene {
         const tex = this.textures.addCanvas(key, canvas);
         if (!tex) return;
         for (let r = 0; r < 4; r++) for (let c = 0; c < 9; c++) tex.add(`${r}_${c}`, 0, c * FRAME, r * FRAME, FRAME, FRAME);
-        for (const dir of Object.keys(ROWS) as Dir[]) {
+        for (const dir of Object.keys(ROWS) as Facing[]) {
           const r = ROWS[dir];
           this.anims.create({ key: `${key}_walk_${dir}`, frames: Array.from({ length: 8 }, (_, i) => ({ key, frame: `${r}_${i + 1}` })), frameRate: 11, repeat: -1 });
         }
@@ -465,7 +455,7 @@ export class WorldScene extends Phaser.Scene {
       }
       ent.tx = p.x; ent.ty = p.y;
       if (ent.label.text !== p.name) ent.label.setText(p.name);
-      if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Dir;
+      if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Facing;
       if (Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) > 400) ent.sprite.setPosition(p.x, p.y);
     }
     for (const [id, ent] of map) if (!seen.has(id)) { this.destroyChar(ent); map.delete(id); }

@@ -18,21 +18,10 @@
 //   useless across the worker/relay/WS split. Production must use
 //   Upstash.
 
-type RedisString = string | number | null;
+import type { PubSubHandler, RedisLike, RedisString } from "@/types/redis";
 
-export type PubSubHandler = (channel: string, message: string) => void;
-
-export interface RedisLike {
-  get(key: string): Promise<RedisString>;
-  set(key: string, value: string, opts?: { ex?: number; px?: number }): Promise<"OK">;
-  exists(key: string): Promise<0 | 1>;
-  del(...keys: string[]): Promise<number>;
-  incr(key: string): Promise<number>;
-  expire(key: string, seconds: number): Promise<0 | 1>;
-  keys(pattern: string): Promise<string[]>;
-  /** Publish a message on a channel. Returns the number of subscribers reached. */
-  publish(channel: string, message: string): Promise<number>;
-}
+// Re-exported so existing importers keep working.
+export type { PubSubHandler, RedisLike };
 
 class MemoryRedis implements RedisLike {
   private store = new Map<string, { value: string; expiresAt: number | null }>();

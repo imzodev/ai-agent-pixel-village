@@ -18,7 +18,6 @@
 //   per chunk per quarter second.
 
 import { and, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
-import { db } from "@/db";
 import {
   animals,
   buildings,
@@ -33,11 +32,23 @@ import {
   worldEvents,
   worldState,
 } from "@/db/schema";
+import { onlinePlayers } from "@/db/views";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
 import { gameHour } from "@/lib/worldmap";
 import { getBuildingDoors } from "@/lib/buildingsServer";
 import { redis, initRedis } from "@/lib/redis";
+import { withReadDb } from "@/lib/db";
 import type { WorldSnapshot } from "@/lib/protocol";
+import type {
+  PlayerRow,
+  ProcCacheEntry,
+  RawSnapshot,
+  Snapshot,
+  SponsorLite,
+  ViewState,
+} from "@/types/snapshot";
+
+export type { Snapshot };
 
 // Cache TTL — long enough that several polls share a snapshot, short
 // enough that state changes are visible. 250 ms is a sensible default
@@ -69,55 +80,94 @@ const CHAT_WINDOW_MS = 12_000;
 const cacheKey = (cx: number, cy: number, meId: number | null): string =>
   `snap:${cx}:${cy}:${meId ?? "anon"}`;
 
-type SponsorLite = {
-  id: number;
-  businessName: string;
-  brandColor: string;
-  tagline: string;
-};
+// Player projection shared by the view read and the direct fallback.
+const playerColumns = {
+  id: characters.id,
+  name: characters.name,
+  x: characters.x,
+  y: characters.y,
+  facing: characters.facing,
+  appearance: characters.appearance,
+  level: characters.level,
+  hp: characters.hp,
+  maxHp: characters.maxHp,
+  coins: characters.coins,
+  gems: characters.gems,
+  xp: characters.xp,
+} as const;
 
-type PlayerRow = {
-  id: number;
-  name: string;
-  x: number;
-  y: number;
-  facing: string;
-  appearance: typeof characters.$inferSelect.appearance;
-  level: number;
-  hp: number;
-  maxHp: number;
-  coins: number;
-  gems: number;
-  xp: number;
-};
+// View availability, cached so a missing view doesn't cost a failed query
+// per snapshot. Retried every VIEW_RETRY_MS so a view created later (by
+// the sim worker on boot) is picked up without a process restart.
+let viewState: ViewState = { available: true, checkedAt: 0 };
+const VIEW_RETRY_MS = 30_000;
 
-type RawSnapshot = {
-  world: typeof worldState.$inferSelect;
-  players: PlayerRow[];
-  npcs: Array<typeof npcs.$inferSelect>;
-  animals: Array<typeof animals.$inferSelect>;
-  buildings: Array<typeof buildings.$inferSelect>;
-  sponsors: SponsorLite[];
-  groundItems: Array<typeof groundItems.$inferSelect>;
-  resourceNodes: Array<typeof resourceNodes.$inferSelect>;
-  enemies: Array<typeof enemies.$inferSelect>;
-  chat: Array<typeof worldChat.$inferSelect>;
-  events: Array<typeof worldEvents.$inferSelect>;
-  doors: Map<string, { x: number; y: number }>;
-  meId: number | null;
-  meEquipped: string[];
-  equippedByChar: Map<number, string[]>;
-  spById: Record<string, SponsorLite>;
-};
+/**
+ * Fetch the online player rows.
+ *
+ * Primary source is the `online_players` materialized view (small, stable,
+ * refreshed by the sim worker). If it is missing or empty we fall back to
+ * the indexed characters range scan. Either way, if the requesting player
+ * isn't in the result (e.g. the view has not refreshed since they joined)
+ * we look them up directly so `me` is never null for a live session.
+ */
+async function fetchOnlinePlayers(
+  rdb: ReturnType<typeof withReadDb>,
+  meId: number | null,
+  since: Date,
+): Promise<PlayerRow[]> {
+  // The view exposes the same columns under its own name.
+  const viewColumns = {
+    id: onlinePlayers.id,
+    name: onlinePlayers.name,
+    x: onlinePlayers.x,
+    y: onlinePlayers.y,
+    facing: onlinePlayers.facing,
+    appearance: onlinePlayers.appearance,
+    level: onlinePlayers.level,
+    hp: onlinePlayers.hp,
+    maxHp: onlinePlayers.maxHp,
+    coins: onlinePlayers.coins,
+    gems: onlinePlayers.gems,
+    xp: onlinePlayers.xp,
+  } as const;
 
-export type Snapshot = WorldSnapshot;
+  const tryView = viewState.available || Date.now() - viewState.checkedAt > VIEW_RETRY_MS;
+  if (tryView) {
+    try {
+      const rows = await rdb.select(viewColumns).from(onlinePlayers);
+      viewState = { available: true, checkedAt: Date.now() };
+      if (rows.length > 0) {
+        if (meId && !rows.some((r) => r.id === meId)) {
+          const [me] = await rdb
+            .select(playerColumns)
+            .from(characters)
+            .where(eq(characters.id, meId))
+            .limit(1);
+          if (me) rows.push(me);
+        }
+        return rows;
+      }
+    } catch {
+      // View missing (not created yet) — remember and use the direct query
+      // until the retry window elapses.
+      viewState = { available: false, checkedAt: Date.now() };
+      console.warn("[snapshot] online_players view unavailable; using characters directly");
+    }
+  }
+
+  return rdb.select(playerColumns).from(characters).where(gt(characters.lastSeenAt, since));
+}
 
 // ── Assembler ──────────────────────────────────────────────────────────
 // Pulls only entities within the player's reach. Called once per (chunk,
 // TTL window); results are JSON-serialised and served to every player in
 // that chunk for the rest of the window.
 async function buildRawSnapshot(meId: number | null, playerX: number, playerY: number): Promise<RawSnapshot> {
-  const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));
+  // All reads go through the replica when one is configured (falls back to
+  // the primary otherwise). Writes never happen in this module.
+  const rdb = withReadDb();
+  const [ws] = await rdb.select().from(worldState).where(eq(worldState.id, 1));
   const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
   const chatSince = new Date(Date.now() - CHAT_WINDOW_MS);
 
@@ -141,40 +191,22 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
     chat,
     events,
   ] = await Promise.all([
-    // Players stay global but time-bounded — chat needs everyone, and the
-    // result is bounded to ~last 45 s. Indexed on lastSeenAt.
-    db
-      .select({
-        id: characters.id,
-        name: characters.name,
-        x: characters.x,
-        y: characters.y,
-        facing: characters.facing,
-        appearance: characters.appearance,
-        level: characters.level,
-        hp: characters.hp,
-        maxHp: characters.maxHp,
-        coins: characters.coins,
-        gems: characters.gems,
-        xp: characters.xp,
-      })
-      .from(characters)
-      .where(gt(characters.lastSeenAt, since)),
-    db.select().from(npcs).where(
+    fetchOnlinePlayers(rdb, meId, since),
+    rdb.select().from(npcs).where(
       and(
         eq(npcs.active, true),
         gte(npcs.x, xMin), lt(npcs.x, xMax),
         gte(npcs.y, yMin), lt(npcs.y, yMax),
       ),
     ),
-    db.select().from(animals).where(
+    rdb.select().from(animals).where(
       and(
         gte(animals.x, xMin), lt(animals.x, xMax),
         gte(animals.y, yMin), lt(animals.y, yMax),
       ),
     ),
-    db.select().from(buildings),
-    db
+    rdb.select().from(buildings),
+    rdb
       .select({
         id: sponsors.id,
         businessName: sponsors.businessName,
@@ -184,26 +216,26 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
       })
       .from(sponsors)
       .where(eq(sponsors.status, "active")),
-    db.select().from(groundItems).where(
+    rdb.select().from(groundItems).where(
       and(
         gte(groundItems.x, xMin), lt(groundItems.x, xMax),
         gte(groundItems.y, yMin), lt(groundItems.y, yMax),
       ),
     ),
-    db.select().from(resourceNodes),
-    db.select().from(enemies).where(
+    rdb.select().from(resourceNodes),
+    rdb.select().from(enemies).where(
       and(
         gte(enemies.x, xMin), lt(enemies.x, xMax),
         gte(enemies.y, yMin), lt(enemies.y, yMax),
       ),
     ),
-    db
+    rdb
       .select()
       .from(worldChat)
       .where(gt(worldChat.createdAt, chatSince))
       .orderBy(desc(worldChat.id))
       .limit(30),
-    db.select().from(worldEvents).orderBy(desc(worldEvents.id)).limit(10),
+    rdb.select().from(worldEvents).orderBy(desc(worldEvents.id)).limit(10),
   ]);
 
   const spById = new Map<number, SponsorLite>(sponsorRows.map((s) => [s.id, s]));
@@ -213,7 +245,7 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   // scan the old code did in JS. Two short queries replace the cost.
   let meEquipped: string[] = [];
   if (meId) {
-    const rows = await db
+    const rows = await rdb
       .select({ itemKey: inventory.itemKey })
       .from(inventory)
       .where(sql`${inventory.characterId} = ${meId} and ${inventory.equipped} = true`);
@@ -222,7 +254,7 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   const playerIds = players.map((p) => p.id);
   const equippedAll =
     playerIds.length > 0
-      ? await db
+      ? await rdb
           .select({ characterId: inventory.characterId, itemKey: inventory.itemKey })
           .from(inventory)
           .where(and(inArray(inventory.characterId, playerIds), eq(inventory.equipped, true)))
@@ -377,8 +409,6 @@ let initStarted = false;
 // reads through to Redis directly.
 const PROC_CACHE_MAX = Number(process.env.SNAPSHOT_PROC_CACHE_SIZE ?? 256);
 const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 750));
-
-type ProcCacheEntry = { snap: Snapshot; expiresAt: number };
 
 const procCache = new Map<string, ProcCacheEntry>();
 
