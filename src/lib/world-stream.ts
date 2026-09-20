@@ -345,18 +345,25 @@ async function refreshAllConnections(): Promise<void> {
   }
 }
 
-// Pub/sub bridge kept exported for future re-enablement once the
-// @upstash/redis subscribe is reliable. Right now calling this only
-// burns Redis commands without delivering messages.
+// Pub/sub bridge. DISABLED by default.
+//
+// Nothing publishes `world_changes` any more (the sim stopped emitting
+// per-entity events), and the Upstash HTTP subscriber does not reliably
+// deliver messages. Starting it therefore costs Redis commands for no
+// updates. The WS server pushes fresh snapshots on its own schedule
+// instead. Set ENABLE_REDIS_PUBSUB=1 to turn it on for future use.
 //
 // subscribePubSub returns an "unsubscribe" thunk. The Upstash variant
 // returns a Promise of a void-returning function; the memory variant
 // returns a sync void-returning function. We coalesce both into a
 // single callable.
+const PUBSUB_ENABLED = process.env.ENABLE_REDIS_PUBSUB === "1";
+
 let pubSubStarted = false;
 let pubSubUnsub: () => Promise<void> | void = () => {};
 
 export async function startPubSubBridge(): Promise<void> {
+  if (!PUBSUB_ENABLED) return;
   if (pubSubStarted) return;
   pubSubStarted = true;
   pubSubUnsub = await subscribePubSub(WORLD_CHANGE_CHANNEL, (_channel, message) => {

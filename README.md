@@ -86,23 +86,34 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `DATABASE_URL` (required) — Postgres on `127.0.0.1:5432`, db `app_db`, user/pass `postgres`/`postgres`.
   - If port 5432 is free: `docker compose up -d`, then `pnpm db:push`.
   - If port 5432 is already taken by another local Postgres, just `CREATE DATABASE app_db;` on it (or run `docker compose up -d` after remapping the host port in `docker-compose.yml`).
-- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (recommended) — snapshot cache, presence mirror, and the `world:version` counter. Without these the app falls back to an in-process memory cache and still works in single-process dev mode.
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (**optional**) — Redis is **off the hot path**. Snapshots and player presence are served from in-process memory and Postgres, so a normal run issues zero Upstash commands. Redis is only used when you opt in with `SNAPSHOT_REDIS_CACHE=1` (cross-process snapshot cache) or `ENABLE_REDIS_PUBSUB=1` (the `world_changes` bridge). With no URL set, the in-process memory client is used and nothing is billed.
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
 - `OPENAI_API_KEY` (+ `OPENAI_MODEL`) or `ANTHROPIC_API_KEY` (+ `ANTHROPIC_MODEL`) — LLM-driven NPC dialogue. Without them the scripted brain runs.
 
-### Phase 4 hardening tunables
+### Performance / cost tunables
 
 - `WS_REFRESH_MS` (default 5000) — how often the WS server pushes a fresh snapshot to every connected client.
+- `SNAPSHOT_PROC_CACHE_TTL_MS` (default 5000, keep ≤ `WS_REFRESH_MS`) — the in-process snapshot cache that absorbs every reader in the shared Next.js + WS process. This is what makes steady-state refreshes free.
+- `SNAPSHOT_REDIS_CACHE` (default off) — opt-in cross-process snapshot cache for a multi-process deployment.
+- `LAST_SEEN_TTL_SECONDS` (default 10) — in-memory throttle between a player's Postgres `lastSeenAt` writes.
+- `PRESENCE_WRITE_INTERVAL_MS` (default 10000) — WS-side throttle before calling `refreshLastSeen`.
+- `PROXIMITY_RADIUS_PX` (default 1152) — snapshot proximity bbox half-size.
+- `ONLINE_PLAYERS_REFRESH_MS` (default 5000) — materialized-view refresh cadence (sim worker).
+
+### Phase 4 hardening tunables
+
 - `WS_MAX_UPGRADES_PER_IP` (default 10) + `WS_IP_WINDOW_MS` (default 10000) — reconnect-storm protection. Upgrades over the limit per window return `429`.
 - `SLOW_CLIENT_THRESHOLD_BYTES` (default 262144) + `SLOW_CLIENT_HOLD_MS` (default 2000) — a connection whose OS send buffer stays over the threshold for the hold window is closed with `1008 slow consumer`.
+- `ENABLE_REDIS_PUBSUB` (default off) — start the `world_changes` subscriber. Off because nothing publishes and the Upstash subscriber is unreliable.
 - `LOG_LEVEL` (default `info`) — pino log verbosity.
 - `SERVICE_NAME` / `WS_SHARD_ID` — labels attached to every Prometheus metric and log line. Set per shard.
 
 ### Observability
 
-- `src/lib/metrics.ts` owns the Prometheus registry (ws / snapshot-cache / sim / db-pool gauges, plus default Node/process collectors). It is **not currently exposed via an HTTP endpoint** — the user removed `/api/metrics` and `/api/health`. The registry stays so a future scrape endpoint (e.g. gated by `PROMETHEUS_SCRAPE_TOKEN`) can be wired without rebuilding.
-- `src/lib/lifecycle.ts` exposes `setDraining` / `isDraining`. The server marks itself draining on SIGTERM/SIGINT and rejects new WS upgrades with `503` until it exits. A future readiness endpoint can read `isDraining()` and return `503` to drain LB connections.
+- `/api/health` reports DB connectivity, Upstash configured/degraded (in-memory flag), and draining state.
+- `src/lib/metrics.ts` owns the Prometheus registry (ws / snapshot-cache / sim / db-pool gauges, plus default Node/process collectors). It is **not currently exposed via an HTTP endpoint**; the registry stays so a future scrape endpoint (e.g. gated by `PROMETHEUS_SCRAPE_TOKEN`) can be wired without rebuilding.
+- `src/lib/lifecycle.ts` exposes `setDraining` / `isDraining`. The server marks itself draining on SIGTERM/SIGINT and rejects new WS upgrades with `503` until it exits.
 - Logs are JSON via `pino` (`src/lib/logger.ts`), stamped with `service` and `shard`.
 - Operational runbook: `docs/RUNBOOK.md`.
 

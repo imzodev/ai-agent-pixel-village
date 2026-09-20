@@ -1,118 +1,67 @@
-// Player presence.
+// Player presence persistence.
 //
-// Two responsibilities:
-//   1. Persist "where was everyone when they were last seen" to Postgres
-//      so a player rejoins at the right spot.
-//   2. Mirror a lightweight presence record into Redis with a short TTL,
-//      so "who is online right now" can be answered without scanning the
-//      characters table.
+// Responsibility: remember where each player was when last seen, so they
+// rejoin at the right spot and appear in the "online" window. That is a
+// single Postgres UPDATE per player, throttled in memory so a 1.5 s WS
+// heartbeat becomes at most one write per LAST_SEEN_TTL_MS (default 10 s).
 //
-// Before: every /api/world POST ran UPDATE characters SET lastSeenAt=now().
-// At 5k players @ 1 Hz that was 5k UPDATEs/sec. Now each player is written
-// at most once per LAST_SEEN_TTL_SECONDS (default 10s), and the WS server
-// additionally throttles in memory so the Redis EXISTS gate isn't hit on
-// every heartbeat.
+// This module deliberately does NOT touch Redis. It previously mirrored
+// presence into a `presence:{id}` key and used a `player:{id}:ping` key as
+// the throttle gate; the mirror had no readers and the gate cost two Redis
+// commands per write, which is unsustainable on a small Upstash plan. The
+// in-memory throttle below is exact for a single process and, in a
+// multi-process deployment, still bounds each process to one write per
+// player per window.
+//
+// "Who is online" is answered from Postgres directly: the `online_players`
+// materialized view (see src/lib/onlinePlayers.ts) or a characters query
+// filtered on lastSeenAt.
 
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { characters } from "@/db/schema";
-import { redis } from "@/lib/redis";
-import type { PresenceRecord } from "@/types/redis";
 
-export type { PresenceRecord };
-
-const LAST_SEEN_TTL_SECONDS = Math.max(1, Number(process.env.LAST_SEEN_TTL_SECONDS ?? 10));
-// Presence outlives the write cadence so a player never briefly vanishes
-// between writes.
-const PRESENCE_TTL_SECONDS = Math.max(
-  LAST_SEEN_TTL_SECONDS + 5,
-  Number(process.env.PRESENCE_TTL_SECONDS ?? 30),
+const LAST_SEEN_TTL_MS = Math.max(
+  1000,
+  Number(process.env.LAST_SEEN_TTL_SECONDS ?? 10) * 1000,
 );
 
-const pingKey = (playerId: number): string => `player:${playerId}:ping`;
-const presenceKey = (playerId: number): string => `presence:${playerId}`;
+// playerId → last time we persisted a position for them. Bounded by a
+// prune so a long-lived process does not grow this without limit.
+const lastWriteAt = new Map<number, number>();
+const MAP_SOFT_CAP = 10_000;
+
+function prune(now: number): void {
+  if (lastWriteAt.size < MAP_SOFT_CAP) return;
+  for (const [id, at] of lastWriteAt) {
+    if (now - at >= LAST_SEEN_TTL_MS) lastWriteAt.delete(id);
+  }
+}
 
 /**
- * Write a player's presence.
+ * Persist a player's position + lastSeenAt, throttled to once per
+ * LAST_SEEN_TTL_MS unless `force` is set.
  *
- * Callers on the hot path (WS heartbeats) should throttle themselves and
- * pass `{ force: true }` to skip the Redis EXISTS gate — that removes one
- * Redis command per heartbeat. The HTTP fallback path relies on the gate.
+ * The WS server already throttles per connection and passes
+ * `{ force: true }`; the HTTP fallback relies on the throttle here.
  */
 export async function refreshLastSeen(
   playerId: number,
   position?: { x?: number; y?: number; facing?: string },
   opts?: { force?: boolean },
 ): Promise<void> {
+  const now = Date.now();
   if (!opts?.force) {
-    // Redis EXISTS is the gate; if the key is present we skip the write.
-    // If Redis is unreachable, fail open and let the DB write proceed so
-    // the player doesn't disappear from the world.
-    let present = 0;
-    try {
-      present = await redis.exists(pingKey(playerId));
-    } catch {
-      present = 0;
-    }
-    if (present === 1) return;
+    const last = lastWriteAt.get(playerId) ?? 0;
+    if (now - last < LAST_SEEN_TTL_MS) return;
   }
+  lastWriteAt.set(playerId, now);
+  prune(now);
 
-  const patch: Partial<typeof characters.$inferInsert> = { lastSeenAt: new Date() };
+  const patch: Partial<typeof characters.$inferInsert> = { lastSeenAt: new Date(now) };
   if (position?.x !== undefined) patch.x = position.x;
   if (position?.y !== undefined) patch.y = position.y;
   if (position?.facing !== undefined) patch.facing = position.facing;
 
   await db.update(characters).set(patch).where(eq(characters.id, playerId));
-
-  // Redis presence mirror — live position, short TTL. Best-effort.
-  try {
-    await redis.set(
-      presenceKey(playerId),
-      JSON.stringify({
-        id: playerId,
-        x: position?.x,
-        y: position?.y,
-        facing: position?.facing,
-        at: Date.now(),
-      }),
-      { ex: PRESENCE_TTL_SECONDS },
-    );
-  } catch {
-    // Presence mirror is advisory; the DB row is authoritative.
-  }
-
-  try {
-    await redis.set(pingKey(playerId), "1", { ex: LAST_SEEN_TTL_SECONDS });
-  } catch {
-    // Ignore — the next write will retry.
-  }
-}
-
-/**
- * Read every live presence record. Uses SCAN-style key listing via the
- * RedisLike `keys` helper (simple prefix match). At very large player
- * counts this would want a Redis SET/index; at village scale it is fine.
- */
-export async function getOnlinePresence(): Promise<PresenceRecord[]> {
-  const out: PresenceRecord[] = [];
-  try {
-    const keys = await redis.keys("presence:*");
-    for (const key of keys) {
-      const raw = await redis.get(key);
-      if (!raw) continue;
-      try {
-        out.push(JSON.parse(String(raw)) as PresenceRecord);
-      } catch {
-        // Skip malformed entries.
-      }
-    }
-  } catch {
-    // Redis unavailable — caller should fall back to the DB.
-  }
-  return out;
-}
-
-/** Cheap online count sourced from Redis presence. */
-export async function onlineCount(): Promise<number> {
-  return (await getOnlinePresence()).length;
 }

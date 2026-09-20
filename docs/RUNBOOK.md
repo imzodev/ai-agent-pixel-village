@@ -20,9 +20,13 @@ Eviction closes a connection with `1008` after its OS send buffer stays over `SL
 
 ## Snapshot staleness
 
-1. The WS server's snapshot TTL is `SNAPSHOT_TTL_SECONDS` (default 1). Clients get a fresh snapshot at most every `WS_REFRESH_MS`.
-2. The `online_players` materialized view is refreshed by `world-tickd` every `ONLINE_PLAYERS_REFRESH_MS` (default 5 s). If presence data is stale, the view is missing a player the `characters` query would include. The snapshot falls back to the direct `characters` query if the view read fails.
+1. Snapshots are served from the in-process cache, keyed by chunk + player, with `SNAPSHOT_PROC_CACHE_TTL_MS` (default 5 s). Keep this at or below `WS_REFRESH_MS`, otherwise a chunk can serve a snapshot older than one refresh interval.
+2. The `online_players` materialized view is refreshed by `world-tickd` every `ONLINE_PLAYERS_REFRESH_MS` (default 5 s). If presence data is stale, the view can miss a player the `characters` query would include. The snapshot falls back to the direct `characters` query if the view read fails.
 3. If a specific chunk is stale, the `online_players` view may be lagging the primary. Check `pg_stat_user_tables` (last analyze) on the view.
+
+## Redis / Upstash usage is zero on the hot path
+
+Snapshots and presence no longer touch Redis: the in-process cache serves the WS + HTTP paths (same process), and `lastSeenAt` is throttled in memory. Redis is only contacted when `SNAPSHOT_REDIS_CACHE=1` or `ENABLE_REDIS_PUBSUB=1`. If the Upstash dashboard shows commands and neither flag is set, something re-introduced a `redis.*` call on a hot path — search the diff for it. The `world:version` counter is now an in-process integer.
 
 ## Sim worker not running
 
@@ -35,7 +39,7 @@ Eviction closes a connection with `1008` after its OS send buffer stays over `SL
 
 ## Graceful shutdown
 
-`src/server.ts` flips `isDraining()` to true on SIGTERM/SIGINT and waits 5 s for any future readiness endpoint to report 503, then closes the WS server, the periodic refresh, the HTTP listener, and the pub/sub bridge.
+`src/server.ts` flips `isDraining()` to true on SIGTERM/SIGINT and waits 5 s for the readiness check to report 503, then closes the WS server, the periodic refresh, the HTTP listener, and (if enabled) the pub/sub bridge. `/api/health` returns 503 while draining, so an LB removes the instance.
 
 - The WS upgrade path returns `503` while draining (`ws_upgrade_rejected_total{reason="draining"}`).
 - The graceful drain delay is hard-coded at 5 s; tune in `src/server.ts` if the LB needs more time.
@@ -47,6 +51,6 @@ Client reconnect jitter is in `worldStream.ts` (exponential backoff capped at 8 
 
 ## NOTIFY / Redis pubsub
 
-The Upstash HTTP subscribe proved unreliable; the sim publishes `world_change` events to Redis, but `startPubSubBridge` is kept exported in `src/lib/world-stream.ts` and will return a no-op thunk until the subscriber path is restored. The WS server pushes fresh snapshots on its own schedule (`WS_REFRESH_MS`); entity updates from `world-tickd` therefore do NOT fan out via pub/sub yet.
+The `world_changes` bridge is **disabled by default** (`ENABLE_REDIS_PUBSUB` unset). Nothing publishes to it any more — the sim stopped emitting per-entity events — and the Upstash HTTP subscriber did not reliably deliver. The WS server pushes fresh snapshots on its own schedule (`WS_REFRESH_MS`), which is what clients rely on.
 
-If a future `redis.subscribe` call returns errors, check the `WS server log` for the connect error message and the Upstash dashboard's "Commands" tab.
+If you re-enable it (`ENABLE_REDIS_PUBSUB=1`), also restore a publisher, and check the WS server log plus the Upstash dashboard's "Commands" tab for subscribe errors.

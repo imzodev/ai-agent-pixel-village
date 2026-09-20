@@ -51,9 +51,18 @@ import type {
 
 export type { Snapshot };
 
-// Cache TTL — long enough that several polls share a snapshot, short
-// enough that state changes are visible. 250 ms is a sensible default
-// for a pixel village; tune via SNAPSHOT_TTL_MS if needed.
+// Optional cross-process snapshot cache in Redis. OFF by default.
+//
+// The WS server and the HTTP routes run in the SAME process (custom
+// server in src/server.ts), so the in-process cache below already
+// serves every reader. A Redis copy adds a GET per cache miss and a
+// SET per rebuild with no in-process benefit — at one rebuild every
+// WS_REFRESH_MS that alone exceeds a small Upstash plan. Enable it only
+// for a multi-process deployment that shares snapshots across processes.
+const SNAPSHOT_REDIS_CACHE = process.env.SNAPSHOT_REDIS_CACHE === "1";
+
+// TTL for the opt-in Redis snapshot cache (seconds). Only read when
+// SNAPSHOT_REDIS_CACHE is on.
 const SNAPSHOT_TTL_SECONDS = Math.max(1, Math.floor(Number(process.env.SNAPSHOT_TTL_MS ?? 250) / 1000));
 
 // Proximity radius in PIXELS, centered on the player's actual position.
@@ -402,21 +411,25 @@ let initStarted = false;
  * per chunk for SNAPSHOT_TTL_SECONDS. Many players in the same chunk
  * share one cache entry.
  */
-// In-process LRU cache for the WS path. Each WS process keeps its own
-// snapshot cache keyed by chunk. The TTL is short (one SNAPSHOT_TTL_MS)
-// so the WS server always serves fresh-ish data. Crucially, this avoids
-// per-refresh Redis GETs — at scale, those would burn Upstash budget
-// quickly. The HTTP path (/api/world fallback) bypasses this layer and
-// reads through to Redis directly.
+// In-process snapshot cache. THE cache for the WS + HTTP paths (they
+// share the process). Keyed by chunk + player, so every connection in a
+// chunk within the TTL window shares one DB rebuild. Kept at or below
+// WS_REFRESH_MS so it never serves a snapshot older than one refresh.
 const PROC_CACHE_MAX = Number(process.env.SNAPSHOT_PROC_CACHE_SIZE ?? 256);
-const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 750));
+const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 5000));
 
 const procCache = new Map<string, ProcCacheEntry>();
+
+// Monotonic per-process snapshot version. Replaces the old Redis
+// `INCR world:version` (one write per rebuild, read by nobody).
+let localVersion = 0;
 
 function procCacheGet(key: string): Snapshot | null {
   const e = procCache.get(key);
   if (!e) return null;
-  if (e.expiresAt < Date.now()) {
+  // `<=` so an entry whose TTL equals the refresh interval is rebuilt at
+  // the next refresh rather than lingering one extra cycle.
+  if (e.expiresAt <= Date.now()) {
     procCache.delete(key);
     return null;
   }
@@ -444,8 +457,8 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
   const { cx, cy } = chunkAtWorldPx(playerX, playerY);
   const key = cacheKey(cx, cy, meId);
 
-  // Layer 1: in-process cache. No Redis call. Hot path for the WS
-  // server's periodic refresh.
+  // In-process cache — the hot path for the WS server's periodic refresh
+  // and the HTTP fallback. No Redis.
   const hit = procCacheGet(key);
   if (hit) {
     metrics.snapshotCacheHitsTotal.inc();
@@ -453,40 +466,39 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
   }
   metrics.snapshotCacheMissesTotal.inc();
 
-  // Layer 2: Redis cache. Shared across processes (e.g. for the HTTP
-  // /api/world fallback). One read per cache miss; one read per call
-  // for the WS path is too expensive at scale.
-  try {
-    const cached = await redis.get(key);
-    if (cached) {
-      try {
-        const snap = JSON.parse(String(cached)) as Snapshot;
-        procCacheSet(key, snap);
-        return snap;
-      } catch {
-        // Bad cache entry — fall through to rebuild.
+  // Optional cross-process Redis cache (off by default — see the
+  // SNAPSHOT_REDIS_CACHE comment).
+  if (SNAPSHOT_REDIS_CACHE) {
+    try {
+      const cached = await redis.get(key);
+      if (cached) {
+        try {
+          const snap = JSON.parse(String(cached)) as Snapshot;
+          procCacheSet(key, snap);
+          return snap;
+        } catch {
+          // Bad cache entry — fall through to rebuild.
+        }
       }
+    } catch {
+      // Redis unreachable — fall through and serve fresh from DB.
     }
-  } catch {
-    // Redis unreachable — fall through and serve fresh from DB.
   }
 
-  // Cache miss — rebuild from DB. world:version only increments on
-  // actual rebuild, not on every cache hit.
-  let version = 0;
-  try {
-    version = await redis.incr("world:version");
-  } catch {
-    version = Date.now();
-  }
+  // Monotonic version, in-process only. The client does not consume it
+  // yet (no delta protocol), so it must not cost a Redis command. A
+  // module-local counter keeps it monotonic without touching the network.
+  const version = ++localVersion;
 
   const raw = await buildRawSnapshot(meId, playerX, playerY);
   const snap = formatSnapshot(raw, version);
   procCacheSet(key, snap);
-  try {
-    await redis.set(key, JSON.stringify(snap), { ex: SNAPSHOT_TTL_SECONDS });
-  } catch {
-    // Redis unreachable — serve anyway, just without caching.
+  if (SNAPSHOT_REDIS_CACHE) {
+    try {
+      await redis.set(key, JSON.stringify(snap), { ex: SNAPSHOT_TTL_SECONDS });
+    } catch {
+      // Redis unreachable — serve anyway, just without caching.
+    }
   }
   return snap;
 }

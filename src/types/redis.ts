@@ -1,4 +1,4 @@
-// Redis client + presence types. Types only — no logic.
+// Redis client types. Types only — no logic.
 
 export type RedisString = string | number | null;
 
@@ -15,12 +15,3 @@ export interface RedisLike {
   /** Publish a message on a channel. Returns the number of subscribers reached. */
   publish(channel: string, message: string): Promise<number>;
 }
-
-/** A player's live presence mirror in Redis. */
-export type PresenceRecord = {
-  id: number;
-  x?: number;
-  y?: number;
-  facing?: string;
-  at: number;
-};
