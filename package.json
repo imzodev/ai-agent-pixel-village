@@ -16,6 +16,7 @@
     "fetch:lpc": "node scripts/fetch-lpc.mjs"
   },
   "dependencies": {
+    "@prometheus-io/client": "^0.16.1",
     "@upstash/redis": "^1.38.4",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
@@ -23,6 +24,7 @@
     "nipplejs": "^1.0.4",
     "pg": "8.20.0",
     "phaser": "^4.2.1",
+    "pino": "^10.3.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "stripe": "^22.6.1"

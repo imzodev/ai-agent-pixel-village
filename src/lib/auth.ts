@@ -21,7 +21,7 @@ export function verifyPassword(password: string, stored: string) {
   return test.length === expected.length && timingSafeEqual(test, expected);
 }
 
-export async function createSession(userId: number) {
+export async function createSession(userId: number, shardId?: string) {
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
   await db.insert(sessions).values({ token, userId, expiresAt });
@@ -32,6 +32,17 @@ export async function createSession(userId: number) {
     path: "/",
     expires: expiresAt,
   });
+  // Optional shard cookie for an LB to route WS upgrades to the right
+  // shard. Single-process deployments ignore it. Cookie attributes match
+  // the session cookie (HttpOnly, SameSite=Lax).
+  if (shardId !== undefined) {
+    jar.set("shard", shardId, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      expires: expiresAt,
+    });
+  }
   return token;
 }
 

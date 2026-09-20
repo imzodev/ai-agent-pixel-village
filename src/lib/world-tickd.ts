@@ -24,6 +24,8 @@ import { pool } from "@/db";
 import { tickWorld } from "./sim";
 import { initRedis } from "./redis";
 import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
+import { metrics } from "@/lib/metrics";
+import { log } from "@/lib/logger";
 
 const TICK_INTERVAL_MS = Number(process.env.WORLD_TICK_INTERVAL_MS ?? 1000);
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
@@ -88,11 +90,12 @@ async function main(): Promise<void> {
   };
 
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(`[tickd] received ${signal}, draining`);
+    log.info({ signal }, "draining");
     running = false;
     if (inFlight) await inFlight;
     await releaseAdvisoryLock();
     await pool.end();
+    log.info("exiting");
     process.exit(0);
   };
 
@@ -102,8 +105,12 @@ async function main(): Promise<void> {
   while (running) {
     const start = Date.now();
     inFlight = tickWorld()
+      .then(() => {
+        metrics.simTickDuration.observe((Date.now() - start) / 1000);
+      })
       .catch((err) => {
-        console.error("[tickd] tick failed:", err);
+        metrics.simTickFailuresTotal.inc();
+        log.error({ err }, "tick failed");
       })
       .finally(() => {
         inFlight = null;

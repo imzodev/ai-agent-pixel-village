@@ -5,6 +5,7 @@ import { createSession, destroySession, hashPassword, verifyPassword } from "@/l
 import { ensureSeeded } from "@/lib/seed";
 import { SPAWN } from "@/lib/worldmap";
 import { addItem, logEvent } from "@/lib/game";
+import { pickShardForPosition } from "@/lib/shards";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +47,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
       .returning();
     await addItem(ch.id, "berry", 2);
     await logEvent("arrival", `${name} arrived in the grove.`, "character", ch.id, ch.x, ch.y);
-    await createSession(user.id);
+    await createSession(user.id, pickShardForPosition(ch.x, ch.y));
     return Response.json({ ok: true, character: ch });
   }
   if (action === "login") {
     const [user] = await db.select().from(users).where(eq(users.username, username));
     if (!user || !verifyPassword(password, user.passwordHash)) return Response.json({ error: "Wrong username or password." }, { status: 401 });
-    await createSession(user.id);
+    // Pick a shard based on the user's last known position. Single-process
+    // deployments have one region and always return "0", which the LB
+    // ignores. Multi-process deployments route by this cookie.
+    const [ch] = await db.select({ x: characters.x, y: characters.y }).from(characters).where(eq(characters.userId, user.id)).limit(1);
+    await createSession(user.id, ch ? pickShardForPosition(ch.x, ch.y) : "0");
     return Response.json({ ok: true });
   }
   return Response.json({ error: "Unknown action" }, { status: 404 });

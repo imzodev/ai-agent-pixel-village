@@ -1,0 +1,57 @@
+// Example Caddy config for the ai-village stack. Caddy terminates
+// TLS, serves the public edge, and routes WebSocket upgrades to the
+// configured shard. Single-shard deployments can collapse the routing
+// into a single reverse_proxy. The `shard` cookie is set by the Next.js
+// auth route based on the player's home chunk; Caddy matches it and
+// forwards to the corresponding upstream.
+//
+// This is an EXAMPLE — review against your security and capacity
+// requirements before deploying.
+
+{
+  auto_https off
+}
+
+http://localhost:3000 {
+  encode zstd gzip
+
+  # Health probes (LB-facing). Strip the cookie for cacheability.
+  @health path /api/health
+  reverse_proxy @health localhost:3000 {
+    header_up Cookie ""
+  }
+
+  # Metrics. Same, no cookies.
+  @metrics path /api/metrics
+  reverse_proxy @metrics localhost:3000 {
+    header_up Cookie ""
+  }
+
+  # Session cookies are set on login and updated on every response.
+  # Caddy passes them through unchanged.
+
+  # Auth: route to the server process (which also serves /api/*).
+  reverse_proxy /api/auth/* localhost:3000
+
+  # WS: route by shard cookie. Falls back to shard 0 if the cookie is
+  # missing (e.g. on the first handshake before the session is established).
+  @ws path /ws
+  @shard0 header Cookie shard=0
+  @shard1 header Cookie shard=1
+  handle_response @ws {
+    @shard1 header_up Server ""
+    request_header X-Shard 1
+    reverse_proxy localhost:3000
+  }
+  handle_response @ws {
+    @shard0 header_up Server ""
+    request_header X-Shard 0
+    reverse_proxy localhost:3000
+  }
+  handle_response @ws {
+    reverse_proxy localhost:3000
+  }
+
+  # Everything else: the server (Next.js) on port 3000.
+  reverse_proxy localhost:3000
+}

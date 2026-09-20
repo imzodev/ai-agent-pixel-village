@@ -18,6 +18,8 @@ import { createServer } from "node:http";
 import next from "next";
 import { attachWsServer, closeAllWs, startPubSubBridge, stopPubSubBridge, startPeriodicRefresh, stopPeriodicRefresh } from "@/lib/world-stream";
 import { initRedis } from "@/lib/redis";
+import { setDraining } from "@/lib/lifecycle";
+import { log } from "@/lib/logger";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const dev = process.env.NODE_ENV !== "production";
@@ -48,11 +50,19 @@ async function main(): Promise<void> {
   startPeriodicRefresh();
 
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(`[server] received ${signal}, draining`);
+    log.info({ signal }, "draining");
+    // Mark the process draining FIRST so any future health/readiness
+    // endpoint can return 503 and an LB removes us from rotation. New
+    // WS upgrades are also rejected (see world-stream.ts).
+    setDraining(true);
+    // Give the LB a moment to notice. 5 s is plenty for a healthy LB;
+    // longer adds to total shutdown time.
+    await new Promise((r) => setTimeout(r, 5000));
     closeAllWs(wss);
     stopPeriodicRefresh();
     await new Promise<void>((r) => server.close(() => r()));
     await stopPubSubBridge();
+    log.info("exiting");
     process.exit(0);
   };
 
@@ -60,7 +70,7 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
 
   server.listen(PORT, () => {
-    console.log(`[server] ready on :${PORT} (Next.js + WS at /ws)`);
+    log.info({ port: PORT, wsPath: "/ws" }, "ready");
   });
 }
 

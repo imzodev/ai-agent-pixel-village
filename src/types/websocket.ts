@@ -24,6 +24,8 @@ export type Connection = {
   /** Pending delta hint: chunk keys the client should refetch. */
   pendingDeltas: Set<string>;
   flushTimer: NodeJS.Timeout | null;
+  /** When the client first exceeded the slow-client buffer threshold. */
+  slowSince: number;
 };
 
 /** Client-side stream callbacks. */

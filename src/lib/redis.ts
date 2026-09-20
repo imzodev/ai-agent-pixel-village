@@ -178,7 +178,8 @@ export async function initRedis(): Promise<void> {
   }
 }
 
-/** True when initRedis() tried Upstash but failed; useful for /api/health. */
+/** True when initRedis() tried Upstash but failed. Stored for future
+ *  operational tooling; no HTTP endpoint currently reads it. */
 export function redisDegraded(): boolean {
   return initFailed;
 }

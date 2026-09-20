@@ -32,6 +32,10 @@ import { getSnapshot } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
 import { WORLD_CHANGE_CHANNEL } from "@/lib/sim";
+import { metrics } from "@/lib/metrics";
+import { log } from "@/lib/logger";
+import { isDraining, setDraining } from "@/lib/lifecycle";
+import { localShardId } from "@/lib/shards";
 import type { WorldChange } from "@/lib/protocol";
 import type { Connection } from "@/types/websocket";
 
@@ -48,7 +52,24 @@ const PRESENCE_WRITE_INTERVAL_MS = Math.max(
   Number(process.env.PRESENCE_WRITE_INTERVAL_MS ?? 10_000),
 );
 
+// Slow-client detection. We sample the actual OS-level buffer instead
+// of a counter (counters proved unreliable and disconnected active
+// clients). An upgrade that hasn't drained within
+// SLOW_CLIENT_THRESHOLD_MS bytes for SLOW_CLIENT_HOLD_MS is closed.
+// A high threshold protects the flicker fix from Phase 2.
+const SLOW_CLIENT_THRESHOLD_BYTES = Number(
+  process.env.SLOW_CLIENT_THRESHOLD_BYTES ?? 256 * 1024,
+);
+const SLOW_CLIENT_HOLD_MS = Number(process.env.SLOW_CLIENT_HOLD_MS ?? 2000);
+
+// Reconnect-storm protection. Per-IP sliding window of upgrade attempts;
+// upgrades over WS_MAX_UPGRADES_PER_IP per WS_IP_WINDOW_MS are refused.
+const WS_IP_WINDOW_MS = Number(process.env.WS_IP_WINDOW_MS ?? 10_000);
+const WS_MAX_UPGRADES_PER_IP = Number(process.env.WS_MAX_UPGRADES_PER_IP ?? 10);
+const wsUpgradeTimestamps = new Map<string, number[]>();
+
 const connections = new Map<number, Connection>();
+const SHARD_ID = localShardId();
 
 // ── Auth ────────────────────────────────────────────────────────────────
 
@@ -105,6 +126,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     lastVersion: 0,
     pendingDeltas: new Set(),
     flushTimer: null,
+    slowSince: 0,
   };
 
   // We don't wrap ws.send or evict "slow consumers" here. The previous
@@ -112,13 +134,19 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   // only reset on `drain` events, which were unreliable under any
   // network jitter — false positives disconnected active clients every
   // ~15 s and forced them to reconnect with a stale bbox, producing
-  // the entity-flicker bug. We now rely on the underlying socket
-  // backpressure: the `ws` library throws ERR_BUFFER_FULL when the
-  // OS socket buffer fills, and each send call below is wrapped in a
-  // try/catch so we just drop frames instead of disconnecting.
-  ws.on("close", () => {
+  // the entity-flicker bug. Slow-client eviction happens in a separate
+  // sweep that watches `ws.bufferedAmount` (the real OS-level queued
+  // bytes), not a hand-rolled counter. Each ws.send below is wrapped
+  // in a try/catch so frame-level errors don't tear the connection.
+  ws.on("close", (code) => {
     if (conn.flushTimer) clearTimeout(conn.flushTimer);
     connections.delete(conn.playerId);
+    metrics.wsConnections.dec({ shard: SHARD_ID });
+    // 1008 = slow-consumer eviction (set by the sweep); anything else
+    // is a normal close.
+    if (code === 1008) {
+      metrics.wsEvictionsTotal.inc({ reason: "slow" });
+    }
   });
   ws.on("error", () => {
     if (conn.flushTimer) clearTimeout(conn.flushTimer);
@@ -126,6 +154,8 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   });
 
   connections.set(conn.playerId, conn);
+  metrics.wsConnections.inc({ shard: SHARD_ID });
+  metrics.wsConnectionsTotal.inc({ shard: SHARD_ID });
 
   // Send initial snapshot. Errors close the connection cleanly.
   try {
@@ -389,6 +419,35 @@ export function attachWsServer(
       fallback(req, socket, head);
       return;
     }
+    // Refuse new upgrades during shutdown so the LB can drain.
+    if (isDraining()) {
+      try {
+        socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+        socket.destroy();
+        metrics.wsUpgradeRejectedTotal.inc({ reason: "draining" });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    // Reconnect-storm protection. Sliding-window per IP.
+    const ip = (req.socket.remoteAddress ?? "unknown").split(",")[0].trim();
+    const now = Date.now();
+    const stamps = wsUpgradeTimestamps.get(ip) ?? [];
+    const recent = stamps.filter((t) => now - t < WS_IP_WINDOW_MS);
+    if (recent.length >= WS_MAX_UPGRADES_PER_IP) {
+      try {
+        socket.write("HTTP/1.1 429 Too Many Requests\r\n\r\n");
+        socket.destroy();
+        metrics.wsUpgradeRejectedTotal.inc({ reason: "rate_limit" });
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    recent.push(now);
+    wsUpgradeTimestamps.set(ip, recent);
+
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });
@@ -397,6 +456,42 @@ export function attachWsServer(
   wss.on("connection", (ws, req) => {
     void onConnection(ws, req);
   });
+
+  // Slow-client sweep. Every `SLOW_CLIENT_HOLD_MS` we sample every open
+  // connection's underlying OS-level buffer (`ws.bufferedAmount`). When a
+  // connection stays above the threshold for longer than the hold window
+  // we close it with code 1008 and bump the eviction counter. Tracking the
+  // OS buffer (rather than our own counter) avoids the false positives
+  // that bit us in Phase 2.
+  const slowSweep = setInterval(() => {
+    if (connections.size === 0) return;
+    const sweepAt = Date.now();
+    for (const [playerId, conn] of connections) {
+      try {
+        const buffered = (conn.ws as unknown as { bufferedAmount?: number }).bufferedAmount ?? 0;
+        if (buffered > SLOW_CLIENT_THRESHOLD_BYTES) {
+          if (conn.slowSince === 0) conn.slowSince = sweepAt;
+          if (sweepAt - conn.slowSince >= SLOW_CLIENT_HOLD_MS) {
+            metrics.wsEvictionsTotal.inc({ reason: "slow" });
+            log.warn({ playerId, buffered }, "closing slow WS client");
+            try {
+              conn.ws.close(1008, "slow consumer");
+            } catch {
+              /* ignore */
+            }
+          }
+        } else {
+          conn.slowSince = 0;
+        }
+      } catch {
+        /* ignore — connection likely gone */
+      }
+    }
+  }, Math.max(500, SLOW_CLIENT_HOLD_MS));
+  // Stop the sweep on process exit so it doesn't keep Node alive.
+  // attachWsServer may be called once per process; we tag the timer
+  // and clear it via closeAllWs.
+  (wss as unknown as { __slowSweep?: NodeJS.Timeout }).__slowSweep = slowSweep;
 
   return wss;
 }
@@ -410,9 +505,13 @@ export function closeAllWs(wss: WebSocketServer): void {
       /* ignore */
     }
   });
+  // Stop the slow-client sweep so it doesn't keep the event loop alive.
+  const sweep = (wss as unknown as { __slowSweep?: NodeJS.Timeout }).__slowSweep;
+  if (sweep) clearInterval(sweep);
 }
 
-/** Number of currently-open WS connections (for /api/health). */
+/** Number of currently-open WS connections. Exposed via `wsConnectionCount()`
+ *  for future operational tooling; no HTTP endpoint currently reads it. */
 export function wsConnectionCount(): number {
   return connections.size;
 }

@@ -38,6 +38,7 @@ import { gameHour } from "@/lib/worldmap";
 import { getBuildingDoors } from "@/lib/buildingsServer";
 import { redis, initRedis } from "@/lib/redis";
 import { withReadDb } from "@/lib/db";
+import { metrics } from "@/lib/metrics";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -446,7 +447,11 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
   // Layer 1: in-process cache. No Redis call. Hot path for the WS
   // server's periodic refresh.
   const hit = procCacheGet(key);
-  if (hit) return hit;
+  if (hit) {
+    metrics.snapshotCacheHitsTotal.inc();
+    return hit;
+  }
+  metrics.snapshotCacheMissesTotal.inc();
 
   // Layer 2: Redis cache. Shared across processes (e.g. for the HTTP
   // /api/world fallback). One read per cache miss; one read per call

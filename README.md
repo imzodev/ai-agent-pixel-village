@@ -27,7 +27,8 @@ items for the player and leads for the business.
 | `src/lib/offers.ts` | which missions / turn-ins / gifts / discount an NPC can extend right now |
 | `src/server.ts` | custom Node server — boots Next.js + WS on the same port so the browser sends the session cookie on WS upgrade |
 | `src/app/api/world` | HTTP fallback for clients without WS (GET public, POST with position) |
-| `src/app/api/health` | DB ping + Upstash status; returns 503 if degraded |
+| `src/app/api/health` | DB ping + Upstash status, shard config, draining state; returns 503 if degraded or draining |
+
 | `src/app/api/npc/[id]/talk`, `/accept` | conversation + applying offers (mission, turn-in, gift, discount → item + lead) |
 | `src/app/api/act` | pet / gather / attack / enter / chat |
 | `src/app/api/items` | pickup / drop / equip / use / place (home decor) |
@@ -89,6 +90,45 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
 - `OPENAI_API_KEY` (+ `OPENAI_MODEL`) or `ANTHROPIC_API_KEY` (+ `ANTHROPIC_MODEL`) — LLM-driven NPC dialogue. Without them the scripted brain runs.
+
+### Phase 4 hardening tunables
+
+- `WS_REFRESH_MS` (default 5000) — how often the WS server pushes a fresh snapshot to every connected client.
+- `WS_MAX_UPGRADES_PER_IP` (default 10) + `WS_IP_WINDOW_MS` (default 10000) — reconnect-storm protection. Upgrades over the limit per window return `429`.
+- `SLOW_CLIENT_THRESHOLD_BYTES` (default 262144) + `SLOW_CLIENT_HOLD_MS` (default 2000) — a connection whose OS send buffer stays over the threshold for the hold window is closed with `1008 slow consumer`.
+- `LOG_LEVEL` (default `info`) — pino log verbosity.
+- `SERVICE_NAME` / `WS_SHARD_ID` — labels attached to every Prometheus metric and log line. Set per shard.
+
+### Observability
+
+- `/api/metrics` returns Prometheus text (`text/plain; version=0.0.4`) with the metrics listed in `src/lib/metrics.ts`: ws connection counts/evictions, snapshot cache hit/miss, sim tick duration/failure, db pool gauges, plus default Node/process collectors. Scrape with your usual Prometheus setup.
+- `/api/health` includes `ws.shard`, `ws.shardCount`, `ws.region`, `ws.connections`, `ws.draining`, `ws.accepting`. Returns `503` once the process enters graceful shutdown so the LB drains the instance.
+- Logs are JSON via pino (`src/lib/logger.ts`), stamped with `service` and `shard`.
+
+### Process supervision
+
+Single-process deployments:
+
+```
+pnpm run dev:server   # Next.js + WS on :3000
+pnpm run dev:tickd    # sim worker
+```
+
+Or with pm2:
+
+```
+pm2 start ecosystem.config.js
+```
+
+Multi-shard WS deployments (optional — see `docs/plans/phase-4-hardening.md` stop criterion):
+
+- `WS_SHARD_ID` and `WS_SHARD_REGIONS` on each shard process, e.g. `WS_SHARD_REGIONS="0-9,-9-0;10-19,0-9"` for two non-overlapping bands.
+- The login route picks a shard from the user's home chunk and sets a `shard` cookie; an LB (Caddyfile.example, or your own) routes `/ws` upgrades by that cookie.
+- `ecosystem.config.js` has commented-out shards.
+
+### Sentry (optional)
+
+Sentry capture is not wired (no `@sentry/nextjs` dependency to keep the bundle light). To enable: install `@sentry/nextjs` and `@sentry/node`, set `SENTRY_DSN` in the env, and initialize in `src/server.ts` / `src/lib/world-tickd.ts` before any other imports.
 
 ## Credits
 
