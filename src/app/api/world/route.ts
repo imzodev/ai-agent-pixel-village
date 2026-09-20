@@ -1,67 +1,14 @@
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, buildings, characters, enemies, groundItems, inventory, npcs, resourceNodes, sponsors, worldChat, worldEvents, worldState } from "@/db/schema";
+import { characters } from "@/db/schema";
 import { getCurrentCharacter, handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { tickWorld } from "@/lib/sim";
-import { gameHour } from "@/lib/worldmap";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
-import { getBuildingDoors } from "@/lib/buildingsServer";
+import { getSnapshot } from "@/lib/snapshot";
+import { refreshLastSeen } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";
-
-async function snapshot(meId: number | null) {
-  const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));
-  const since = new Date(Date.now() - 45_000);
-  const [players, npcRows, animalRows, buildingRows, sponsorRows, ground, nodes, enemyRows, chat, events] = await Promise.all([
-    db.select({ id: characters.id, name: characters.name, x: characters.x, y: characters.y, facing: characters.facing, appearance: characters.appearance, level: characters.level, hp: characters.hp, maxHp: characters.maxHp, coins: characters.coins, gems: characters.gems, xp: characters.xp })
-      .from(characters).where(gt(characters.lastSeenAt, since)),
-    db.select().from(npcs).where(eq(npcs.active, true)),
-    db.select().from(animals),
-    db.select().from(buildings),
-    db.select({ id: sponsors.id, businessName: sponsors.businessName, brandColor: sponsors.brandColor, tagline: sponsors.tagline, status: sponsors.status }).from(sponsors).where(eq(sponsors.status, "active")),
-    db.select().from(groundItems),
-    db.select().from(resourceNodes),
-    db.select().from(enemies),
-    db.select().from(worldChat).where(gt(worldChat.createdAt, new Date(Date.now() - 12_000))).orderBy(desc(worldChat.id)).limit(30),
-    db.select().from(worldEvents).orderBy(desc(worldEvents.id)).limit(10),
-  ]);
-  const spById = new Map(sponsorRows.map((s) => [s.id, s]));
-  const doors = await getBuildingDoors();
-  let equipped: { itemKey: string }[] = [];
-  if (meId) {
-    equipped = await db.select({ itemKey: inventory.itemKey }).from(inventory).where(sql`${inventory.characterId} = ${meId} and ${inventory.equipped} = true`);
-  }
-  const playerIds = players.map((p) => p.id);
-  const equippedAll = playerIds.length
-    ? await db.select({ characterId: inventory.characterId, itemKey: inventory.itemKey }).from(inventory).where(and(inArray(inventory.characterId, playerIds), eq(inventory.equipped, true)))
-    : [];
-  return {
-    now: Date.now(),
-    hour: gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes),
-    weather: ws.weather,
-    dayLengthMinutes: ws.dayLengthMinutes,
-    epochStart: ws.epochStart.getTime(),
-    me: meId ? { ...players.find((p) => p.id === meId), gems: players.find((p) => p.id === meId)?.gems ?? 0, equipped: equipped.map((e) => e.itemKey) } : null,
-    players: players.map((p) => ({ ...p, equipped: equippedAll.filter((e) => e.characterId === p.id).map((e) => e.itemKey) })),
-    npcs: npcRows.map((n) => ({
-      id: n.id, key: n.key, name: n.name, role: n.role, x: n.x, y: n.y, targetX: n.targetX, targetY: n.targetY, facing: n.facing, appearance: n.appearance, mood: n.mood, kind: n.kind,
-      sponsor: n.sponsorId && spById.get(n.sponsorId) ? { businessName: spById.get(n.sponsorId)!.businessName, brandColor: spById.get(n.sponsorId)!.brandColor } : null,
-    })),
-    animals: animalRows.map((a) => ({ id: a.id, species: a.species, name: a.name, x: a.x, y: a.y, targetX: a.targetX, targetY: a.targetY, facing: a.facing, state: a.state, mood: a.mood })),
-    buildings: await Promise.all(buildingRows.map(async (b) => ({
-      id: b.id, key: b.key, name: b.name, kind: b.kind, color: b.color, tx: b.tx, ty: b.ty, tw: b.tw, th: b.th, reservable: b.reservable,
-      doorX: doors.get(b.key)?.x ?? (b.tx + b.tw / 2) * 16,
-      doorY: doors.get(b.key)?.y ?? (b.ty + b.th) * 16 + 12,
-      sponsor: b.sponsorId && spById.get(b.sponsorId) ? { businessName: spById.get(b.sponsorId)!.businessName, brandColor: spById.get(b.sponsorId)!.brandColor, tagline: spById.get(b.sponsorId)!.tagline } : null,
-    }))),
-    groundItems: ground,
-    nodes: nodes.map((n) => ({ id: n.id, kind: n.kind, x: n.x, y: n.y, qty: n.qty, ready: !n.respawnAt })),
-    enemies: enemyRows.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, targetX: e.targetX, targetY: e.targetY, hp: e.hp, maxHp: e.maxHp })),
-    chat: chat.map((c) => ({ id: c.id, speakerType: c.speakerType, speakerId: c.speakerId, text: c.text, at: c.createdAt.getTime() })),
-    events: events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, at: e.createdAt.getTime() })),
-  };
-}
 
 export async function GET() {
   try {
@@ -71,9 +18,11 @@ export async function GET() {
     // GET is a heartbeat too: without this, a character whose lastSeenAt
     // expired while the client had no player never re-enters the 45s players
     // window — me comes back without id/x/y, the client can't spawn, and it
-    // never starts POSTing positions again.
-    if (me) await db.update(characters).set({ lastSeenAt: new Date() }).where(eq(characters.id, me.id));
-    return Response.json(await snapshot(me?.id ?? null));
+    // never starts POSTing positions again. Throttled to one Postgres write
+    // per LAST_SEEN_TTL_SECONDS per player.
+    if (me) await refreshLastSeen(me.id);
+    const snap = await getSnapshot(me?.id ?? null, me?.x ?? 1024, me?.y ?? 760);
+    return Response.json(snap);
   } catch (e) {
     return handleApiError(e);
   }
@@ -84,18 +33,22 @@ export async function POST(req: Request) {
   try {
     await ensureSeeded();
     const me = await getCurrentCharacter();
+    let px = me?.x ?? 1024;
+    let py = me?.y ?? 760;
     if (me) {
       const body = await req.json().catch(() => ({}));
       const x = Number(body.x), y = Number(body.y);
       const facing = ["up", "down", "left", "right"].includes(body.facing) ? body.facing : me.facing;
-      const patch: Partial<typeof characters.$inferInsert> = { lastSeenAt: new Date(), facing };
       if (Number.isFinite(x) && Number.isFinite(y) && (await isWalkableServer(x, y)) && Math.hypot(x - me.x, y - me.y) < 600) {
-        patch.x = x; patch.y = y;
+        px = x; py = y;
+        await refreshLastSeen(me.id, { x, y, facing });
+      } else {
+        await refreshLastSeen(me.id, { facing });
       }
-      await db.update(characters).set(patch).where(eq(characters.id, me.id));
     }
     await tickWorld();
-    return Response.json(await snapshot(me?.id ?? null));
+    const snap = await getSnapshot(me?.id ?? null, px, py);
+    return Response.json(snap);
   } catch (e) {
     return handleApiError(e);
   }

@@ -46,7 +46,54 @@ export function blockedFromChunk(json: unknown): Set<number> {
   return blocked;
 }
 
-const registry = new Map<string, Set<number>>();
+// Bounded LRU registry. Without eviction the chunk world is unbounded and
+// memory grows forever as players explore. 2,000 chunks ≈ 75 MB worst case,
+// well below the per-process heap we want to budget. Sized to cover any
+// plausible active region; cold chunks get re-parsed on revisit.
+const REGISTRY_CAPACITY = Number(process.env.CHUNK_REGISTRY_CAPACITY ?? 2_000);
+
+class LRURegistry<V> {
+  private readonly capacity: number;
+  private readonly map = new Map<string, V>();
+
+  constructor(capacity: number) {
+    this.capacity = Math.max(1, capacity);
+  }
+
+  get(key: string): V | undefined {
+    const v = this.map.get(key);
+    if (v === undefined) return undefined;
+    // Refresh recency — Map preserves insertion order, so delete+set moves
+    // the key to the back.
+    this.map.delete(key);
+    this.map.set(key, v);
+    return v;
+  }
+
+  set(key: string, value: V): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.capacity) {
+      const oldest = this.map.keys().next().value;
+      if (oldest !== undefined) this.map.delete(oldest);
+    }
+    this.map.set(key, value);
+  }
+
+  has(key: string): boolean {
+    return this.map.has(key);
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  entries(): IterableIterator<[string, V]> {
+    return this.map.entries();
+  }
+}
+
+const registry = new LRURegistry<Set<number>>(REGISTRY_CAPACITY);
 
 // Blocks contributed by stamped building templates, kept separate from the
 // per-chunk sets so a later chunk (re-)registration can never erase them.
@@ -105,6 +152,6 @@ export function isWalkableAt(x: number, y: number): boolean {
 // Debug/testing helper (attached to window.__walk by WorldScene).
 export function debugRegistry(): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const [key, set] of registry) out[key] = set.size;
+  for (const [key, set] of registry.entries()) out[key] = set.size;
   return out;
 }

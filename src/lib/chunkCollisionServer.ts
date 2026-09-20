@@ -14,7 +14,7 @@ import {
   FOOT_CORNERS,
 } from "./chunkCollision";
 import { defaultChunk } from "./chunkGen";
-import { stampBuildingCollisions } from "./buildingStampsServer"
+import { stampBuildingCollisions } from "./buildingStampsServer";
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   try {
@@ -27,6 +27,11 @@ async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   }
 }
 
+// In-flight dedup. Without this, two concurrent requests for the same
+// uncached chunk each fire loadChunkJson — duplicate fs.readFile + JSON
+// parse per cold chunk under burst.
+const inFlightLoads = new Map<string, Promise<void>>();
+
 // Register (once) every chunk that a foot-box walkability check around
 // (x, y) can touch. The foot box spans at most 2×2 chunks.
 export async function ensureChunkAt(x: number, y: number): Promise<void> {
@@ -38,7 +43,14 @@ export async function ensureChunkAt(x: number, y: number): Promise<void> {
     const key = chunkId(t.cx, t.cy);
     if (chunkRegistered(t.cx, t.cy) || seen.has(key)) continue;
     seen.add(key);
-    jobs.push(loadChunkJson(t.cx, t.cy).then((json) => registerChunk(t.cx, t.cy, json)));
+
+    let pending = inFlightLoads.get(key);
+    if (!pending) {
+      pending = loadChunkJson(t.cx, t.cy).then((json) => registerChunk(t.cx, t.cy, json));
+      inFlightLoads.set(key, pending);
+      pending.finally(() => inFlightLoads.delete(key));
+    }
+    jobs.push(pending);
   }
   await Promise.all(jobs);
 }

@@ -56,52 +56,60 @@ export const sessions = pgTable("sessions", {
 
 // ---------- Player characters ----------
 
-export const characters = pgTable("characters", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().unique(),
-  name: text("name").notNull(),
-  appearance: jsonb("appearance").$type<Appearance>().notNull(),
-  x: real("x").notNull().default(1024),
-  y: real("y").notNull().default(760),
-  facing: text("facing").notNull().default("down"),
-  coins: integer("coins").notNull().default(20),
-  gems: integer("gems").notNull().default(0),
-  hp: integer("hp").notNull().default(20),
-  maxHp: integer("max_hp").notNull().default(20),
-  xp: integer("xp").notNull().default(0),
-  level: integer("level").notNull().default(1),
-  homeTheme: jsonb("home_theme")
-    .$type<{ wall: string; floor: string }>()
-    .notNull()
-    .default({ wall: "#f5d7b0", floor: "#c68e5a" }),
-  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const characters = pgTable(
+  "characters",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    name: text("name").notNull(),
+    appearance: jsonb("appearance").$type<Appearance>().notNull(),
+    x: real("x").notNull().default(1024),
+    y: real("y").notNull().default(760),
+    facing: text("facing").notNull().default("down"),
+    coins: integer("coins").notNull().default(20),
+    gems: integer("gems").notNull().default(0),
+    hp: integer("hp").notNull().default(20),
+    maxHp: integer("max_hp").notNull().default(20),
+    xp: integer("xp").notNull().default(0),
+    level: integer("level").notNull().default(1),
+    homeTheme: jsonb("home_theme")
+      .$type<{ wall: string; floor: string }>()
+      .notNull()
+      .default({ wall: "#f5d7b0", floor: "#c68e5a" }),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("characters_last_seen_idx").on(t.lastSeenAt)],
+);
 
 // ---------- Buildings & Sponsors ----------
-export const sponsors = pgTable("sponsors", {
-  id: serial("id").primaryKey(),
-  businessName: text("business_name").notNull(),
-  contactEmail: text("contact_email").notNull(),
-  website: text("website"),
-  brandColor: text("brand_color").notNull().default("#e76f51"),
-  tagline: text("tagline").notNull().default(""),
-  pitch: text("pitch").notNull(), // what the agent should weave in
-  persona: text("persona").notNull(), // the NPC character description
-  agentName: text("agent_name").notNull(),
-  discountCode: text("discount_code").notNull(),
-  discountText: text("discount_text").notNull(),
-  buildingId: integer("building_id"),
-  plan: text("plan").notNull().default("village"),
-  rentCents: integer("rent_cents").notNull().default(4900),
-  leadFeeCents: integer("lead_fee_cents").notNull().default(150),
-  status: text("status").notNull().default("pending"), // pending | active | cancelled
-  ownerToken: text("owner_token").notNull().unique(),
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  stripeCheckoutId: text("stripe_checkout_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const sponsors = pgTable(
+  "sponsors",
+  {
+    id: serial("id").primaryKey(),
+    businessName: text("business_name").notNull(),
+    contactEmail: text("contact_email").notNull(),
+    website: text("website"),
+    brandColor: text("brand_color").notNull().default("#e76f51"),
+    tagline: text("tagline").notNull().default(""),
+    pitch: text("pitch").notNull(),
+    persona: text("persona").notNull(),
+    agentName: text("agent_name").notNull(),
+    discountCode: text("discount_code").notNull(),
+    discountText: text("discount_text").notNull(),
+    buildingId: integer("building_id"),
+    plan: text("plan").notNull().default("village"),
+    rentCents: integer("rent_cents").notNull().default(4900),
+    leadFeeCents: integer("lead_fee_cents").notNull().default(150),
+    status: text("status").notNull().default("pending"), // pending | active | cancelled
+    ownerToken: text("owner_token").notNull().unique(),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripeCheckoutId: text("stripe_checkout_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("sponsors_status_idx").on(t.status)],
+);
 
 export const buildings = pgTable("buildings", {
   id: serial("id").primaryKey(),
@@ -201,16 +209,23 @@ export const inventory = pgTable(
   (t) => [index("inventory_char_idx").on(t.characterId)],
 );
 
-export const groundItems = pgTable("ground_items", {
-  id: serial("id").primaryKey(),
-  itemKey: text("item_key").notNull(),
-  qty: integer("qty").notNull().default(1),
-  x: real("x").notNull(),
-  y: real("y").notNull(),
-  meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
-  droppedBy: integer("dropped_by"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const groundItems = pgTable(
+  "ground_items",
+  {
+    id: serial("id").primaryKey(),
+    itemKey: text("item_key").notNull(),
+    qty: integer("qty").notNull().default(1),
+    x: real("x").notNull(),
+    y: real("y").notNull(),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    droppedBy: integer("dropped_by"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("ground_items_xy_idx").on(t.x, t.y),
+    index("ground_items_item_key_idx").on(t.itemKey),
+  ],
+);
 
 export const homeDecor = pgTable("home_decor", {
   id: serial("id").primaryKey(),
@@ -283,13 +298,17 @@ export const conversations = pgTable(
 );
 
 // Chat shown as bubbles in the world
-export const worldChat = pgTable("world_chat", {
-  id: serial("id").primaryKey(),
-  speakerType: text("speaker_type").notNull(), // player | npc
-  speakerId: integer("speaker_id").notNull(),
-  text: text("text").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const worldChat = pgTable(
+  "world_chat",
+  {
+    id: serial("id").primaryKey(),
+    speakerType: text("speaker_type").notNull(), // player | npc
+    speakerId: integer("speaker_id").notNull(),
+    text: text("text").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("world_chat_created_at_idx").on(t.createdAt)],
+);
 
 // ---------- World simulation ----------
 export const worldState = pgTable("world_state", {
@@ -316,15 +335,19 @@ export const worldEvents = pgTable(
   (t) => [index("events_subject_idx").on(t.subjectType, t.subjectId)],
 );
 
-export const resourceNodes = pgTable("resource_nodes", {
-  id: serial("id").primaryKey(),
-  kind: text("kind").notNull(), // berry_bush | herb_patch | rock | mushroom_ring
-  itemKey: text("item_key").notNull(),
-  x: real("x").notNull(),
-  y: real("y").notNull(),
-  qty: integer("qty").notNull().default(3),
-  respawnAt: timestamp("respawn_at"),
-});
+export const resourceNodes = pgTable(
+  "resource_nodes",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(), // berry_bush | herb_patch | rock | mushroom_ring
+    itemKey: text("item_key").notNull(),
+    x: real("x").notNull(),
+    y: real("y").notNull(),
+    qty: integer("qty").notNull().default(3),
+    respawnAt: timestamp("respawn_at"),
+  },
+  (t) => [index("resource_nodes_respawn_idx").on(t.respawnAt)],
+);
 
 export const enemies = pgTable("enemies", {
   id: serial("id").primaryKey(),
