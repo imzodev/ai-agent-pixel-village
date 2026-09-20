@@ -2,9 +2,11 @@
   "name": "nextjs-postgresql-template",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -k -n server,tickd -c blue,green \"npm:dev:server\" \"npm:dev:tickd\"",
+    "dev:server": "tsx --env-file=.env src/server.ts",
+    "dev:tickd": "tsx --env-file=.env src/lib/world-tickd.ts",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production tsx --env-file=.env src/server.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
@@ -31,12 +33,16 @@
     "@types/pg": "8.18.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^10.0.5",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "postcss": "8.5.8",
     "sharp": "0.34.5",
     "tailwindcss": "4.1.17",
-    "typescript": "5.9.3"
+    "tsx": "^4.23.15",
+    "typescript": "5.9.3",
+    "ws": "^8.21.3"
   }
 }

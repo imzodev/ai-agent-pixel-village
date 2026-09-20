@@ -6,11 +6,35 @@ import { isWalkableServer } from "./chunkCollisionServer";
 import { stepTowardWalkable } from "./movement";
 import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
+import { publish } from "./redis";
 
 const ANIMAL_SPEED = 28; // px/s
 const NPC_SPEED = 38;
 const ENEMY_SPEED = 22;
 const TARGET_ENEMIES = 7;
+
+// World-change channel for the NOTIFY relay → Redis pub/sub → WS push.
+// Payloads are tiny — just IDs and chunk coords. Full state stays in DB.
+export const WORLD_CHANGE_CHANNEL = "world_changes";
+
+// Emit a world_change event. Failures are swallowed; missing one
+// notification is fine (the snapshot TTL cache picks up the change
+// within ~250 ms regardless).
+async function emitChange(kind: string, id: number, x: number, y: number): Promise<void> {
+  try {
+    await publish(
+      WORLD_CHANGE_CHANNEL,
+      JSON.stringify({
+        kind,
+        id,
+        chunkX: Math.floor(x / 384),
+        chunkY: Math.floor(y / 240),
+      }),
+    );
+  } catch {
+    // Best-effort. Drop the event; snapshot will catch up.
+  }
+}
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -113,6 +137,7 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
             const stolen = rowsE[0];
             if (stolen) {
               await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
+              void emitChange("groundItem", stolen.id, stolen.x, stolen.y);
               await logEvent("event", "The fox made off with an egg!", undefined, a.id, x, y);
             } else {
               await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, x, y);
@@ -134,9 +159,10 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
         } else {
           state = state === "raid" || state === "return" ? state : "walk";
         }
-      } else if (stateExpired && (a.species === "fox" || Math.random() < 0.35)) {
-        // Foxes are restless hunters — always roam when idle. Other animals
-        // wander occasionally (35% per window).
+      } else if (a.species === "fox" || Math.random() < 0.02) {
+        // Foxes are restless hunters — pick a new target every tick.
+        // Other animals wander ~2% of ticks (~ once per minute on average),
+        // so the world feels alive without every sheep walking constantly.
         const p = await randomPointIn(a.zone);
         if (p) { targetX = p.x; targetY = p.y; state = "walk"; }
       }
@@ -152,7 +178,8 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
         .from(groundItems)
         .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 24} AND ${x + 24}`, sql`${groundItems.y} BETWEEN ${y - 24} AND ${y + 24}`));
       if (!nearby || nearby.n === 0) {
-        await db.insert(groundItems).values({ itemKey: "egg", qty: 1, x, y: y + 4 });
+        const inserted = await db.insert(groundItems).values({ itemKey: "egg", qty: 1, x, y: y + 4 }).returning({ id: groundItems.id });
+        if (inserted[0]) void emitChange("groundItem", inserted[0].id, x, y + 4);
       }
     }
 
@@ -166,6 +193,7 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
         stateUntil: raiding ? (a.stateUntil ?? new Date(now.getTime() + 120_000)) : new Date(now.getTime() + 2000 + Math.random() * 6000),
       })
       .where(eq(animals.id, a.id));
+    void emitChange("animal", a.id, x, y);
   }
 }
 
@@ -186,6 +214,7 @@ async function tickNpcs(dt: number, night: boolean) {
       if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(npcs).set({ x, y, targetX, targetY, facing }).where(eq(npcs.id, n.id));
+    void emitChange("npc", n.id, x, y);
   }
 }
 
@@ -201,14 +230,20 @@ async function tickWeather(ws: typeof worldState.$inferSelect, now: Date) {
   if (weather !== ws.weather) {
     const text = { clear: "The clouds part and sun spills over the plaza.", rain: "A soft rain begins to fall over the grove.", fog: "Fog rolls in from the pond.", snow: "Snow! Fat, lazy flakes drift down on the rooftops." }[weather];
     await logEvent("weather", text ?? "The weather shifts.");
+    // Weather changes are global; emit a sentinel event so WS clients can
+    // refresh their overlay. The id=0 sentinel is ignored by proximity
+    // filters; WS clients invalidate their cached snapshot on receipt.
+    void emitChange("weather", 0, 0, 0);
   }
 }
 
 async function tickResources(now: Date) {
-  await db
+  const respawned = await db
     .update(resourceNodes)
     .set({ qty: 3, respawnAt: null })
-    .where(and(isNotNull(resourceNodes.respawnAt), lt(resourceNodes.respawnAt, now)));
+    .where(and(isNotNull(resourceNodes.respawnAt), lt(resourceNodes.respawnAt, now)))
+    .returning({ id: resourceNodes.id, x: resourceNodes.x, y: resourceNodes.y });
+  for (const r of respawned) void emitChange("resource", r.id, r.x, r.y);
 }
 
 async function tickEnemies(dt: number, now: Date) {
@@ -226,6 +261,7 @@ async function tickEnemies(dt: number, now: Date) {
       if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(enemies).set({ x, y, targetX, targetY }).where(eq(enemies.id, e.id));
+    void emitChange("enemy", e.id, x, y);
   }
   if (rows.length < TARGET_ENEMIES && Math.random() < 0.4) {
     const zone = pick(WILD_ZONES);
@@ -233,7 +269,8 @@ async function tickEnemies(dt: number, now: Date) {
     if (p) {
       const kind = Math.random() < 0.7 ? "slime" : Math.random() < 0.5 ? "bat" : "thornling";
       const hp = kind === "slime" ? 6 : kind === "bat" ? 5 : 9;
-      await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
+      const inserted = await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now }).returning({ id: enemies.id });
+      if (inserted[0]) void emitChange("enemy", inserted[0].id, p.x, p.y);
     }
   }
 }

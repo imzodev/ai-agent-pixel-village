@@ -1,22 +1,6 @@
-import type { Appearance } from "@/db/schema";
+import type { WorldSnapshot } from "@/lib/protocol";
 
-export type Snapshot = {
-  now: number;
-  hour: number;
-  weather: string;
-  dayLengthMinutes: number;
-  epochStart: number;
-  me: { id: number; name: string; x: number; y: number; facing: string; appearance: Appearance; level: number; hp: number; maxHp: number; coins: number; xp: number; equipped: string[] } | null;
-  players: { id: number; name: string; x: number; y: number; facing: string; appearance: Appearance; level: number; equipped: string[] }[];
-  npcs: { id: number; key: string; name: string; role: string; x: number; y: number; targetX: number | null; targetY: number | null; facing: string; appearance: Appearance; mood: string; kind: string; sponsor: { businessName: string; brandColor: string } | null }[];
-  animals: { id: number; species: string; name: string; x: number; y: number; targetX: number | null; targetY: number | null; facing: string; state: string; mood: string }[];
-  buildings: { id: number; key: string; name: string; kind: string; color: string; tx: number; ty: number; tw: number; th: number; reservable: boolean; doorX: number; doorY: number; sponsor: { businessName: string; brandColor: string; tagline: string } | null }[];
-  groundItems: { id: number; itemKey: string; qty: number; x: number; y: number; meta: Record<string, unknown> }[];
-  nodes: { id: number; kind: string; x: number; y: number; qty: number; ready: boolean }[];
-  enemies: { id: number; kind: string; x: number; y: number; targetX: number | null; targetY: number | null; hp: number; maxHp: number }[];
-  chat: { id: number; speakerType: string; speakerId: number; text: string; at: number }[];
-  events: { id: number; kind: string; text: string; at: number }[];
-};
+export type Snapshot = WorldSnapshot;
 
 export type Selection =
   | { type: "npc"; id: number; name: string; role: string; sponsored: boolean; distance: number }

@@ -37,13 +37,14 @@ import { chunkAtWorldPx } from "@/lib/chunkCollision";
 import { gameHour } from "@/lib/worldmap";
 import { getBuildingDoors } from "@/lib/buildingsServer";
 import { redis, initRedis } from "@/lib/redis";
+import type { WorldSnapshot } from "@/lib/protocol";
 
 // Cache TTL — long enough that several polls share a snapshot, short
 // enough that state changes are visible. 250 ms is a sensible default
 // for a pixel village; tune via SNAPSHOT_TTL_MS if needed.
 const SNAPSHOT_TTL_SECONDS = Math.max(1, Math.floor(Number(process.env.SNAPSHOT_TTL_MS ?? 250) / 1000));
 
-const PROXIMITY_RADIUS_CHUNKS = 2;
+const PROXIMITY_RADIUS_CHUNKS = 3;
 
 const PRESENCE_WINDOW_MS = 45_000;
 const CHAT_WINDOW_MS = 12_000;
@@ -91,7 +92,7 @@ type RawSnapshot = {
   spById: Record<string, SponsorLite>;
 };
 
-export type Snapshot = ReturnType<typeof formatSnapshot>;
+export type Snapshot = WorldSnapshot;
 
 // ── Assembler ──────────────────────────────────────────────────────────
 // Pulls only entities within the player's reach. Called once per (chunk,
@@ -235,24 +236,28 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   };
 }
 
-function formatSnapshot(raw: RawSnapshot): unknown {
+function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
   const ws = raw.world;
   const spById = raw.spById;
   const doors = raw.doors;
 
   return {
+    version,
     now: Date.now(),
     hour: gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes),
     weather: ws.weather,
     dayLengthMinutes: ws.dayLengthMinutes,
     epochStart: ws.epochStart.getTime(),
-    me: raw.meId
-      ? {
-          ...raw.players.find((p) => p.id === raw.meId),
-          gems: raw.players.find((p) => p.id === raw.meId)?.gems ?? 0,
-          equipped: raw.meEquipped,
-        }
-      : null,
+    me: (() => {
+      if (!raw.meId) return null;
+      const found = raw.players.find((p) => p.id === raw.meId);
+      if (!found) return null;
+      return {
+        ...found,
+        gems: found.gems ?? 0,
+        equipped: raw.meEquipped,
+      };
+    })(),
     players: raw.players.map((p) => ({
       ...p,
       equipped: raw.equippedByChar.get(p.id) ?? [],
@@ -368,12 +373,22 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
     // Redis unreachable — fall through and serve fresh from DB.
   }
 
+  // Tag each fresh snapshot with a monotonically increasing version so WS
+  // clients can detect changes since reconnect. INCR is atomic; safe
+  // across processes. Falls back to Date.now() if Redis is unreachable.
+  let version = 0;
+  try {
+    version = await redis.incr("world:version");
+  } catch {
+    version = Date.now();
+  }
+
   const raw = await buildRawSnapshot(meId, playerX, playerY);
-  const snap = formatSnapshot(raw);
+  const snap = formatSnapshot(raw, version);
   try {
     await redis.set(key, JSON.stringify(snap), { ex: SNAPSHOT_TTL_SECONDS });
   } catch {
     // Redis unreachable — serve anyway, just without caching.
   }
-  return snap as Snapshot;
+  return snap;
 }

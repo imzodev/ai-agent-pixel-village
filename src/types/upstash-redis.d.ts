@@ -1,7 +1,7 @@
 // Local type stub for @upstash/redis. The package itself is an optional
 // runtime dependency — when UPSTASH_REDIS_REST_URL is unset we never
 // import it. When it IS set, the package should be installed in the
-// deployment environment (via `npm install @upstash/redis`). This stub
+// deployment environment (via `pnpm install @upstash/redis`). This stub
 // lets `npm run typecheck` succeed in environments that don't have the
 // package installed yet (e.g. fresh local dev clone, CI before install).
 declare module "@upstash/redis" {
@@ -14,5 +14,10 @@ declare module "@upstash/redis" {
     incr(key: string): Promise<number>;
     expire(key: string, seconds: number): Promise<0 | 1>;
     keys(pattern: string): Promise<string[]>;
+    publish(channel: string, message: string): Promise<number>;
+    subscribe(
+      channels: string | string[],
+      handler: (msg: { channel: string; payload: string }) => void,
+    ): Promise<() => Promise<void>>;
   }
 }

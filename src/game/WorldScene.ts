@@ -7,6 +7,7 @@ import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { stampBuildings } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
+import { WorldStream } from "./worldStream";
 import {
   DEPTH_CANOPY,
   DEPTH_CHAR_BASE,
@@ -77,7 +78,7 @@ export class WorldScene extends Phaser.Scene {
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private snow!: Phaser.GameObjects.Particles.ParticleEmitter;
   private lastHeartbeat = 0;
-  private pollTimer: number | null = null;
+  private stream: WorldStream | null = null;
   private dragging = false;
   private chatFocused = false;
   private marker!: Phaser.GameObjects.Image;
@@ -222,10 +223,47 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
     this.unsub.push(bus.on("chatFocus", (f) => { this.chatFocused = f; if (f) kb.disableGlobalCapture(); else kb.enableGlobalCapture(); }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
-    this.events.on("shutdown", () => { this.unsub.forEach((u) => u()); if (this.pollTimer) window.clearInterval(this.pollTimer); });
+    this.events.on("shutdown", () => { this.unsub.forEach((u) => u()); this.stream?.stop(); });
 
-    void this.poll();
-    this.pollTimer = window.setInterval(() => void this.poll(), 1000);
+    // Phase 2: replace 1 Hz polling with WebSocket push.
+    // The WS is mounted at /ws on the SAME port as Next.js so the browser
+    // sends the session cookie on the upgrade. Cross-port WS upgrades
+    // would be blocked by same-origin rules and the WS server would
+    // receive no auth.
+    const explicit = typeof window !== "undefined"
+      ? (window as unknown as Record<string, unknown>).__WS_URL__ as string | undefined
+      : undefined;
+    const envUrl = typeof process !== "undefined" && process.env
+      ? process.env.NEXT_PUBLIC_WS_URL
+      : undefined;
+    // Default: same-origin WS at /ws. This works in both dev and prod
+    // because both Next.js and the WS server share port 3000.
+    const fallback = typeof window !== "undefined"
+      ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
+      : "ws://localhost:3000/ws";
+    const wsUrl = explicit ?? envUrl ?? fallback;
+    this.stream = new WorldStream({
+      url: wsUrl,
+      handlers: {
+        onSnapshot: (data) => {
+          this.applySnapshot(data);
+          bus.emit("snapshot", data);
+        },
+        onDelta: () => {
+          // Phase 2 minimum viable: ignore delta hints and rely on the
+          // next full snapshot. Phase 3+ can implement targeted delta
+          // fetches per affected chunk.
+        },
+        onClose: () => {
+          // Optional: trigger a one-off HTTP snapshot fallback. For now,
+          // the stream auto-reconnects; the player sees stale state until
+          // the WS recovers. Acceptable trade-off vs. building a complex
+          // fallback path for what should be a rare case.
+        },
+      },
+      heartbeatIntervalMs: 5000,
+    });
+    this.stream.start();
     // Debug/testing hook: lets Playwright read camera + player state live.
     (window as unknown as Record<string, unknown>).__worldScene = this;
     (window as unknown as Record<string, unknown>).__walk = { isWalkableAt, debugRegistry, chunkAtWorldPx, registerChunk, chunkRegistered };
@@ -260,24 +298,6 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------- networking ----------
-  private polling = false;
-  private async poll() {
-    if (this.polling) return;
-    this.polling = true;
-    try {
-      const body = this.player ? JSON.stringify({ x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.facing }) : null;
-      const res = await fetch("/api/world", body ? { method: "POST", body, headers: { "content-type": "application/json" } } : undefined);
-      if (!res.ok) return;
-      const snap = (await res.json()) as Snapshot;
-      this.applySnapshot(snap);
-      bus.emit("snapshot", snap);
-    } catch {
-      /* offline blip */
-    } finally {
-      this.polling = false;
-    }
-  }
-
   private applySnapshot(s: Snapshot) {
     const first = !this.snapshot;
     this.snapshot = s;
@@ -595,6 +615,11 @@ export class WorldScene extends Phaser.Scene {
     } else this.playWalk(p, false);
     this.placeChar(p);
     if (p.glow) p.glow.setPosition(p.sprite.x, p.sprite.y - 20);
+    // Stream the latest position to the WS server. The server forwards
+    // heartbeats to refreshLastSeen (10s throttled) and uses the position
+    // to update proximity tracking. Sending every frame is cheap because
+    // the WS layer only carries the latest snapshot forward.
+    if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing);
   }
 
   private moveChar(e: CharEnt, dt: number) {
