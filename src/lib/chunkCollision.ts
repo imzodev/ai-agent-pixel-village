@@ -85,7 +85,12 @@ function isTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean 
 // Foot box (16×10 under the character's feet): blocked if any corner lands on
 // a DecorationLower tile. Unregistered chunks are walkable by default so the
 // player can step into a chunk before its JSON finishes streaming.
-const FOOT_CORNERS: ReadonlyArray<readonly [number, number]> = [
+//
+// Shared by the player's WorldScene collision, the server's
+// `ensureChunkAt`, and the axis-separated step used by NPC/animal/enemy
+// movement. Keep the four corner offsets here so a future change to the
+// foot box only needs editing one place.
+export const FOOT_CORNERS: ReadonlyArray<readonly [number, number]> = [
   [-8, -6], [8, -6], [-8, 4], [8, 4],
 ];
 

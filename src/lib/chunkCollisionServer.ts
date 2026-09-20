@@ -6,18 +6,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  CHUNK_TILE_PX,
-  CHUNK_TILE_W,
-  blockStampTiles,
-  blockedFromChunk,
   chunkAtWorldPx,
   chunkId,
   chunkRegistered,
   isWalkableAt,
   registerChunk,
+  FOOT_CORNERS,
 } from "./chunkCollision";
 import { defaultChunk } from "./chunkGen";
-import { getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { stampBuildingCollisions } from "./buildingStampsServer"
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   try {
@@ -30,34 +27,13 @@ async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   }
 }
 
-// Mirror of the client's `stampBuildings()` pass (game/buildingStamps.ts):
-// populates the `stamped` Map in chunkCollision.ts with every building
-// template's DecorationLower + Collision tiles. The client does this once
-// during WorldScene.create(); the server must do it once per process or
-// NPCs / animals walk through walls. Memoised — manifest never changes
-// at runtime.
-let stampedBuildings = false;
-async function ensureBuildingsStamped(): Promise<void> {
-  if (stampedBuildings) return;
-  stampedBuildings = true;
-  const manifest = await getBuildingsManifest();
-  for (const entry of manifest.buildings) {
-    const template = await getTemplate(entry);
-    const blocked = blockedFromChunk(template);
-    if (blocked.size === 0) continue;
-    const ox = entry.tx * CHUNK_TILE_PX;
-    const oy = entry.ty * CHUNK_TILE_PX;
-    blockStampTiles(ox, oy, CHUNK_TILE_W, [...blocked]);
-  }
-}
-
 // Register (once) every chunk that a foot-box walkability check around
 // (x, y) can touch. The foot box spans at most 2×2 chunks.
 export async function ensureChunkAt(x: number, y: number): Promise<void> {
-  await ensureBuildingsStamped();
+  await stampBuildingCollisions();
   const jobs: Promise<void>[] = [];
   const seen = new Set<string>();
-  for (const [dx, dy] of [[-8, -6], [8, -6], [-8, 4], [8, 4]] as const) {
+  for (const [dx, dy] of FOOT_CORNERS) {
     const t = chunkAtWorldPx(x + dx, y + dy);
     const key = chunkId(t.cx, t.cy);
     if (chunkRegistered(t.cx, t.cy) || seen.has(key)) continue;
