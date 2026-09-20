@@ -19,6 +19,7 @@ import {
   loadTilemapAssets,
   recenterCamera,
   releaseOutside,
+  resetChunkState,
 } from "./worldTilemap";
 import type { Action, InputState } from "@/types/input";
 import type { Facing } from "@/types/world";
@@ -82,6 +83,30 @@ export class WorldScene extends Phaser.Scene {
   private fitted = false;
   private mobileInput: { getState(): InputState } | null = null;
   private modalOpen = false;
+  // Set on scene shutdown/destroy. Async work (WS snapshots, chunk loading,
+  // building stamps) checks this before touching Phaser, so a destroyed
+  // scene is never written to. React StrictMode double-mounts in dev and
+  // would otherwise crash with `this.add` / tilemaps being null.
+  private destroyed = false;
+
+  // Bound teardown so it can be used as an event handler and registered
+  // before create()'s awaits. Idempotent.
+  private readonly teardown = (): void => {
+    this.destroyed = true;
+    this.stream?.stop();
+    this.stream = null;
+    this.unsub.forEach((u) => u());
+    this.unsub = [];
+    // Free module-global chunk/rendering state owned by this scene so a
+    // recreated scene never reuses dead tilemaps.
+    resetChunkState();
+  };
+
+  // True while it is safe to create/modify game objects. Guards every async
+  // continuation and the WS snapshot handler.
+  private alive(): boolean {
+    return !this.destroyed && Boolean(this.sys?.isActive()) && Boolean(this.add) && Boolean(this.tweens);
+  }
 
   constructor() {
     super("world");
@@ -96,6 +121,17 @@ export class WorldScene extends Phaser.Scene {
   }
 
   async create() {
+    this.destroyed = false;
+    // Register teardown FIRST, before any await below. create() is async and
+    // the scene can be shut down mid-flight (StrictMode remount, HMR); if
+    // teardown were registered at the end, `destroyed` would stay false and
+    // later continuations would write to a dead scene.
+    this.events.once("shutdown", this.teardown);
+    this.events.once("destroy", this.teardown);
+    // Drop any chunk/render state left by a previous scene instance. The
+    // chunk maps are module-global and would otherwise hold tilemaps owned
+    // by the dead scene (StrictMode remount / HMR), which crash on reuse.
+    resetChunkState();
     makeAllTextures(this);
     // Fox walk animations — 4 directions × 3 frames each (see ATTRIBUTION.md).
     for (const [dir, frames] of [["up", [0, 1, 2] as number[]], ["right", [3, 4, 5] as number[]], ["down", [6, 7, 8] as number[]], ["left", [9, 10, 11] as number[]]] as const) {
@@ -110,13 +146,19 @@ export class WorldScene extends Phaser.Scene {
     // player crosses a chunk boundary in updatePlayer.
     this.lastPlayerChunk = { cx: 0, cy: 0 };
     await ensureChunks(this, this.lastPlayerChunk);
+    // The scene may have been shut down during the await (StrictMode
+    // remount, HMR, navigation). Stop before touching Phaser again.
+    if (!this.alive()) return;
     // Stamp interactive buildings from the manifest (best-effort: a missing
     // or broken manifest leaves the world decor-only).
     try {
       const res = await fetch("/buildings/buildings.json");
+      if (!this.alive()) return;
       if (res.ok) {
         const manifest = (await res.json()) as BuildingManifest;
+        if (!this.alive()) return;
         const stamped = await stampBuildings(this, manifest);
+        if (!this.alive()) return;
         for (const s of stamped) {
           if (s.door) this.buildingDoors.set(s.entry.key, s.door);
           this.buildingZonesRects.set(s.entry.key, s.zone);
@@ -125,6 +167,7 @@ export class WorldScene extends Phaser.Scene {
     } catch {
       /* manifest unavailable — decor-only world */
     }
+    if (!this.alive()) return;
     recenterCamera(this, this.lastPlayerChunk);
     // placeholder char texture
     if (!this.textures.exists("ph_char")) {
@@ -213,7 +256,6 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
     this.unsub.push(bus.on("chatFocus", (f) => { this.chatFocused = f; if (f) kb.disableGlobalCapture(); else kb.enableGlobalCapture(); }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
-    this.events.on("shutdown", () => { this.unsub.forEach((u) => u()); this.stream?.stop(); });
 
     // Phase 2: replace 1 Hz polling with WebSocket push.
     // The WS is mounted at /ws on the SAME port as Next.js so the browser
@@ -236,7 +278,9 @@ export class WorldScene extends Phaser.Scene {
       url: wsUrl,
       handlers: {
         onSnapshot: (data) => {
+          if (!this.alive()) return;
           this.applySnapshot(data);
+          if (!this.alive()) return;
           bus.emit("snapshot", data);
         },
         onDelta: () => {
@@ -292,6 +336,10 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- networking ----------
   private applySnapshot(s: Snapshot) {
+    // A snapshot can arrive after the scene was shut down (WS message in
+    // flight during teardown). `this.add`, `this.tweens` and the tilemaps
+    // are gone by then, so applying it would throw.
+    if (!this.alive()) return;
     const first = !this.snapshot;
     this.snapshot = s;
     this.meId = s.me?.id ?? null;
@@ -415,6 +463,8 @@ export class WorldScene extends Phaser.Scene {
     const key = appearanceKey(app);
     if (!this.textures.exists(key)) {
       const canvas = await composeCharacter(app);
+      // Scene may have been destroyed during the await.
+      if (!this.alive()) return;
       if (!this.textures.exists(key)) {
         const tex = this.textures.addCanvas(key, canvas);
         if (!tex) return;

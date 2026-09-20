@@ -247,6 +247,39 @@ const chunkStates = new Map<string, ChunkState>();
 // same chunk share one Promise and one network request.
 const inFlightLoads = new Map<string, Promise<ChunkLoadResult>>();
 
+/**
+ * Drop all module-global chunk/render state. These maps outlive a Phaser
+ * scene instance, so when the scene is destroyed and recreated (React
+ * StrictMode double-mount, HMR, "restart scene") they would otherwise
+ * still hold tilemaps and sprites owned by the DEAD scene. Reusing those
+ * throws inside Phaser ("Cannot read properties of null"). Call this on
+ * scene shutdown and at the top of create().
+ */
+export function resetChunkState(): void {
+  chunkStates.clear();
+  inFlightLoads.clear();
+  sortedTextureCache.clear();
+}
+
+// Phaser scene status values (src/scene/const.js). SHUTDOWN and above mean
+// the scene must not be drawn to.
+const SCENE_SHUTDOWN = 8;
+
+/**
+ * True when a scene can still be attached to.
+ *
+ * Note we do NOT use `sys.isActive()` — that is only true for RUNNING (5),
+ * but the initial map build runs inside `create()`, when the status is
+ * CREATING (4). Using isActive() there made the first chunk load bail and
+ * the map only appeared after login drove a later re-render. Anything below
+ * SHUTDOWN (8) is usable; SHUTDOWN/DESTROYED (9) are not.
+ */
+function sceneAlive(scene: Phaser.Scene): boolean {
+  const sys = scene?.sys as Phaser.Scenes.Systems | undefined;
+  const status = sys?.settings?.status;
+  return typeof status === "number" && status < SCENE_SHUTDOWN;
+}
+
 // Run the one-pass extractor on a cached JSON. The pass:
 //   - lifts every non-zero tile from a SORTED_LAYERS entry (recording it
 //     and zeroing the GID in the JSON so the static layer draws nothing),
@@ -708,14 +741,22 @@ export async function ensureChunks(
   scene: Phaser.Scene,
   { cx, cy }: { cx: number; cy: number },
 ): Promise<void> {
+  if (!sceneAlive(scene)) return;
   const { chunks } = getActiveWindow(scene, { cx, cy });
   for (const c of chunks) {
+    // The scene can be shut down at any await boundary (StrictMode remount,
+    // HMR, scene restart). Bail before touching Phaser with a dead scene.
+    if (!sceneAlive(scene)) return;
     const state = chunkStates.get(chunkKey(c.cx, c.cy));
     if (state) {
+      // Guard against a state entry left over from a previous scene
+      // instance (its tilemap belongs to a destroyed scene).
+      if (state.tilemap.scene !== scene) continue;
       buildChunkLayers(state, chunkOrigin(c.cx, c.cy));
       continue;
     }
     const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = await loadChunk(scene, c.cx, c.cy);
+    if (!sceneAlive(scene)) return;
     if (!tilemap) continue;
     registerCollisionIfNeeded(scene, c.cx, c.cy);
     const fresh = buildChunkState(tilemap, sortedTiles, anchorGrid, anchorByObjectId);
