@@ -91,12 +91,12 @@ export async function stampBuildings(
     await loadTemplate(scene, key, entry.file);
     const result = parseStamp(scene, key);
     if (!result) continue;
-    const { tilemap, sortedTiles, baseAnchorY } = result;
+    const { tilemap, sortedTiles, columnAnchors } = result;
     const tilesets = registerReferencedTilesets(tilemap);
     const origin = tileOrigin(entry.tx, entry.ty);
     createStaticLayers(tilemap, tilesets, origin, key);
     const sortedSprites: Phaser.GameObjects.Image[] = [];
-    instantiateSortedSprites(scene, tilesets, sortedTiles, baseAnchorY, origin, sortedSprites);
+    instantiateSortedSprites(scene, tilesets, sortedTiles, columnAnchors, origin, sortedSprites);
     registerStampCollision(scene, key, origin.x, origin.y);
     out.push({
       entry,
