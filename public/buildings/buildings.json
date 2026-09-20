@@ -71,6 +71,18 @@
       "reservable": true,
       "tx": 55,
       "ty": 32
+    },
+    {
+      "key": "cabin_7",
+      "file": "/buildings/cabin_1.json",
+      "name": "Cabin Six",
+      "kind": "home",
+      "description": "The scabin close to Marigold",
+      "color": "#d9b0f4",
+      "menu": [],
+      "reservable": true,
+      "tx": 34,
+      "ty": 6
     }
   ]
 }
