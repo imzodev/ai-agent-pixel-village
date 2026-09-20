@@ -35,6 +35,44 @@ function facingOf(dx: number, dy: number) {
   return dy > 0 ? "down" : "up";
 }
 
+// Axis-separated step that respects chunk collision: try the full diagonal
+// move, then x-only and y-only, sliding along obstacles instead of getting
+// stuck. Used by NPC/animal/enemy ticks to mirror the player movement rules.
+async function stepTowardWalkable(
+  x: number,
+  y: number,
+  tx: number,
+  ty: number,
+  dist: number,
+): Promise<{ x: number; y: number; arrived: boolean; facing: "left" | "right" | "up" | "down" }> {
+  const dx = tx - x;
+  const dy = ty - y;
+  const d = Math.hypot(dx, dy);
+  if (d === 0) return { x, y, arrived: true, facing: facingOf(dx, dy) };
+  const ux = dx / d;
+  const uy = dy / d;
+  const step = Math.min(dist, d);
+  const nx = x + ux * step;
+  const ny = y + uy * step;
+  if (d <= step) return { x: tx, y: ty, arrived: true, facing: facingOf(dx, dy) };
+  const facing = facingOf(dx, dy);
+
+  // Diagonal first; fall back to axis-only to slide along walls.
+  if (await isWalkableServer(nx, ny)) return { x: nx, y: ny, arrived: false, facing };
+  const xOnly = await isWalkableServer(nx, y);
+  const yOnly = await isWalkableServer(x, ny);
+  if (xOnly && yOnly) {
+    // Both axes open — pick whichever has the larger component for natural
+    // sliding around corners.
+    if (Math.abs(ux) >= Math.abs(uy)) return { x: nx, y, arrived: false, facing };
+    return { x, y: ny, arrived: false, facing };
+  }
+  if (xOnly) return { x: nx, y, arrived: false, facing };
+  if (yOnly) return { x, y: ny, arrived: false, facing };
+  // Fully blocked — give up this step so the caller can re-roll the path.
+  return { x, y, arrived: false, facing };
+}
+
 /**
  * Advance the world. Called opportunistically by API requests; the first
  * caller after >= 1s of quiet wins the tick (atomic update), so many clients
@@ -98,7 +136,8 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
       if (targetX != null && targetY != null) {
         // Raiding foxes hustle — 60 px/s vs the normal 28.
         const speed = raiding ? 60 : ANIMAL_SPEED;
-        const s = stepToward(x, y, targetX, targetY, speed * dt);
+        const s = await stepTowardWalkable(x, y, targetX, targetY, speed * dt);
+        const stuck = s.x === x && s.y === y && !s.arrived;
         x = s.x; y = s.y; facing = s.facing;
         if (s.arrived) {
           targetX = null; targetY = null;
@@ -125,7 +164,16 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
             state = Math.random() < 0.5 ? "graze" : "idle";
           }
         }
-        else state = state === "raid" || state === "return" ? state : "walk";
+        else {
+          // Pressed against a wall — abandon target and pick a new walkable
+          // destination on the next idle window.
+          if (stuck) {
+            targetX = null; targetY = null;
+            state = "idle";
+          } else {
+            state = state === "raid" || state === "return" ? state : "walk";
+          }
+        }
       } else if (stateExpired && (a.species === "fox" || Math.random() < 0.35)) {
         // Foxes are restless hunters — always roam when idle. Other animals
         // wander occasionally (35% per window).
@@ -167,9 +215,13 @@ async function tickNpcs(dt: number, night: boolean) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
     let { x, y, targetX, targetY, facing } = n;
     if (targetX != null && targetY != null) {
-      const s = stepToward(x, y, targetX, targetY, NPC_SPEED * dt);
+      const s = await stepTowardWalkable(x, y, targetX, targetY, NPC_SPEED * dt);
+      const stuck = s.x === x && s.y === y && !s.arrived;
       x = s.x; y = s.y; facing = s.facing;
       if (s.arrived) { targetX = null; targetY = null; }
+      // If we ran into a wall, give up on this target and pick a new walkable
+      // destination next tick instead of pressing against the obstacle.
+      else if (stuck) { targetX = null; targetY = null; }
     } else if (Math.random() < (night ? 0.05 : 0.18)) {
       const r = night ? 30 : n.wanderRadius;
       const p = await randomPointIn({ x: n.homeX - r, y: n.homeY - r, w: r * 2, h: r * 2 });
@@ -206,6 +258,15 @@ async function tickEnemies(dt: number, now: Date) {
   for (const e of rows) {
     let { x, y, targetX, targetY } = e;
     if (targetX != null && targetY != null) {
+      const s = await stepTowardWalkable(x, y, targetX, targetY, ENEMY_SPEED * dt);
+      x = s.x; y = s.y;
+      if (s.arrived || (s.x === x && s.y === y)) {
+        // Arrived or pinned against a wall — pick a new walkable destination.
+        const zone = WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
+        const p = await randomPointIn(zone);
+        if (p) { targetX = p.x; targetY = p.y; }
+      }
+    } else {
       const zone = WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
       const p = await randomPointIn(zone);
       if (p) { targetX = p.x; targetY = p.y; }
