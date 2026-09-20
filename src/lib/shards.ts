@@ -28,10 +28,15 @@ export function parseShardRegions(env: string | undefined): ShardRegion[] {
   return out.length ? out : [unboundedRegion()];
 }
 
+// Matches two signed integers separated by a hyphen, so negative bounds
+// like "-9-0" parse correctly (a naive split("-") would break them).
+const RANGE_RE = /^(-?\d+)-(-?\d+)$/;
+
 function parseRange(token: string): [number, number] | [null, null] {
-  const [a, b] = token.split("-");
-  const x = Number(a);
-  const y = Number(b);
+  const m = RANGE_RE.exec(token.trim());
+  if (!m) return [null, null];
+  const x = Number(m[1]);
+  const y = Number(m[2]);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return [null, null];
   const lo = Math.min(x, y);
   const hi = Math.max(x, y);

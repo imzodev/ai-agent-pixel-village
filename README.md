@@ -27,7 +27,7 @@ items for the player and leads for the business.
 | `src/lib/offers.ts` | which missions / turn-ins / gifts / discount an NPC can extend right now |
 | `src/server.ts` | custom Node server — boots Next.js + WS on the same port so the browser sends the session cookie on WS upgrade |
 | `src/app/api/world` | HTTP fallback for clients without WS (GET public, POST with position) |
-| `src/app/api/health` | DB ping + Upstash status, shard config, draining state; returns 503 if degraded or draining |
+| ~~`src/app/api/health`~~ | Removed — the underlying `isDraining()` flag and DB/Upstash probes live in `src/lib/lifecycle.ts` and `src/lib/redis.ts`; a future authenticated endpoint can re-expose them. |
 
 | `src/app/api/npc/[id]/talk`, `/accept` | conversation + applying offers (mission, turn-in, gift, discount → item + lead) |
 | `src/app/api/act` | pet / gather / attack / enter / chat |
@@ -101,9 +101,10 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 
 ### Observability
 
-- `/api/metrics` returns Prometheus text (`text/plain; version=0.0.4`) with the metrics listed in `src/lib/metrics.ts`: ws connection counts/evictions, snapshot cache hit/miss, sim tick duration/failure, db pool gauges, plus default Node/process collectors. Scrape with your usual Prometheus setup.
-- `/api/health` includes `ws.shard`, `ws.shardCount`, `ws.region`, `ws.connections`, `ws.draining`, `ws.accepting`. Returns `503` once the process enters graceful shutdown so the LB drains the instance.
-- Logs are JSON via pino (`src/lib/logger.ts`), stamped with `service` and `shard`.
+- `src/lib/metrics.ts` owns the Prometheus registry (ws / snapshot-cache / sim / db-pool gauges, plus default Node/process collectors). It is **not currently exposed via an HTTP endpoint** — the user removed `/api/metrics` and `/api/health`. The registry stays so a future scrape endpoint (e.g. gated by `PROMETHEUS_SCRAPE_TOKEN`) can be wired without rebuilding.
+- `src/lib/lifecycle.ts` exposes `setDraining` / `isDraining`. The server marks itself draining on SIGTERM/SIGINT and rejects new WS upgrades with `503` until it exits. A future readiness endpoint can read `isDraining()` and return `503` to drain LB connections.
+- Logs are JSON via `pino` (`src/lib/logger.ts`), stamped with `service` and `shard`.
+- Operational runbook: `docs/RUNBOOK.md`.
 
 ### Process supervision
 

@@ -9,6 +9,8 @@
     "start": "NODE_ENV=production tsx --env-file=.env src/server.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -45,6 +47,7 @@
     "tailwindcss": "4.1.17",
     "tsx": "^4.23.15",
     "typescript": "5.9.3",
+    "vitest": "^5.0.1",
     "ws": "^8.21.3"
   }
 }
