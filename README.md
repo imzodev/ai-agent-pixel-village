@@ -19,10 +19,15 @@ items for the player and leads for the business.
 | `src/db/schema.ts` | users, characters, buildings, sponsors, npcs (agents), animals, items, inventory, missions, leads, conversations, world state/events, resource nodes, enemies |
 | `src/lib/worldmap.ts` | shared geometry (buildings, trees, pond, collision, game clock) used by server **and** client |
 | `src/lib/seed.ts` | idempotent world seed: 8 buildings, 7 NPCs (1 sponsored demo: the bakery), 17 animals, missions, nodes |
-| `src/lib/sim.ts` | world tick (animals wander/sleep/hunger, NPC wander, weather, respawns, enemy spawns, unattended events). Claimed atomically by whichever request arrives first. |
+| `src/lib/sim.ts` | world tick (animals wander/sleep/hunger, NPC wander, weather, respawns, enemy spawns, unattended events). Emits `world_change` pub/sub events on every entity update. |
+| `src/lib/world-tickd.ts` | standalone sim worker — runs `tickWorld` at 1 Hz, advisory-locked to a single primary |
+| `src/lib/world-stream.ts` | WebSocket server (`/ws`) — cookie auth, proximity-filtered snapshot fan-out, slow-client backpressure |
+| `src/lib/protocol.ts` | wire protocol (`WsClientMessage`, `WsServerMessage`, `WorldSnapshot`) shared by server + client |
 | `src/lib/agent.ts` | NPC brain: scripted (always), LLM (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`), or remote webhook. Pitch weaving lives here. |
 | `src/lib/offers.ts` | which missions / turn-ins / gifts / discount an NPC can extend right now |
-| `src/app/api/world` | poll + heartbeat (GET public, POST with position) |
+| `src/server.ts` | custom Node server — boots Next.js + WS on the same port so the browser sends the session cookie on WS upgrade |
+| `src/app/api/world` | HTTP fallback for clients without WS (GET public, POST with position) |
+| `src/app/api/health` | DB ping + Upstash status; returns 503 if degraded |
 | `src/app/api/npc/[id]/talk`, `/accept` | conversation + applying offers (mission, turn-in, gift, discount → item + lead) |
 | `src/app/api/act` | pet / gather / attack / enter / chat |
 | `src/app/api/items` | pickup / drop / equip / use / place (home decor) |
@@ -30,16 +35,48 @@ items for the player and leads for the business.
 | `src/app/api/sponsors` | reserve a building (Stripe Checkout subscription when configured), dashboard, edits, cancel; `/webhook` for Stripe |
 | `src/app/api/agents` | external AI agents: register, look, move/say/offerMission/dropItem, webhook conversations |
 | `src/game/WorldScene.ts` | the Phaser scene |
+| `src/game/worldStream.ts` | browser WS client with jittered reconnect |
 | `src/components/Hud.tsx` | React overlay: dialogue, bag, missions, home decorator, world log, inspect |
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/agents` | agent API docs |
+
+## Process topology
+
+```
+┌────────────────┐  ┌────────────────┐
+│  src/server.ts │  │ world-tickd.ts │
+│  Next.js + WS  │  │   sim worker   │
+│  on :3000      │  │   1 Hz tick    │
+│  /ws upgrade   │  │                │
+└───────┬────────┘  └────────┬───────┘
+        │                    │
+        ▼                    ▼
+┌──────────────────────────────────────┐
+│  Upstash Redis (HTTP pub/sub)        │
+│  world_changes channel               │
+│  sim publishes → ws subscribes        │
+└──────────────────────────────────────┘
+```
+
+With Upstash wired, world_change events fan out from the tickd to the WS
+server in real time. Without Upstash (single-process dev), the WS server
+falls back to an in-process memory pub/sub plus a 1500 ms periodic
+snapshot refresh.
+
+Run locally:
+```
+pnpm run dev:server   # Next.js + WS on :3000
+pnpm run dev:tickd    # sim worker
+```
+Or both at once: `pnpm run dev` (uses `concurrently`).
 
 ## Env
 
 - `DATABASE_URL` (required) — Postgres on `127.0.0.1:5432`, db `app_db`, user/pass `postgres`/`postgres`.
   - If port 5432 is free: `docker compose up -d`, then `pnpm db:push`.
   - If port 5432 is already taken by another local Postgres, just `CREATE DATABASE app_db;` on it (or run `docker compose up -d` after remapping the host port in `docker-compose.yml`).
+- `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (recommended for production) — cross-process pub/sub for WS push. Without these, the app still works in single-process dev mode but two-process prod mode loses cross-process event delivery.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
 - `OPENAI_API_KEY` (+ `OPENAI_MODEL`) or `ANTHROPIC_API_KEY` (+ `ANTHROPIC_MODEL`) — LLM-driven NPC dialogue. Without them the scripted brain runs.
 

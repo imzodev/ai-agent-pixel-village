@@ -158,7 +158,10 @@ let initFailed = false;
 export async function initRedis(): Promise<void> {
   if (initialized) return;
   initialized = true;
-  if (!process.env.UPSTASH_REDIS_REST_URL) return;
+  if (!process.env.UPSTASH_REDIS_REST_URL) {
+    console.log("[redis] no UPSTASH_REDIS_REST_URL — using in-memory cache (single-process only)");
+    return;
+  }
   try {
     // Lazy import so local dev (no @upstash/redis installed) doesn't blow up.
     const mod = (await import("@upstash/redis")) as unknown as {
@@ -173,6 +176,9 @@ export async function initRedis(): Promise<void> {
       url: process.env.UPSTASH_REDIS_REST_URL,
       token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
     });
+    console.log(
+      `[redis] Upstash client connected: ${process.env.UPSTASH_REDIS_REST_URL.replace(/\/+$/, "")}`,
+    );
   } catch (err) {
     initFailed = true;
     active = new MemoryRedis();
@@ -213,17 +219,28 @@ export async function subscribePubSub(
           subscribe: (
             channels: string | string[],
             handler: (msg: { channel: string; payload: string }) => void,
-          ) => Promise<() => Promise<void>>;
+          ) => Promise<{
+            unsubscribe: (channels?: string[]) => Promise<void>;
+          }>;
         };
       };
       const client = new mod.Redis({
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN ?? "",
       });
-      const unsub = await client.subscribe(channel, (msg) => {
+      const subscriber = await client.subscribe(channel, (msg) => {
         if (typeof msg.payload === "string") handler(channel, msg.payload);
       });
-      return unsub;
+      // The Upstash SDK returns a Subscriber with .unsubscribe(); wrap it
+      // so callers get a uniform unsubscribe function regardless of
+      // backend.
+      return async () => {
+        try {
+          await subscriber.unsubscribe();
+        } catch {
+          // Best-effort.
+        }
+      };
     } catch (err) {
       console.warn("[redis] pub/sub subscribe failed, falling back to memory:", err);
     }

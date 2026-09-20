@@ -9,9 +9,14 @@
 // pool and removes the dependency.
 //
 // Concurrency safety: only one tickd should run per primary. The advisory
-// lock pg_try_advisory_lock(42) prevents two tickds from fighting. If the
-// lock is held, this instance logs and exits. If the primary drops the
-// connection, the lock auto-releases.
+// lock pg_try_advisory_lock(42) prevents two tickds from fighting.
+//
+// On shutdown (SIGINT / SIGTERM) we release the lock and close the pool
+// promptly so a restarted tickd can acquire the lock immediately. If a
+// previous tickd crashed without releasing, the lock auto-releases when
+// its connection drops — but Postgres keeps the connection open until
+// TCP teardown. We poll for up to LOCK_WAIT_MS to give a graceful
+// restart a chance to settle.
 //
 // Run: `pnpm dev:tickd` (or `node --import tsx src/lib/world-tickd.ts`).
 
@@ -21,6 +26,8 @@ import { tickWorld } from "./sim";
 import { initRedis } from "./redis";
 
 const TICK_INTERVAL_MS = Number(process.env.WORLD_TICK_INTERVAL_MS ?? 1000);
+const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
+const LOCK_POLL_MS = 250;
 const ADVISORY_LOCK_KEY = 42;
 
 async function tryAcquireAdvisoryLock(): Promise<boolean> {
@@ -37,13 +44,23 @@ async function releaseAdvisoryLock(): Promise<void> {
   }
 }
 
+async function acquireWithWait(): Promise<boolean> {
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (await tryAcquireAdvisoryLock()) return true;
+    await new Promise((r) => setTimeout(r, LOCK_POLL_MS));
+  }
+  return false;
+}
+
 async function main(): Promise<void> {
   await initRedis();
 
-  if (!(await tryAcquireAdvisoryLock())) {
+  if (!(await acquireWithWait())) {
     console.error(
-      "[tickd] another tickd holds advisory lock; another instance is already running. Exiting.",
+      `[tickd] could not acquire advisory lock within ${LOCK_WAIT_MS}ms — another instance is running or a previous tickd crashed without releasing. Exiting.`,
     );
+    await pool.end();
     process.exit(1);
   }
   console.log(`[tickd] acquired advisory lock; ticking every ${TICK_INTERVAL_MS} ms`);

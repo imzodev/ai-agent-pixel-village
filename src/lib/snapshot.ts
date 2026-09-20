@@ -44,12 +44,30 @@ import type { WorldSnapshot } from "@/lib/protocol";
 // for a pixel village; tune via SNAPSHOT_TTL_MS if needed.
 const SNAPSHOT_TTL_SECONDS = Math.max(1, Math.floor(Number(process.env.SNAPSHOT_TTL_MS ?? 250) / 1000));
 
-const PROXIMITY_RADIUS_CHUNKS = 3;
+// Proximity radius in PIXELS, centered on the player's actual position.
+//
+// The previous implementation anchored the bbox on the player's CHUNK
+// origin (multiples of 384×240), which meant the whole bbox JUMPED by
+// an entire chunk every time the player crossed a chunk boundary.
+// Entities near the boundary (e.g. the chicken coop straddling two
+// chunk rows) flickered in/out on every crossing. A pixel-centered
+// bbox moves smoothly with the player and entities only leave view
+// when they genuinely cross the radius — like a normal view distance.
+//
+// Default 1152 px = 3 chunk-widths, comfortably larger than the
+// viewport (clamped to a 3×3 chunk area ≈ 1152×720 px) so entities
+// slightly off-screen are still tracked and can walk into view.
+const PROXIMITY_RADIUS_PX = Number(process.env.PROXIMITY_RADIUS_PX ?? 1152);
 
 const PRESENCE_WINDOW_MS = 45_000;
 const CHAT_WINDOW_MS = 12_000;
 
-const cacheKey = (cx: number, cy: number): string => `snap:${cx}:${cy}`;
+// Cache key includes meId so two players in the same chunk don't see
+// each other's `me` field. Without this, the second player's request
+// would return the first player's snapshot, including their position
+// as `me`.
+const cacheKey = (cx: number, cy: number, meId: number | null): string =>
+  `snap:${cx}:${cy}:${meId ?? "anon"}`;
 
 type SponsorLite = {
   id: number;
@@ -103,12 +121,13 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
   const chatSince = new Date(Date.now() - CHAT_WINDOW_MS);
 
-  // Bounding box for proximity-filtered entities.
-  const { cx, cy } = chunkAtWorldPx(playerX, playerY);
-  const xMin = (cx - PROXIMITY_RADIUS_CHUNKS) * 384;
-  const xMax = (cx + PROXIMITY_RADIUS_CHUNKS + 1) * 384;
-  const yMin = (cy - PROXIMITY_RADIUS_CHUNKS) * 240;
-  const yMax = (cy + PROXIMITY_RADIUS_CHUNKS + 1) * 240;
+  // Bounding box for proximity-filtered entities — pixel-centered on the
+  // player's actual position so it moves smoothly with them (no chunk
+  // snapping). See the PROXIMITY_RADIUS_PX comment above.
+  const xMin = playerX - PROXIMITY_RADIUS_PX;
+  const xMax = playerX + PROXIMITY_RADIUS_PX;
+  const yMin = playerY - PROXIMITY_RADIUS_PX;
+  const yMax = playerY + PROXIMITY_RADIUS_PX;
 
   const [
     players,
@@ -350,6 +369,40 @@ let initStarted = false;
  * per chunk for SNAPSHOT_TTL_SECONDS. Many players in the same chunk
  * share one cache entry.
  */
+// In-process LRU cache for the WS path. Each WS process keeps its own
+// snapshot cache keyed by chunk. The TTL is short (one SNAPSHOT_TTL_MS)
+// so the WS server always serves fresh-ish data. Crucially, this avoids
+// per-refresh Redis GETs — at scale, those would burn Upstash budget
+// quickly. The HTTP path (/api/world fallback) bypasses this layer and
+// reads through to Redis directly.
+const PROC_CACHE_MAX = Number(process.env.SNAPSHOT_PROC_CACHE_SIZE ?? 256);
+const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 750));
+
+type ProcCacheEntry = { snap: Snapshot; expiresAt: number };
+
+const procCache = new Map<string, ProcCacheEntry>();
+
+function procCacheGet(key: string): Snapshot | null {
+  const e = procCache.get(key);
+  if (!e) return null;
+  if (e.expiresAt < Date.now()) {
+    procCache.delete(key);
+    return null;
+  }
+  // Refresh recency for LRU.
+  procCache.delete(key);
+  procCache.set(key, e);
+  return e.snap;
+}
+
+function procCacheSet(key: string, snap: Snapshot): void {
+  if (procCache.size >= PROC_CACHE_MAX) {
+    const oldest = procCache.keys().next().value;
+    if (oldest !== undefined) procCache.delete(oldest);
+  }
+  procCache.set(key, { snap, expiresAt: Date.now() + PROC_CACHE_TTL_MS });
+}
+
 export async function getSnapshot(meId: number | null, playerX: number, playerY: number): Promise<Snapshot> {
   if (!initStarted) {
     initStarted = true;
@@ -358,13 +411,23 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
   }
 
   const { cx, cy } = chunkAtWorldPx(playerX, playerY);
-  const key = cacheKey(cx, cy);
+  const key = cacheKey(cx, cy, meId);
 
+  // Layer 1: in-process cache. No Redis call. Hot path for the WS
+  // server's periodic refresh.
+  const hit = procCacheGet(key);
+  if (hit) return hit;
+
+  // Layer 2: Redis cache. Shared across processes (e.g. for the HTTP
+  // /api/world fallback). One read per cache miss; one read per call
+  // for the WS path is too expensive at scale.
   try {
     const cached = await redis.get(key);
     if (cached) {
       try {
-        return JSON.parse(String(cached)) as Snapshot;
+        const snap = JSON.parse(String(cached)) as Snapshot;
+        procCacheSet(key, snap);
+        return snap;
       } catch {
         // Bad cache entry — fall through to rebuild.
       }
@@ -373,9 +436,8 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
     // Redis unreachable — fall through and serve fresh from DB.
   }
 
-  // Tag each fresh snapshot with a monotonically increasing version so WS
-  // clients can detect changes since reconnect. INCR is atomic; safe
-  // across processes. Falls back to Date.now() if Redis is unreachable.
+  // Cache miss — rebuild from DB. world:version only increments on
+  // actual rebuild, not on every cache hit.
   let version = 0;
   try {
     version = await redis.incr("world:version");
@@ -385,6 +447,7 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
 
   const raw = await buildRawSnapshot(meId, playerX, playerY);
   const snap = formatSnapshot(raw, version);
+  procCacheSet(key, snap);
   try {
     await redis.set(key, JSON.stringify(snap), { ex: SNAPSHOT_TTL_SECONDS });
   } catch {

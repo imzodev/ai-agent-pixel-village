@@ -111,7 +111,7 @@ export class WorldStream {
 
   private startHeartbeat(): void {
     const interval = this.opts.heartbeatIntervalMs ?? 5000;
-    this.heartbeatTimer = setInterval(() => {
+    const tick = () => {
       if (!this.lastPosition) return;
       this.send({
         type: "heartbeat",
@@ -119,7 +119,12 @@ export class WorldStream {
         y: this.lastPosition.y,
         facing: this.lastPosition.facing,
       });
-    }, interval);
+    };
+    // Send immediately so the server's proximity bbox is anchored on the
+    // player's real position from the first instant after connect (the
+    // DB position it authenticates with can be up to 10s stale).
+    tick();
+    this.heartbeatTimer = setInterval(tick, interval);
   }
 
   private stopHeartbeat(): void {

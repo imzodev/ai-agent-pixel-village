@@ -18,6 +18,6 @@ declare module "@upstash/redis" {
     subscribe(
       channels: string | string[],
       handler: (msg: { channel: string; payload: string }) => void,
-    ): Promise<() => Promise<void>>;
+    ): Promise<{ unsubscribe: (channels?: string[]) => Promise<void> }>;
   }
 }

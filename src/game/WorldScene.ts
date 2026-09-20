@@ -261,7 +261,10 @@ export class WorldScene extends Phaser.Scene {
           // fallback path for what should be a rare case.
         },
       },
-      heartbeatIntervalMs: 5000,
+      // 1.5s so the server's view of the player's position (used to
+      // center the proximity bbox) stays fresh. This does NOT increase
+      // DB writes — refreshLastSeen throttles those to every 10s.
+      heartbeatIntervalMs: 1500,
     });
     this.stream.start();
     // Debug/testing hook: lets Playwright read camera + player state live.
@@ -325,25 +328,45 @@ export class WorldScene extends Phaser.Scene {
         ent.door = door;
       }
     }
-    // me
+// me
+    //
+    // The player sprite is created once on first snapshot and NEVER
+    // destroyed on subsequent snapshots. The previous behavior of
+    // destroy-and-recreate when `s.me` was null is the cause of the
+    // "respawn at previous location" bug: the DB-stale `s.me.x/y`
+    // (refreshLastSeen is throttled to 10 s) would become the spawn
+    // position of the new sprite, yanking the camera back. The client
+    // is authoritative on its own position; the WS heartbeats keep
+    // the DB in sync, and the local sprite stays where the user moved
+    // it regardless of what the snapshot says.
     if (s.me) {
       if (!this.player) {
-        // Spawn inside the central chunk so the player appears on screen even
-        // when the server reports a position outside the chunk world.
-        const spawn = chunkCenter(0, 0);
+        // First spawn — place the player at the DB position so we rejoin
+        // where we left off. Fall back to the central chunk only if the DB
+        // position is wildly off (e.g. negative world coords).
+        const spawn =
+          s.me.x >= 0 && s.me.x < 2000 && s.me.y >= -1500 && s.me.y < 1500
+            ? { x: s.me.x, y: s.me.y }
+            : chunkCenter(0, 0);
         this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a");
         this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
         this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
         this.resizeOverlays();
-      } else if (first || Math.hypot(this.player.sprite.x - s.me.x, this.player.sprite.y - s.me.y) > 500) {
-        this.player.sprite.setPosition(s.me.x, s.me.y);
       }
       this.player.glow?.setVisible(s.me.equipped.includes("lantern"));
       if (s.me.equipped.includes("lantern") && !this.player.glow) {
         this.player.glow = this.add.circle(s.me.x, s.me.y, 70, 0xffc866, 0.16).setDepth(DEPTH_LIGHT).setBlendMode(Phaser.BlendModes.ADD);
       }
-    } else if (this.player) {
-      this.destroyChar(this.player); this.player = null; this.cameras.main.stopFollow();
+    } else if (!this.player) {
+      // No `s.me` on the very first snapshot (e.g. cookie not yet set
+      // up). Place the player at the central chunk so we have something
+      // to follow. Subsequent snapshots with `s.me` non-null will spawn
+      // a real sprite; we still won't destroy this placeholder.
+      const spawn = chunkCenter(0, 0);
+      this.player = this.makeChar(spawn.x, spawn.y, "you", { body: "male", skin: "#f1c9a5", hair: "plain", hairColor: "#5a3a1a", shirtColor: "#4a7c59", pantsColor: "#3a3a4a" }, PLAYER_SPEED, "#ffe08a");
+      this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
+      this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+      this.resizeOverlays();
     }
     // other players
     this.syncChars(this.players, s.players.filter((p) => p.id !== this.meId), 130, "#d6f5ff", (p) => ({ type: "player", id: p.id, name: p.name, distance: this.distTo(p.x, p.y) }));

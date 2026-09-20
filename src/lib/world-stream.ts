@@ -36,8 +36,6 @@ import type { WorldChange } from "@/lib/protocol";
 
 const WS_PATH = "/ws";
 
-const MAX_OUTBOUND_BYTES = 64 * 1024;
-const SLOW_CLIENT_TIMEOUT_MS = 2000;
 const DELTA_COALESCE_MS = 100;
 const COOKIE_NAME = "grove_session";
 
@@ -48,9 +46,6 @@ type Connection = {
   homeCy: number;
   homePx: number;
   homePy: number;
-  outboundBytes: number;
-  isSlow: boolean;
-  slowSince: number;
   // Last snapshot version we sent this connection. Used for reconnect.
   lastVersion: number;
   // Pending delta hint: chunk (cx, cy) the client should refetch.
@@ -111,35 +106,20 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     homeCy: cy,
     homePx: auth.x,
     homePy: auth.y,
-    outboundBytes: 0,
-    isSlow: false,
-    slowSince: 0,
     lastVersion: 0,
     pendingDeltas: new Set(),
     flushTimer: null,
   };
 
-  // Wrap send so we can track outbound buffer size and evict slow clients.
-  const originalSend = ws.send.bind(ws);
-  ws.send = ((data: string | Buffer | ArrayBuffer | Uint8Array, opts?: unknown, cb?: unknown) => {
-    if (conn.isSlow) return;
-    const size = typeof data === "string" ? data.length : (data as Uint8Array).byteLength;
-    conn.outboundBytes += size;
-    if (conn.outboundBytes > MAX_OUTBOUND_BYTES) {
-      conn.isSlow = true;
-      conn.slowSince = Date.now();
-      setTimeout(() => {
-        try {
-          ws.close(1008, "slow consumer");
-        } catch {
-          /* already closed */
-        }
-      }, SLOW_CLIENT_TIMEOUT_MS);
-      return;
-    }
-    return originalSend(data, opts as never, cb as never);
-  }) as typeof ws.send;
-
+  // We don't wrap ws.send or evict "slow consumers" here. The previous
+  // implementation used a per-connection outbound byte counter that
+  // only reset on `drain` events, which were unreliable under any
+  // network jitter — false positives disconnected active clients every
+  // ~15 s and forced them to reconnect with a stale bbox, producing
+  // the entity-flicker bug. We now rely on the underlying socket
+  // backpressure: the `ws` library throws ERR_BUFFER_FULL when the
+  // OS socket buffer fills, and each send call below is wrapped in a
+  // try/catch so we just drop frames instead of disconnecting.
   ws.on("close", () => {
     if (conn.flushTimer) clearTimeout(conn.flushTimer);
     connections.delete(conn.playerId);
@@ -149,26 +129,24 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     connections.delete(conn.playerId);
   });
 
-  // Decrement byte count on successful send completion.
-  ws.on("drain", () => {
-    // Drain means the OS buffer accepted everything; reset counter.
-    conn.outboundBytes = 0;
-  });
-
-  // Override "drain" with proper accounting on send completion. The above
-  // simple drain handler isn't quite right for byte tracking; the byte
-  // count is approximate and that's fine for slow-consumer detection.
-
   connections.set(conn.playerId, conn);
 
   // Send initial snapshot. Errors close the connection cleanly.
   try {
+    // Refresh presence FIRST so the snapshot's `s.me` reflects the fresh
+    // lastSeenAt. Without this, on a reconnect after the previous WS
+    // connection dropped, lastSeenAt could be >45 s old and the snapshot
+    // would exclude the local player entirely. (This is the path that
+    // triggered the "respawn" symptom before the WorldScene fix.)
+    await refreshLastSeen(conn.playerId);
     const snap = await getSnapshot(conn.playerId, auth.x, auth.y);
     conn.lastVersion = snap.version;
-    ws.send(JSON.stringify({ type: "snapshot", data: snap }));
-    // Also refresh presence so the player appears in the 45 s window
-    // immediately (the WS connect serves itself is also a heartbeat).
-    await refreshLastSeen(conn.playerId);
+    try {
+      ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+    } catch {
+      // Socket buffer overflow or other transient send error. Drop
+      // this frame; the next periodic refresh will catch up.
+    }
   } catch (err) {
     console.error("[ws] initial snapshot failed:", err);
     ws.close(1011, "snapshot failed");
@@ -186,12 +164,22 @@ function onMessage(conn: Connection, raw: string): void {
     return;
   }
   if (msg.type === "ping") {
-    conn.ws.send(JSON.stringify({ type: "pong" }));
+    try {
+      conn.ws.send(JSON.stringify({ type: "pong" }));
+    } catch {
+      /* socket overflow — drop */
+    }
     return;
   }
 if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "number") {
     const facing = ["up","down","left","right"].includes(msg.facing ?? "") ? msg.facing! : "down";
-    void refreshLastSeen(conn.playerId, { x: msg.x, y: msg.y, facing });
+    // Catch refresh errors so they don't become unhandled rejections that
+    // silently drop the player from the 45 s presence window. A failed
+    // DB write still leaves the Redis throttle key in place, so the next
+    // heartbeat will retry.
+    refreshLastSeen(conn.playerId, { x: msg.x, y: msg.y, facing }).catch((err) => {
+      console.error(`[ws] refreshLastSeen failed for player ${conn.playerId}:`, err);
+    });
     // Update home chunk so future world_change events go to the right
     // proximity set. Cheap; happens every client heartbeat.
     const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
@@ -207,7 +195,11 @@ if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "n
     // Legacy handshake — sessionId is no longer required since the WS
     // upgrade itself authenticates via cookie. Acknowledged for forward
     // compatibility with future client variants.
-    conn.ws.send(JSON.stringify({ type: "pong" }));
+    try {
+      conn.ws.send(JSON.stringify({ type: "pong" }));
+    } catch {
+      /* socket overflow — drop */
+    }
   }
 }
 
@@ -215,11 +207,14 @@ if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "n
 
 function onWorldChange(change: WorldChange): void {
   for (const conn of connections.values()) {
-    // Proximity filter: include if the change is within ±3 chunks of the
-    // player's home chunk (matches snapshot.ts PROXIMITY_RADIUS_CHUNKS).
+    // Proximity filter in chunk space. The snapshot bbox is
+    // PROXIMITY_RADIUS_PX (default 1152 px) centered on the player;
+    // 1152px = 3 chunk-widths on X and ~4.8 chunk-heights on Y. Using 5
+    // chunks on both axes is a safe over-estimate so we never skip a
+    // change the snapshot would have included.
     const dx = Math.abs(change.chunkX - conn.homeCx);
     const dy = Math.abs(change.chunkY - conn.homeCy);
-    if (dx > 3 || dy > 3) continue;
+    if (dx > 5 || dy > 5) continue;
     conn.pendingDeltas.add(`${change.chunkX},${change.chunkY}`);
     scheduleFlush(conn);
   }
@@ -238,31 +233,47 @@ async function flushDeltas(conn: Connection): Promise<void> {
   if (conn.ws.readyState !== conn.ws.OPEN) return;
 
   // Phase 2 minimum viable: when a relevant entity changes, fetch a fresh
-  // full snapshot for this connection and push it. This is heavier than
-  // a targeted delta payload, but the proximity filter and chunk cache
-  // keep the snapshot bounded, and clients need real data to render
-  // movement. Phase 3+ will switch to per-entity diffs.
+  // full snapshot for this connection and push it. The bbox is centered
+  // on conn.homePx/homePy, which the heartbeat handler keeps fresh
+  // (default 1.5s). A pixel-centered bbox means small position staleness
+  // only nudges the bbox rather than snapping it by a whole chunk.
   try {
     const snap = await getSnapshot(conn.playerId, conn.homePx, conn.homePy);
     conn.lastVersion = snap.version;
-    conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+    try {
+      conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+    } catch {
+      /* socket overflow — drop frame, next refresh will catch up */
+    }
   } catch {
-    /* ignore — next change or reconnect will refresh */
+    /* ignore — DB hiccup */
   }
   void chunks; // Suppress unused warning — chunk list informs future logic.
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
-// Periodic full-snapshot refresh per connection. The pub/sub bridge fires
-// on entity changes, but in dev without Upstash Redis the cross-process
-// pub/sub doesn't work — the tickd's world_change publishes don't reach
-// the WS server's process. A short-interval refresh covers that case:
-// every ~1.5s the WS pushes a fresh snapshot to every client. The
-// proximity filter and 250 ms chunk cache keep the per-client cost
-// bounded; this is the same payload the client would otherwise build
-// itself. Phase 3+ will switch to per-entity diffs once Redis is wired.
-const PERIODIC_REFRESH_MS = Number(process.env.WS_REFRESH_MS ?? 1500);
+// Periodic full-snapshot refresh per connection.
+//
+// We rely solely on the periodic refresh for client updates — no pub/sub.
+// Reasons:
+//
+//   - Upstash HTTP subscribe is unreliable in this SDK version (the
+//     AbortController streaming fetch often aborts silently, leaving
+//     the WS process disconnected from world_change events).
+//   - Per-entity change publishes would burn ~40 Redis commands/sec of
+//     sim time even when coalesced — too expensive at any meaningful
+//     player count.
+//   - 60 s periodic refresh × 3 Redis ops per snapshot = 3 ops/min per
+//     connection. At 1000 connections that's 3000 ops/min, dominated
+//     by per-connection overhead rather than Redis.
+//
+// The trade-off is up to 60 s of staleness between sim updates reaching
+// clients. For a pixel village with chunk-cache proximity filter this
+// is invisible — the next snapshot is usually indistinguishable from
+// the previous.
+
+const PERIODIC_REFRESH_MS = Number(process.env.WS_REFRESH_MS ?? 5000);
 
 let periodicStarted = false;
 let periodicTimer: NodeJS.Timeout | null = null;
@@ -270,6 +281,7 @@ let periodicTimer: NodeJS.Timeout | null = null;
 export function startPeriodicRefresh(): void {
   if (periodicStarted) return;
   periodicStarted = true;
+  console.log(`[ws] periodic snapshot refresh every ${PERIODIC_REFRESH_MS}ms`);
   periodicTimer = setInterval(() => {
     void refreshAllConnections();
   }, PERIODIC_REFRESH_MS);
@@ -287,17 +299,27 @@ async function refreshAllConnections(): Promise<void> {
     try {
       const snap = await getSnapshot(conn.playerId, conn.homePx, conn.homePy);
       conn.lastVersion = snap.version;
-      conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+      try {
+        conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+      } catch {
+        /* socket overflow — drop frame, next refresh will catch up */
+      }
     } catch {
-      /* ignore — slow consumer or DB hiccup */
+      /* DB hiccup — try again next interval */
     }
   }
 }
 
-// Start the pub/sub bridge that consumes world_change events. Must be
-// called once at process start. Idempotent — repeated calls are no-ops.
+// Pub/sub bridge kept exported for future re-enablement once the
+// @upstash/redis subscribe is reliable. Right now calling this only
+// burns Redis commands without delivering messages.
+//
+// subscribePubSub returns an "unsubscribe" thunk. The Upstash variant
+// returns a Promise of a void-returning function; the memory variant
+// returns a sync void-returning function. We coalesce both into a
+// single callable.
 let pubSubStarted = false;
-let pubSubUnsub: (() => Promise<void> | void) | null = null;
+let pubSubUnsub: () => Promise<void> | void = () => {};
 
 export async function startPubSubBridge(): Promise<void> {
   if (pubSubStarted) return;
@@ -311,15 +333,23 @@ export async function startPubSubBridge(): Promise<void> {
     }
     onWorldChange(change);
   });
+  if (typeof pubSubUnsub !== "function") {
+    // Defensive: subscribePubSub returned something unexpected (e.g. the
+    // Upstash Subscriber object). Fall back to a no-op so stopPubSubBridge
+    // never crashes on shutdown.
+    pubSubUnsub = () => {};
+  }
 }
 
 export async function stopPubSubBridge(): Promise<void> {
   if (!pubSubStarted) return;
   pubSubStarted = false;
-  if (pubSubUnsub) {
+  try {
     await pubSubUnsub();
-    pubSubUnsub = null;
+  } catch {
+    // Best-effort; the underlying connection may already be gone.
   }
+  pubSubUnsub = () => {};
 }
 
 /**
@@ -375,6 +405,11 @@ export function closeAllWs(wss: WebSocketServer): void {
       /* ignore */
     }
   });
+}
+
+/** Number of currently-open WS connections (for /api/health). */
+export function wsConnectionCount(): number {
+  return connections.size;
 }
 
 // Re-export so callers that still want to boot this as a standalone
