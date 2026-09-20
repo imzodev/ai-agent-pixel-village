@@ -89,6 +89,11 @@ export class WorldScene extends Phaser.Scene {
   // would otherwise crash with `this.add` / tilemaps being null.
   private destroyed = false;
 
+  // Throttle state for the `playerMoved` bus event (HUD proximity UI).
+  private lastSelfEmitAt = 0;
+  private lastSelfEmitX = 0;
+  private lastSelfEmitY = 0;
+
   // Bound teardown so it can be used as an event handler and registered
   // before create()'s awaits. Idempotent.
   private readonly teardown = (): void => {
@@ -287,6 +292,16 @@ export class WorldScene extends Phaser.Scene {
           // Phase 2 minimum viable: ignore delta hints and rely on the
           // next full snapshot. Phase 3+ can implement targeted delta
           // fetches per affected chunk.
+        },
+        onPlayerPos: ({ id, x, y, facing }) => {
+          if (!this.alive() || id === this.meId) return;
+          const ent = this.players.get(id);
+          if (!ent) return; // not in our proximity window yet
+          ent.tx = x;
+          ent.ty = y;
+          if (facing === "up" || facing === "down" || facing === "left" || facing === "right") {
+            ent.facing = facing;
+          }
         },
         onClose: () => {
           // Optional: trigger a one-off HTTP snapshot fallback. For now,
@@ -683,6 +698,21 @@ export class WorldScene extends Phaser.Scene {
     // to update proximity tracking. Sending every frame is cheap because
     // the WS layer only carries the latest snapshot forward.
     if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing);
+    // Tell the HUD where we are so its proximity UI (Pick up / Gather / …)
+    // reflects the live position, not the up-to-10s-stale server row.
+    // Throttled to ~10 Hz and only on a meaningful move.
+    const now = this.time.now;
+    if (
+      !this.lastSelfEmitAt
+      || now - this.lastSelfEmitAt > 100
+      || Math.abs(p.sprite.x - this.lastSelfEmitX) > 4
+      || Math.abs(p.sprite.y - this.lastSelfEmitY) > 4
+    ) {
+      this.lastSelfEmitAt = now;
+      this.lastSelfEmitX = p.sprite.x;
+      this.lastSelfEmitY = p.sprite.y;
+      bus.emit("playerMoved", { x: p.sprite.x, y: p.sprite.y });
+    }
   }
 
   private moveChar(e: CharEnt, dt: number) {

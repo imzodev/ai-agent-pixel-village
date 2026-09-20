@@ -20,6 +20,7 @@ async function api<T = unknown>(url: string, body?: unknown, method = body ? "PO
 
 export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [selfPos, setSelfPos] = useState<{ x: number; y: number } | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | null>(null);
@@ -46,6 +47,7 @@ export default function Hud() {
   useEffect(() => {
     const u = [
       bus.on("snapshot", setSnap),
+      bus.on("playerMoved", setSelfPos),
       bus.on("select", setSel),
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
@@ -83,14 +85,23 @@ export default function Hud() {
   useEffect(() => {
     bus.emit("modalOpen", !!talk);
   }, [talk]);
-  // keep the selection's distance live as the player walks
+  // Keep the selection's distance live as the player walks. Use the
+  // client's live sprite position (selfPos) — `snap.me` is the server row
+  // and can be ~10s stale, which delayed the Pick up / Gather buttons.
   useEffect(() => {
-    if (!snap?.me || !sel) return;
-    const pos = entityPos(snap, sel);
-    if (!pos) return;
-    const d = Math.hypot(pos.x - snap.me.x, pos.y - snap.me.y);
+    if (!sel) return;
+    const self = selfPos ?? snap?.me;
+    if (!self) return;
+    const pos = snap ? entityPos(snap, sel) : null;
+    // The selected entity vanished (e.g. someone picked the item up or it
+    // despawned) — drop the stale card instead of showing it forever.
+    if (!pos) {
+      setSel(null);
+      return;
+    }
+    const d = Math.hypot(pos.x - self.x, pos.y - self.y);
     if (Math.abs(d - sel.distance) > 4) setSel({ ...sel, distance: d });
-  }, [snap, sel]);
+  }, [snap, sel, selfPos]);
 
   const showGain = (items: { itemKey: string; qty: number; label?: string }[]) => {
     for (const g of items) {
@@ -211,7 +222,7 @@ export default function Hud() {
       <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-wrap items-center gap-2 bg-gradient-to-b from-black/50 to-transparent p-2 text-white">
         <div className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 text-base font-bold tracking-tight text-amber-900 shadow">🌳 thegrove</div>
         <div className="rounded-lg bg-black/40 px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]} {snap?.weather ?? "…"} · 🕰 {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
-        <div className="rounded-lg bg-black/40 px-2 py-1">👥 {snap?.players.length ?? 0} online · 🤖 {snap?.npcs.length ?? 0} agents</div>
+        <div className="rounded-lg bg-black/40 px-2 py-1">👥 {snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 {snap?.npcs.length ?? 0} agents</div>
         <div className="flex-1" />
         {loggedIn && me?.me && (
           <div className="flex items-center gap-2 rounded-lg bg-black/40 px-2 py-1">

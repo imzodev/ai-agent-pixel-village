@@ -15,11 +15,17 @@ import type { StreamHandlers, WorldStreamOptions } from "@/types/websocket";
 
 export type { StreamHandlers, WorldStreamOptions };
 
+// How often the client streams its position to the server for relay to
+// nearby players. Separate from the slower presence heartbeat so the DB
+// write stays throttled.
+const POS_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_WS_POS_MS ?? 200);
+
 export class WorldStream {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private posTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   private lastPosition: { x: number; y: number; facing: Facing } | null = null;
 
@@ -34,6 +40,7 @@ export class WorldStream {
     this.closed = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.posTimer) clearInterval(this.posTimer);
     if (this.ws) {
       try {
         this.ws.close();
@@ -43,7 +50,7 @@ export class WorldStream {
     }
   }
 
-  /** Update the player's position; sent on the next heartbeat tick. */
+  /** Update the player's position; sent on the next pos/heartbeat tick. */
   setPosition(x: number, y: number, facing: Facing): void {
     this.lastPosition = { x, y, facing };
   }
@@ -61,6 +68,7 @@ export class WorldStream {
       this.reconnectAttempts = 0;
       this.opts.handlers.onOpen?.();
       this.startHeartbeat();
+      this.startPositionStream();
       // Send a hello so the server knows we're a fresh client. lastVersion
       // is unknown on first connect — server sends a full snapshot.
       this.send({ type: "hello" });
@@ -77,12 +85,15 @@ export class WorldStream {
         this.opts.handlers.onSnapshot(msg.data);
       } else if (msg.type === "delta") {
         this.opts.handlers.onDelta();
+      } else if (msg.type === "playerPos") {
+        this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing });
       }
       // "pong" and "error" are observable via close events; nothing to do.
     };
 
     this.ws.onclose = () => {
       this.stopHeartbeat();
+      this.stopPositionStream();
       this.opts.handlers.onClose?.();
       if (!this.closed) this.scheduleReconnect();
     };
@@ -122,6 +133,28 @@ export class WorldStream {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+  }
+
+  // Fast position stream for player-to-player movement. Only sends when
+  // the position actually changed since the last frame, so an idle client
+  // costs nothing.
+  private startPositionStream(): void {
+    let sent: { x: number; y: number; facing: Facing } | null = null;
+    const tick = () => {
+      const p = this.lastPosition;
+      if (!p) return;
+      if (sent && p.x === sent.x && p.y === sent.y && p.facing === sent.facing) return;
+      sent = { ...p };
+      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing });
+    };
+    this.posTimer = setInterval(tick, POS_INTERVAL_MS);
+  }
+
+  private stopPositionStream(): void {
+    if (this.posTimer) {
+      clearInterval(this.posTimer);
+      this.posTimer = null;
     }
   }
 

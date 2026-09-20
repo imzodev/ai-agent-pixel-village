@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { characters, groundItems, homeDecor, inventory, items } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { addItem, logEvent, progressMissions } from "@/lib/game";
+import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,20 @@ export async function POST(req: Request) {
     if (action === "pickup") {
       const [g] = await db.select().from(groundItems).where(eq(groundItems.id, Number(body.groundItemId)));
       if (!g) return Response.json({ error: "Already gone." }, { status: 404 });
-      if (Math.hypot(g.x - me.x, g.y - me.y) > 90) return Response.json({ error: "Too far away." }, { status: 400 });
+      // Validate against the live sprite position when we have it. `me.x/y`
+      // is the DB row, refreshed at most every PRESENCE_WRITE_INTERVAL_MS,
+      // so a player who just walked up to an item would otherwise be told
+      // "too far away" for a few seconds.
+      const live = getLivePlayerPosition(me.id);
+      const px = live?.x ?? me.x;
+      const py = live?.y ?? me.y;
+      if (Math.hypot(g.x - px, g.y - py) > 90) return Response.json({ error: "Too far away." }, { status: 400 });
       await db.delete(groundItems).where(eq(groundItems.id, g.id));
       await addItem(me.id, g.itemKey, g.qty, g.meta);
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === g.itemKey, g.qty);
+      // Push the removal to nearby players now instead of waiting up to
+      // WS_REFRESH_MS for the periodic snapshot.
+      markWorldDirty(g.x, g.y);
       return Response.json({ ok: true, message: `Picked up ${g.itemKey.replace("_", " ")}.` });
     }
 
@@ -31,7 +42,11 @@ export async function POST(req: Request) {
       const qty = Math.max(1, Math.min(row.qty, Number(body.qty ?? 1)));
       if (qty >= row.qty) await db.delete(inventory).where(eq(inventory.id, row.id));
       else await db.update(inventory).set({ qty: row.qty - qty }).where(eq(inventory.id, row.id));
-      await db.insert(groundItems).values({ itemKey: row.itemKey, qty, x: me.x + (Math.random() - 0.5) * 30, y: me.y + 18, meta: row.meta, droppedBy: me.id });
+      const live = getLivePlayerPosition(me.id);
+      const px = live?.x ?? me.x;
+      const py = live?.y ?? me.y;
+      await db.insert(groundItems).values({ itemKey: row.itemKey, qty, x: px + (Math.random() - 0.5) * 30, y: py + 18, meta: row.meta, droppedBy: me.id });
+      markWorldDirty(px, py);
       return Response.json({ ok: true, message: `Dropped ${def?.name ?? row.itemKey}.` });
     }
     if (action === "equip") {

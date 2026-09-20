@@ -28,15 +28,15 @@ import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, sessions, users } from "@/db/schema";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
-import { getSnapshot } from "@/lib/snapshot";
+import { getSnapshot, invalidateSnapshots } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
 import { WORLD_CHANGE_CHANNEL } from "@/lib/sim";
 import { metrics } from "@/lib/metrics";
 import { log } from "@/lib/logger";
-import { isDraining, setDraining } from "@/lib/lifecycle";
+import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
-import type { WorldChange } from "@/lib/protocol";
+import type { WorldChange, WorldSnapshot, Facing } from "@/lib/protocol";
 import type { Connection } from "@/types/websocket";
 
 const WS_PATH = "/ws";
@@ -70,6 +70,115 @@ const wsUpgradeTimestamps = new Map<string, number[]>();
 
 const connections = new Map<number, Connection>();
 const SHARD_ID = localShardId();
+
+// Movement relay: how far a player's `pos` reaches, and the per-connection
+// coalescing window for the post-mutation snapshot push.
+const RELAY_RADIUS_PX = Number(process.env.WS_RELAY_RADIUS_PX ?? 1200);
+const DIRTY_FLUSH_MS = Math.max(50, Number(process.env.WS_DIRTY_FLUSH_MS ?? 150));
+
+// ── Live positions + shared send path ──────────────────────────────────
+
+/**
+ * The freshest known position for a connected player, or null. Used for
+ * mutation validation so a HTTP route does not compare against a stale
+ * DB row.
+ */
+export function getLivePlayerPosition(playerId: number): { x: number; y: number } | null {
+  const c = connections.get(playerId);
+  return c ? { x: c.homePx, y: c.homePy } : null;
+}
+
+/**
+ * Overwrite player positions in a snapshot with the live WS positions so
+ * the periodic snapshot never yanks a moving player's sprite backward
+ * (the DB row can be ~10 s stale).
+ */
+function applyLivePositions(snap: WorldSnapshot): void {
+  for (const p of snap.players) {
+    const c = connections.get(p.id);
+    if (c) {
+      p.x = c.homePx;
+      p.y = c.homePy;
+      p.facing = c.homeFacing;
+    }
+  }
+  if (snap.me) {
+    const c = connections.get(snap.me.id);
+    if (c) {
+      snap.me.x = c.homePx;
+      snap.me.y = c.homePy;
+      snap.me.facing = c.homeFacing;
+    }
+  }
+}
+
+/**
+ * Build this connection's snapshot (shared build + `me` injection + live
+ * positions) and send it. Returns true on success.
+ */
+async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }): Promise<boolean> {
+  if (conn.ws.readyState !== conn.ws.OPEN) return false;
+  try {
+    const snap = await getSnapshot(conn.playerId, conn.homePx, conn.homePy, opts);
+    applyLivePositions(snap);
+    conn.lastVersion = snap.version;
+    try {
+      conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+      return true;
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
+/** Mark the world dirty near (x, y) and schedule a coalesced push. */
+export function markWorldDirty(x?: number, y?: number): void {
+  if (x !== undefined && y !== undefined) dirtyPoints.push({ x, y });
+  if (dirtyTimer) return;
+  dirtyTimer = setTimeout(() => void flushDirty(), DIRTY_FLUSH_MS);
+}
+
+let dirtyPoints: Array<{ x: number; y: number }> = [];
+let dirtyTimer: NodeJS.Timeout | null = null;
+
+async function flushDirty(): Promise<void> {
+  dirtyTimer = null;
+  const points = dirtyPoints;
+  dirtyPoints = [];
+  // Rebuild fresh: the cached snapshot still contains the pre-mutation
+  // state until we drop it.
+  invalidateSnapshots();
+  for (const conn of connections.values()) {
+    if (conn.ws.readyState !== conn.ws.OPEN) continue;
+    // No point recorded means "everywhere" (e.g. a global event).
+    const near =
+      points.length === 0 ||
+      points.some((p) => Math.hypot(p.x - conn.homePx, p.y - conn.homePy) <= RELAY_RADIUS_PX);
+    if (!near) continue;
+    await sendSnapshot(conn, { bypassRedis: true });
+  }
+}
+
+/** Relay a player's live position to nearby connections. */
+function relayPosition(from: Connection, x: number, y: number, facing: Facing): void {
+  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing });
+  for (const conn of connections.values()) {
+    if (conn === from) continue;
+    if (conn.ws.readyState !== conn.ws.OPEN) continue;
+    if (Math.hypot(conn.homePx - x, conn.homePy - y) > RELAY_RADIUS_PX) continue;
+    try {
+      conn.ws.send(msg);
+    } catch {
+      /* socket overflow — drop */
+    }
+  }
+}
+
+function normalizeFacing(value: string | undefined): Facing {
+  return value === "up" || value === "down" || value === "left" || value === "right" ? value : "down";
+}
 
 // ── Auth ────────────────────────────────────────────────────────────────
 
@@ -122,6 +231,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     homeCy: cy,
     homePx: auth.x,
     homePy: auth.y,
+    homeFacing: "down",
     lastPresenceAt: 0,
     lastVersion: 0,
     pendingDeltas: new Set(),
@@ -168,14 +278,10 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     // the Redis throttle gate.
     await refreshLastSeen(conn.playerId, undefined, { force: true });
     conn.lastPresenceAt = Date.now();
-    const snap = await getSnapshot(conn.playerId, auth.x, auth.y);
-    conn.lastVersion = snap.version;
-    try {
-      ws.send(JSON.stringify({ type: "snapshot", data: snap }));
-    } catch {
-      // Socket buffer overflow or other transient send error. Drop
-      // this frame; the next periodic refresh will catch up.
-    }
+    await sendSnapshot(conn);
+    // Tell nearby players we exist so their next snapshot includes us
+    // (players are proximity-filtered).
+    markWorldDirty(auth.x, auth.y);
   } catch (err) {
     console.error("[ws] initial snapshot failed:", err);
     ws.close(1011, "snapshot failed");
@@ -200,13 +306,35 @@ function onMessage(conn: Connection, raw: string): void {
     }
     return;
   }
+if (msg.type === "pos" && typeof msg.x === "number" && typeof msg.y === "number") {
+    // Fast in-memory movement update. Never writes the DB for position —
+    // presence (below) stays on its own slow cadence. Relay to nearby
+    // players so they see movement within a frame or two.
+    const facing = normalizeFacing(msg.facing);
+    const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
+    const changedChunk = cx !== conn.homeCx || cy !== conn.homeCy;
+    conn.homePx = msg.x;
+    conn.homePy = msg.y;
+    conn.homeFacing = facing;
+    if (changedChunk) {
+      conn.homeCx = cx;
+      conn.homeCy = cy;
+      // Crossing a chunk edge may move us into (or out of) another
+      // player's proximity window; push a fresh snapshot so sprites are
+      // created/removed promptly rather than waiting for the 5 s refresh.
+      markWorldDirty(msg.x, msg.y);
+    }
+    relayPosition(conn, msg.x, msg.y, facing);
+    return;
+  }
 if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "number") {
-    const facing = ["up","down","left","right"].includes(msg.facing ?? "") ? msg.facing! : "down";
+    const facing = normalizeFacing(msg.facing);
     // Update home chunk so subsequent refreshes use the right bbox. Cheap;
     // happens every client heartbeat.
     const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
     conn.homePx = msg.x;
     conn.homePy = msg.y;
+    conn.homeFacing = facing;
     if (cx !== conn.homeCx || cy !== conn.homeCy) {
       conn.homeCx = cx;
       conn.homeCy = cy;
@@ -262,28 +390,10 @@ function scheduleFlush(conn: Connection): void {
 
 async function flushDeltas(conn: Connection): Promise<void> {
   conn.flushTimer = null;
-  const chunks = Array.from(conn.pendingDeltas);
+  const had = conn.pendingDeltas.size > 0;
   conn.pendingDeltas.clear();
-  if (chunks.length === 0) return;
-  if (conn.ws.readyState !== conn.ws.OPEN) return;
-
-  // Phase 2 minimum viable: when a relevant entity changes, fetch a fresh
-  // full snapshot for this connection and push it. The bbox is centered
-  // on conn.homePx/homePy, which the heartbeat handler keeps fresh
-  // (default 1.5s). A pixel-centered bbox means small position staleness
-  // only nudges the bbox rather than snapping it by a whole chunk.
-  try {
-    const snap = await getSnapshot(conn.playerId, conn.homePx, conn.homePy);
-    conn.lastVersion = snap.version;
-    try {
-      conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
-    } catch {
-      /* socket overflow — drop frame, next refresh will catch up */
-    }
-  } catch {
-    /* ignore — DB hiccup */
-  }
-  void chunks; // Suppress unused warning — chunk list informs future logic.
+  if (!had) return;
+  await sendSnapshot(conn);
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
@@ -330,18 +440,7 @@ export function stopPeriodicRefresh(): void {
 
 async function refreshAllConnections(): Promise<void> {
   for (const conn of connections.values()) {
-    if (conn.ws.readyState !== conn.ws.OPEN) continue;
-    try {
-      const snap = await getSnapshot(conn.playerId, conn.homePx, conn.homePy);
-      conn.lastVersion = snap.version;
-      try {
-        conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
-      } catch {
-        /* socket overflow — drop frame, next refresh will catch up */
-      }
-    } catch {
-      /* DB hiccup — try again next interval */
-    }
+    await sendSnapshot(conn);
   }
 }
 

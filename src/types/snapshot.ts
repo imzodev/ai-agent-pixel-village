@@ -41,7 +41,14 @@ export type PlayerRow = {
   xp: number;
 };
 
-/** Intermediate shape produced by the DB assembler, before formatting. */
+/**
+ * Intermediate shape produced by the DB assembler, before formatting.
+ *
+ * Note there is no `meId`/`meEquipped` here: the shared snapshot is cached
+ * per chunk (not per player), and the local player's own row is injected
+ * from `players` at send time. That keeps one rebuild shared across every
+ * player in a chunk.
+ */
 export type RawSnapshot = {
   world: typeof worldState.$inferSelect;
   players: PlayerRow[];
@@ -54,9 +61,8 @@ export type RawSnapshot = {
   enemies: Array<typeof enemies.$inferSelect>;
   chat: Array<typeof worldChat.$inferSelect>;
   events: Array<typeof worldEvents.$inferSelect>;
+  onlineCount: number;
   doors: Map<string, { x: number; y: number }>;
-  meId: number | null;
-  meEquipped: string[];
   equippedByChar: Map<number, string[]>;
   spById: Record<string, SponsorLite>;
 };

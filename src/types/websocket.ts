@@ -17,6 +17,8 @@ export type Connection = {
   homeCy: number;
   homePx: number;
   homePy: number;
+  /** Latest facing from `pos`/`heartbeat`, used when relaying positions. */
+  homeFacing: Facing;
   /** Last time we persisted this player's presence (in-memory throttle). */
   lastPresenceAt: number;
   /** Last snapshot version we sent this connection. Used for reconnect. */
@@ -32,6 +34,8 @@ export type Connection = {
 export type StreamHandlers = {
   onSnapshot: (data: WorldSnapshot) => void;
   onDelta: () => void;
+  /** Another player's live position (movement relay). */
+  onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing }) => void;
   onOpen?: () => void;
   onClose?: () => void;
 };

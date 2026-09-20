@@ -3,10 +3,17 @@ import { db } from "@/db";
 import { animals, buildings, characters, enemies, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
+import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+
+/** Live sprite position, falling back to the (stale) DB row. */
+function livePos(me: { id: number; x: number; y: number }): { x: number; y: number } {
+  const live = getLivePlayerPosition(me.id);
+  return { x: live?.x ?? me.x, y: live?.y ?? me.y };
+}
 
 /** World actions: pet | gather | attack | enter | chat */
 export async function POST(req: Request) {
@@ -19,13 +26,16 @@ export async function POST(req: Request) {
       const text = String(body.text ?? "").trim().slice(0, 140);
       if (!text) return Response.json({ error: "Say something." }, { status: 400 });
       await db.insert(worldChat).values({ speakerType: "player", speakerId: me.id, text });
+      const p = livePos(me);
+      markWorldDirty(p.x, p.y);
       return Response.json({ ok: true });
     }
 
     if (action === "pet") {
       const [a] = await db.select().from(animals).where(eq(animals.id, Number(body.id)));
       if (!a) return Response.json({ error: "It scampered off." }, { status: 404 });
-      if (Math.hypot(a.x - me.x, a.y - me.y) > 90) return Response.json({ error: "Get a little closer." }, { status: 400 });
+      const p = livePos(me);
+      if (Math.hypot(a.x - p.x, a.y - p.y) > 90) return Response.json({ error: "Get a little closer." }, { status: 400 });
       const recently = a.lastPettedAt && Date.now() - a.lastPettedAt.getTime() < 20_000;
       await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5) }).where(eq(animals.id, a.id));
       const reactions: Record<string, string[]> = {
@@ -55,13 +65,15 @@ export async function POST(req: Request) {
         await recalcLevel(me.id);
       }
       await logEvent("pet", `${me.name} petted ${a.name} the ${a.species}.`, "animal", a.id, a.x, a.y);
+      markWorldDirty(a.x, a.y);
       return Response.json({ ok: true, message: `${a.name} ${pick(reactions[a.species] ?? ["seems pleased"])}.${drops.length ? " You got " + drops.map((d) => d.itemKey.replace("_", " ")).join(", ") + "!" : ""}`, gained: drops, missions: touched });
     }
 
     if (action === "gather") {
       const [n] = await db.select().from(resourceNodes).where(eq(resourceNodes.id, Number(body.id)));
       if (!n) return Response.json({ error: "Nothing here." }, { status: 404 });
-      if (Math.hypot(n.x - me.x, n.y - me.y) > 90) return Response.json({ error: "Too far." }, { status: 400 });
+      const p = livePos(me);
+      if (Math.hypot(n.x - p.x, n.y - p.y) > 90) return Response.json({ error: "Too far." }, { status: 400 });
       if (n.respawnAt || n.qty <= 0) return Response.json({ error: "Picked clean. It'll grow back." }, { status: 400 });
       const qty = n.qty - 1;
       await db.update(resourceNodes).set({ qty, respawnAt: qty <= 0 ? new Date(Date.now() + 4 * 60_000) : null }).where(eq(resourceNodes.id, n.id));
@@ -69,13 +81,15 @@ export async function POST(req: Request) {
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, 1);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
       await recalcLevel(me.id);
+      markWorldDirty(n.x, n.y);
       return Response.json({ ok: true, message: `Gathered 1 ${n.itemKey.replace("_", " ")}.`, gained: [{ itemKey: n.itemKey, qty: 1 }] });
     }
 
     if (action === "attack") {
       const [e] = await db.select().from(enemies).where(eq(enemies.id, Number(body.id)));
       if (!e) return Response.json({ error: "It's gone." }, { status: 404 });
-      if (Math.hypot(e.x - me.x, e.y - me.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
+      const p = livePos(me);
+      if (Math.hypot(e.x - p.x, e.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
       const [sword] = await db.select().from(inventory).where(sql`${inventory.characterId} = ${me.id} and ${inventory.itemKey} = 'wooden_sword' and ${inventory.equipped} = true`);
       const dmg = 2 + Math.floor(Math.random() * 3) + (sword ? 2 : 0) + Math.floor(me.level / 2);
       const hp = e.hp - dmg;
@@ -101,6 +115,7 @@ export async function POST(req: Request) {
           message += ` It hits back for ${taken}.`;
         }
       }
+      markWorldDirty(e.x, e.y);
       return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken });
     }
 

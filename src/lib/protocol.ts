@@ -12,11 +12,19 @@ export type { Facing };
 export type WsClientMessage =
   | { type: "hello"; sessionId?: string; lastVersion?: number }
   | { type: "ping" }
-  | { type: "heartbeat"; x: number; y: number; facing: Facing };
+  // Presence heartbeat: slow (1.5 s) and drives the DB lastSeenAt write.
+  | { type: "heartbeat"; x: number; y: number; facing: Facing }
+  // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
+  // players. Never triggers a DB write.
+  | { type: "pos"; x: number; y: number; facing: Facing };
 
 export type WsServerMessage =
   | { type: "snapshot"; data: WorldSnapshot }
   | { type: "delta"; version: number; chunkX: number; chunkY: number }
+  // Another player's live position, relayed on their `pos`. Applied to the
+  // existing sprite if present; ignored otherwise (the next snapshot
+  // creates it).
+  | { type: "playerPos"; id: number; x: number; y: number; facing: Facing }
   | { type: "pong" }
   | { type: "error"; message: string };
 
@@ -32,6 +40,8 @@ export type WorldSnapshot = {
   dayLengthMinutes: number;
   epochStart: number;
   me: PlayerSnapshot | null;
+  /** Total online players, world-wide — `players` is proximity-filtered. */
+  onlineCount: number;
   players: PlayerSnapshot[];
   npcs: NpcSnapshot[];
   animals: AnimalSnapshot[];

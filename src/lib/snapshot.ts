@@ -83,12 +83,11 @@ const PROXIMITY_RADIUS_PX = Number(process.env.PROXIMITY_RADIUS_PX ?? 1152);
 const PRESENCE_WINDOW_MS = 45_000;
 const CHAT_WINDOW_MS = 12_000;
 
-// Cache key includes meId so two players in the same chunk don't see
-// each other's `me` field. Without this, the second player's request
-// would return the first player's snapshot, including their position
-// as `me`.
-const cacheKey = (cx: number, cy: number, meId: number | null): string =>
-  `snap:${cx}:${cy}:${meId ?? "anon"}`;
+// Shared snapshot cache keyed by chunk ONLY. Every player in a chunk
+// shares one rebuild; the local player's `me` row is injected from the
+// shared `players` array at send time, so `meId` must not be part of the
+// key (it would force a rebuild per player).
+const cacheKey = (cx: number, cy: number): string => `snap:${cx}:${cy}`;
 
 // Player projection shared by the view read and the direct fallback.
 const playerColumns = {
@@ -112,52 +111,61 @@ const playerColumns = {
 let viewState: ViewState = { available: true, checkedAt: 0 };
 const VIEW_RETRY_MS = 30_000;
 
-/**
- * Fetch the online player rows.
- *
- * Primary source is the `online_players` materialized view (small, stable,
- * refreshed by the sim worker). If it is missing or empty we fall back to
- * the indexed characters range scan. Either way, if the requesting player
- * isn't in the result (e.g. the view has not refreshed since they joined)
- * we look them up directly so `me` is never null for a live session.
- */
-async function fetchOnlinePlayers(
-  rdb: ReturnType<typeof withReadDb>,
-  meId: number | null,
-  since: Date,
-): Promise<PlayerRow[]> {
-  // The view exposes the same columns under its own name.
-  const viewColumns = {
-    id: onlinePlayers.id,
-    name: onlinePlayers.name,
-    x: onlinePlayers.x,
-    y: onlinePlayers.y,
-    facing: onlinePlayers.facing,
-    appearance: onlinePlayers.appearance,
-    level: onlinePlayers.level,
-    hp: onlinePlayers.hp,
-    maxHp: onlinePlayers.maxHp,
-    coins: onlinePlayers.coins,
-    gems: onlinePlayers.gems,
-    xp: onlinePlayers.xp,
-  } as const;
+// Projection over the online_players view (same columns under its name).
+const viewColumns = {
+  id: onlinePlayers.id,
+  name: onlinePlayers.name,
+  x: onlinePlayers.x,
+  y: onlinePlayers.y,
+  facing: onlinePlayers.facing,
+  appearance: onlinePlayers.appearance,
+  level: onlinePlayers.level,
+  hp: onlinePlayers.hp,
+  maxHp: onlinePlayers.maxHp,
+  coins: onlinePlayers.coins,
+  gems: onlinePlayers.gems,
+  xp: onlinePlayers.xp,
+} as const;
 
+/**
+ * Fetch the online player rows inside the proximity bbox, plus the global
+ * online count.
+ *
+ * Players are proximity-filtered like every other entity (the local
+ * player is at the bbox center, so they are always included). The global
+ * count is read separately so the HUD can show "N online" without
+ * shipping N player rows to every client. Primary source is the
+ * `online_players` materialized view (refreshed by the sim worker); if it
+ * is missing we fall back to the indexed characters range scan.
+ */
+async function fetchPlayers(
+  rdb: ReturnType<typeof withReadDb>,
+  since: Date,
+  bbox: { xMin: number; xMax: number; yMin: number; yMax: number },
+): Promise<{ players: PlayerRow[]; onlineCount: number }> {
   const tryView = viewState.available || Date.now() - viewState.checkedAt > VIEW_RETRY_MS;
+
+  // Global count — cheap on the view, indexed range scan on characters.
+  const countQuery = rdb
+    .select({ n: sql<number>`count(*)::int` })
+    .from(onlinePlayers);
+
   if (tryView) {
     try {
-      const rows = await rdb.select(viewColumns).from(onlinePlayers);
+      const [rows, countRows] = await Promise.all([
+        rdb
+          .select(viewColumns)
+          .from(onlinePlayers)
+          .where(
+            and(
+              gte(onlinePlayers.x, bbox.xMin), lt(onlinePlayers.x, bbox.xMax),
+              gte(onlinePlayers.y, bbox.yMin), lt(onlinePlayers.y, bbox.yMax),
+            ),
+          ),
+        countQuery,
+      ]);
       viewState = { available: true, checkedAt: Date.now() };
-      if (rows.length > 0) {
-        if (meId && !rows.some((r) => r.id === meId)) {
-          const [me] = await rdb
-            .select(playerColumns)
-            .from(characters)
-            .where(eq(characters.id, meId))
-            .limit(1);
-          if (me) rows.push(me);
-        }
-        return rows;
-      }
+      return { players: rows, onlineCount: countRows[0]?.n ?? rows.length };
     } catch {
       // View missing (not created yet) — remember and use the direct query
       // until the retry window elapses.
@@ -166,14 +174,30 @@ async function fetchOnlinePlayers(
     }
   }
 
-  return rdb.select(playerColumns).from(characters).where(gt(characters.lastSeenAt, since));
+  const [rows, countRows] = await Promise.all([
+    rdb
+      .select(playerColumns)
+      .from(characters)
+      .where(
+        and(
+          gt(characters.lastSeenAt, since),
+          gte(characters.x, bbox.xMin), lt(characters.x, bbox.xMax),
+          gte(characters.y, bbox.yMin), lt(characters.y, bbox.yMax),
+        ),
+      ),
+    rdb
+      .select({ n: sql<number>`count(*)::int` })
+      .from(characters)
+      .where(gt(characters.lastSeenAt, since)),
+  ]);
+  return { players: rows, onlineCount: countRows[0]?.n ?? rows.length };
 }
 
 // ── Assembler ──────────────────────────────────────────────────────────
 // Pulls only entities within the player's reach. Called once per (chunk,
 // TTL window); results are JSON-serialised and served to every player in
 // that chunk for the rest of the window.
-async function buildRawSnapshot(meId: number | null, playerX: number, playerY: number): Promise<RawSnapshot> {
+async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSnapshot> {
   // All reads go through the replica when one is configured (falls back to
   // the primary otherwise). Writes never happen in this module.
   const rdb = withReadDb();
@@ -190,7 +214,7 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   const yMax = playerY + PROXIMITY_RADIUS_PX;
 
   const [
-    players,
+    playersResult,
     npcRows,
     animalRows,
     buildingRows,
@@ -201,7 +225,7 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
     chat,
     events,
   ] = await Promise.all([
-    fetchOnlinePlayers(rdb, meId, since),
+    fetchPlayers(rdb, since, { xMin, xMax, yMin, yMax }),
     rdb.select().from(npcs).where(
       and(
         eq(npcs.active, true),
@@ -251,16 +275,10 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
   const spById = new Map<number, SponsorLite>(sponsorRows.map((s) => [s.id, s]));
   const doors = await getBuildingDoors();
 
-  // Equipment lookup: per-player single query avoids the O(P×E) nested
-  // scan the old code did in JS. Two short queries replace the cost.
-  let meEquipped: string[] = [];
-  if (meId) {
-    const rows = await rdb
-      .select({ itemKey: inventory.itemKey })
-      .from(inventory)
-      .where(sql`${inventory.characterId} = ${meId} and ${inventory.equipped} = true`);
-    meEquipped = rows.map((r) => r.itemKey);
-  }
+  // Equipment for the (proximity-filtered) players we are actually
+  // shipping. The local player's own equipment comes from this same list,
+  // so no separate per-player query is needed.
+  const { players, onlineCount } = playersResult;
   const playerIds = players.map((p) => p.id);
   const equippedAll =
     playerIds.length > 0
@@ -289,9 +307,8 @@ async function buildRawSnapshot(meId: number | null, playerX: number, playerY: n
     enemies: enemyRows,
     chat,
     events,
+    onlineCount,
     doors,
-    meId,
-    meEquipped,
     equippedByChar,
     spById: Object.fromEntries(spById),
   };
@@ -309,16 +326,10 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
     weather: ws.weather,
     dayLengthMinutes: ws.dayLengthMinutes,
     epochStart: ws.epochStart.getTime(),
-    me: (() => {
-      if (!raw.meId) return null;
-      const found = raw.players.find((p) => p.id === raw.meId);
-      if (!found) return null;
-      return {
-        ...found,
-        gems: found.gems ?? 0,
-        equipped: raw.meEquipped,
-      };
-    })(),
+    // `me` is injected per requester by getSnapshot(); the cached shared
+    // snapshot always carries null here.
+    me: null,
+    onlineCount: raw.onlineCount,
     players: raw.players.map((p) => ({
       ...p,
       equipped: raw.equippedByChar.get(p.id) ?? [],
@@ -406,15 +417,9 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
 
 let initStarted = false;
 
-/**
- * Get a snapshot for the player at (x, y). Proximity-filtered and cached
- * per chunk for SNAPSHOT_TTL_SECONDS. Many players in the same chunk
- * share one cache entry.
- */
-// In-process snapshot cache. THE cache for the WS + HTTP paths (they
-// share the process). Keyed by chunk + player, so every connection in a
-// chunk within the TTL window shares one DB rebuild. Kept at or below
-// WS_REFRESH_MS so it never serves a snapshot older than one refresh.
+// In-process shared snapshot cache. THE cache for the WS + HTTP paths
+// (they share one process). Keyed by chunk only, so every player in a
+// chunk within the TTL window shares one DB rebuild.
 const PROC_CACHE_MAX = Number(process.env.SNAPSHOT_PROC_CACHE_SIZE ?? 256);
 const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 5000));
 
@@ -447,18 +452,28 @@ function procCacheSet(key: string, snap: Snapshot): void {
   procCache.set(key, { snap, expiresAt: Date.now() + PROC_CACHE_TTL_MS });
 }
 
-export async function getSnapshot(meId: number | null, playerX: number, playerY: number): Promise<Snapshot> {
-  if (!initStarted) {
-    initStarted = true;
-    // Fire and forget — first request may use the fallback once.
-    void initRedis();
-  }
+/**
+ * Drop every cached shared snapshot. Called after a mutation so the next
+ * read rebuilds with the change (and the WS server can push it immediately
+ * instead of waiting out the TTL).
+ */
+export function invalidateSnapshots(): void {
+  procCache.clear();
+}
 
+/**
+ * Build (or serve from cache) the shared snapshot for a chunk. The
+ * returned object has `me: null`; callers inject the local player via
+ * `withMe()`.
+ */
+async function getSharedSnapshot(
+  playerX: number,
+  playerY: number,
+  opts?: { bypassRedis?: boolean },
+): Promise<Snapshot> {
   const { cx, cy } = chunkAtWorldPx(playerX, playerY);
-  const key = cacheKey(cx, cy, meId);
+  const key = cacheKey(cx, cy);
 
-  // In-process cache — the hot path for the WS server's periodic refresh
-  // and the HTTP fallback. No Redis.
   const hit = procCacheGet(key);
   if (hit) {
     metrics.snapshotCacheHitsTotal.inc();
@@ -466,9 +481,9 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
   }
   metrics.snapshotCacheMissesTotal.inc();
 
-  // Optional cross-process Redis cache (off by default — see the
-  // SNAPSHOT_REDIS_CACHE comment).
-  if (SNAPSHOT_REDIS_CACHE) {
+  // Optional cross-process Redis cache (off by default). `bypassRedis` is
+  // used by the post-mutation broadcast so it never serves a stale entry.
+  if (SNAPSHOT_REDIS_CACHE && !opts?.bypassRedis) {
     try {
       const cached = await redis.get(key);
       if (cached) {
@@ -485,12 +500,8 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
     }
   }
 
-  // Monotonic version, in-process only. The client does not consume it
-  // yet (no delta protocol), so it must not cost a Redis command. A
-  // module-local counter keeps it monotonic without touching the network.
   const version = ++localVersion;
-
-  const raw = await buildRawSnapshot(meId, playerX, playerY);
+  const raw = await buildRawSnapshot(playerX, playerY);
   const snap = formatSnapshot(raw, version);
   procCacheSet(key, snap);
   if (SNAPSHOT_REDIS_CACHE) {
@@ -501,4 +512,35 @@ export async function getSnapshot(meId: number | null, playerX: number, playerY:
     }
   }
   return snap;
+}
+
+/**
+ * Inject the local player's `me` row from the shared `players` list. The
+ * shared snapshot has `me: null`; this produces the per-requester shape
+ * without a per-player cache entry.
+ */
+export function withMe(shared: Snapshot, meId: number | null): Snapshot {
+  if (!meId) return shared;
+  const me = shared.players.find((p) => p.id === meId) ?? null;
+  return me ? { ...shared, me } : shared;
+}
+
+/**
+ * Get a snapshot for the player at (x, y). Proximity-filtered, cached per
+ * chunk, with `me` injected. Many players in the same chunk share one
+ * cache entry.
+ */
+export async function getSnapshot(
+  meId: number | null,
+  playerX: number,
+  playerY: number,
+  opts?: { bypassRedis?: boolean },
+): Promise<Snapshot> {
+  if (!initStarted) {
+    initStarted = true;
+    // Fire and forget — first request may use the fallback once.
+    void initRedis();
+  }
+  const shared = await getSharedSnapshot(playerX, playerY, opts);
+  return withMe(shared, meId);
 }

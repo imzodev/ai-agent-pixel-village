@@ -6,6 +6,8 @@ import type { Selection } from "@/types/world";
 
 export type Events = {
   snapshot: Snapshot;
+  /** The local player's live sprite position, emitted as they walk. */
+  playerMoved: { x: number; y: number };
   select: Selection | null;
   toast: { text: string; kind?: "info" | "good" | "bad" };
   enterBuilding: { key: string; name: string };
