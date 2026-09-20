@@ -21,7 +21,36 @@ export { CHUNK_TILE_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_PX_W, CHUNK_PX_H };
 export type ChunkOrigin = { x: number; y: number };
 
 // One tile lifted out of a SORTED_LAYERS layer for Y-sort rendering.
-export type LiftedTile = { layerName: string; tileIndex: number; gid: number };
+// `objectId` is the tile's `objectId` Tiled property (undefined when the
+// tile has no such property). Tiles that share an `objectId` belong to the
+// same logical object — they're sorted together against the player using
+// that object's deepest anchor. Tiles without `objectId` fall back to the
+// spatial rule (same-column then chunk-wide max).
+export type LiftedTile = {
+  layerName: string;
+  tileIndex: number;
+  gid: number;
+  objectId?: string;
+};
+
+// Per-objectId anchor: the deepest tile-y (in the chunk's local row
+// coordinate) for tiles in ANCHOR_LAYERS that carry the matching
+// `objectId`. -1 means "no anchor found for this object in this chunk."
+type AnchorByObjectId = Map<string, number>;
+
+// Result of loading a chunk: the parsed tilemap plus the data needed to
+// (re-)instantiate Y-sorted sprites from the SORTED_LAYERS layers.
+//
+// `anchorByObjectId` maps each `objectId` to the deepest ANCHOR_LAYERS
+// tile-y in the chunk. Lifted tiles with the same `objectId` sort at
+// `(anchor + 1) * TILE_PX`. Tiles without an `objectId` use the
+// spatial fallback (see findAnchorYForLiftedTile).
+export type ChunkLoadResult = {
+  tilemap: Phaser.Tilemaps.Tilemap | null;
+  sortedTiles: LiftedTile[];
+  anchorGrid: AnchorGrid;
+  anchorByObjectId: AnchorByObjectId;
+};
 
 // Per-tile depth anchor grid, indexed by `tx + ty * CHUNK_TILE_W`. Each
 // cell holds the bottom-most tile-y in ANCHOR_LAYERS for that chunk
@@ -43,14 +72,6 @@ export type LiftedTile = { layerName: string; tileIndex: number; gid: number };
 // No shape inference, no GID/tileset hardcoding, no heuristic radius
 // search. New decorations work without code changes.
 export type AnchorGrid = Int32Array;
-
-// Result of loading a chunk: the parsed tilemap plus the data needed to
-// (re-)instantiate Y-sorted sprites from the SORTED_LAYERS layers.
-export type ChunkLoadResult = {
-  tilemap: Phaser.Tilemaps.Tilemap | null;
-  sortedTiles: LiftedTile[];
-  anchorGrid: AnchorGrid;
-};
 
 // Layers that should be Y-sorted against the player instead of drawn at a
 // fixed depth. Every tile in these layers is lifted out of the static
@@ -217,6 +238,7 @@ type ChunkState = {
   sortedSprites: Phaser.GameObjects.Image[];
   sortedTiles: LiftedTile[];
   anchorGrid: AnchorGrid;
+  anchorByObjectId: AnchorByObjectId;
 };
 
 const chunkStates = new Map<string, ChunkState>();
@@ -251,11 +273,12 @@ export function parseCachedTilemap(scene: Phaser.Scene, key: string): ChunkLoadR
       tilemap: null,
       sortedTiles: [],
       anchorGrid: emptyAnchorGrid(),
+      anchorByObjectId: new Map(),
     };
   }
-  const { sortedTiles, anchorGrid } = extractFromChunkJson(json);
+  const { sortedTiles, anchorGrid, anchorByObjectId } = extractFromChunkJson(json);
   const tilemap = scene.make.tilemap({ key }) ?? null;
-  return { tilemap, sortedTiles, anchorGrid };
+  return { tilemap, sortedTiles, anchorGrid, anchorByObjectId };
 }
 
 function emptyAnchorGrid(): AnchorGrid {
@@ -289,7 +312,7 @@ export function loadChunk(
       if (!file || file.key !== key) return;
       cleanup();
       console.warn(`[worldTilemap] failed to load chunk ${key} (url=${`/api/chunks/${cx}/${cy}`})`);
-      resolve({ tilemap: null, sortedTiles: [], anchorGrid: emptyAnchorGrid() });
+      resolve({ tilemap: null, sortedTiles: [], anchorGrid: emptyAnchorGrid(), anchorByObjectId: new Map() });
     };
     const cleanup = () => {
       scene.load.off("filecomplete", onComplete);
@@ -307,11 +330,23 @@ export function loadChunk(
 
 function extractFromChunkJson(
   json: unknown,
-): { sortedTiles: LiftedTile[]; anchorGrid: AnchorGrid } {
+): {
+  sortedTiles: LiftedTile[];
+  anchorGrid: AnchorGrid;
+  anchorByObjectId: AnchorByObjectId;
+} {
   const layers = (json as { layers?: unknown })?.layers;
   const sortedTiles: LiftedTile[] = [];
   const anchorGrid = emptyAnchorGrid();
-  if (!Array.isArray(layers)) return { sortedTiles, anchorGrid };
+  const anchorByObjectId = new Map<string, number>();
+  if (!Array.isArray(layers)) {
+    return { sortedTiles, anchorGrid, anchorByObjectId };
+  }
+  // Build a per-tileset "tile-id → objectId" lookup from the JSON's
+  // tilesets array. We support two layouts: the `tiles: [{id, properties}]`
+  // shape Tiled writes when per-tile properties exist, and the
+  // `tileproperties: {"<id>": {objectId: "..."}}` legacy shape.
+  const objectIdByTile = buildObjectIdLookup(json);
   for (const layer of layers) {
     const typed = layer as { name?: unknown; type?: unknown; data?: unknown };
     if (typeof typed.name !== "string" || typed.type !== "tilelayer") continue;
@@ -323,18 +358,88 @@ function extractFromChunkJson(
     for (let i = 0; i < data.length; i++) {
       const gid = data[i] & 0x1fffffff; // strip Tiled flip/rotate flags
       if (gid <= 0) continue;
-      const idx = i;
-      if (anchor && (anchorGrid[idx] < 0 || tyFromIndex(i) > anchorGrid[idx])) {
-        anchorGrid[idx] = tyFromIndex(i);
+      const ty = tyFromIndex(i);
+      const tileId = gidToTileId(gid, json);
+      const objectId = tileId !== undefined ? objectIdByTile.get(tileId) : undefined;
+      if (anchor && (anchorGrid[i] < 0 || ty > anchorGrid[i])) {
+        anchorGrid[i] = ty;
+      }
+      if (anchor && objectId) {
+        const prev = anchorByObjectId.get(objectId);
+        if (prev === undefined || ty > prev) anchorByObjectId.set(objectId, ty);
       }
       if (lift) {
-        sortedTiles.push({ layerName: typed.name, tileIndex: i, gid });
+        sortedTiles.push({
+          layerName: typed.name,
+          tileIndex: i,
+          gid,
+          objectId,
+        });
         // Zero so Phaser's parse produces an empty cell there.
         data[i] = 0;
       }
     }
   }
-  return { sortedTiles, anchorGrid };
+  return { sortedTiles, anchorGrid, anchorByObjectId };
+}
+
+// Resolve a chunk-local GID to a tileset-relative tile-id by finding
+// the tileset with the largest firstgid ≤ gid. Returns undefined if no
+// tileset matches (an unknown GID — should not happen for tiles lifted
+// from a known layer, but we guard against it rather than throw).
+function gidToTileId(gid: number, json: unknown): number | undefined {
+  const tilesets = (json as { tilesets?: unknown })?.tilesets;
+  if (!Array.isArray(tilesets)) return undefined;
+  let best: { firstgid: number; tileid: number } | null = null;
+  for (const ts of tilesets) {
+    const typed = ts as { firstgid?: unknown };
+    if (typeof typed.firstgid !== "number") continue;
+    if (typed.firstgid <= gid && (!best || typed.firstgid > best.firstgid)) {
+      best = { firstgid: typed.firstgid, tileid: gid - typed.firstgid };
+    }
+  }
+  return best?.tileid;
+}
+
+// Build a tile-id → objectId lookup from the JSON's tilesets array.
+// Supports both modern (`tiles[].properties`) and legacy
+// (`tileproperties[id]`) Tiled shapes.
+function buildObjectIdLookup(json: unknown): Map<number, string> {
+  const out = new Map<number, string>();
+  const tilesets = (json as { tilesets?: unknown })?.tilesets;
+  if (!Array.isArray(tilesets)) return out;
+  for (const ts of tilesets) {
+    const typed = ts as {
+      firstgid?: unknown;
+      tiles?: unknown;
+      tileproperties?: unknown;
+    };
+    const firstgid = typeof typed.firstgid === "number" ? typed.firstgid : 0;
+    // Modern: tiles[] array on each tileset entry.
+    if (Array.isArray(typed.tiles)) {
+      for (const tile of typed.tiles) {
+        const t = tile as { id?: unknown; properties?: unknown };
+        if (typeof t.id !== "number" || !Array.isArray(t.properties)) continue;
+        for (const prop of t.properties) {
+          const p = prop as { name?: unknown; value?: unknown };
+          if (p.name === "objectId" && typeof p.value === "string") {
+            out.set(firstgid + t.id, p.value);
+          }
+        }
+      }
+    }
+    // Legacy: tileproperties map at the tileset level.
+    if (typed.tileproperties && typeof typed.tileproperties === "object") {
+      const tp = typed.tileproperties as Record<string, { objectId?: unknown }>;
+      for (const [k, v] of Object.entries(tp)) {
+        const id = Number.parseInt(k, 10);
+        if (Number.isFinite(id) && typeof v?.objectId === "string") {
+          out.set(firstgid + id, v.objectId);
+        }
+      }
+    }
+  }
+  return out;
 }
 
 function tyFromIndex(i: number): number {
@@ -345,6 +450,7 @@ function buildChunkState(
   tilemap: Phaser.Tilemaps.Tilemap,
   sortedTiles: LiftedTile[],
   anchorGrid: AnchorGrid,
+  anchorByObjectId: AnchorByObjectId,
 ): ChunkState {
   return {
     tilemap,
@@ -353,6 +459,7 @@ function buildChunkState(
     sortedSprites: [],
     sortedTiles,
     anchorGrid,
+    anchorByObjectId,
   };
 }
 
@@ -391,6 +498,7 @@ function buildChunkLayers(state: ChunkState, origin: ChunkOrigin): void {
     state.tilesets,
     state.sortedTiles,
     state.anchorGrid,
+    state.anchorByObjectId,
     origin,
     state.sortedSprites,
   );
@@ -422,16 +530,24 @@ export function createStaticLayers(
 // Instantiate one Y-sorted sprite per lifted upper-layer tile at `origin`.
 // Sprites are appended to `out`. Exported so buildingStamps.ts can render
 // template roofs / awnings with the same depth rule as chunk canopies.
+//
+// Sort depth for each lifted tile:
+//   1. If the lifted tile has an `objectId` AND `anchorByObjectId` has an
+//      entry for it, use that object-anchor's bottom edge. Every tile in
+//      the same object sorts at the same depth.
+//   2. Otherwise, fall back to the spatial rule (same-column anchor,
+//      chunk-wide max) via the per-cell anchorGrid.
 export function instantiateSortedSprites(
   scene: Phaser.Scene,
   tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
   liftedTiles: ReadonlyArray<LiftedTile>,
   anchorGrid: AnchorGrid,
+  anchorByObjectId: AnchorByObjectId,
   origin: ChunkOrigin,
   out: Phaser.GameObjects.Image[],
 ): void {
   for (const tile of liftedTiles) {
-    const sprite = instantiateSortedTile(scene, tile, tilesets, anchorGrid, origin);
+    const sprite = instantiateSortedTile(scene, tile, tilesets, anchorGrid, anchorByObjectId, origin);
     if (sprite) out.push(sprite);
   }
 }
@@ -547,6 +663,7 @@ function instantiateSortedTile(
   tile: LiftedTile,
   tilesets: ReadonlyArray<Phaser.Tilemaps.Tileset>,
   anchorGrid: AnchorGrid,
+  anchorByObjectId: AnchorByObjectId,
   origin: ChunkOrigin,
 ): Phaser.GameObjects.Image | null {
   if (tilesets.length === 0) return null;
@@ -562,7 +679,17 @@ function instantiateSortedTile(
   const ty = (tile.tileIndex - tx) / CHUNK_TILE_W;
   const worldX = origin.x + tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
   const displayY = origin.y + ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2;
-  const baseY = findAnchorYForLiftedTile(tx, ty, anchorGrid);
+  // Sort-anchor lookup: prefer objectId (groups every tile in the same
+  // logical object together regardless of column placement); fall back to
+  // the spatial rule (same-column then chunk-wide max) for orphan tiles
+  // that don't carry an objectId.
+  let baseY: number;
+  if (tile.objectId) {
+    const objAnchor = anchorByObjectId.get(tile.objectId);
+    baseY = objAnchor !== undefined ? objAnchor : findAnchorYForLiftedTile(tx, ty, anchorGrid);
+  } else {
+    baseY = findAnchorYForLiftedTile(tx, ty, anchorGrid);
+  }
   const sortTy = baseY >= 0 ? baseY : ty;
   const sortY = origin.y + (sortTy + 1) * CHUNK_TILE_PX;
   const img = scene.add.image(worldX, displayY, tex.key);
@@ -588,10 +715,10 @@ export async function ensureChunks(
       buildChunkLayers(state, chunkOrigin(c.cx, c.cy));
       continue;
     }
-    const { tilemap, sortedTiles, anchorGrid } = await loadChunk(scene, c.cx, c.cy);
+    const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = await loadChunk(scene, c.cx, c.cy);
     if (!tilemap) continue;
     registerCollisionIfNeeded(scene, c.cx, c.cy);
-    const fresh = buildChunkState(tilemap, sortedTiles, anchorGrid);
+    const fresh = buildChunkState(tilemap, sortedTiles, anchorGrid, anchorByObjectId);
     chunkStates.set(chunkKey(c.cx, c.cy), fresh);
     buildChunkLayers(fresh, chunkOrigin(c.cx, c.cy));
   }
