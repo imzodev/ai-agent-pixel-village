@@ -52,27 +52,12 @@ export function makeCreatureTextures(scene: Scene) {
 
 // ---------- Nodes / props ----------
 
-/**
- * Sub-region of the `lpc_crops` spritesheet used for a crop node. The
- * mature wheat tile spans 32×64 (two cells wide × four cells tall, with
- * the soil line at the bottom); the picked-clean state uses an early-
- * stage sprout indicating regrowth. Each kind has its own x/y/w/h — so
- * crops with different footprints (e.g. wheat at 32×64, pumpkin at
- * 32×32) coexist without code changes elsewhere.
- *
- * Add a new crop by appending one entry here. Each frame is registered
- * on the `lpc_crops` texture at scene-create time by
- * `registerCropFrames`.
- */
-type CropRect = { x: number; y: number; w: number; h: number };
-type CropEntry = { grown: CropRect; picked: CropRect };
+// Per-kind crop configuration (stage count, regrowth timing, sprite
+// frames) lives in src/lib/crops.ts so the server (sim worker, action
+// route) and client (texture frame registration, snapshot assembly)
+// agree on the same source of truth.
 
-const CROP_REGIONS: Record<string, CropEntry> = {
-  wheat_field: {
-    grown:  { x: 992, y: 128, w: 32, h: 64 },
-    picked: { x: 992, y: 16,  w: 32, h: 64 },
-  },
-};
+import { CROP_KINDS } from "@/lib/crops";
 
 const LPC_CROPS_KEY = "lpc_crops";
 
@@ -85,15 +70,17 @@ export function loadPropSprites(scene: Scene): void {
 /**
  * Registers named sub-region frames on the `lpc_crops` texture. Call
  * once during scene create, after preload has finished. Each crop kind
- * gets a `kind_grown` and `kind_picked` frame that Phaser renders at
- * exactly its native w×h — no `setCrop` + `setDisplaySize` dance.
+ * gets one frame per stage — `kind_stage_0` (picked) through
+ * `kind_stage_(stages-1)` (fully grown) — that Phaser renders at the
+ * frame's native w×h.
  */
 export function registerCropFrames(scene: Scene): void {
   const tex = scene.textures.get(LPC_CROPS_KEY);
   if (!tex) return;
-  for (const [kind, entry] of Object.entries(CROP_REGIONS)) {
-    tex.add(`${kind}_grown`, 0, entry.grown.x, entry.grown.y, entry.grown.w, entry.grown.h);
-    tex.add(`${kind}_picked`, 0, entry.picked.x, entry.picked.y, entry.picked.w, entry.picked.h);
+  for (const [kind, cfg] of Object.entries(CROP_KINDS)) {
+    cfg.frames.forEach((rect, stage) => {
+      tex.add(`${kind}_stage_${stage}`, 0, rect.x, rect.y, rect.w, rect.h);
+    });
   }
 }
 
@@ -101,9 +88,11 @@ export function registerCropFrames(scene: Scene): void {
  * Returns the `lpc_crops` frame name to use for a crop node, or `null`
  * if the kind falls back to its own procedural `node_<kind>` sprite.
  */
-export function nodeFrameKey(kind: string, ready: boolean): string | null {
-  if (!(kind in CROP_REGIONS)) return null;
-  return ready ? `${kind}_grown` : `${kind}_picked`;
+export function nodeFrameKey(kind: string, stage: number): string | null {
+  const cfg = CROP_KINDS[kind];
+  if (!cfg || cfg.frames.length === 0) return null;
+  const clamped = Math.max(0, Math.min(stage, cfg.frames.length - 1));
+  return `${kind}_stage_${clamped}`;
 }
 
 /**

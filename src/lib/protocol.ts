@@ -128,8 +128,12 @@ export type ResourceNodeSnapshot = {
   kind: string;
   x: number;
   y: number;
-  qty: number;
-  ready: boolean;
+  /** Current regrowth stage. 0 = picked/empty; (stages-1) = fully grown. */
+  stage: number;
+  /** Total visual stages for this kind (from src/lib/crops.ts). */
+  stages: number;
+  /** Epoch ms when the sim worker will advance `stage` by one. Null when fully grown or no regrowth. */
+  nextAdvanceAt: number | null;
 };
 
 export type EnemySnapshot = {

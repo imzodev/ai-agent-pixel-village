@@ -339,14 +339,21 @@ export const resourceNodes = pgTable(
   "resource_nodes",
   {
     id: serial("id").primaryKey(),
-    kind: text("kind").notNull(), // berry_bush | herb_patch | rock | mushroom_ring
+    kind: text("kind").notNull(), // berry_bush | herb_patch | rock | mushroom_ring | wheat_field
     itemKey: text("item_key").notNull(),
     x: real("x").notNull(),
     y: real("y").notNull(),
-    qty: integer("qty").notNull().default(3),
-    respawnAt: timestamp("respawn_at"),
+    /** Items given to the player per pick. */
+    qty: integer("qty").notNull().default(1),
+    /** Current regrowth stage. 0 = picked/empty, (stages-1) = fully grown. */
+    stage: integer("stage").notNull().default(0),
+    /** When the sim worker should advance `stage` by one. NULL = no regrowth scheduled. */
+    nextAdvanceAt: timestamp("next_advance_at"),
   },
-  (t) => [index("resource_nodes_respawn_idx").on(t.respawnAt)],
+  (t) => [
+    index("resource_nodes_stage_idx").on(t.stage),
+    index("resource_nodes_next_advance_idx").on(t.nextAdvanceAt),
+  ],
 );
 
 export const enemies = pgTable("enemies", {

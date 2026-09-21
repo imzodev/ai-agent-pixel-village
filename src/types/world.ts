@@ -29,7 +29,16 @@ export type Selection =
   | { type: "animal"; id: number; name: string; species: string; distance: number }
   | { type: "enemy"; id: number; kind: string; hp: number; maxHp: number; distance: number }
   | { type: "item"; id: number; itemKey: string; distance: number }
-  | { type: "node"; id: number; kind: string; ready: boolean; distance: number }
+  | {
+      type: "node";
+      id: number;
+      kind: string;
+      /** Current regrowth stage. 0 = picked/empty; (stages-1) = fully grown. */
+      stage: number;
+      /** Total visual stages for this kind. */
+      stages: number;
+      distance: number;
+    }
   | {
       type: "building";
       id: number;

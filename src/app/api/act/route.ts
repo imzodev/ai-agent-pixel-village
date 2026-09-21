@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, buildings, characters, enemies, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
+import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
@@ -74,15 +75,41 @@ export async function POST(req: Request) {
       if (!n) return Response.json({ error: "Nothing here." }, { status: 404 });
       const p = livePos(me);
       if (Math.hypot(n.x - p.x, n.y - p.y) > 90) return Response.json({ error: "Too far." }, { status: 400 });
-      if (n.respawnAt || n.qty <= 0) return Response.json({ error: "Picked clean. It'll grow back." }, { status: 400 });
-      const qty = n.qty - 1;
-      await db.update(resourceNodes).set({ qty, respawnAt: qty <= 0 ? new Date(Date.now() + 4 * 60_000) : null }).where(eq(resourceNodes.id, n.id));
-      await addItem(me.id, n.itemKey, 1);
-      await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, 1);
+
+      const cfg = getCropKind(n.kind);
+      // Every kind in CROP_KINDS has stages>=2; legacy kinds default to
+      // a 2-stage binary (ready/picked) so old data still works.
+      const stages = cfg?.stages ?? 2;
+      const yieldAmt = cfg?.yield ?? n.qty;
+      const regrowthMs = cfg?.regrowthMs ?? 0;
+
+      // Pickable at every stage except stage 0 (depleted). With stages=5
+      // the user can pick 4 times before the node hits 0 and refuses
+      // further picks until it regrows.
+      if (n.stage < 1) {
+        return Response.json({ error: "Picked clean. It'll grow back." }, { status: 400 });
+      }
+
+      // Pick: decrement toward empty (stage 0). If regrowthMs > 0, the
+      // next regrowth tick will advance stage back toward stages-1;
+      // picking again interrupts that and starts a fresh cycle.
+      const newStage = n.stage - 1;
+      const newNextAdvanceAt = regrowthMs > 0 ? new Date(Date.now() + regrowthMs) : null;
+      await db.update(resourceNodes).set({
+        stage: newStage,
+        nextAdvanceAt: newNextAdvanceAt,
+      }).where(eq(resourceNodes.id, n.id));
+
+      await addItem(me.id, n.itemKey, yieldAmt);
+      await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
       await recalcLevel(me.id);
       markWorldDirty(n.x, n.y);
-      return Response.json({ ok: true, message: `Gathered 1 ${n.itemKey.replace("_", " ")}.`, gained: [{ itemKey: n.itemKey, qty: 1 }] });
+      return Response.json({
+        ok: true,
+        message: `Gathered ${yieldAmt} ${n.itemKey.replace("_", " ")}.`,
+        gained: [{ itemKey: n.itemKey, qty: yieldAmt }],
+      });
     }
 
     if (action === "attack") {

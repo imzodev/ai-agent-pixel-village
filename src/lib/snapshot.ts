@@ -39,6 +39,7 @@ import { getBuildingDoors } from "@/lib/buildingsServer";
 import { redis, initRedis } from "@/lib/redis";
 import { withReadDb } from "@/lib/db";
 import { metrics } from "@/lib/metrics";
+import { CROP_KINDS } from "@/lib/crops";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -386,7 +387,15 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       };
     }),
     groundItems: raw.groundItems,
-    nodes: raw.resourceNodes.map((n) => ({ id: n.id, kind: n.kind, x: n.x, y: n.y, qty: n.qty, ready: !n.respawnAt })),
+    nodes: raw.resourceNodes.map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      x: n.x,
+      y: n.y,
+      stage: n.stage,
+      stages: CROP_KINDS[n.kind]?.stages ?? 1,
+      nextAdvanceAt: n.nextAdvanceAt ? n.nextAdvanceAt.getTime() : null,
+    })),
     enemies: raw.enemies.map((e) => ({
       id: e.id,
       kind: e.kind,

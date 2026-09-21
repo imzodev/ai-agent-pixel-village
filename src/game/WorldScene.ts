@@ -451,15 +451,23 @@ export class WorldScene extends Phaser.Scene {
     // nodes
     for (const n of s.nodes) {
       let img = this.nodes.get(n.id);
-      // Crop kinds render via a named frame on the shared lpc_crops
-      // spritesheet (frame dimensions match the crop's w×h). All other
-      // node kinds fall back to their own procedural node_<kind> sprite.
-      const frameKey = nodeFrameKey(n.kind, n.ready);
+      // Stage 0 = picked/empty. Non-crop kinds (rock, berry, herb,
+      // mushroom) hide entirely; crop kinds still render their stage-0
+      // frame so the player sees the "regrowing" tile.
+      const isReady = n.stage >= n.stages - 1;
+      const frameKey = nodeFrameKey(n.kind, n.stage);
       const targetKey = frameKey ? "lpc_crops" : nodeTextureKey(n.kind);
+      const depleted = n.stage === 0 && !frameKey; // procedural kind with no regrowth
+      if (depleted) {
+        // Static kinds (rock, berry, herb, mushroom) — regrowthMs = 0,
+        // so once picked they stay gone. Hide the sprite entirely.
+        if (img) { img.destroy(); this.nodes.delete(n.id); }
+        continue;
+      }
       if (!img) {
         img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
         img.setInteractive({ useHandCursor: true });
-        img.on("pointerdown", () => { if (this.modalOpen) return; const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, ready: cur?.ready ?? n.ready, distance: this.distTo(n.x, n.y) }); });
+        img.on("pointerdown", () => { if (this.modalOpen) return; const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, stage: cur?.stage ?? n.stage, stages: cur?.stages ?? n.stages, distance: this.distTo(n.x, n.y) }); });
         this.nodes.set(n.id, img);
       } else if (img.texture.key !== targetKey) {
         // Texture key changed (e.g. procedural → cropped). Swap; the frame
@@ -469,7 +477,7 @@ export class WorldScene extends Phaser.Scene {
         // Same texture, different state — just swap the frame.
         img.setFrame(frameKey);
       }
-      img.setAlpha(n.ready ? 1 : 0.55);
+      img.setAlpha(isReady ? 1 : 0.55);
     }
     // chat bubbles
     for (const c of s.chat) {
@@ -641,7 +649,7 @@ export class WorldScene extends Phaser.Scene {
     for (const a of s.animals) cands.push({ d: this.distTo(a.x, a.y), sel: { type: "animal", id: a.id, name: a.name, species: a.species, distance: this.distTo(a.x, a.y) } });
     for (const e of s.enemies) cands.push({ d: this.distTo(e.x, e.y), sel: { type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) } });
     for (const i of s.groundItems) cands.push({ d: this.distTo(i.x, i.y), sel: { type: "item", id: i.id, itemKey: i.itemKey, distance: this.distTo(i.x, i.y) } });
-    for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, ready: n.ready, distance: this.distTo(n.x, n.y) } });
+    for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: this.distTo(n.x, n.y) } });
     for (const b of s.buildings) { const d = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
     cands.sort((a, b) => a.d - b.d);
     if (cands[0] && cands[0].d < 110) this.select(cands[0].sel);

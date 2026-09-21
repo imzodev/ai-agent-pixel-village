@@ -22,6 +22,7 @@ import { TILE, WILD_ZONES, tilePoint, tileRect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
+import { getCropKind } from "@/lib/crops";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -363,7 +364,20 @@ async function syncWildlifeLayout() {
     await db.delete(resourceNodes);
     for (const [kind, itemKey, tx, ty] of NODE_DEFS) {
       const p = tilePoint(tx, ty);
-      await db.insert(resourceNodes).values({ kind, itemKey, x: p.x, y: p.y, qty: 3 });
+      const cfg = getCropKind(kind);
+      // Crop kinds start fully grown (stage = stages-1). Non-crop kinds
+      // use stages=2 (ready) from the config; missing config means a
+      // legacy kind with no regrowth — start at the only stage (0).
+      const stages = cfg?.stages ?? 1;
+      const startStage = stages - 1;
+      await db.insert(resourceNodes).values({
+        kind,
+        itemKey,
+        x: p.x,
+        y: p.y,
+        qty: cfg?.yield ?? 1,
+        stage: startStage,
+      });
     }
     await db.delete(enemies);
     for (const def of ANIMAL_DEFS) {
@@ -583,7 +597,18 @@ async function seed() {
       }
     }
     const nodeDefs: [string, string, number, number][] = NODE_DEFS;
-    for (const [kind, itemKey, x, y] of nodeDefs) await tx.insert(resourceNodes).values({ kind, itemKey, x, y, qty: 3 });
+    for (const [kind, itemKey, x, y] of nodeDefs) {
+      const cfg = getCropKind(kind);
+      const stages = cfg?.stages ?? 1;
+      await tx.insert(resourceNodes).values({
+        kind,
+        itemKey,
+        x,
+        y,
+        qty: cfg?.yield ?? 1,
+        stage: stages - 1,
+      });
+    }
     await tx.insert(worldEvents).values({ kind: "world", text: "The grove wakes up for the first time." });
   });
   void WILD_ZONES;

@@ -253,7 +253,7 @@ export default function Hud() {
         else walk();
         break;
       case "node":
-        if (!s.ready) { toast("Still regrowing.", "info"); return; }
+        if (s.stage < 1) { toast("Picked clean. It'll grow back.", "info"); return; }
         if (d <= 90) void act({ action: "gather", id: s.id });
         else walk();
         break;
@@ -410,7 +410,17 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🫳 Pick up {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "node" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)} disabled={!sel.ready}>🧺 Gather {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "node" && (() => {
+            // Pickable at every stage except 0 (depleted). Out-of-range
+            // shows Walk over. Stage 0 shows a dimmed "empty" label.
+            const empty = sel.stage === 0;
+            if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            return (
+              <Btn on={() => commitSelection(sel)} disabled={empty}>
+                {empty ? "🌱 Empty" : "🧺 Gather"} {interactHint}
+              </Btn>
+            );
+          })()}
           {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
@@ -567,7 +577,10 @@ function selTitle(sel: Selection) {
     case "building": return sel.name;
     case "player": return `${sel.name} (villager)`;
     case "item": return `${ITEM_ICONS[sel.itemKey] ?? "📦"} ${sel.itemKey.replace("_", " ")}`;
-    case "node": return `${sel.kind.replace("_", " ")}${sel.ready ? "" : " (regrowing)"}`;
+    case "node": {
+      const base = sel.kind.replace("_", " ");
+      return sel.stage === 0 ? `${base} (empty)` : base;
+    }
     case "enemy": return `Wild ${sel.kind} · ${sel.hp}/${sel.maxHp} HP`;
   }
 }

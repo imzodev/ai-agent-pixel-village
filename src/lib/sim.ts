@@ -1,6 +1,7 @@
 import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
+import { getCropKind } from "@/lib/crops";
 import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { stepTowardWalkable } from "./movement";
@@ -220,10 +221,30 @@ async function tickWeather(ws: typeof worldState.$inferSelect, now: Date) {
 }
 
 async function tickResources(now: Date) {
-  await db
-    .update(resourceNodes)
-    .set({ qty: 3, respawnAt: null })
-    .where(and(isNotNull(resourceNodes.respawnAt), lt(resourceNodes.respawnAt, now)));
+  // Advance stage for any resource node whose regrowth timer has
+  // elapsed. Picking resets the timer, so this only ever moves nodes
+  // toward (never past) `stages - 1`. Kinds with regrowthMs = 0 never
+  // get a `nextAdvanceAt` set by the action route, so they're naturally
+  // skipped here.
+  const due = await db
+    .select({ id: resourceNodes.id, kind: resourceNodes.kind, stage: resourceNodes.stage })
+    .from(resourceNodes)
+    .where(and(isNotNull(resourceNodes.nextAdvanceAt), lt(resourceNodes.nextAdvanceAt, now)));
+  for (const row of due) {
+    const cfg = getCropKind(row.kind);
+    const stages = cfg?.stages ?? 2;
+    const regrowthMs = cfg?.regrowthMs ?? 0;
+    if (regrowthMs <= 0) continue;
+    const nextStage = row.stage + 1;
+    const fullyGrown = nextStage >= stages - 1;
+    await db
+      .update(resourceNodes)
+      .set({
+        stage: nextStage,
+        nextAdvanceAt: fullyGrown ? null : new Date(now.getTime() + regrowthMs),
+      })
+      .where(eq(resourceNodes.id, row.id));
+  }
 }
 
 async function tickEnemies(dt: number, now: Date) {

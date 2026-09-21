@@ -274,8 +274,12 @@ export type ResourceNode = {
   itemKey: string;
   x: number;
   y: number;
+  /** Items yielded per pick. */
   qty: number;
-  respawnAt: Date | null;
+  /** Current regrowth stage. 0 = picked/empty; (stages-1) = fully grown. */
+  stage: number;
+  /** When the sim worker should advance `stage` by one. Null = no regrowth scheduled. */
+  nextAdvanceAt: Date | null;
 };
 
 export type Enemy = {

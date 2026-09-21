@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, buildings, characters, enemies, leads, missions, npcs, resourceNodes, sponsors, worldEvents } from "@/db/schema";
 import { handleApiError } from "@/lib/auth";
+import { getCropKind } from "@/lib/crops";
 import { ensureSeeded } from "@/lib/seed";
 
 export const dynamic = "force-dynamic";
@@ -105,7 +106,18 @@ export async function GET(req: Request) {
     if (type === "node") {
       const [n] = await db.select().from(resourceNodes).where(eq(resourceNodes.id, id));
       if (!n) return Response.json({ error: "?" }, { status: 404 });
-      return Response.json({ title: n.kind.replace("_", " "), lines: [`Yields: ${n.itemKey}`, n.respawnAt ? `Regrowing — ready in ${Math.max(0, Math.ceil((n.respawnAt.getTime() - Date.now()) / 60000))} min` : `${n.qty} left to gather`] });
+      const stages = getCropKind(n.kind)?.stages ?? 1;
+      // Stage 0 = depleted (won't yield). Stages 1..stages-1 = pickable.
+      const pickable = n.stage >= 1;
+      const regrowthLine = n.nextAdvanceAt
+        ? `Regrowing — next stage in ${Math.max(0, Math.ceil((n.nextAdvanceAt.getTime() - Date.now()) / 60000))} min (stage ${n.stage}/${stages - 1})`
+        : pickable
+          ? `Yields ${n.qty} ${n.itemKey} per pick (stage ${n.stage}/${stages - 1})`
+          : `Empty — waiting for regrowth`;
+      return Response.json({
+        title: n.kind.replace("_", " "),
+        lines: [`Yields: ${n.itemKey}`, regrowthLine],
+      });
     }
     if (type === "enemy") {
       const [e] = await db.select().from(enemies).where(eq(enemies.id, id));
