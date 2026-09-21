@@ -72,3 +72,15 @@ export type ViewState = { available: boolean; checkedAt: number };
 
 /** One entry in the in-process snapshot cache. */
 export type ProcCacheEntry = { snap: Snapshot; expiresAt: number };
+
+/**
+ * Process-wide snapshot cache state. Shared on globalThis because the
+ * snapshot module is loaded both by src/server.ts and inside Next's
+ * bundled API routes; separate copies would diverge and a mutation that
+ * invalidated one would leave the other serving the pre-mutation
+ * snapshot (e.g. a picked-up egg reappearing on the next refresh).
+ */
+export type SnapshotCacheState = {
+  procCache: Map<string, ProcCacheEntry>;
+  version: number;
+};

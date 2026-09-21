@@ -37,7 +37,7 @@ import { log } from "@/lib/logger";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
 import type { WorldChange, WorldSnapshot, Facing } from "@/lib/protocol";
-import type { Connection } from "@/types/websocket";
+import type { Connection, WsSharedState } from "@/types/websocket";
 
 const WS_PATH = "/ws";
 
@@ -68,7 +68,30 @@ const WS_IP_WINDOW_MS = Number(process.env.WS_IP_WINDOW_MS ?? 10_000);
 const WS_MAX_UPGRADES_PER_IP = Number(process.env.WS_MAX_UPGRADES_PER_IP ?? 10);
 const wsUpgradeTimestamps = new Map<string, number[]>();
 
-const connections = new Map<number, Connection>();
+// Shared WS state, anchored on globalThis.
+//
+// This module is loaded TWICE in one process: once by src/server.ts (the
+// custom server that actually attaches the WS upgrade handler) and again
+// inside Next's bundle for every API route. Each copy would otherwise
+// have its own `connections` Map and its own dirty queue, so a route
+// calling markWorldDirty() would touch an empty map and no post-mutation
+// push would ever happen (the client waited for the 5 s periodic
+// refresh). A single globalThis-backed state object makes both copies see
+// the same connections, live positions and dirty queue.
+const SHARED_STATE_KEY = "__grove_ws_shared__";
+
+function getSharedState(): WsSharedState {
+  const g = globalThis as unknown as Record<string, WsSharedState | undefined>;
+  let s = g[SHARED_STATE_KEY];
+  if (!s) {
+    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null };
+    g[SHARED_STATE_KEY] = s;
+  }
+  return s;
+}
+
+const shared = getSharedState();
+const connections = shared.connections;
 const SHARD_ID = localShardId();
 
 // Movement relay: how far a player's `pos` reaches, and the per-connection
@@ -135,18 +158,15 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
 
 /** Mark the world dirty near (x, y) and schedule a coalesced push. */
 export function markWorldDirty(x?: number, y?: number): void {
-  if (x !== undefined && y !== undefined) dirtyPoints.push({ x, y });
-  if (dirtyTimer) return;
-  dirtyTimer = setTimeout(() => void flushDirty(), DIRTY_FLUSH_MS);
+  if (x !== undefined && y !== undefined) shared.dirtyPoints.push({ x, y });
+  if (shared.dirtyTimer) return;
+  shared.dirtyTimer = setTimeout(() => void flushDirty(), DIRTY_FLUSH_MS);
 }
 
-let dirtyPoints: Array<{ x: number; y: number }> = [];
-let dirtyTimer: NodeJS.Timeout | null = null;
-
 async function flushDirty(): Promise<void> {
-  dirtyTimer = null;
-  const points = dirtyPoints;
-  dirtyPoints = [];
+  shared.dirtyTimer = null;
+  const points = shared.dirtyPoints;
+  shared.dirtyPoints = [];
   // Rebuild fresh: the cached snapshot still contains the pre-mutation
   // state until we drop it.
   invalidateSnapshots();

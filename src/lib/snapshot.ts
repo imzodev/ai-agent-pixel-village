@@ -42,9 +42,9 @@ import { metrics } from "@/lib/metrics";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
-  ProcCacheEntry,
   RawSnapshot,
   Snapshot,
+  SnapshotCacheState,
   SponsorLite,
   ViewState,
 } from "@/types/snapshot";
@@ -423,11 +423,23 @@ let initStarted = false;
 const PROC_CACHE_MAX = Number(process.env.SNAPSHOT_PROC_CACHE_SIZE ?? 256);
 const PROC_CACHE_TTL_MS = Math.max(50, Number(process.env.SNAPSHOT_PROC_CACHE_TTL_MS ?? 5000));
 
-const procCache = new Map<string, ProcCacheEntry>();
+// Anchored on globalThis: this module is loaded both by src/server.ts and
+// by Next's bundled API routes, and a mutation invalidated in one copy
+// must also drop the other copy's cache (see SnapshotCacheState).
+const SNAPSHOT_CACHE_KEY = "__grove_snapshot_cache__";
 
-// Monotonic per-process snapshot version. Replaces the old Redis
-// `INCR world:version` (one write per rebuild, read by nobody).
-let localVersion = 0;
+function getCacheState(): SnapshotCacheState {
+  const g = globalThis as unknown as Record<string, SnapshotCacheState | undefined>;
+  let s = g[SNAPSHOT_CACHE_KEY];
+  if (!s) {
+    s = { procCache: new Map(), version: 0 };
+    g[SNAPSHOT_CACHE_KEY] = s;
+  }
+  return s;
+}
+
+const cacheState = getCacheState();
+const procCache = cacheState.procCache;
 
 function procCacheGet(key: string): Snapshot | null {
   const e = procCache.get(key);
@@ -500,7 +512,7 @@ async function getSharedSnapshot(
     }
   }
 
-  const version = ++localVersion;
+  const version = ++cacheState.version;
   const raw = await buildRawSnapshot(playerX, playerY);
   const snap = formatSnapshot(raw, version);
   procCacheSet(key, snap);

@@ -30,6 +30,16 @@ export type Connection = {
   slowSince: number;
 };
 
+/**
+ * Process-wide WS state shared by every loaded copy of the WS module
+ * (custom server + Next's bundled API routes). See world-stream.ts.
+ */
+export type WsSharedState = {
+  connections: Map<number, Connection>;
+  dirtyPoints: Array<{ x: number; y: number }>;
+  dirtyTimer: ReturnType<typeof setTimeout> | null;
+};
+
 /** Client-side stream callbacks. */
 export type StreamHandlers = {
   onSnapshot: (data: WorldSnapshot) => void;
