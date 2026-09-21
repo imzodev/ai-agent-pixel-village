@@ -15,7 +15,9 @@ export type Events = {
   refreshMe: undefined;
   moveTo: { x: number; y: number };
   poke: undefined;
-  chatFocus: boolean;
+  /** Emitted by WorldScene when E/Space is pressed on an actionable selection. */
+  primaryAction: Selection;
+  /** Toggle one of the UI panels / routes. */
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
   /** True while any modal is open that should block canvas interaction. */
   modalOpen: boolean;

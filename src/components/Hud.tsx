@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
+import { inputRouter } from "@/game/input/router";
+import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import { TRADES } from "@/lib/trade";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
@@ -71,6 +73,20 @@ export default function Hud() {
     return () => u.forEach((f) => f());
   }, [toast, refreshMe]);
   useEffect(() => { if (snap?.me && !me?.me) void refreshMe(); }, [snap?.me, me?.me, refreshMe]);
+
+  // Mirror local selection changes to the bus so WorldScene's
+  // `lastSelection` (which gates the context-sensitive E behavior) stays
+  // in sync with the HUD. Without this, clearing `sel` here — via
+  // setSel(null) after a pickup, the ✕ button, or because the entity
+  // vanished — leaves WorldScene thinking the player still has the
+  // stale selection, and the next E press runs primaryAction on a
+  // gone entity (no menu, no action).
+  useEffect(() => {
+    bus.emit("select", sel);
+  }, [sel]);
+
+  // (The router-registration effect lives further down, after `commitSelection`
+  // and `close` are defined.)
 
   // Close the talk panel when the NPC drifts out of range (e.g. they walked
   // away, or you did) — without waiting for the next failed send.
@@ -210,9 +226,103 @@ export default function Hud() {
     setSel(null);
   };
 
+  // Computed once per render; reused below by commitSelection and the JSX.
+  const loggedIn = !!snap?.me;
+  const interactHint = (() => {
+    const k = formatBinding("player.interact");
+    return k ? `(${prettyKey(k)})` : "";
+  })();
+
+  /**
+   * Run the default action for a selection, mirroring the primary action
+   * button. Out-of-range = walk over (next press acts). Used by both the
+   * button's onClick and the `player.interact` key/command handler, so
+   * there's exactly one place that defines "what does this entity do".
+   */
+  const commitSelection = (s: Selection): void => {
+    if (!loggedIn) return;
+    if (!snap) return;
+    const pos = entityPos(snap, s);
+    if (!pos) return;
+    const self = selfPos ?? snap.me;
+    const d = self ? Math.hypot(pos.x - self.x, pos.y - self.y) : 9999;
+    const walk = () => bus.emit("moveTo", { x: pos.x, y: pos.y + (s.type === "building" ? 0 : 18) });
+    switch (s.type) {
+      case "item":
+        if (d <= 90) void invAction({ action: "pickup", groundItemId: s.id }).then(() => setSel(null));
+        else walk();
+        break;
+      case "node":
+        if (!s.ready) { toast("Still regrowing.", "info"); return; }
+        if (d <= 90) void act({ action: "gather", id: s.id });
+        else walk();
+        break;
+      case "animal":
+        if (d <= 90) void act({ action: "pet", id: s.id });
+        else walk();
+        break;
+      case "enemy":
+        if (d <= 80) void act({ action: "attack", id: s.id });
+        else walk();
+        break;
+      case "building":
+        if (d <= 140) void enterBuilding(s.key, s.name);
+        else walk();
+        break;
+      case "npc":
+        if (d <= 160) void startTalk(s.id, s.name, s.role);
+        else walk();
+        break;
+      case "player":
+        // No primary action on another player.
+        break;
+    }
+  };
+
+  // ui.close handler closes the topmost open UI: talk → trade → craft →
+  // inspect → panel → building → selection. The router dispatches ui.* even
+  // when a text field is focused, so Escape always works.
+  const close = useCallback((): void => {
+    if (talk) { setTalk(null); return; }
+    if (trade) { setTrade(null); return; }
+    if (craft) { setCraft(null); return; }
+    if (inspect) { setInspect(null); return; }
+    if (panel) { setPanel(null); return; }
+    if (building) { setBuilding(null); return; }
+    if (sel) { setSel(null); return; }
+  }, [talk, trade, craft, inspect, panel, building, sel]);
+
+  // Register UI commands with the input router. The effect depends on the
+  // state each handler reads, so closures always see current values and
+  // re-registering on a real change keeps them in sync.
+  useEffect(() => {
+    const disposers = [
+      inputRouter.register({ id: "ui.close", scope: "ui", run: close }),
+      inputRouter.register({
+        id: "ui.bag",
+        scope: "ui",
+        run: () => setPanel((p) => (p === "bag" ? null : "bag")),
+      }),
+      inputRouter.register({
+        id: "ui.map",
+        scope: "ui",
+        run: () => setPanel((p) => (p === "log" ? null : "log")),
+      }),
+      inputRouter.register({
+        id: "ui.shop",
+        scope: "ui",
+        run: () => { window.location.href = "/shop"; },
+      }),
+    ];
+    const offPrimary = bus.on("primaryAction", (s) => commitSelection(s));
+    return () => {
+      for (const d of disposers) d();
+      offPrimary();
+    };
+  }, [talk, trade, craft, inspect, panel, building, sel, commitSelection, close]);
+
   const hour = snap ? clockFrom(snap) : 7;
   const hh = Math.floor(hour), mm = Math.floor((hour % 1) * 60);
-  const loggedIn = !!snap?.me;
   const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; return Math.hypot(n.x - b.doorX, n.y - b.doorY) < 200; }) ?? [] : [];
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
 
@@ -282,10 +392,10 @@ export default function Hud() {
             const recipes: Recipe[] = (npcKey ? recipesForNpc(npcKey) : undefined) ?? [];
             const inv = me?.inventory ?? [];
             const sellable = trades.some((t: TradeItem) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
-            const craftable = recipes.some((r: Recipe) => canCraft(r, inv));
             const Buttons = (
               <>
-                <Btn on={() => startTalk(sel.id, sel.name, sel.role)}>💬 Talk</Btn>
+                {/* eslint-disable-next-line react-hooks/refs -- commitSelection is a plain function; the rule mis-flags identifiers declared near the call site. */}
+                <Btn on={() => { commitSelection(sel); }}>💬 Talk {interactHint}</Btn>
                 {recipes.length > 0 && (
                   <Btn on={() => npcKey && openCraft(sel.id, sel.name, npcKey)}>
                     📜 Craft
@@ -298,11 +408,11 @@ export default function Hud() {
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
           })()}
-          {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => act({ action: "pet", id: sel.id })}>🤚 Pet</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => invAction({ action: "pickup", groundItemId: sel.id }).then(() => setSel(null))}>🫳 Pick up</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "node" && (sel.distance <= 90 ? <Btn on={() => act({ action: "gather", id: sel.id })} disabled={!sel.ready}>🧺 Gather</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => act({ action: "attack", id: sel.id })}>⚔️ Attack</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => enterBuilding(sel.key, sel.name)}>🚪 Enter</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🫳 Pick up {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "node" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)} disabled={!sel.ready}>🧺 Gather {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
           <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
@@ -312,7 +422,7 @@ export default function Hud() {
       {/* Chat input */}
       {loggedIn && !talk && (
         <form className="pointer-events-auto absolute bottom-3 left-3 flex w-[min(90vw,360px)] gap-1" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); }}>
-          <input value={chat} onChange={(e) => setChat(e.target.value)} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} placeholder="Say something to the plaza… (WASD to walk, E to interact)" className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
+          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Say something to the plaza… (WASD to walk, E to interact)" className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
           <button className="rounded-lg bg-amber-700 px-3 text-white">Say</button>
         </form>
       )}
@@ -341,7 +451,7 @@ export default function Hud() {
         <div
           role="dialog"
           aria-modal="true"
-          onClick={() => { setTalk(null); bus.emit("chatFocus", false); }}
+          onClick={() => { setTalk(null); }}
           className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
         >
         <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,560px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 shadow-2xl">
@@ -349,7 +459,7 @@ export default function Hud() {
             <div className="font-bold text-amber-900">{talk.name}</div><div className="text-stone-500">{talk.role}</div>
             {talk.sponsor && <span className="rounded px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ sponsored by {talk.sponsor.businessName}</span>}
             <div className="flex-1" />
-            <button className="text-stone-400 hover:text-stone-700" onClick={() => { setTalk(null); bus.emit("chatFocus", false); }}>✕</button>
+            <button className="text-stone-400 hover:text-stone-700" onClick={() => { setTalk(null); }}>✕</button>
           </div>
           <div className="max-h-52 space-y-1.5 overflow-y-auto px-3 py-2">
             {talk.lines.map((l, i) => (
@@ -374,7 +484,7 @@ export default function Hud() {
             </div>
           )}
           <form className="flex gap-1 border-t-2 border-amber-900/20 p-2" onSubmit={(e) => { e.preventDefault(); const v = talkInput.current?.value.trim(); if (!v) return; talkInput.current!.value = ""; void sendTalk(v); }}>
-            <input ref={talkInput} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} placeholder={`Say something to ${talk.name}…`} className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none focus:border-amber-700" maxLength={300} />
+            <input ref={talkInput} placeholder={`Say something to ${talk.name}…`} className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none focus:border-amber-700" maxLength={300} />
             <button className="rounded-lg bg-amber-700 px-3 text-white" disabled={talk.busy}>Send</button>
           </form>
         </div>
@@ -393,7 +503,7 @@ export default function Hud() {
           {panel === "log" && (
             <div className="space-y-2">
               <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); if (!ask.trim()) return; void doInspect(`/api/inspect?q=${encodeURIComponent(ask)}&x=${snap?.me?.x ?? 0}&y=${snap?.me?.y ?? 0}`); }}>
-                <input value={ask} onChange={(e) => setAsk(e.target.value)} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} placeholder="Ask: what's that sheep doing?" className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none" />
+                <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask: what's that sheep doing?" className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none" />
                 <button className="rounded-lg bg-amber-700 px-3 text-white">Ask</button>
               </form>
               <div className="text-[11px] text-stone-500">Try “tell me about the bakery”, “who is Wren?”, “what&apos;s the weather?”</div>
@@ -502,8 +612,8 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40">
       <form className="w-[min(92vw,340px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ ok?: boolean }>("/api/auth/login", { username: u, password: p }); if (r.error) setErr(r.error); else location.reload(); }}>
         <div className="text-lg font-bold text-amber-900">Welcome back</div>
-        <input value={u} onChange={(e) => setU(e.target.value)} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} placeholder="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
-        <input value={p} onChange={(e) => setP(e.target.value)} onFocus={() => bus.emit("chatFocus", true)} onBlur={() => bus.emit("chatFocus", false)} type="password" placeholder="password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
+        <input value={u} onChange={(e) => setU(e.target.value)} placeholder="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
+        <input value={p} onChange={(e) => setP(e.target.value)} type="password" placeholder="password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
         {err && <div className="mt-2 text-red-700">{err}</div>}
         <div className="mt-3 flex gap-2"><button className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white">Sign in</button><button type="button" onClick={onClose} className="rounded-lg bg-stone-200 px-3 py-1.5">Cancel</button><Link href="/signup" className="ml-auto self-center text-amber-800 underline">New here?</Link></div>
       </form>
@@ -540,11 +650,6 @@ function CraftModal({ craft, me, performCraft, onClose }: {
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const closeIfEsc = useCallback((e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }, [onClose]);
-  useEffect(() => {
-    document.addEventListener("keydown", closeIfEsc);
-    return () => document.removeEventListener("keydown", closeIfEsc);
-  }, [closeIfEsc]);
 
   const doCraft = async (recipe: Recipe, qty: number) => {
     if (busy) return;
@@ -631,11 +736,6 @@ function TradeModal({ trade, performTrade, onClose }: {
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const closeIfEsc = useCallback((e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }, [onClose]);
-  useEffect(() => {
-    document.addEventListener("keydown", closeIfEsc);
-    return () => document.removeEventListener("keydown", closeIfEsc);
-  }, [closeIfEsc]);
 
   const doSell = async (row: { trade: TradeItem; have: number }, qty: number) => {
     if (busy) return;

@@ -21,7 +21,7 @@ import {
   releaseOutside,
   resetChunkState,
 } from "./worldTilemap";
-import type { Action, InputState } from "@/types/input";
+import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
 
@@ -63,7 +63,10 @@ export class WorldScene extends Phaser.Scene {
   private buildingZones = new Map<string, { zone: Phaser.GameObjects.Zone; glow: Phaser.GameObjects.Arc; door: { x: number; y: number } }>();
   private shownChat = new Set<number>();
   private moveTarget: { x: number; y: number } | null = null;
-  private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  /** The most recent Selection the player has chosen (click or E). Used
+   *  by the context-sensitive `interact` command handler so a second
+   *  press of E acts on the same selection instead of re-targeting. */
+  private lastSelection: Selection | null = null;
   private night!: Phaser.GameObjects.Rectangle;
   private fog!: Phaser.GameObjects.Rectangle;
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -71,7 +74,6 @@ export class WorldScene extends Phaser.Scene {
   private lastHeartbeat = 0;
   private stream: WorldStream | null = null;
   private dragging = false;
-  private chatFocused = false;
   private marker!: Phaser.GameObjects.Image;
   private sentFirst = false;
   private lastPlayerChunk: { cx: number; cy: number } | null = null;
@@ -81,7 +83,6 @@ export class WorldScene extends Phaser.Scene {
   // wheel handler so zooming out can never reveal the background.
   private minZoom = 1;
   private fitted = false;
-  private mobileInput: { getState(): InputState } | null = null;
   private modalOpen = false;
   // Set on scene shutdown/destroy. Async work (WS snapshots, chunk loading,
   // building stamps) checks this before touching Phaser, so a destroyed
@@ -203,15 +204,15 @@ export class WorldScene extends Phaser.Scene {
     this.scale.on("resize", () => this.resizeOverlays());
     this.resizeOverlays();
 
-    // input
-    const kb = this.input.keyboard!;
-    this.keys = {
-      W: kb.addKey("W", false), A: kb.addKey("A", false), S: kb.addKey("S", false), D: kb.addKey("D", false),
-      UP: kb.addKey("UP", false), LEFT: kb.addKey("LEFT", false), DOWN: kb.addKey("DOWN", false), RIGHT: kb.addKey("RIGHT", false),
-      E: kb.addKey("E", false), SPACE: kb.addKey("SPACE", false),
-    };
-    kb.on("keydown-E", () => { if (!this.chatFocused) this.interactNearest(); });
-    kb.on("keydown-SPACE", () => { if (!this.chatFocused) this.interactNearest(); });
+    // input — keyboard + touch both go through the input router. See
+    // src/game/input/router.ts. The DOM adapter is installed once per
+    // page by GameCanvas; here we just register the scene's commands.
+    this.unsub.push(inputRouter.register({
+      id: "player.interact",
+      scope: "gameplay",
+      run: () => this.interact(),
+    }));
+
     this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
       const cam = this.cameras.main;
       cam.setZoom(Phaser.Math.Clamp(cam.zoom - Math.sign(dy) * 0.25, this.minZoom, 4));
@@ -259,7 +260,7 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("focus", ({ x, y }) => this.cameras.main.pan(x, y, 500)));
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
-    this.unsub.push(bus.on("chatFocus", (f) => { this.chatFocused = f; if (f) kb.disableGlobalCapture(); else kb.enableGlobalCapture(); }));
+    this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
     // Phase 2: replace 1 Hz polling with WebSocket push.
@@ -576,6 +577,45 @@ export class WorldScene extends Phaser.Scene {
   private select(sel: Selection) {
     bus.emit("select", sel);
   }
+  /**
+   * True when the snapshot still contains the entity the selection points
+   * at. Used to detect stale selections (e.g. after a pickup, before the
+   * post-mutation snapshot has been pushed) so the next E press re-targets
+   * instead of silently acting on nothing.
+   */
+  private selectionExists(sel: Selection): boolean {
+    if (!this.snapshot) return false;
+    switch (sel.type) {
+      case "npc": return this.snapshot.npcs.some((x) => x.id === sel.id);
+      case "animal": return this.snapshot.animals.some((x) => x.id === sel.id);
+      case "enemy": return this.snapshot.enemies.some((x) => x.id === sel.id);
+      case "item": return this.snapshot.groundItems.some((x) => x.id === sel.id);
+      case "node": return this.snapshot.nodes.some((x) => x.id === sel.id);
+      case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
+      case "player": return this.snapshot.players.some((x) => x.id === sel.id);
+    }
+  }
+  /**
+   * Context-sensitive E/Space handler. If the player already has an
+   * actionable selection that still exists in the snapshot, ask the HUD
+   * to run its primary action; otherwise target the nearest interactable
+   * thing.
+   */
+  private interact() {
+    const sel = this.lastSelection;
+    if (sel && this.isActionable(sel) && this.selectionExists(sel)) {
+      bus.emit("primaryAction", sel);
+      return;
+    }
+    // Stale selection (entity just got picked up / killed / respawned);
+    // clear it and re-target so the next E always opens the menu.
+    this.lastSelection = null;
+    this.interactNearest();
+  }
+  /** Selection types that have a primary action the player can perform. */
+  private isActionable(sel: Selection): boolean {
+    return sel.type !== "player";
+  }
   private interactNearest() {
     if (!this.player || !this.snapshot) return;
     const s = this.snapshot;
@@ -589,30 +629,6 @@ export class WorldScene extends Phaser.Scene {
     cands.sort((a, b) => a.d - b.d);
     if (cands[0] && cands[0].d < 110) this.select(cands[0].sel);
     else bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
-  }
-
-  /** Public hook for the React layer to attach the mobile input source. */
-  public attachInput(src: { getState(): InputState }): void {
-    this.mobileInput = src;
-  }
-
-  /** Public hook for the React layer to forward action button presses. */
-  public handleAction(a: Action): void {
-    if (this.chatFocused) return;
-    switch (a) {
-      case "interact":
-        this.interactNearest();
-        break;
-      case "bag":
-        bus.emit("toggle", "bag");
-        break;
-      case "shop":
-        bus.emit("toggle", "shop");
-        break;
-      case "map":
-        bus.emit("toggle", "map");
-        break;
-    }
   }
 
   // ---------- update loop ----------
@@ -651,20 +667,11 @@ export class WorldScene extends Phaser.Scene {
 
   private updatePlayer(dt: number) {
     const p = this.player!;
-    let vx = 0, vy = 0;
-    if (!this.chatFocused) {
-      // Touch / joystick input takes priority when present.
-      const touch = this.mobileInput?.getState();
-      if (touch && !touch.textFocused && (touch.axisX !== 0 || touch.axisY !== 0)) {
-        vx = touch.axisX;
-        vy = touch.axisY;
-      } else {
-        if (this.keys.A.isDown || this.keys.LEFT.isDown) vx -= 1;
-        if (this.keys.D.isDown || this.keys.RIGHT.isDown) vx += 1;
-        if (this.keys.W.isDown || this.keys.UP.isDown) vy -= 1;
-        if (this.keys.S.isDown || this.keys.DOWN.isDown) vy += 1;
-      }
-    }
+    // The router merges touch joystick + keyboard movement and returns 0
+    // while a text field is focused. See src/game/input/router.ts.
+    const axis = inputRouter.axis();
+    let vx = axis.x;
+    let vy = axis.y;
     // Snap to dominant axis so WASD is cardinal-only (matches the facing
     // selection below). Click-to-move NPCs stay diagonal — that's correct
     // for moving toward a specific point.

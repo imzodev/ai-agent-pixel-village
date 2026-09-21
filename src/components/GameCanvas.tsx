@@ -1,10 +1,15 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { inputRouter } from "@/game/input/router";
+import { installDomKeyboard } from "@/game/input/domKeyboard";
 
 export default function GameCanvas() {
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLDivElement>(null);
+  const disposers = useRef<Array<() => void>>([]);
+
   useEffect(() => {
+    disposers.current = [];
     let game: import("phaser").Game | null = null;
     let input: { destroy(): void } | null = null;
     let cancelled = false;
@@ -30,31 +35,29 @@ export default function GameCanvas() {
         render: { antialias: false },
       });
 
+      // Keyboard is installed on every device (the touch fallback used to
+      // provide B/Y/M only on touch — now they're real desktop shortcuts).
+      disposers.current.push(installDomKeyboard(inputRouter, window));
+
       if (isTouch) {
         const { createInputSource } = await import("@/game/InputSource");
         const src = createInputSource({
+          router: inputRouter,
           container: inputRef.current,
-          onAction: (a) => {
-            // Hand off to whatever scene is active.
-            const scene = game?.scene.getScene("world") as { handleAction?(action: string): void } | null;
-            scene?.handleAction?.(a);
-          },
         });
         input = src;
-        game.events.once("ready", () => {
-          const scene = game?.scene.getScene("world") as { attachInput?(src: unknown): void } | null;
-          scene?.attachInput?.(src);
-        });
       }
     })();
     return () => {
       cancelled = true;
       input?.destroy();
+      for (const d of disposers.current) d();
+      disposers.current = [];
       game?.destroy(true);
     };
   }, []);
   return (
-    <div className="absolute inset-0 h-full w-full overflow-hidden" style={{ backgroundColor: "#6fae5f" }}>
+    <div className="absolute inset-0 h-full w-screen overflow-hidden" style={{ backgroundColor: "#6fae5f" }}>
       <div ref={ref} className="absolute inset-0" />
       <div
         ref={inputRef}
@@ -63,7 +66,6 @@ export default function GameCanvas() {
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          // honor iOS safe areas
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
           paddingLeft: "env(safe-area-inset-left)",
