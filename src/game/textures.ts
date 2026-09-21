@@ -51,6 +51,69 @@ export function makeCreatureTextures(scene: Scene) {
 }
 
 // ---------- Nodes / props ----------
+
+/**
+ * Sub-region of the `lpc_crops` spritesheet used for a crop node. The
+ * mature wheat tile spans 32×64 (two cells wide × four cells tall, with
+ * the soil line at the bottom); the picked-clean state uses an early-
+ * stage sprout indicating regrowth. Each kind has its own x/y/w/h — so
+ * crops with different footprints (e.g. wheat at 32×64, pumpkin at
+ * 32×32) coexist without code changes elsewhere.
+ *
+ * Add a new crop by appending one entry here. Each frame is registered
+ * on the `lpc_crops` texture at scene-create time by
+ * `registerCropFrames`.
+ */
+type CropRect = { x: number; y: number; w: number; h: number };
+type CropEntry = { grown: CropRect; picked: CropRect };
+
+const CROP_REGIONS: Record<string, CropEntry> = {
+  wheat_field: {
+    grown:  { x: 992, y: 128, w: 32, h: 64 },
+    picked: { x: 992, y: 16,  w: 32, h: 64 },
+  },
+};
+
+const LPC_CROPS_KEY = "lpc_crops";
+
+export function loadPropSprites(scene: Scene): void {
+  // Master LPC crops spritesheet. One texture, many sub-region frames —
+  // crops don't need per-state PNGs.
+  scene.load.image(LPC_CROPS_KEY, "/assets/food/crops.png");
+}
+
+/**
+ * Registers named sub-region frames on the `lpc_crops` texture. Call
+ * once during scene create, after preload has finished. Each crop kind
+ * gets a `kind_grown` and `kind_picked` frame that Phaser renders at
+ * exactly its native w×h — no `setCrop` + `setDisplaySize` dance.
+ */
+export function registerCropFrames(scene: Scene): void {
+  const tex = scene.textures.get(LPC_CROPS_KEY);
+  if (!tex) return;
+  for (const [kind, entry] of Object.entries(CROP_REGIONS)) {
+    tex.add(`${kind}_grown`, 0, entry.grown.x, entry.grown.y, entry.grown.w, entry.grown.h);
+    tex.add(`${kind}_picked`, 0, entry.picked.x, entry.picked.y, entry.picked.w, entry.picked.h);
+  }
+}
+
+/**
+ * Returns the `lpc_crops` frame name to use for a crop node, or `null`
+ * if the kind falls back to its own procedural `node_<kind>` sprite.
+ */
+export function nodeFrameKey(kind: string, ready: boolean): string | null {
+  if (!(kind in CROP_REGIONS)) return null;
+  return ready ? `${kind}_grown` : `${kind}_picked`;
+}
+
+/**
+ * Procedural texture key for a resource node. Used for every node kind
+ * that doesn't have an `lpc_crops` frame (see `nodeFrameKey`).
+ */
+export function nodeTextureKey(kind: string): string {
+  return `node_${kind}`;
+}
+
 export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "node_berry_bush", ["...gggg....", "..gggpgg...", ".gpgggggg..", ".ggggpggpg.", "gggpggggggg", ".ggggggpgg.", "..ggpgggg..", "....dd....."], { g: "#4e9a51", p: "#7a4fb5", d: "#5a3a22" }, 2);
   pixelTexture(scene, "node_herb_patch", ["..g...g..g.", ".gg..gg.gg.", ".g.g.g.g.g.", "..g..g..g..", "..g..g..g..", ".dddddddddd"], { g: "#6fc36a", d: "#8a6a4a" }, 2);
@@ -101,3 +164,4 @@ export function makeAllTextures(scene: Scene) {
   makeCreatureTextures(scene);
   makePropTextures(scene);
 }
+

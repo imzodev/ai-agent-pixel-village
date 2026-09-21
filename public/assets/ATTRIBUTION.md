@@ -13,3 +13,14 @@ Permission has been granted by the original authors under the CC0/CC0
 chain; however, OGA BY 3.0 / CC BY 3.0 are the practical upstream licenses for
 the assembled sheet, so we keep credit visible here. If you fork the project,
 include this file (or a link to it) in your distribution.
+
+## Wheat field tiles
+
+Rendered at runtime as a sub-region of `food/crops.png` (LPC Crops,
+bluecarrot16 / Daniel Eddeland / Joshua Taylor / Richard Kettering)
+via Phaser's `setCrop`. Mature wheat (32×64) and a young sprout for
+the picked/regrowth state. See `food/CREDITS-crops.txt` for the
+upstream license chain.
+
+- **License**: CC-BY-SA 3.0+ / GPL 3.0+. **Attribution required** when
+  redistributing.

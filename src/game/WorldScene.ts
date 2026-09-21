@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
-import { makeAllTextures } from "./textures";
+import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { stampBuildings } from "./buildingStamps";
@@ -120,6 +120,7 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     loadTilemapAssets(this);
+    loadPropSprites(this);
     // Animated fox sprite — the sheet is a 3x-scaled export: 144×256 total,
     // 3 cols × 4 rows of 48×64 frames (up / right / down / left).
     // See public/assets/ATTRIBUTION.md for licensing.
@@ -139,6 +140,10 @@ export class WorldScene extends Phaser.Scene {
     // by the dead scene (StrictMode remount / HMR), which crash on reuse.
     resetChunkState();
     makeAllTextures(this);
+    // The lpc_crops image is loaded in preload; add per-crop frame regions
+    // (wheat_field, …) so node rendering can pick the right one via a frame
+    // name. Must run after preload, hence here in create().
+    registerCropFrames(this);
     // Fox walk animations — 4 directions × 3 frames each (see ATTRIBUTION.md).
     for (const [dir, frames] of [["up", [0, 1, 2] as number[]], ["right", [3, 4, 5] as number[]], ["down", [6, 7, 8] as number[]], ["left", [9, 10, 11] as number[]]] as const) {
       this.anims.create({
@@ -446,13 +451,25 @@ export class WorldScene extends Phaser.Scene {
     // nodes
     for (const n of s.nodes) {
       let img = this.nodes.get(n.id);
+      // Crop kinds render via a named frame on the shared lpc_crops
+      // spritesheet (frame dimensions match the crop's w×h). All other
+      // node kinds fall back to their own procedural node_<kind> sprite.
+      const frameKey = nodeFrameKey(n.kind, n.ready);
+      const targetKey = frameKey ? "lpc_crops" : nodeTextureKey(n.kind);
       if (!img) {
-        img = this.add.image(n.x, n.y, `node_${n.kind}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
+        img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
         img.setInteractive({ useHandCursor: true });
         img.on("pointerdown", () => { if (this.modalOpen) return; const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, ready: cur?.ready ?? n.ready, distance: this.distTo(n.x, n.y) }); });
         this.nodes.set(n.id, img);
+      } else if (img.texture.key !== targetKey) {
+        // Texture key changed (e.g. procedural → cropped). Swap; the frame
+        // re-applies below.
+        img.setTexture(targetKey, frameKey ?? undefined);
+      } else if (frameKey) {
+        // Same texture, different state — just swap the frame.
+        img.setFrame(frameKey);
       }
-      img.setAlpha(n.ready ? 1 : 0.35);
+      img.setAlpha(n.ready ? 1 : 0.55);
     }
     // chat bubbles
     for (const c of s.chat) {
