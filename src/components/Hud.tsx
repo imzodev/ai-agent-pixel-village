@@ -621,14 +621,16 @@ function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {
 }
 function LoginModal({ onClose }: { onClose: () => void }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
+  const userRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { userRef.current?.focus(); }, []);
   return (
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40">
       <form className="w-[min(92vw,340px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ ok?: boolean }>("/api/auth/login", { username: u, password: p }); if (r.error) setErr(r.error); else location.reload(); }}>
         <div className="text-lg font-bold text-amber-900">Welcome back</div>
-        <input value={u} onChange={(e) => setU(e.target.value)} placeholder="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
-        <input value={p} onChange={(e) => setP(e.target.value)} type="password" placeholder="password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
+        <input ref={userRef} value={u} onChange={(e) => setU(e.target.value)} placeholder="username" autoComplete="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
+        <input value={p} onChange={(e) => setP(e.target.value)} type="password" placeholder="password" autoComplete="current-password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
         {err && <div className="mt-2 text-red-700">{err}</div>}
-        <div className="mt-3 flex gap-2"><button className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white">Sign in</button><button type="button" onClick={onClose} className="rounded-lg bg-stone-200 px-3 py-1.5">Cancel</button><Link href="/signup" className="ml-auto self-center text-amber-800 underline">New here?</Link></div>
+        <div className="mt-3 flex gap-2"><button type="submit" className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white">Sign in</button><button type="button" onClick={onClose} className="rounded-lg bg-stone-200 px-3 py-1.5">Cancel</button><Link href="/signup" className="ml-auto self-center text-amber-800 underline">New here?</Link></div>
       </form>
     </div>
   );
