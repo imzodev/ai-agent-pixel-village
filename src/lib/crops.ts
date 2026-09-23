@@ -28,25 +28,25 @@ export type CropKindConfig = {
 
 // 5-stage wheat progression harvested from public/assets/food/crops.png
 // (LPC crops by bluecarrot16 / Eddeland / Taylor / Kettering). The
-// wheat column at x=992 spans rows 1..11, with the head and leaves
-// distributed vertically across rows. Each stage crops a clean,
-// non-overlapping sub-region with its own distinct visual:
+// wheat column at x=992 spans rows 1..11. To get a smooth visual growth
+// with consistent image dimensions, all 5 stages are 32x64 crops that
+// share the same soil line at the bottom — only the y offset changes:
 //
-// Stage 0  (picked / just regrowing) : tiny tuft on soil       (rows 1-2, 32x32)
-// Stage 1  (sprout)                  : small green sprout        (rows 2-3, 32x32)
-// Stage 2  (sprout with leaves)       : sprout + leaves           (rows 3-4, 32x32)
-// Stage 3  (small wheat)             : wheat with one head       (rows 4-7, 32x64)
-// Stage 4  (mature wheat)            : full plant, multiple heads (rows 8-11, 32x64)
+// Stage 0  (picked / just regrowing) : tuft on soil                (y=16,  32x64)
+// Stage 1  (sprout)                  : small sprout + soil         (y=48,  32x64)
+// Stage 2  (small wheat)             : wheat with first head        (y=80,  32x64)
+// Stage 3  (medium wheat)            : wheat with more leaves      (y=96,  32x64)
+// Stage 4  (mature wheat)            : full plant, multiple heads  (y=128, 32x64)
 //
-// Different stages have different dimensions; Phaser uses each frame's
-// w/h for the display size automatically. All frames share the soil
-// line at the bottom of their crop.
+// Tweak the y values here to dial in the visual growth. With
+// setOrigin(0.5, 1) every frame's bottom anchors at the node's world
+// position so the soil line stays on the ground.
 const WHEAT_FRAMES: CropRect[] = [
-  { x: 992, y: 16, w: 32, h: 32 }, // stage 0 — tiny tuft on soil
-  { x: 992, y: 32, w: 32, h: 32 }, // stage 1 — small sprout
-  { x: 992, y: 48, w: 32, h: 32 }, // stage 2 — sprout with leaves
-  { x: 992, y: 64, w: 32, h: 64 }, // stage 3 — wheat with one head
-  { x: 992, y: 128, w: 32, h: 64 }, // stage 4 — mature wheat
+  { x: 992, y: 32,  w: 32, h: 32 }, // stage 0 — tuft on soil
+  { x: 992, y: 64,  w: 32, h: 64 }, // stage 1 — small sprout
+  { x: 992, y: 128,  w: 32, h: 64 }, // stage 2 — wheat with first head
+  { x: 960, y: 192,  w: 32, h: 64 }, // stage 3 — more leaves, fuller
+  { x: 992, y: 192, w: 32, h: 64 }, // stage 4 — mature wheat
 ];
 
 export const CROP_KINDS: Record<string, CropKindConfig> = {
