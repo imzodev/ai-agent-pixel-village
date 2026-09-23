@@ -26,9 +26,21 @@ export function installDomKeyboard(
     router.setTextFocused(focused);
   }
 
+  // True when a text field is currently focused. Used by the keydown/keyup
+  // listeners below to skip routing keystrokes that belong to the field.
+  function textFocused(): boolean {
+    const t = typeof document !== "undefined" ? document.activeElement : null;
+    return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || (t as HTMLElement).isContentEditable));
+  }
+
   function onKeyDown(e: KeyboardLikeEvent): void {
     // Never hijack browser/OS shortcuts (Cmd+M, Ctrl+R, Alt+F4, …).
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // When a text field has focus, the keystroke belongs to the field —
+    // let it through (so letters, backspace, etc. work) and don't run any
+    // game command. The router already gates gameplay-scope commands,
+    // but ui-scope (B / Y / M / Esc) was still firing while typing.
+    if (textFocused()) return;
     const norm = normalizeKey(e.key);
     if (!norm) return;
     const lookup = commandFor(norm);
@@ -49,6 +61,7 @@ export function installDomKeyboard(
   }
 
   function onKeyUp(e: KeyboardLikeEvent): void {
+    if (textFocused()) return;
     const norm = normalizeKey(e.key);
     if (!norm) return;
     const lookup = commandFor(norm);
