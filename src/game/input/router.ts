@@ -3,23 +3,57 @@
 // feed it via trigger/setHeld/setTextFocused, handlers register commands
 // via register(), and the scene polls axis()/isHeld().
 //
-// Module-singleton `inputRouter` matches the bus.ts pattern; create a new
-// one with createInputRouter() in tests.
+// Modal keymaps (a LIFO stack) let a menu rebind the keyboard for its
+// own context — e.g. the trade modal can bind `Enter` to "sell 1" and
+// `Escape` to close, while the global `B` (bag) is silently captured.
+// The topmost keymap wins; unmapped keys still fall through to global.
 
 import type {
+  BindingMode,
   CommandId,
   CommandScope,
   InputCommand,
 } from "@/types/input";
 import { axisFromHeld } from "./axis";
 
+export type KeyBinding = {
+  readonly keys: readonly string[];
+  readonly command: CommandId;
+  readonly mode: BindingMode;
+};
+
+export type ModalKeymap = {
+  /** Debug label shown in dev tools. */
+  readonly label: string;
+  /** Bindings active while this keymap is on top. */
+  readonly bindings: readonly KeyBinding[];
+  /** Command handlers invoked by `trigger` / `setHeld` for this keymap. */
+  readonly handlers: readonly InputCommand[];
+};
+
 export type InputRouter = {
-  /** Register a command handler. Returns a disposer. */
+  /** Register a command handler in the GLOBAL handler map. Returns a disposer. */
   register(cmd: InputCommand): () => void;
-  /** Programmatic press (touch button, gamepad). Routed with the same
-   *  scope-gating as keyboard presses. */
+  /**
+   * Set the global key bindings (the default layer). Replaces any prior
+   * global bindings. The router looks these up only when no modal
+   * keymap matches the pressed key.
+   */
+  setGlobalBindings(bindings: readonly KeyBinding[]): void;
+  /**
+   * Push a modal keymap onto the stack. The topmost keymap's bindings
+   * and handlers take priority over the global ones. Returns a disposer
+   * that pops the keymap (safe to call multiple times).
+   */
+  pushKeymap(km: ModalKeymap): () => void;
+  /** True if any modal keymap is active. */
+  isModalOpen(): boolean;
+  /** Look up the command + mode bound to a normalised key, modal-first. */
+  lookup(key: string): { command: CommandId; mode: BindingMode } | null;
+  /** Programmatic press (touch button, gamepad). Routed through the
+   *  same modal-first dispatch path. */
   trigger(id: CommandId): void;
-  /** Update the held-set for a hold-mode command. */
+  /** Update the held-set for a hold-mode command (modal-first). */
   setHeld(id: CommandId, held: boolean): void;
   /** True while the command is held. */
   isHeld(id: CommandId): boolean;
@@ -34,27 +68,77 @@ export type InputRouter = {
 };
 
 export function createInputRouter(): InputRouter {
-  const handlers = new Map<CommandId, InputCommand>();
+  const globalHandlers = new Map<CommandId, InputCommand>();
+  let globalBindings: ReadonlyArray<KeyBinding> = [];
+  const globalBindingIndex = new Map<string, { command: CommandId; mode: BindingMode }>();
   const held = new Set<CommandId>();
   let virtualAxis: { x: number; y: number } = { x: 0, y: 0 };
   let textFocused = false;
+  const keymapStack: ModalKeymap[] = [];
 
-  function dispatch(cmd: InputCommand): void {
-    if (cmd.scope === "gameplay" && textFocused) return;
-    cmd.run();
+  function findCommand(id: CommandId): { cmd: InputCommand; scope: CommandScope } | null {
+    // Modal keymap handlers take priority over global.
+    for (let i = keymapStack.length - 1; i >= 0; i--) {
+      const h = keymapStack[i].handlers.find((c) => c.id === id);
+      if (h) return { cmd: h, scope: h.scope };
+    }
+    const g = globalHandlers.get(id);
+    return g ? { cmd: g, scope: g.scope } : null;
+  }
+
+  function dispatch(id: CommandId): void {
+    const found = findCommand(id);
+    if (!found) return;
+    if (found.scope === "gameplay" && textFocused) return;
+    if (found.scope === "gameplay" && keymapStack.length > 0) return;
+    found.cmd.run();
   }
 
   return {
     register(cmd) {
-      handlers.set(cmd.id, cmd);
+      globalHandlers.set(cmd.id, cmd);
       return () => {
-        if (handlers.get(cmd.id) === cmd) handlers.delete(cmd.id);
+        if (globalHandlers.get(cmd.id) === cmd) globalHandlers.delete(cmd.id);
         held.delete(cmd.id);
       };
     },
+    setGlobalBindings(bindings) {
+      globalBindings = bindings;
+      globalBindingIndex.clear();
+      for (const b of bindings) {
+        for (const k of b.keys) globalBindingIndex.set(k, { command: b.command, mode: b.mode });
+      }
+    },
+    pushKeymap(km) {
+      keymapStack.push(km);
+      let alive = true;
+      return () => {
+        if (!alive) return;
+        alive = false;
+        const i = keymapStack.indexOf(km);
+        if (i >= 0) keymapStack.splice(i, 1);
+      };
+    },
+    isModalOpen() {
+      return keymapStack.length > 0;
+    },
+    lookup(key) {
+      // Modal keymaps first; the topmost wins. If any modal is open
+      // and the key isn't in the topmost modal's bindings, the lookup
+      // returns null so the key is NOT routed through the global layer
+      // (the modal "captures" unmapped keys).
+      for (let i = keymapStack.length - 1; i >= 0; i--) {
+        for (const b of keymapStack[i].bindings) {
+          if (b.keys.includes(key)) return { command: b.command, mode: b.mode };
+        }
+        // Topmost modal didn't bind this key — don't fall through.
+        if (keymapStack.length > 0) return null;
+      }
+      // Then global.
+      return globalBindingIndex.get(key) ?? null;
+    },
     trigger(id) {
-      const cmd = handlers.get(id);
-      if (cmd) dispatch(cmd);
+      dispatch(id);
     },
     setHeld(id, on) {
       if (on) held.add(id);
@@ -66,6 +150,8 @@ export function createInputRouter(): InputRouter {
     axis() {
       // Text input owns movement while focused.
       if (textFocused) return { x: 0, y: 0 };
+      // Modal keymaps block movement while open.
+      if (keymapStack.length > 0) return { x: 0, y: 0 };
       // Joystick takes priority when it's actually being driven.
       if (virtualAxis.x !== 0 || virtualAxis.y !== 0) return virtualAxis;
       return axisFromHeld(held);
@@ -77,10 +163,13 @@ export function createInputRouter(): InputRouter {
       textFocused = focused;
     },
     dispose() {
-      handlers.clear();
+      globalHandlers.clear();
+      globalBindings = [];
+      globalBindingIndex.clear();
       held.clear();
       virtualAxis = { x: 0, y: 0 };
       textFocused = false;
+      keymapStack.length = 0;
     },
   };
 }

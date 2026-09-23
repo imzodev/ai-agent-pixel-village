@@ -2,7 +2,7 @@
 // piece; everything else (router, bindings, axis) stays DOM-free.
 
 import type { InputRouter } from "./router";
-import { commandFor, normalizeKey } from "./bindings";
+import { normalizeKey } from "./bindings";
 
 type KeyboardLikeEvent = {
   key: string;
@@ -33,17 +33,30 @@ export function installDomKeyboard(
     return !!(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || (t as HTMLElement).isContentEditable));
   }
 
+  // True for keys that should pass through to the active text field
+  // rather than being captured by the game (letters, digits, space, etc.).
+  // Escape and Enter are explicitly NOT typeable: dialogs need them
+  // even while a text field has focus.
+  function isTypeable(key: string): boolean {
+    if (key === "Enter" || key === "Escape" || key === "Tab") return false;
+    if (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight") return false;
+    return true;
+  }
+
   function onKeyDown(e: KeyboardLikeEvent): void {
     // Never hijack browser/OS shortcuts (Cmd+M, Ctrl+R, Alt+F4, …).
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // When a text field has focus, the keystroke belongs to the field —
-    // let it through (so letters, backspace, etc. work) and don't run any
-    // game command. The router already gates gameplay-scope commands,
-    // but ui-scope (B / Y / M / Esc) was still firing while typing.
-    if (textFocused()) return;
+    // When a text field has focus, only "typeable" keys belong to the
+    // field; system keys (Esc/Enter/arrows) fall through to the router
+    // so modals can still close on Esc and form-style flows can fire on
+    // Enter.
+    if (textFocused() && isTypeable(e.key)) return;
     const norm = normalizeKey(e.key);
     if (!norm) return;
-    const lookup = commandFor(norm);
+    // Modal keymaps take priority over global bindings. If a modal is
+    // open and a key is unmapped in the modal layer, the router returns
+    // null and we drop the event.
+    const lookup = router.lookup(norm);
     if (!lookup) return;
     if (lookup.mode === "press") {
       // Auto-repeat is meaningless for discrete actions.
@@ -61,17 +74,17 @@ export function installDomKeyboard(
   }
 
   function onKeyUp(e: KeyboardLikeEvent): void {
-    if (textFocused()) return;
+    if (textFocused() && isTypeable(e.key)) return;
     const norm = normalizeKey(e.key);
     if (!norm) return;
-    const lookup = commandFor(norm);
+    const lookup = router.lookup(norm);
     if (!lookup || lookup.mode !== "hold") return;
     if (held.delete(norm)) router.setHeld(lookup.command, false);
   }
 
   function onBlur(): void {
     for (const k of held) {
-      const lookup = commandFor(k);
+      const lookup = router.lookup(k);
       if (lookup) router.setHeld(lookup.command, false);
     }
     held.clear();

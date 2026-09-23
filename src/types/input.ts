@@ -12,6 +12,10 @@ export type InputState = {
 /** Every action exposed by the game. A binding maps a key to one of these. */
 export type CommandId =
   | "player.interact"
+  | "player.craft"
+  | "player.sell"
+  | "trade.sell"
+  | "trade.focus_qty"
   | "ui.bag"
   | "ui.shop"
   | "ui.map"

@@ -232,6 +232,10 @@ export default function Hud() {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
   })();
+  const keyHint = (cmd: "player.craft" | "player.sell"): string => {
+    const k = formatBinding(cmd);
+    return k ? `(${prettyKey(k)})` : "";
+  };
 
   /**
    * Run the default action for a selection, mirroring the primary action
@@ -313,13 +317,48 @@ export default function Hud() {
         scope: "ui",
         run: () => { window.location.href = "/shop"; },
       }),
+      // Craft/Sell are NPC-contextual: only fire when the current
+      // selection is an NPC in range with the right preconditions
+      // (recipes / sellable inventory). The button visibility already
+      // encodes the same checks, so the handler is effectively a
+      // keyboard mirror of the click.
+      inputRouter.register({
+        id: "player.craft",
+        scope: "ui",
+        run: () => {
+          if (!sel || sel.type !== "npc" || sel.distance > 160) return;
+          const npc = snap?.npcs.find((n) => n.id === sel.id);
+          if (!npc) return;
+          const npcKey = (npc as { key?: string }).key;
+          if (!npcKey) return;
+          const recipes = recipesForNpc(npcKey);
+          if (recipes.length === 0) return;
+          openCraft(sel.id, sel.name, npcKey);
+        },
+      }),
+      inputRouter.register({
+        id: "player.sell",
+        scope: "ui",
+        run: () => {
+          if (!sel || sel.type !== "npc" || sel.distance > 160) return;
+          const npc = snap?.npcs.find((n) => n.id === sel.id);
+          if (!npc) return;
+          const npcKey = (npc as { key?: string }).key;
+          if (!npcKey) return;
+          const trades: TradeItem[] = TRADES[npcKey] ?? [];
+          const inv = me?.inventory ?? [];
+          const sellable = trades.some((t) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
+          if (!sellable) return;
+          openTrade(sel.id, sel.name, npcKey);
+        },
+      }),
     ];
     const offPrimary = bus.on("primaryAction", (s) => commitSelection(s));
     return () => {
       for (const d of disposers) d();
       offPrimary();
     };
-  }, [talk, trade, craft, inspect, panel, building, sel, commitSelection, close]);
+  }, [talk, trade, craft, inspect, panel, building, sel, snap, me, openCraft, openTrade, commitSelection, close]);
 
   const hour = snap ? clockFrom(snap) : 7;
   const hh = Math.floor(hour), mm = Math.floor((hour % 1) * 60);
@@ -398,11 +437,11 @@ export default function Hud() {
                 <Btn on={() => { commitSelection(sel); }}>💬 Talk {interactHint}</Btn>
                 {recipes.length > 0 && (
                   <Btn on={() => npcKey && openCraft(sel.id, sel.name, npcKey)}>
-                    📜 Craft
+                    📜 Craft {keyHint("player.craft")}
                   </Btn>
                 )}
                 {sellable && (
-                  <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell</Btn>
+                  <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
               </>
             );
@@ -751,6 +790,7 @@ function TradeModal({ trade, performTrade, onClose }: {
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const firstQtyRef = useRef<HTMLInputElement | null>(null);
 
   const doSell = async (row: { trade: TradeItem; have: number }, qty: number) => {
     if (busy) return;
@@ -758,6 +798,56 @@ function TradeModal({ trade, performTrade, onClose }: {
     await performTrade(row.trade.itemKey, qty);
     setBusy(false);
   };
+
+  // Push a modal keymap so the trade modal gets its own keyboard
+  // bindings (Enter → sell the first row, e → focus the qty input,
+  // numbers → also focus, escape → close). Movement keys (WASD) are
+  // blocked globally while the modal is open via the router. The `e`
+  // here is modal-scoped and does NOT trigger the global "player.interact"
+  // — the modal layer wins. We bind escape so the modal layer can
+  // close the trade window.
+  useEffect(() => {
+    const firstRow = trade.rows[0];
+    const keymap = {
+      label: "trade",
+      bindings: [
+        ...(firstRow ? [{ keys: ["enter"], command: "trade.sell" as const, mode: "press" as const }] : []),
+        { keys: ["e"], command: "trade.focus_qty" as const, mode: "press" as const },
+        { keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"], command: "trade.focus_qty" as const, mode: "press" as const },
+        { keys: ["escape"], command: "ui.close" as const, mode: "press" as const },
+      ],
+      handlers: [
+        {
+          id: "trade.sell" as const,
+          scope: "ui" as const,
+          run: () => {
+            if (!firstRow || busy) return;
+            const input = firstQtyRef.current;
+            const qty = input ? Math.max(1, Math.min(firstRow.have, Number(input.value) || 1)) : 1;
+            void doSell(firstRow, qty);
+          },
+        },
+        {
+          id: "trade.focus_qty" as const,
+          scope: "ui" as const,
+          run: () => { firstQtyRef.current?.focus(); firstQtyRef.current?.select(); },
+        },
+        {
+          // Modal-local escape → close modal. The router's `trigger`
+          // will look up the global "ui.close" handler in the HUD's
+          // registration effect (which is global). It calls the `close`
+          // function which closes the topmost open UI.
+          id: "ui.close" as const,
+          scope: "ui" as const,
+          run: () => { onClose(); },
+        },
+      ],
+    };
+    const dispose = inputRouter.pushKeymap(keymap);
+    // Focus the first qty input so the user can type immediately.
+    const focusTimer = setTimeout(() => firstQtyRef.current?.focus(), 50);
+    return () => { dispose(); clearTimeout(focusTimer); };
+  }, [trade, busy, onClose]);
 
   return (
     <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -773,17 +863,22 @@ function TradeModal({ trade, performTrade, onClose }: {
           {trade.rows.length === 0 && (
             <div className="rounded bg-stone-100 p-3 text-center text-stone-500">You have nothing {trade.npcName} buys right now.</div>
           )}
-          {trade.rows.map((r) => (
-            <TradeRow key={r.trade.itemKey} row={r} busy={busy} onSell={(qty) => doSell(r, qty)} />
+          {trade.rows.map((r, i) => (
+            <TradeRow key={r.trade.itemKey} row={r} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
           ))}
         </div>
-        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done</Btn></div>
+        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
       </div>
     </div>
   );
 }
 
-function TradeRow({ row, busy, onSell }: { row: { trade: TradeItem; have: number }; busy: boolean; onSell: (qty: number) => void }) {
+function TradeRow({ row, busy, onSell, firstQtyRef }: {
+  row: { trade: TradeItem; have: number };
+  busy: boolean;
+  onSell: (qty: number) => void;
+  firstQtyRef?: React.RefObject<HTMLInputElement | null>;
+}) {
   const [qty, setQty] = useState(1);
   const total = qty * row.trade.price;
   useEffect(() => { setQty((q) => Math.min(Math.max(1, q), row.have)); }, [row.have]);
@@ -797,6 +892,7 @@ function TradeRow({ row, busy, onSell }: { row: { trade: TradeItem; have: number
       <div className="flex items-center gap-1.5">
         <button disabled={busy || qty <= 1} onClick={() => setQty((q) => Math.max(1, q - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">−</button>
         <input
+          ref={firstQtyRef}
           type="number"
           min={1}
           max={row.have}

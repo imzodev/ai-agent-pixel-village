@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_KEY_BINDINGS,
-  commandFor,
   formatBinding,
   normalizeKey,
   prettyKey,
 } from "./bindings";
+import { inputRouter } from "./router";
 
 describe("normalizeKey", () => {
   it("lowercases ASCII letters and digits", () => {
@@ -21,6 +21,10 @@ describe("normalizeKey", () => {
   it("maps Escape", () => {
     expect(normalizeKey("Escape")).toBe("escape");
   });
+  it("maps Enter and Tab to lowercase tokens", () => {
+    expect(normalizeKey("Enter")).toBe("enter");
+    expect(normalizeKey("Tab")).toBe("tab");
+  });
   it("rejects unknown / non-bindable keys", () => {
     expect(normalizeKey("F1")).toBeNull();
     expect(normalizeKey("PageUp")).toBeNull();
@@ -28,17 +32,17 @@ describe("normalizeKey", () => {
   });
 });
 
-describe("commandFor", () => {
+describe("router.lookup", () => {
   it("returns the bound command for known keys", () => {
-    expect(commandFor("e")).toEqual({ command: "player.interact", mode: "press" });
-    expect(commandFor("space")).toEqual({ command: "player.interact", mode: "press" });
-    expect(commandFor("w")).toEqual({ command: "move.up", mode: "hold" });
-    expect(commandFor("arrowdown")).toEqual({ command: "move.down", mode: "hold" });
-    expect(commandFor("escape")).toEqual({ command: "ui.close", mode: "press" });
+    expect(inputRouter.lookup("e")).toEqual({ command: "player.interact", mode: "press" });
+    expect(inputRouter.lookup("space")).toEqual({ command: "player.interact", mode: "press" });
+    expect(inputRouter.lookup("w")).toEqual({ command: "move.up", mode: "hold" });
+    expect(inputRouter.lookup("arrowdown")).toEqual({ command: "move.down", mode: "hold" });
+    expect(inputRouter.lookup("escape")).toEqual({ command: "ui.close", mode: "press" });
   });
   it("returns null for unbound keys", () => {
-    expect(commandFor("q")).toBeNull();
-    expect(commandFor("f12")).toBeNull();
+    expect(inputRouter.lookup("q")).toBeNull();
+    expect(inputRouter.lookup("f12")).toBeNull();
   });
 });
 
