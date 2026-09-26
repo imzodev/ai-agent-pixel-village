@@ -22,7 +22,7 @@ import {
   resetChunkState,
 } from "./worldTilemap";
 import { inputRouter } from "./input/router";
-import type { Facing } from "@/types/world";
+import type { Facing, NpcState } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 
@@ -58,6 +58,21 @@ function zoneOf(rect: Phaser.Geom.Rectangle): Phaser.Types.GameObjects.Particles
 
 function touchDist(t: TouchList): number {
   return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+
+/**
+ * Map an NPC's classified state to the small glyph drawn above its
+ * sprite. Single source of truth — adding/changing a glyph happens
+ * here and only here.
+ */
+function stateToGlyph(s: NpcState): string {
+  switch (s) {
+    case "resting":       return "💤";
+    case "facing_player": return "👀";
+    case "walking":       return "·";
+    case "chatting":      return "💬";
+    case "idle":          return "";
+  }
 }
 
 export class WorldScene extends Phaser.Scene {
@@ -544,16 +559,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy();
+    e.sprite.destroy();
+    e.label.destroy();
+    e.badge?.destroy();
+    e.stateIcon?.destroy();
+    e.bubble?.c.destroy();
+    e.glow?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[] }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; state?: NpcState }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
     for (const p of list) {
       seen.add(p.id);
       const eq = cosmeticsListToEquipped(p.cosmetics);
+      const icon = p.state ? stateToGlyph(p.state) : "";
       let ent = map.get(p.id);
       const appKey = appearanceKey(p.appearance, eq);
       if (ent && ent.appKey !== appKey) { this.destroyChar(ent); map.delete(p.id); ent = undefined; }
@@ -565,12 +586,23 @@ export class WorldScene extends Phaser.Scene {
           const txt = badge(p);
           ent.badge = this.add.text(p.x, p.y - 62, txt, { fontFamily: "monospace", fontSize: "9px", color: txt.startsWith("★") ? "#ffd166" : "#cfe8cf", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
         }
+        if (icon) {
+          ent.stateIcon = this.add.text(p.x, p.y - 76, icon, { fontFamily: "monospace", fontSize: "10px", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
+        }
         map.set(p.id, ent);
       } else if (ent.equipped !== eq) {
         // Existing sprite, equipped gear changed (equip/unequip from shop).
         // Rebuild the texture so the new cosmetics show up.
         ent.equipped = eq;
         void this.ensureCharTexture(ent, p.appearance, eq);
+      }
+      // State icon: recreate when the glyph changes (cheap; rarely fires).
+      const currentIcon = ent.stateIcon?.text ?? "";
+      if (currentIcon !== icon) {
+        ent.stateIcon?.destroy();
+        ent.stateIcon = icon
+          ? this.add.text(ent.sprite.x, ent.sprite.y - 76, icon, { fontFamily: "monospace", fontSize: "10px", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3)
+          : undefined;
       }
       ent.tx = p.x; ent.ty = p.y;
       if (ent.label.text !== p.name) ent.label.setText(p.name);
@@ -799,6 +831,7 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.setDepth(DEPTH_CHAR_BASE + y);
     e.label.setPosition(x, y - 50).setDepth(DEPTH_CHAR_BASE + y + 2);
     e.badge?.setPosition(x, y - 60).setDepth(DEPTH_CHAR_BASE + y + 3);
+    e.stateIcon?.setPosition(x, y - 76).setDepth(DEPTH_CHAR_BASE + y + 4);
     if (e.bubble) {
       e.bubble.c.setPosition(x, y - (e.badge ? 72 : 62));
       if (this.time.now > e.bubble.until) { e.bubble.c.destroy(); e.bubble = undefined; }

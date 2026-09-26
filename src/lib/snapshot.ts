@@ -41,6 +41,7 @@ import { redis, initRedis } from "@/lib/redis";
 import { withReadDb } from "@/lib/db";
 import { metrics } from "@/lib/metrics";
 import { CROP_KINDS } from "@/lib/crops";
+import { classifyNpc } from "@/lib/npcState";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -52,6 +53,21 @@ import type {
 } from "@/types/snapshot";
 
 export type { Snapshot };
+
+/**
+ * True if any player in the proximity-filtered array is within the
+ * "notice the NPC" radius of `(x, y)`. Reuses the `players` already
+ * loaded for the snapshot — no extra DB read.
+ */
+function anyPlayerNearby(players: PlayerRow[], x: number, y: number): boolean {
+  const radius = 96;
+  for (const p of players) {
+    const dx = p.x - x;
+    const dy = p.y - y;
+    if (dx * dx + dy * dy <= radius * radius) return true;
+  }
+  return false;
+}
 
 // Optional cross-process snapshot cache in Redis. OFF by default.
 //
@@ -343,10 +359,15 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
   const spById = raw.spById;
   const doors = raw.doors;
 
+  // Sample `now` once so the wire-side `hour` and the per-NPC state
+  // classifier see the same instant.
+  const now = Date.now();
+  const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes, now);
+
   return {
     version,
-    now: Date.now(),
-    hour: gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes),
+    now,
+    hour,
     weather: ws.weather,
     dayLengthMinutes: ws.dayLengthMinutes,
     epochStart: ws.epochStart.getTime(),
@@ -361,6 +382,13 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
     })),
     npcs: raw.npcs.map((n) => {
       const sp = n.sponsorId != null ? spById[String(n.sponsorId)] : null;
+      const state = classifyNpc({
+        x: n.x, y: n.y,
+        targetX: n.targetX, targetY: n.targetY,
+        homeX: n.homeX, homeY: n.homeY,
+        hasPlayerNearby: anyPlayerNearby(raw.players, n.x, n.y),
+        hour,
+      });
       return {
         id: n.id,
         key: n.key,
@@ -374,6 +402,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
         appearance: n.appearance,
         mood: n.mood,
         kind: n.kind,
+        state,
         cosmetics: raw.cosmeticsByChar.get(n.id) ?? [],
         sponsor: sp ? { businessName: sp.businessName, brandColor: sp.brandColor } : null,
       };

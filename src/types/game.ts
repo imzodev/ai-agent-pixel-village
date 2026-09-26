@@ -12,6 +12,8 @@ export type CharEnt = {
   sprite: Phaser.GameObjects.Sprite;
   label: Phaser.GameObjects.Text;
   badge?: Phaser.GameObjects.Text;
+  /** Tiny glyph over the sprite indicating NPC behaviour state (💤 resting, 👀 facing player, …). */
+  stateIcon?: Phaser.GameObjects.Text;
   tx: number;
   ty: number;
   facing: Facing;

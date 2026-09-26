@@ -4,10 +4,10 @@
 // guarantees shape parity at compile time.
 
 import type { Appearance } from "@/types/domain";
-import type { Facing } from "@/types/world";
+import type { Facing, NpcState } from "@/types/world";
 
 // Re-exported for callers that already import protocol types together.
-export type { Facing };
+export type { Facing, NpcState };
 
 export type WsClientMessage =
   | { type: "hello"; sessionId?: string; lastVersion?: number }
@@ -84,6 +84,8 @@ export type NpcSnapshot = {
   appearance: Appearance;
   mood: string;
   kind: string;
+  /** Server-classified behaviour for UI rendering (z💤 = resting, 👀 = facing player, …). */
+  state: NpcState;
   /** Currently equipped cosmetic items, slot→key. NPCs can wear cosmetics too. */
   cosmetics: { slot: string; itemKey: string }[];
   sponsor: { businessName: string; brandColor: string } | null;
