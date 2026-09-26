@@ -16,8 +16,15 @@ type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { t
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
 
 async function api<T = unknown>(url: string, body?: unknown, method = body ? "POST" : "GET"): Promise<T & { error?: string }> {
-  const res = await fetch(url, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
-  return res.json();
+  try {
+    const res = await fetch(url, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+    return await res.json();
+  } catch (err) {
+    // Network error (server down, CORS, dropped connection). Surface as a
+    // soft error so callers can show a toast instead of throwing an
+    // unhandled rejection into the browser console.
+    return { error: err instanceof Error ? err.message : "Network error" } as T & { error?: string };
+  }
 }
 
 export default function Hud() {
