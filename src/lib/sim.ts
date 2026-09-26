@@ -7,8 +7,6 @@ import { isWalkableServer } from "./chunkCollisionServer";
 import { stepTowardWalkable } from "./movement";
 import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
-import { makeNavigator, makeNavCache, type NavCache, CELL_PX } from "./nav";
-import type { Navigator, Point } from "@/types/world";
 
 const ANIMAL_SPEED = 28; // px/s
 const NPC_SPEED = 38;
@@ -24,73 +22,11 @@ export const WORLD_CHANGE_CHANNEL = "world_changes";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
-// Pathfinding state shared across all NPC/animal/enemy ticks. Built once
-// per process; the cache is in-memory only (the DB still carries the
-// final target, and the wire shape doesn't change). Sim workers can't
-// hot-reload safely across processes here, so reuse a single instance.
-const nav: Navigator = makeNavigator(isWalkableServer);
-const navCache: NavCache = makeNavCache();
-
 // Wanderers (NPCs, animals, enemies) carry an optional (targetX, targetY)
 // pair. These two helpers collapse the `!= null && != null` ceremony and
 // the `targetX = null; targetY = null` reset into single readable calls.
 const hasTarget = (tx: number | null, ty: number | null): boolean => tx != null && ty != null;
 const clearTarget = (): { targetX: null; targetY: null } => ({ targetX: null, targetY: null });
-
-/**
- * Resolve the next pixel the entity should step toward. Uses the cached
- * path if it's still good, plans a new one with A* if not, and falls
- * back to a straight-line target if planning fails. The caller can
- * follow the returned point with the existing `stepTowardWalkable`.
- *
- * Single source of truth: NPCs, animals, and the fox raid all call this.
- */
-async function nextStepTarget(
-  entityId: number,
-  from: Point,
-  goal: Point,
-): Promise<{ next: Point; arrived: boolean }> {
-  const cached = navCache.get(entityId);
-  if (cached && cached.waypoints.length >= 2) {
-    // waypoints[0] is `from` by construction; waypoints[1] is the next cell.
-    const next = cached.waypoints[1];
-    return { next, arrived: false };
-  }
-  const r = await nav.plan(from, goal, { maxTiles: 80 });
-  if (r?.path && r.path.waypoints.length >= 2) {
-    navCache.set(entityId, r.path);
-    return { next: r.path.waypoints[1], arrived: false };
-  }
-  // A* refused: fall back to a direct step toward the goal. The
-  // stepTowardWalkable caller's axis-aware variant still handles
-  // single-cell obstacles, so this is a graceful degradation.
-  return { next: goal, arrived: false };
-}
-
-/** Advance along the cached path. Returns true when the path is exhausted. */
-function advancePath(entityId: number, current: Point): boolean {
-  const cached = navCache.get(entityId);
-  if (!cached) return true;
-  // Drop the head (current point) and keep the rest.
-  const remaining = cached.waypoints.slice(1);
-  if (remaining.length === 0) {
-    navCache.clear(entityId);
-    return true;
-  }
-  // If the entity deviated significantly from the cached waypoints,
-  // invalidate — small drift is fine because cells are 32 px wide.
-  const head = remaining[0];
-  if (Math.abs(head.x - current.x) > CELL_PX || Math.abs(head.y - current.y) > CELL_PX) {
-    navCache.clear(entityId);
-    return true;
-  }
-  if (remaining.length === 1) {
-    navCache.clear(entityId);
-    return false;
-  }
-  navCache.set(entityId, { ...cached, waypoints: remaining });
-  return false;
-}
 
 async function randomPointIn(zone: Rect, tries = 12) {
   for (let i = 0; i < tries; i++) {
@@ -162,14 +98,11 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
       state = "return";
       const home = await randomPointIn(a.zone);
       targetX = home?.x ?? null; targetY = home?.y ?? null;
-      // Cache invalidation: a new target means the existing path is stale.
-      navCache.clear(a.id);
     }
 
     if (night && a.species !== "fox" && a.species !== "cat" && state !== "sleep" && !raiding && Math.random() < 0.3) {
       state = "sleep";
       ({ targetX, targetY } = clearTarget());
-      navCache.clear(a.id);
     } else if (state === "sleep" && (!night || Math.random() < 0.05)) {
       state = "idle";
     }
@@ -177,44 +110,36 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
       if (hasTarget(targetX, targetY)) {
         // Raiding foxes hustle — 60 px/s vs the normal 28.
         const speed = raiding ? 60 : ANIMAL_SPEED;
-        const goal: Point = { x: targetX!, y: targetY! };
-        const next = await nextStepTarget(a.id, { x, y }, goal);
-        const s = await stepTowardWalkable(x, y, next.next.x, next.next.y, speed * dt, isWalkableServer);
+        const s = await stepTowardWalkable(x, y, targetX!, targetY!, speed * dt, isWalkableServer);
         x = s.x; y = s.y; facing = s.facing;
         if (s.arrived) {
-          // Advance the path; if exhausted we wrap up the step as before.
-          const done = advancePath(a.id, { x, y });
-          if (done) {
-            ({ targetX, targetY } = clearTarget());
-            if (state === "raid") {
-              // Steal the nearest ground egg at the coop, then head home.
-              const rowsE = await db
-                .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
-                .from(groundItems)
-                .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 60} AND ${x + 60}`, sql`${groundItems.y} BETWEEN ${y - 60} AND ${y + 60}`))
-                .limit(1);
-              const stolen = rowsE[0];
-              if (stolen) {
-                await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
-                await logEvent("event", "The fox made off with an egg!", undefined, a.id, x, y);
-              } else {
-                await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, x, y);
-              }
-              state = "return";
-              const home = await randomPointIn(a.zone);
-              targetX = home?.x ?? null; targetY = home?.y ?? null;
-              // A* path will be planned on the next tick for the new target.
-            } else if (state === "return") {
-              state = "idle";
+          ({ targetX, targetY } = clearTarget());
+          if (state === "raid") {
+            // Steal the nearest ground egg at the coop, then head home.
+            const rowsE = await db
+              .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
+              .from(groundItems)
+              .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 60} AND ${x + 60}`, sql`${groundItems.y} BETWEEN ${y - 60} AND ${y + 60}`))
+              .limit(1);
+            const stolen = rowsE[0];
+            if (stolen) {
+              await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
+              await logEvent("event", "The fox made off with an egg!", undefined, a.id, x, y);
             } else {
-              state = Math.random() < 0.5 ? "graze" : "idle";
+              await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, x, y);
             }
+            state = "return";
+            const home = await randomPointIn(a.zone);
+            targetX = home?.x ?? null; targetY = home?.y ?? null;
+          } else if (state === "return") {
+            state = "idle";
+          } else {
+            state = Math.random() < 0.5 ? "graze" : "idle";
           }
         }
         else if (s.stuck) {
           // Pressed against a wall — abandon target and pick a new walkable
           // destination on the next idle window.
-          navCache.clear(a.id);
           ({ targetX, targetY } = clearTarget());
           state = "idle";
         } else {
@@ -226,11 +151,7 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
         // minute on average) so the world feels alive without every
         // sheep walking constantly.
         const p = await randomPointIn(a.zone);
-        if (p) {
-          targetX = p.x; targetY = p.y; state = "walk";
-          // The old cached waypoints (if any) belong to a previous target.
-          navCache.clear(a.id);
-        }
+        if (p) { targetX = p.x; targetY = p.y; state = "walk"; }
       }
     }
     const petFresh = a.lastPettedAt && now.getTime() - a.lastPettedAt.getTime() < 10 * 60_000;
@@ -267,25 +188,15 @@ async function tickNpcs(dt: number, night: boolean) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
     let { x, y, targetX, targetY, facing } = n;
     if (hasTarget(targetX, targetY)) {
-      const next = await nextStepTarget(n.id, { x, y }, { x: targetX!, y: targetY! });
-      const s = await stepTowardWalkable(x, y, next.next.x, next.next.y, NPC_SPEED * dt, isWalkableServer);
+      const s = await stepTowardWalkable(x, y, targetX!, targetY!, NPC_SPEED * dt, isWalkableServer);
       x = s.x; y = s.y; facing = s.facing;
-      if (s.arrived) {
-        const done = advancePath(n.id, { x, y });
-        if (done) ({ targetX, targetY } = clearTarget());
-      }
-      if (s.stuck) {
-        navCache.clear(n.id);
-        ({ targetX, targetY } = clearTarget());
-      }
+      // Arrived or pinned against a wall — drop the target. The wander
+      // branch below will pick a new walkable destination next tick.
+      if (s.arrived || s.stuck) ({ targetX, targetY } = clearTarget());
     } else if (Math.random() < (night ? 0.05 : 0.18)) {
       const r = night ? 30 : n.wanderRadius;
       const p = await randomPointIn({ x: n.homeX - r, y: n.homeY - r, w: r * 2, h: r * 2 });
-      if (p) {
-        targetX = p.x; targetY = p.y;
-        // New target invalidates the previous path.
-        navCache.clear(n.id);
-      }
+      if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(npcs).set({ x, y, targetX, targetY, facing }).where(eq(npcs.id, n.id));
   }
@@ -342,24 +253,13 @@ async function tickEnemies(dt: number, now: Date) {
     let { x, y, targetX, targetY } = e;
     let needsNewTarget = !hasTarget(targetX, targetY);
     if (!needsNewTarget) {
-      const next = await nextStepTarget(e.id, { x, y }, { x: targetX!, y: targetY! });
-      const s = await stepTowardWalkable(x, y, next.next.x, next.next.y, ENEMY_SPEED * dt, isWalkableServer);
+      const s = await stepTowardWalkable(x, y, targetX!, targetY!, ENEMY_SPEED * dt, isWalkableServer);
       x = s.x; y = s.y;
-      if (s.arrived) {
-        const done = advancePath(e.id, { x, y });
-        if (done) needsNewTarget = true;
-      }
-      if (s.stuck) {
-        navCache.clear(e.id);
-        needsNewTarget = true;
-      }
+      needsNewTarget = s.arrived || s.stuck;
     }
     if (needsNewTarget) {
       const p = await randomPointIn(zoneForEnemy(x, y));
-      if (p) {
-        targetX = p.x; targetY = p.y;
-        navCache.clear(e.id);
-      }
+      if (p) { targetX = p.x; targetY = p.y; }
     }
     await db.update(enemies).set({ x, y, targetX, targetY }).where(eq(enemies.id, e.id));
   }
