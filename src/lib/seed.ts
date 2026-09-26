@@ -36,6 +36,8 @@ export const ITEM_DEFS = [
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
   { key: "honey_bun", name: "Honey Bun", kind: "consumable", icon: "🥐", description: "Restores 8 HP. Sticky fingers guaranteed.", value: 6 },
   { key: "bread", name: "Fresh Bread", kind: "consumable", icon: "🍞", description: "Still warm. Baked by Marigold.", value: 3 },
+  { key: "tea", name: "Calming Tea", kind: "consumable", icon: "🍵", description: "Restores 6 HP. A Wren original.", value: 4 },
+  { key: "cinnamon_knot", name: "Cinnamon Knot", kind: "consumable", icon: "🥯", description: "Restores 10 HP. Sticky-sweet.", value: 8 },
   { key: "recipe_cinnamon", name: "Recipe: Cinnamon Knots", kind: "recipe", icon: "📜", description: "A handwritten recipe card from the bakery.", value: 10 },
   { key: "recipe_tea", name: "Recipe: Calming Tea", kind: "recipe", icon: "📜", description: "Three herbs, hot water, patience.", value: 10 },
   { key: "wooden_sword", name: "Wooden Sword", kind: "tool", icon: "🗡️", description: "+2 attack. Splinters included.", value: 15, equippable: true },
@@ -274,6 +276,79 @@ const MISSION_DEFS: {
     reward: { coins: 6, xp: 20, items: [{ itemKey: "table", qty: 1 }, { itemKey: "rug", qty: 1 }] },
     repeatable: true,
   },
+  {
+    key: "miller_wheat",
+    npc: "miller",
+    title: "Grind the Wheat",
+    description: "Hollis will turn your wheat into flour. Bring 4 sheaves.",
+    offerLine: "Four wheat and I'll grind you four flour, straight off the millstone. Don't let it sit in the rain.",
+    completeLine: "There you go — a full sack of flour, fresh from this morning's grind. Bakery's open, says I.",
+    requirement: { type: "collect", itemKey: "wheat", qty: 4 },
+    reward: { coins: 8, xp: 15, items: [{ itemKey: "flour", qty: 4 }] },
+    repeatable: true,
+  },
+  {
+    key: "tinker_wool",
+    npc: "tinker",
+    title: "Spinning a New Hat",
+    description: "Greta can weave a straw hat if you bring her 3 tufts of wool.",
+    offerLine: "Three tufts of wool and I'll stitch you a proper hat. I make them breathable, I promise.",
+    completeLine: "Try the fit. Sun off your ears, just like the old country. There's the rug too — I had it lying around.",
+    requirement: { type: "collect", itemKey: "wool", qty: 3 },
+    reward: { coins: 4, xp: 15, items: [{ itemKey: "rug", qty: 1 }] },
+    repeatable: true,
+  },
+  {
+    key: "herbalist_mushroom",
+    npc: "herbalist",
+    title: "Tincture of the Cap",
+    description: "Wren will trade a calming tincture for 3 speckled mushrooms.",
+    offerLine: "Three mushrooms and I'll brew you a tincture. Tastes the way the woods smell after rain.",
+    completeLine: "Here's a flask. Two drops under the tongue and the world gets quieter. I'll put a rug down for you while you wait it out.",
+    requirement: { type: "collect", itemKey: "mushroom", qty: 3 },
+    reward: { coins: 6, xp: 12, items: [{ itemKey: "tea", qty: 1 }, { itemKey: "rug", qty: 1 }] },
+  },
+  {
+    key: "shopkeeper_slimy",
+    npc: "shopkeeper",
+    title: "Slime-Gel Stockroom",
+    description: "Pip buys slime gel in bulk. Bring him 5 blobs.",
+    offerLine: "Five slime gel and I'll do the lamp. Brass and everything, and the rug to put under it.",
+    completeLine: "Lovely consistency. Here's a lamp and a rug — and a little left over for a bookcase, why not.",
+    requirement: { type: "collect", itemKey: "slime_gel", qty: 5 },
+    reward: { coins: 10, xp: 18, items: [{ itemKey: "lantern", qty: 1 }, { itemKey: "rug", qty: 1 }, { itemKey: "bookshelf", qty: 1 }] },
+    repeatable: true,
+  },
+  {
+    key: "orphan_bunny",
+    npc: "orphan",
+    title: "Catching the Sunset Bunny",
+    description: "Tobin lost his favorite rabbit. Pet two of them to calm them down.",
+    offerLine: "The bunnies at the north end get nervous around dusk. Pet a couple and see if one of them is BunBun.",
+    completeLine: "You found her! She's OK, just shy. Here — feather for your trouble, and a painting for your wall.",
+    requirement: { type: "pet", species: "rabbit", qty: 2 },
+    reward: { coins: 5, xp: 12, items: [{ itemKey: "painting", qty: 1 }] },
+  },
+  {
+    key: "shopkeeper_cabins",
+    npc: "shopkeeper",
+    title: "Visit a Cabin",
+    description: "Pip wants you to drop by one of the cabins and say hello.",
+    offerLine: "Stick your head in a cabin, any cabin, and tell me what the kettle's doing. I'll furnish the rest.",
+    completeLine: "Kettle on, is it? Lovely. A bookcase and a lamp for the trouble — and a bed, if you'll take it.",
+    requirement: { type: "visit", buildingKey: "cabin_1" },
+    reward: { coins: 4, xp: 10, items: [{ itemKey: "bookshelf", qty: 1 }, { itemKey: "lamp", qty: 1 }, { itemKey: "bed", qty: 1 }] },
+  },
+  {
+    key: "innkeeper_bats",
+    npc: "innkeeper",
+    title: "Bats in the Belfry",
+    description: "Bats are roosting where they shouldn't. Defeat 2 of them.",
+    offerLine: "Two bats in the belfry and I'll throw in a painting and a round on the house.",
+    completeLine: "Belfry's clear. Here's the painting and dinner's on the inn tonight.",
+    requirement: { type: "defeat", enemyKind: "bat", qty: 2 },
+    reward: { coins: 12, xp: 20, items: [{ itemKey: "painting", qty: 1 }, { itemKey: "honey_bun", qty: 2 }] },
+  },
 ];
 
 let seededPromise: Promise<void> | null = null;
@@ -436,6 +511,8 @@ export function ensureSeeded() {
     .then(() => syncBuildingsFromManifest())
     .then(() => syncWildlifeLayout())
     .then(() => syncNpcLayout())
+    .then(() => syncItems())
+    .then(() => syncMissions())
     .then(() => seedCosmetics())
     .then(() => seedActivities());
 }
@@ -450,6 +527,50 @@ async function seedActivities() {
     x: 1080, y: 1100,
     config: { capacity: 2, durationSec: 60, rewardCoins: 25, rewardXp: 12 },
   });
+}
+
+async function syncItems() {
+  try {
+    for (const it of ITEM_DEFS) {
+      const values = {
+        key: it.key,
+        name: it.name,
+        kind: it.kind,
+        icon: it.icon,
+        description: it.description,
+        value: it.value,
+        equippable: "equippable" in it ? it.equippable : false,
+        placeable: "placeable" in it ? it.placeable : false,
+      };
+      await db.insert(items).values(values).onConflictDoUpdate({
+        target: items.key,
+        set: { name: values.name, kind: values.kind, icon: values.icon, description: values.description, value: values.value, equippable: values.equippable, placeable: values.placeable },
+      });
+    }
+  } catch (e) {
+    console.warn("[seed] item sync failed:", e instanceof Error ? e.message : e);
+  }
+}
+
+async function syncMissions() {
+  try {
+    const npcRows = await db.select({ id: npcs.id, key: npcs.key }).from(npcs);
+    const npcIdByKey = new Map(npcRows.map((r) => [r.key, r.id]));
+    for (const m of MISSION_DEFS) {
+      const npcId = npcIdByKey.get(m.npc);
+      if (!npcId) continue;
+      const values = {
+        key: m.key, npcId, title: m.title, description: m.description, offerLine: m.offerLine, completeLine: m.completeLine,
+        requirement: m.requirement, reward: m.reward, sponsorId: null,
+      };
+      await db.insert(missions).values(values).onConflictDoUpdate({
+        target: missions.key,
+        set: { npcId, title: m.title, description: m.description, offerLine: m.offerLine, completeLine: m.completeLine, requirement: m.requirement, reward: m.reward },
+      });
+    }
+  } catch (e) {
+    console.warn("[seed] mission sync failed:", e instanceof Error ? e.message : e);
+  }
 }
 
 async function seedCosmetics() {

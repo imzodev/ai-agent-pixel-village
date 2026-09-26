@@ -5,7 +5,8 @@ export type QuestRequirement =
   | { type: "pet"; species: string; qty: number }
   | { type: "talk"; npcKey: string }
   | { type: "visit"; buildingKey: string }
-  | { type: "spend_coins"; amount: number };
+  | { type: "spend_coins"; amount: number }
+  | { type: "defeat"; enemyKind: string; qty: number };
 
 export type QuestReward = {
   coins?: number;

@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, buildings, characters, enemies, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
+import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
@@ -9,6 +10,13 @@ import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 export const dynamic = "force-dynamic";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+
+/** Fire-and-forget daily-quest event. Keeps the call sites short. */
+function daily(characterId: number, kind: "collect" | "pet" | "talk" | "visit" | "spend_coins" | "defeat", payload: Record<string, number | string>, amount = 1): void {
+  void getContainer().services.quest
+    .recordEvent(characterId, { kind, payload }, amount)
+    .catch((e) => console.error("[act] daily quest event failed:", e));
+}
 
 /** Live sprite position, falling back to the (stale) DB row. */
 function livePos(me: { id: number; x: number; y: number }): { x: number; y: number } {
@@ -64,6 +72,9 @@ export async function POST(req: Request) {
         }
         await db.update(characters).set({ xp: sql`${characters.xp} + 2` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
+        // Daily quests: this pet counts, and each drop is a collect.
+        daily(me.id, "pet", { species: a.species });
+        for (const d of drops) daily(me.id, "collect", { itemKey: d.itemKey }, d.qty);
       }
       await logEvent("pet", `${me.name} petted ${a.name} the ${a.species}.`, "animal", a.id, a.x, a.y);
       markWorldDirty(a.x, a.y);
@@ -104,6 +115,7 @@ export async function POST(req: Request) {
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
       await recalcLevel(me.id);
+      daily(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
       markWorldDirty(n.x, n.y);
       return Response.json({
         ok: true,
@@ -132,6 +144,7 @@ export async function POST(req: Request) {
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
         await db.update(characters).set({ xp: sql`${characters.xp} + 10` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
+        daily(me.id, "defeat", { enemyKind: e.kind });
         await logEvent("combat", `${me.name} drove off a ${e.kind}.`, "character", me.id, e.x, e.y);
       } else {
         await db.update(enemies).set({ hp }).where(eq(enemies.id, e.id));
@@ -151,6 +164,7 @@ export async function POST(req: Request) {
       if (!b) return Response.json({ error: "No such place." }, { status: 404 });
       await db.update(buildings).set({ visits: b.visits + 1 }).where(eq(buildings.id, b.id));
       await progressMissions(me.id, (r) => r.type === "visit" && r.buildingKey === b.key);
+      daily(me.id, "visit", { buildingKey: b.key });
       await logEvent("visit", `${me.name} stepped into ${b.name}.`, "building", b.id);
       return Response.json({ ok: true });
     }

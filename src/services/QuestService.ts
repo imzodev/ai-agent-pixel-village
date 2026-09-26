@@ -23,7 +23,8 @@ export class QuestService {
     const today = utcDate();
     const existing = await this.repo.listForDate(characterId, today);
     if (existing.length > 0) return existing;
-    const picked = pickThreeQuests();
+    const isNewcomer = existing.length === 0;
+    const picked = pickThreeQuests(isNewcomer);
     await this.repo.insertQuests(
       picked.map((tpl) => ({
         characterId,
@@ -40,18 +41,21 @@ export class QuestService {
     return this.repo.listForDate(characterId, today);
   }
 
-  /** Apply progress from a gameplay event. Called from /api/world, /api/act, etc. */
-  async recordEvent(characterId: number, evt: { kind: "collect" | "pet" | "talk" | "visit" | "spend_coins"; payload: Record<string, number | string> }): Promise<DailyQuest[]> {
+  /** Apply progress from a gameplay event. `amount` (default 1) is how
+   *  much the event satisfies the requirement — e.g. a 5× berry pick
+   *  emits `amount: 5` so a "pick 5 berries" quest completes at once. */
+  async recordEvent(characterId: number, evt: { kind: "collect" | "pet" | "talk" | "visit" | "spend_coins" | "defeat"; payload: Record<string, number | string> }, amount = 1): Promise<DailyQuest[]> {
     const quests = await this.repo.listForDate(characterId, utcDate());
     const updated: DailyQuest[] = [];
     for (const q of quests) {
       if (q.status !== "active") continue;
       const matches = questEventMatches(q.requirement, evt);
       if (!matches) continue;
-      await this.repo.setProgress(q.id, q.progress + 1);
+      const next = q.progress + amount;
+      await this.repo.setProgress(q.id, next);
       const target = targetOf(q.requirement);
-      if (target !== null && q.progress + 1 >= target) await this.completeQuest(characterId, q.id);
-      updated.push({ ...q, progress: q.progress + 1 });
+      if (target !== null && next >= target) await this.completeQuest(characterId, q.id);
+      updated.push({ ...q, progress: next });
     }
     return updated;
   }
@@ -125,8 +129,12 @@ export class QuestService {
   }
 }
 
-function pickThreeQuests(): QuestTemplate[] {
-  const pool = [...QUEST_TEMPLATES];
+function pickThreeQuests(isNewcomer = false): QuestTemplate[] {
+  const pool = [...QUEST_TEMPLATES].filter((q) => {
+    if (q.starterOnly && !isNewcomer) return false;
+    if (q.sponsorOnly && false /* no live sponsor gating yet */) return false;
+    return true;
+  });
   const picked: QuestTemplate[] = [];
   while (picked.length < 3 && pool.length > 0) {
     const totalWeight = pool.reduce((s, q) => s + q.weight, 0);
@@ -147,6 +155,7 @@ function targetOf(req: QuestRequirement): number | null {
   switch (req.type) {
     case "collect": return req.qty;
     case "pet": return req.qty;
+    case "defeat": return req.qty;
     case "spend_coins": return req.amount;
     case "talk":
     case "visit":
@@ -159,9 +168,11 @@ function questEventMatches(req: QuestRequirement, evt: { kind: string; payload: 
   switch (req.type) {
     case "collect": return evt.payload.itemKey === req.itemKey;
     case "pet": return evt.payload.species === req.species;
-    case "talk": return evt.payload.npcKey === req.npcKey;
+    case "talk": return req.npcKey === "any" || evt.payload.npcKey === req.npcKey;
     case "visit": return evt.payload.buildingKey === req.buildingKey;
+    case "defeat": return evt.payload.enemyKind === req.enemyKind;
     case "spend_coins": return true;
+    default: return false;
   }
 }
 

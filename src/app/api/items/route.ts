@@ -2,10 +2,18 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, groundItems, homeDecor, inventory, items } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
+import { getContainer } from "@/lib/container";
 import { addItem, logEvent, progressMissions } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
+
+/** Fire-and-forget daily-quest event. */
+function daily(characterId: number, kind: "collect" | "pet" | "talk" | "visit" | "spend_coins" | "defeat", payload: Record<string, number | string>, amount = 1): void {
+  void getContainer().services.quest
+    .recordEvent(characterId, { kind, payload }, amount)
+    .catch((e) => console.error("[items] daily quest event failed:", e));
+}
 
 /** Inventory actions: pickup | drop | equip | use | place | unplace */
 export async function POST(req: Request) {
@@ -28,6 +36,7 @@ export async function POST(req: Request) {
       await db.delete(groundItems).where(eq(groundItems.id, g.id));
       await addItem(me.id, g.itemKey, g.qty, g.meta);
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === g.itemKey, g.qty);
+      daily(me.id, "collect", { itemKey: g.itemKey }, g.qty);
       // Push the removal to nearby players now instead of waiting up to
       // WS_REFRESH_MS for the periodic snapshot.
       markWorldDirty(g.x, g.y);
