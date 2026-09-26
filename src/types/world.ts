@@ -8,6 +8,9 @@ export type Facing = "up" | "down" | "left" | "right";
 
 export type Point = { x: number; y: number };
 
+/** Tile-grid coordinates. Centered cell semantics: cell (0,0) spans world px 0..CELL_PX. */
+export type GridPoint = { tx: number; ty: number };
+
 export type StepResult = Point & {
   arrived: boolean;
   facing: Facing;
@@ -20,6 +23,40 @@ export type StepResult = Point & {
 };
 
 export type WalkableChecker = (x: number, y: number) => Promise<boolean> | boolean;
+
+/**
+ * A planned route through the world. Waypoints are pixel coordinates so
+ * the path-follower doesn't have to convert back; `cost` is tile count and
+ * is best-effort (capped searches may understate it).
+ */
+export type WalkPath = {
+  waypoints: Point[];
+  cost: number;
+};
+
+export type NavResult = { path: WalkPath } | null;
+
+/**
+ * DIP contract for the navigation planner. Sim depends on this interface,
+ * not on a concrete class, so a nav-mesh implementation is drop-in later.
+ *
+ * `invalidate(id)` lets callers drop a cached plan when their move target
+ * changes (NPC re-targets, fox raid interrupts, etc.) without reaching
+ * into the cache directly.
+ */
+export interface Navigator {
+  plan(from: Point, to: Point, opts?: NavOptions): Promise<NavResult>;
+  invalidate(id: number): void;
+}
+
+export type NavOptions = { maxTiles?: number };
+
+/**
+ * Server-computed behaviour label for an NPC. Surfaced in the wire as a
+ * small icon over the sprite so players can read what the NPC is up to
+ * (resting, paused to face the player, walking, etc.).
+ */
+export type NpcState = "idle" | "walking" | "resting" | "facing_player" | "chatting";
 
 // What the player has clicked/hovered in the world. Rendered by the HUD
 // as the inspect card and consumed by the scene for interaction prompts.
