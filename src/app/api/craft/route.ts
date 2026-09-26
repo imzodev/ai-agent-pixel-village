@@ -1,9 +1,9 @@
 // Craft endpoint — thin transport. The pure recipe checks + the db
 // validation live below. Proximity check enforces the discovery mechanic:
 // you must stand near the crafter NPC to use their recipes.
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, npcs } from "@/db/schema";
+import { characters, inventory, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { addItem, logEvent, removeItem } from "@/lib/game";
 import { maxCraftable, recipeByKey } from "@/lib/recipes";
@@ -37,10 +37,10 @@ async function performCraft(opts: {
   }
 
   const invRows = await db
-    .select({ itemKey: sql<string>`item_key`, qty: sql<number>`sum(${sql.raw("qty")})::int` })
-    .from(sql`inventory`)
-    .where(sql`character_id = ${opts.characterId} AND item_key = ANY(${recipe.inputs.map((i) => i.itemKey)})`)
-    .groupBy(sql`item_key`);
+    .select({ itemKey: inventory.itemKey, qty: sql<number>`sum(${inventory.qty})::int` })
+    .from(inventory)
+    .where(and(eq(inventory.characterId, opts.characterId), inArray(inventory.itemKey, recipe.inputs.map((i) => i.itemKey))))
+    .groupBy(inventory.itemKey);
   const have = new Map(invRows.map((r) => [r.itemKey, r.qty ?? 0]));
   const max = maxCraftable(recipe, [...have.entries()].map(([itemKey, q]) => ({ itemKey, qty: q })));
   if (max < qty) {
