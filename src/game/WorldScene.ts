@@ -24,6 +24,7 @@ import {
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
+import type { EquippedCosmetics } from "@/types/cosmetic";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -36,6 +37,20 @@ const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
 const PLAYER_SPEED = 120;
+
+/** Convert the snapshot's flat slot/itemKey list into an EquippedCosmetics
+ *  record the LPC compositor can read. Slots not in CosmeticSlot are
+ *  ignored (e.g. sponsor-only slots without sprites yet). */
+function cosmeticsListToEquipped(list: { slot: string; itemKey: string }[] | undefined): EquippedCosmetics | undefined {
+  if (!list || list.length === 0) return undefined;
+  const out: EquippedCosmetics = {};
+  for (const { slot, itemKey } of list) {
+    if (slot === "hair" || slot === "hat" || slot === "glasses" || slot === "outfit" || slot === "back" || slot === "pet") {
+      out[slot] = itemKey;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 function zoneOf(rect: Phaser.Geom.Rectangle): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
   return { type: "random", source: rect as unknown as Phaser.Types.GameObjects.Particles.RandomZoneSource };
@@ -399,6 +414,7 @@ export class WorldScene extends Phaser.Scene {
     // the DB in sync, and the local sprite stays where the user moved
     // it regardless of what the snapshot says.
     if (s.me) {
+      const meEq = cosmeticsListToEquipped(s.me.cosmetics);
       if (!this.player) {
         // First spawn — place the player at the DB position so we rejoin
         // where we left off. Fall back to the central chunk only if the DB
@@ -407,10 +423,15 @@ export class WorldScene extends Phaser.Scene {
           s.me.x >= 0 && s.me.x < 2000 && s.me.y >= -1500 && s.me.y < 1500
             ? { x: s.me.x, y: s.me.y }
             : chunkCenter(0, 0);
-        this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a");
+        this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a", meEq);
         this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
         this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
         this.resizeOverlays();
+      } else if (this.player.equipped !== meEq) {
+        // Re-equip or unequip (from the shop). Rebuild the texture so the
+        // new cosmetics show up without a place teleport.
+        this.player.equipped = meEq;
+        void this.ensureCharTexture(this.player, s.me.appearance, meEq);
       }
       this.player.glow?.setVisible(s.me.equipped.includes("lantern"));
       if (s.me.equipped.includes("lantern") && !this.player.glow) {
@@ -491,19 +512,19 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------- entities ----------
-  private makeChar(x: number, y: number, name: string, app: Appearance, speed: number, labelColor: string): CharEnt {
+  private makeChar(x: number, y: number, name: string, app: Appearance, speed: number, labelColor: string, eq?: EquippedCosmetics): CharEnt {
     const sprite = this.add.sprite(x, y, "ph_char").setOrigin(0.5, 0.9);
     sprite.setInteractive({ useHandCursor: true });
     const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
-    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app) };
-    void this.ensureCharTexture(ent, app);
+    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq), equipped: eq };
+    void this.ensureCharTexture(ent, app, eq);
     return ent;
   }
 
-  private async ensureCharTexture(ent: CharEnt, app: Appearance) {
-    const key = appearanceKey(app);
+  private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics) {
+    const key = appearanceKey(app, eq);
     if (!this.textures.exists(key)) {
-      const canvas = await composeCharacter(app);
+      const canvas = await composeCharacter(app, eq);
       // Scene may have been destroyed during the await.
       if (!this.alive()) return;
       if (!this.textures.exists(key)) {
@@ -518,6 +539,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (!ent.sprite.active) return;
     ent.texKey = key;
+    ent.appKey = key;
     ent.sprite.setTexture(key, `${ROWS[ent.facing]}_0`);
   }
 
@@ -525,17 +547,18 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[] }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
     for (const p of list) {
       seen.add(p.id);
+      const eq = cosmeticsListToEquipped(p.cosmetics);
       let ent = map.get(p.id);
-      const appKey = appearanceKey(p.appearance);
+      const appKey = appearanceKey(p.appearance, eq);
       if (ent && ent.appKey !== appKey) { this.destroyChar(ent); map.delete(p.id); ent = undefined; }
       if (!ent) {
-        ent = this.makeChar(p.x, p.y, p.name, p.appearance, speed, labelColor);
+        ent = this.makeChar(p.x, p.y, p.name, p.appearance, speed, labelColor, eq);
         const created = ent;
         ent.sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(p); s.distance = this.distTo(created.sprite.x, created.sprite.y); this.select(s); });
         if (badge) {
@@ -543,6 +566,11 @@ export class WorldScene extends Phaser.Scene {
           ent.badge = this.add.text(p.x, p.y - 62, txt, { fontFamily: "monospace", fontSize: "9px", color: txt.startsWith("★") ? "#ffd166" : "#cfe8cf", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
         }
         map.set(p.id, ent);
+      } else if (ent.equipped !== eq) {
+        // Existing sprite, equipped gear changed (equip/unequip from shop).
+        // Rebuild the texture so the new cosmetics show up.
+        ent.equipped = eq;
+        void this.ensureCharTexture(ent, p.appearance, eq);
       }
       ent.tx = p.x; ent.ty = p.y;
       if (ent.label.text !== p.name) ent.label.setText(p.name);

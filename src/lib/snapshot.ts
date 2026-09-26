@@ -21,6 +21,7 @@ import { and, desc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import {
   animals,
   buildings,
+  characterEquipped,
   characters,
   enemies,
   groundItems,
@@ -281,6 +282,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
   // so no separate per-player query is needed.
   const { players, onlineCount } = playersResult;
   const playerIds = players.map((p) => p.id);
+  const npcIds = npcRows.map((n) => n.id);
   const equippedAll =
     playerIds.length > 0
       ? await rdb
@@ -294,6 +296,26 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     const list = equippedByChar.get(e.characterId);
     if (list) list.push(e.itemKey);
     else equippedByChar.set(e.characterId, [e.itemKey]);
+  }
+
+  // Cosmetic equips (hats, glasses, outfit) from character_equipped. Same
+  // ids we already loaded. Both players and NPCs can equip cosmetics.
+  const cosmeticAll = (playerIds.length + npcIds.length) > 0
+    ? await rdb
+        .select({
+          characterId: characterEquipped.characterId,
+          slot: characterEquipped.slot,
+          itemKey: characterEquipped.itemKey,
+        })
+        .from(characterEquipped)
+        .where(inArray(characterEquipped.characterId, [...playerIds, ...npcIds]))
+    : [];
+
+  const cosmeticsByChar = new Map<number, { slot: string; itemKey: string }[]>();
+  for (const c of cosmeticAll) {
+    const list = cosmeticsByChar.get(c.characterId);
+    if (list) list.push({ slot: c.slot, itemKey: c.itemKey });
+    else cosmeticsByChar.set(c.characterId, [{ slot: c.slot, itemKey: c.itemKey }]);
   }
 
   return {
@@ -311,6 +333,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     onlineCount,
     doors,
     equippedByChar,
+    cosmeticsByChar,
     spById: Object.fromEntries(spById),
   };
 }
@@ -334,6 +357,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
     players: raw.players.map((p) => ({
       ...p,
       equipped: raw.equippedByChar.get(p.id) ?? [],
+      cosmetics: raw.cosmeticsByChar.get(p.id) ?? [],
     })),
     npcs: raw.npcs.map((n) => {
       const sp = n.sponsorId != null ? spById[String(n.sponsorId)] : null;
@@ -350,6 +374,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
         appearance: n.appearance,
         mood: n.mood,
         kind: n.kind,
+        cosmetics: raw.cosmeticsByChar.get(n.id) ?? [],
         sponsor: sp ? { businessName: sp.businessName, brandColor: sp.brandColor } : null,
       };
     }),

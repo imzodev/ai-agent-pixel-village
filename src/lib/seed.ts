@@ -41,7 +41,6 @@ export const ITEM_DEFS = [
   { key: "recipe_cinnamon", name: "Recipe: Cinnamon Knots", kind: "recipe", icon: "📜", description: "A handwritten recipe card from the bakery.", value: 10 },
   { key: "recipe_tea", name: "Recipe: Calming Tea", kind: "recipe", icon: "📜", description: "Three herbs, hot water, patience.", value: 10 },
   { key: "wooden_sword", name: "Wooden Sword", kind: "tool", icon: "🗡️", description: "+2 attack. Splinters included.", value: 15, equippable: true },
-  { key: "straw_hat", name: "Straw Hat", kind: "hat", icon: "👒", description: "Keeps the sun off.", value: 8, equippable: true },
   { key: "lantern", name: "Brass Lantern", kind: "tool", icon: "🏮", description: "Glows softly at night.", value: 12, equippable: true },
   { key: "chair", name: "Oak Chair", kind: "furniture", icon: "🪑", description: "Sturdy. Place it at home.", value: 10, placeable: true },
   { key: "table", name: "Round Table", kind: "furniture", icon: "🟤", description: "Fits four friends.", value: 14, placeable: true },
@@ -240,9 +239,9 @@ const MISSION_DEFS: {
     title: "Visit the Inn with Tobin",
     description: "Tobin wants you to go see Bram at the inn and tell him Tobin says hi.",
     offerLine: "Can you go tell Bram I said hi? He's at the inn. He makes a funny face when you say my name.",
-    completeLine: "Did he make the face?? He always makes the face. Here, you can have my second-best feather.",
+    completeLine: "Did he make the face?? He always makes the face. Here, take this sweet bun my friend baked for me.",
     requirement: { type: "talk", npcKey: "innkeeper" },
-    reward: { coins: 3, xp: 15, items: [{ itemKey: "straw_hat", qty: 1 }] },
+    reward: { coins: 3, xp: 15, items: [{ itemKey: "honey_bun", qty: 1 }] },
   },
   {
     key: "innkeeper_slimes",
@@ -513,7 +512,7 @@ export function ensureSeeded() {
     .then(() => syncNpcLayout())
     .then(() => syncItems())
     .then(() => syncMissions())
-    .then(() => seedCosmetics())
+    .then(() => syncCosmetics())
     .then(() => seedActivities());
 }
 
@@ -573,40 +572,51 @@ async function syncMissions() {
   }
 }
 
-async function seedCosmetics() {
-  const [any] = await db.select().from(cosmeticItems).limit(1);
-  if (any) return;
-  for (const it of COSMETIC_CATALOG) {
-    await db.insert(cosmeticItems).values({
-      key: it.key,
-      name: it.name,
-      slot: it.slot,
-      assetRef: it.assetRef,
-      tintColor: it.tintColor,
-      rarity: it.rarity,
-      coinPrice: it.coinPrice,
-      gemPrice: it.gemPrice,
-      sponsorGrantedOnly: it.sponsorGrantedOnly,
-      sponsorId: it.sponsorId,
-      availableFrom: it.availableFrom,
-      availableUntil: it.availableUntil,
-    }).onConflictDoNothing();
+async function syncCosmetics() {
+  try {
+    for (const it of COSMETIC_CATALOG) {
+      // Schema declares timestamp (Date | null); the canonical catalog type
+      // uses strings for portability across server/client boundaries. Parse
+      // ISO strings to Dates here so Drizzle's typed insert is happy.
+      const from = it.availableFrom ? new Date(it.availableFrom) : null;
+      const until = it.availableUntil ? new Date(it.availableUntil) : null;
+      const values = {
+        key: it.key,
+        name: it.name,
+        slot: it.slot,
+        assetRef: it.assetRef,
+        tintColor: it.tintColor,
+        rarity: it.rarity,
+        coinPrice: it.coinPrice,
+        gemPrice: it.gemPrice,
+        sponsorGrantedOnly: it.sponsorGrantedOnly,
+        sponsorId: it.sponsorId,
+        availableFrom: from,
+        availableUntil: until,
+      };
+      await db.insert(cosmeticItems).values(values).onConflictDoUpdate({
+        target: cosmeticItems.key,
+        set: {
+          name: values.name,
+          slot: values.slot,
+          assetRef: values.assetRef,
+          tintColor: values.tintColor,
+          rarity: values.rarity,
+          coinPrice: values.coinPrice,
+          gemPrice: values.gemPrice,
+          sponsorGrantedOnly: values.sponsorGrantedOnly,
+          sponsorId: values.sponsorId,
+          availableFrom: values.availableFrom,
+          availableUntil: values.availableUntil,
+        },
+      });
+    }
+  } catch (e) {
+    console.warn("[seed] cosmetic sync failed:", e instanceof Error ? e.message : e);
   }
 }
 
-const COSMETIC_CATALOG = [
-  { key: "hat_straw", name: "Straw Hat", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#d9b676", rarity: "common", coinPrice: 200, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "hat_crown", name: "Forest Crown", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#ffd166", rarity: "rare", coinPrice: 0, gemPrice: 250, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "hat_party", name: "Party Cone", slot: "hat", assetRef: "/lpc/hair_plain.png", tintColor: "#ff5e8a", rarity: "uncommon", coinPrice: 350, gemPrice: 50, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "glasses_round", name: "Round Specs", slot: "glasses", assetRef: "/cosmetics/glasses_round.png", tintColor: null, rarity: "common", coinPrice: 300, gemPrice: 30, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "outfit_apron", name: "Baker's Apron", slot: "outfit", assetRef: "/cosmetics/outfit_apron.png", tintColor: "#e76f51", rarity: "uncommon", coinPrice: 600, gemPrice: 80, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "back_pet_chick", name: "Chick Pal", slot: "pet", assetRef: "/cosmetics/pet_chick.png", tintColor: null, rarity: "epic", coinPrice: 0, gemPrice: 500, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-  { key: "hair_long", name: "Long Hair", slot: "hair", assetRef: "/lpc/hair_long.png", tintColor: "#5a3a1a", rarity: "common", coinPrice: 150, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null },
-] satisfies Array<{
-  key: string; name: string; slot: string; assetRef: string; tintColor: string | null;
-  rarity: string; coinPrice: number; gemPrice: number; sponsorGrantedOnly: boolean;
-  sponsorId: number | null; availableFrom: Date | null; availableUntil: Date | null;
-}>;
+const COSMETIC_CATALOG = await import("./cosmetics").then((m) => m.COSMETIC_CATALOG);
 
 async function seed() {
   const [ws] = await db.select().from(worldState).where(eq(worldState.id, 1));

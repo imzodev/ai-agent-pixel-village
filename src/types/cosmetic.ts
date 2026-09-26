@@ -3,6 +3,10 @@
 export const COSMETIC_SLOTS = ["hair", "hat", "glasses", "outfit", "back", "pet"] as const;
 export type CosmeticSlot = (typeof COSMETIC_SLOTS)[number];
 
+/** Slot → equipped item key (or undefined). One item per slot. Used by the
+ *  LPC compositor to drive the layer order in src/game/lpc.ts. */
+export type EquippedCosmetics = Partial<Record<CosmeticSlot, string>>;
+
 export const COSMETIC_RARITIES = ["common", "uncommon", "rare", "epic", "legendary"] as const;
 export type CosmeticRarity = (typeof COSMETIC_RARITIES)[number];
 

@@ -61,6 +61,22 @@ export class CosmeticService {
     });
   }
 
+  async buyWithGems(characterId: number, itemKey: string, userId?: number): Promise<{ newBalance: number }> {
+    const item = await this.repo.findCatalogItem(itemKey);
+    if (!item) throw new Error("unknown item");
+    if (item.gemPrice <= 0) throw new Error("not purchasable with gems");
+    if (await this.repo.owns(characterId, itemKey)) throw new Error("already owned");
+    if (!this.db) throw new Error("CosmeticService requires a Drizzle db handle");
+    return await this.db.transaction(async (tx) => {
+      const [ch] = await tx.select({ coins: characters.coins, gems: characters.gems }).from(characters).where(eq(characters.id, characterId)).limit(1);
+      if (!ch || ch.gems < item.gemPrice) throw new Error("insufficient gems");
+      await tx.update(characters).set({ gems: ch.gems - item.gemPrice }).where(eq(characters.id, characterId));
+      await tx.insert(cosmeticOwnerships).values({ characterId, itemKey, source: "gem" });
+      this.analytics.track("cosmetic_bought_gems", { itemKey, price: item.gemPrice }, userId);
+      return { newBalance: ch.gems - item.gemPrice };
+    });
+  }
+
   async grantSponsorHat(characterId: number, sponsorId: number, hatItemKey: string, userId?: number): Promise<{ granted: boolean }> {
     if (await this.repo.owns(characterId, hatItemKey)) return { granted: false };
     await this.repo.grantOwnership(characterId, hatItemKey, "sponsor");

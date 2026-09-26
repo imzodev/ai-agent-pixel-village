@@ -6,6 +6,7 @@
 
 import type Phaser from "phaser";
 import type { Facing } from "@/types/world";
+import type { EquippedCosmetics } from "@/types/cosmetic";
 
 export type CharEnt = {
   sprite: Phaser.GameObjects.Sprite;
@@ -17,6 +18,9 @@ export type CharEnt = {
   speed: number;
   texKey: string | null;
   appKey: string;
+  /** Currently equipped cosmetics for this character. Drives the LPC layer
+   *  order (glasses over eyes, outfit over torso, hat over hair). */
+  equipped?: EquippedCosmetics;
   bubble?: { c: Phaser.GameObjects.Container; until: number };
   glow?: Phaser.GameObjects.Arc;
 };

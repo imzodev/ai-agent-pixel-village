@@ -1,6 +1,11 @@
 // Universal LPC spritesheet compositing. Layers are 576x256 walk sheets
 // (9 frames x 4 rows: up, left, down, right; 64x64 per frame).
 import type { Appearance } from "@/db/schema";
+import { COSMETIC_CATALOG, cosmoByKey } from "@/lib/cosmetics";
+import type { CosmeticSlot, EquippedCosmetics } from "@/types/cosmetic";
+
+// Re-exported for callers that previously imported the type from this module.
+export type { EquippedCosmetics };
 
 export const FRAME = 64;
 export const ROWS = { up: 0, left: 1, down: 2, right: 3 } as const;
@@ -34,16 +39,70 @@ function hexToRgb(hex: string): [number, number, number] {
 
 type Layer = { src: string; tint?: string; mode?: "skin" | "recolor" };
 
-export function layersFor(a: Appearance): Layer[] {
+/** Resolve the catalog entries for whatever the player is wearing. */
+function resolveCosmetics(eq: EquippedCosmetics | undefined) {
+  const out: { item: ReturnType<typeof cosmoByKey>; slot: CosmeticSlot }[] = [];
+  if (!eq) return out;
+  for (const slot of Object.keys(eq) as CosmeticSlot[]) {
+    const key = eq[slot];
+    if (!key) continue;
+    const item = cosmoByKey(key);
+    if (item) out.push({ item, slot });
+  }
+  return out;
+}
+
+/**
+ * Z-order of the base sprite body. The catalog contributes additional
+ * layers (glasses over eyes, apron over torso, hat over hair).
+ */
+export function layersFor(a: Appearance, eq?: EquippedCosmetics): Layer[] {
   const b = a.body === "female" ? "female" : "male";
+  const cos = resolveCosmetics(eq);
+  const glasses = cos.find((c) => c.slot === "glasses")?.item;
+  const outfit = cos.find((c) => c.slot === "outfit")?.item;
+  const hat = cos.find((c) => c.slot === "hat")?.item;
+
   return [
     { src: `/lpc/body_${b}.png`, tint: a.skin, mode: "skin" },
     { src: `/lpc/head_${b}.png`, tint: a.skin, mode: "skin" },
     { src: `/lpc/eyes.png` },
+    // Glasses render on the face, between the head/eyes and the legs/torso.
+    // Glasses don't use a skin recolor; if a tintColor is set, recolor it
+    // so sponsor-branded glasses match the brand color.
+    ...(glasses
+      ? [
+          {
+            src: glasses.assetRef,
+            tint: glasses.tintColor ?? undefined,
+            mode: "recolor" as const,
+          },
+        ]
+      : []),
     { src: `/lpc/legs_${b}.png`, tint: a.pantsColor, mode: "recolor" },
     { src: `/lpc/feet_${b}.png` },
     { src: `/lpc/torso_${b}.png`, tint: a.shirtColor, mode: "recolor" },
+    // Aprons/overtunics render over the torso, before the hair.
+    ...(outfit
+      ? [
+          {
+            src: outfit.assetRef,
+            tint: outfit.tintColor ?? undefined,
+            mode: "recolor" as const,
+          },
+        ]
+      : []),
     { src: `/lpc/hair_${HAIR_STYLES.includes(a.hair) ? a.hair : "plain"}.png`, tint: a.hairColor, mode: "recolor" },
+    // Hats render last so they sit on top of the hair.
+    ...(hat
+      ? [
+          {
+            src: hat.assetRef,
+            tint: hat.tintColor ?? undefined,
+            mode: "recolor" as const,
+          },
+        ]
+      : []),
   ];
 }
 
@@ -78,20 +137,23 @@ function tintLayer(img: HTMLImageElement, tint: string, mode: "skin" | "recolor"
 
 const composedCache = new Map<string, Promise<HTMLCanvasElement>>();
 
-export function appearanceKey(a: Appearance) {
-  return `lpc_${a.body}_${a.skin}_${a.hair}_${a.hairColor}_${a.shirtColor}_${a.pantsColor}`.replace(/#/g, "");
+/** Cache key includes appearance and equipped cosmetics so re-equipping
+ *  recomposes. The catalog is cheap, so the key is just the visible gear. */
+export function appearanceKey(a: Appearance, eq?: EquippedCosmetics) {
+  const cos = eq ? Object.entries(eq).sort().flat().join("|") : "";
+  return `lpc_${a.body}_${a.skin}_${a.hair}_${a.hairColor}_${a.shirtColor}_${a.pantsColor}__${cos}`.replace(/#/g, "");
 }
 
-/** Compose all layers into one 576x256 sheet. Cached by appearance. */
-export function composeCharacter(a: Appearance): Promise<HTMLCanvasElement> {
-  const key = appearanceKey(a);
+/** Compose all layers into one 576x256 sheet. Cached by appearance + cosmetics. */
+export function composeCharacter(a: Appearance, eq?: EquippedCosmetics): Promise<HTMLCanvasElement> {
+  const key = appearanceKey(a, eq);
   let p = composedCache.get(key);
   if (!p) {
     p = (async () => {
       const canvas = document.createElement("canvas");
       canvas.width = 576; canvas.height = 256;
       const ctx = canvas.getContext("2d")!;
-      for (const layer of layersFor(a)) {
+      for (const layer of layersFor(a, eq)) {
         try {
           const img = await loadImage(layer.src);
           ctx.drawImage(layer.tint && layer.mode ? tintLayer(img, layer.tint, layer.mode) : img, 0, 0);
@@ -107,8 +169,15 @@ export function composeCharacter(a: Appearance): Promise<HTMLCanvasElement> {
 }
 
 /** Draw a single frame (for previews). */
-export async function drawPreview(target: HTMLCanvasElement, a: Appearance, dir: keyof typeof ROWS = "down", frame = 0, scale = 3) {
-  const sheet = await composeCharacter(a);
+export async function drawPreview(
+  target: HTMLCanvasElement,
+  a: Appearance,
+  eq: EquippedCosmetics | undefined,
+  dir: keyof typeof ROWS = "down",
+  frame = 0,
+  scale = 3,
+) {
+  const sheet = await composeCharacter(a, eq);
   target.width = FRAME * scale; target.height = FRAME * scale;
   const ctx = target.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;

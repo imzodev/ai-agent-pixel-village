@@ -20,11 +20,21 @@ import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = resolve(__dirname, "..", "public", "lpc");
-const SRC_BASE =
-  "https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/master";
+
+// Two LPC mirrors are available. The sanderfrenken mirror has the main
+// base layers (body, head, hair, hat). The liberatedpixelcup mirror has
+// extras like facial/glasses and torso/aprons that sanderfrenken lacks.
+// Each entry can override `base` to pull from a different source.
+const SANDER = "https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/master";
+const LIBERATED = "https://raw.githubusercontent.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator/master";
 
 const CROP = { left: 0, top: 8 * 64, width: 9 * 64, height: 4 * 64 };
 
+/**
+ * @param dest   output filename inside public/lpc/
+ * @param src    path under the LPC repo (e.g. "spritesheets/hat/cloth/bandana/adult.png")
+ * @param base   optional source mirror; defaults to SANDER.
+ */
 const FILES = [
   ["body_male.png",   "spritesheets/body/bodies/male.png"],
   ["body_female.png", "spritesheets/body/bodies/female.png"],
@@ -47,23 +57,35 @@ const FILES = [
   ["hair_buzzcut.png", "spritesheets/hair/buzzcut/adult.png"],
   ["hair_bedhead.png", "spritesheets/hair/bedhead/male.png"],
   ["hair_cowlick.png", "spritesheets/hair/cowlick/adult.png"],
+  // Cosmetic layers: hats (sanderfrenken).
+  ["hat_straw.png",     "spritesheets/hat/cloth/bandana/adult.png"],
+  ["hat_crown.png",     "spritesheets/hat/formal/crown/adult.png"],
+  ["hat_party.png",     "spritesheets/hat/holiday/elf/adult.png"],
+  // Glasses + apron (liberatedpixelcup). Same 576x256 walk sheet format.
+  ["glasses_round.png",  "spritesheets/facial/glasses/round/adult/walk.png", LIBERATED],
+  ["outfit_apron.png",   "spritesheets/torso/aprons/apron/male/walk/white.png", LIBERATED],
 ];
 
 await mkdir(OUT_DIR, { recursive: true });
 
 let ok = 0, fail = 0;
-for (const [dest, src] of FILES) {
-  const url = `${SRC_BASE}/${src}`;
+for (const [dest, src, base] of FILES) {
+  const url = `${base ?? SANDER}/${src}`;
   process.stdout.write(`  ${dest.padEnd(20)} ← ${src}\n`);
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const buf = Buffer.from(await res.arrayBuffer());
-    const cropped = await sharp(buf)
-      .extract(CROP)
-      .png()
-      .toBuffer();
-    await writeFile(resolve(OUT_DIR, dest), cropped);
+    const meta = await sharp(buf).metadata();
+    // The canonical LPC mirror (e.g. facial/glasses) ships the walk
+    // cycle already cropped to 576x256. Master template layers ship as
+    // 832x1344 and need the CROP. Skip the crop when the source is
+    // already the right size.
+    const out =
+      meta.width === 576 && meta.height === 256
+        ? buf
+        : await sharp(buf).extract(CROP).png().toBuffer();
+    await writeFile(resolve(OUT_DIR, dest), out);
     ok++;
   } catch (err) {
     console.error(`    ✗ ${err.message}`);

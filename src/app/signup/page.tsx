@@ -21,7 +21,7 @@ export default function SignupPage() {
     let alive = true;
     const t = setInterval(() => {
       frame.current = (frame.current + 1) % 9;
-      if (canvas.current && alive) void drawPreview(canvas.current, a, dir, frame.current === 0 ? 1 : frame.current, 3);
+      if (canvas.current && alive) void drawPreview(canvas.current, a, undefined, dir, frame.current === 0 ? 1 : frame.current, 3);
     }, 110);
     return () => { alive = false; clearInterval(t); };
   }, [a, dir]);

@@ -67,6 +67,8 @@ export type PlayerSnapshot = {
   gems: number;
   xp: number;
   equipped: string[];
+  /** Currently equipped cosmetic items, slot→key. One per slot. */
+  cosmetics: { slot: string; itemKey: string }[];
 };
 
 export type NpcSnapshot = {
@@ -82,6 +84,8 @@ export type NpcSnapshot = {
   appearance: Appearance;
   mood: string;
   kind: string;
+  /** Currently equipped cosmetic items, slot→key. NPCs can wear cosmetics too. */
+  cosmetics: { slot: string; itemKey: string }[];
   sponsor: { businessName: string; brandColor: string } | null;
 };
 

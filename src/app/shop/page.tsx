@@ -1,6 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { COSMETIC_RARITIES, COSMETIC_SLOTS, type CosmeticRarity, type CosmeticSlot } from "@/types/cosmetic";
+import type { Appearance } from "@/db/schema";
+import type { EquippedCosmetics } from "@/types/cosmetic";
+import { drawPreview } from "@/game/lpc";
 
 type Item = {
   item: {
@@ -28,14 +31,26 @@ export default function ShopPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<CosmeticSlot | "all">("all");
   const [tab, setTab] = useState<"cosmetics" | "gems">("cosmetics");
+  // The current character + their equipped cosmetics. Used to render each
+  // cosmetic card preview against the player's own appearance. Loaded from
+  // /api/me and refreshed after equip/unequip.
+  const [meAppearance, setMeAppearance] = useState<Appearance | null>(null);
+  const [meEquipped, setMeEquipped] = useState<EquippedCosmetics | undefined>(undefined);
 
   const reload = async () => {
-    const [s, p] = await Promise.all([
+    const [s, p, meRes] = await Promise.all([
       fetch("/api/shop").then((r) => r.json()),
       fetch("/api/gems").then((r) => r.json()),
+      fetch("/api/me").then((r) => r.json()).catch(() => null),
     ]);
     setView(s);
     setPacks(p.packs);
+    if (meRes?.me) {
+      setMeAppearance(meRes.me.appearance as Appearance);
+      const eq: EquippedCosmetics = {};
+      for (const it of s.items as Item[]) if (it.equipped) eq[it.item.slot] = it.item.key;
+      setMeEquipped(Object.keys(eq).length > 0 ? eq : undefined);
+    }
   };
 
   useEffect(() => {
@@ -75,6 +90,40 @@ export default function ShopPage() {
       if (!r.ok) {
         const e = await r.json().catch(() => ({}));
         alert(e.error ?? "equip failed");
+      } else await reload();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const unequip = async (itemKey: string) => {
+    setBusy(itemKey);
+    try {
+      const r = await fetch("/api/shop", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "unequip", itemKey }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert(e.error ?? "unequip failed");
+      } else await reload();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const buyGemsItem = async (itemKey: string) => {
+    setBusy(itemKey);
+    try {
+      const r = await fetch("/api/shop", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "buy_gems", itemKey }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert(e.error ?? "purchase failed");
       } else await reload();
     } finally {
       setBusy(null);
@@ -124,15 +173,27 @@ export default function ShopPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
             {filtered.map((row) => {
               const r = row.item;
+              // The preview shows the player wearing EVERYTHING they own in this
+              // slot EXCEPT the current row swapped in — i.e. "what you'd
+              // look like wearing this one". When nothing is owned, the
+              // preview is just the bare appearance.
+              const previewEq: EquippedCosmetics | undefined = meAppearance
+                ? { ...(meEquipped ?? {}), [r.slot]: r.key }
+                : undefined;
               return (
                 <div key={r.key} style={{ background: "#0e1830", border: `2px solid ${rarityColor(r.rarity)}`, borderRadius: 10, padding: 12 }}>
-                  <div style={{ aspectRatio: "1/1", background: "#16244a", borderRadius: 6, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
-                    {slotIcon(r.slot)}
+                  <div style={{ aspectRatio: "1/1", background: "#16244a", borderRadius: 6, marginBottom: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {meAppearance
+                      ? <PreviewCanvas app={meAppearance} eq={previewEq} />
+                      : <div style={{ fontSize: 28 }}>{slotIcon(r.slot)}</div>}
                   </div>
                   <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 600 }}>{r.name}</div>
                   <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9aa", marginBottom: 8 }}>{r.slot} · {r.rarity}</div>
                   {row.equipped ? (
-                    <Badge color="#7ee787">equipped</Badge>
+                    <>
+                      <Badge color="#7ee787">equipped</Badge>
+                      <button disabled={busy === r.key} onClick={() => unequip(r.key)} style={{ ...btnPrimary, marginTop: 4 }}>unequip</button>
+                    </>
                   ) : row.owned ? (
                     <button disabled={busy === r.key} onClick={() => equip(r.key)} style={btnPrimary}>equip</button>
                   ) : r.coinPrice > 0 ? (
@@ -140,7 +201,7 @@ export default function ShopPage() {
                       🪙 {r.coinPrice}
                     </button>
                   ) : r.gemPrice > 0 ? (
-                    <button disabled={busy === r.key || !row.canAffordGems} style={btnDisabled}>💎 {r.gemPrice}</button>
+                    <button disabled={busy === r.key || !row.canAffordGems} onClick={() => buyGemsItem(r.key)} style={!row.canAffordGems ? btnDisabled : btnPrimary}>💎 {r.gemPrice}</button>
                   ) : (
                     <Badge color="#ffd166">sponsor gift</Badge>
                   )}
@@ -215,4 +276,21 @@ function Badge({ color, children }: { color: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+/** Card-preview canvas: renders the player's appearance with the current row's
+ *  cosmetic swapped in (or, if the player has the row already equipped,
+ *  wearing everything they have). Invalidates on prop change so the right
+ *  cosmetic shows on each card. */
+function PreviewCanvas({ app, eq }: { app: Appearance; eq: EquippedCosmetics | undefined }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    let alive = true;
+    void drawPreview(ref.current, app, eq, "down", 1, 3).then(() => {
+      if (!alive) return;
+    });
+    return () => { alive = false; };
+  }, [app, eq]);
+  return <canvas ref={ref} width={192} height={192} style={{ imageRendering: "pixelated", width: "100%", height: "100%" }} />;
 }
