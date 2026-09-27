@@ -26,6 +26,23 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "eat" },
   },
+  sheep: {
+    // Combined from sheep_walk + sheep_eat (block 0 = walk, block 1 = eat).
+    url: "/assets/animals/sheep.png",
+    frameWidth: 128,
+    frameHeight: 128,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.6, // same relative scale as the cow
+    originX: 0.5,
+    originY: 0.65, // side-view hooves sit at y≈83 of 128
+    labelHeight: 43,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 7, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { graze: "eat" },
+  },
   chicken: {
     // Combined from chicken_walk + chicken_eat (block 0 = walk, block 1 = eat).
     // Unlike the cow, the chicken's eat row is a pecking loop, so it
