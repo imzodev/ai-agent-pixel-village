@@ -26,6 +26,23 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "eat" },
   },
+  llama: {
+    // Combined from llama_walk + llama_eat (block 0 = walk, block 1 = eat).
+    url: "/assets/animals/llama.png",
+    frameWidth: 128,
+    frameHeight: 128,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.6, // same relative scale as the cow
+    originX: 0.5,
+    originY: 0.71, // hooves sit at y≈91 of 128
+    labelHeight: 62, // tall neck: head reaches y≈29
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 7, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { graze: "eat" },
+  },
   pig: {
     // Combined from pig_walk + pig_eat (block 0 = walk, block 1 = eat).
     url: "/assets/animals/pig.png",

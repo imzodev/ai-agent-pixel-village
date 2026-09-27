@@ -173,6 +173,8 @@ const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: num
   { species: "cow", names: ["Buttercup", "Juniper"], zone: tileRect(126, -12, 24, 21) },
   // Pigs share the cows' pasture (the farm).
   { species: "pig", names: ["Truffle", "Hamlet"], zone: tileRect(126, -12, 24, 21) },
+  // Llamas get their own meadow east of the village (chunk 3_0, fully open).
+  { species: "llama", names: ["Paco", "Luna"], zone: tileRect(76, 5, 18, 12) },
   { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: tileRect(24, 33, 20, 12) },
   { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 20) },
   { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
