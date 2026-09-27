@@ -48,9 +48,14 @@ export function tilesOf(template) {
 /**
  * Write `template` (using the shared tilesets) as `<name>.png` +
  * `public/buildings/<jsonName>.json`.
+ *
+ * `paint(ctx, pixels)` (optional) may repaint a tile before it is baked:
+ * ctx = { layer, row, col, where: { name, r, c } } locates the tile in the
+ * template and in its source tileset; `pixels` is its 16×16 RGBA buffer.
+ * Return a new buffer (or mutate and return it), or undefined to keep it.
  */
-export async function bakeBuilding(template, { name, jsonName }) {
-  const { tilesetOf } = tilesOf(template);
+export async function bakeBuilding(template, { name, jsonName, paint }) {
+  const { tilesetOf, where } = tilesOf(template);
   const images = new Map();
   async function tilePixels(gid) {
     const ts = tilesetOf(gid);
@@ -71,8 +76,9 @@ export async function bakeBuilding(template, { name, jsonName }) {
   // Every distinct tile image gets one slot in the new sheet.
   const slots = [];
   const slotByKey = new Map();
-  async function slotFor(gid) {
-    const px = await tilePixels(gid);
+  async function slotFor(gid, layer, row, col) {
+    let px = await tilePixels(gid);
+    if (paint) px = paint({ layer, row, col, where: where(gid) }, px) ?? px;
     const key = px.toString("base64");
     if (!slotByKey.has(key)) {
       slotByKey.set(key, slots.length);
@@ -85,10 +91,11 @@ export async function bakeBuilding(template, { name, jsonName }) {
   for (const layer of template.layers) {
     if (layer.data.some((g) => g > 0x1fffffff)) throw new Error(`${layer.name}: flipped tiles are not supported`);
     const data = [];
-    for (const gid of layer.data) {
+    for (let k = 0; k < layer.data.length; k++) {
+      const gid = layer.data[k];
       if (!gid) data.push(0);
       else if (MARKER_LAYERS.has(layer.name)) data.push(1);
-      else data.push(await slotFor(gid));
+      else data.push(await slotFor(gid, layer.name, Math.floor(k / template.width), k % template.width));
     }
     layers.push({ ...layer, data });
   }
