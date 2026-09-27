@@ -34,7 +34,7 @@ export async function GET(req: Request) {
 
     if (q && !type) {
       const dist = (x: number, y: number) => Math.hypot(x - px, y - py);
-      const species = ["sheep", "cow", "chicken", "duck", "rabbit", "fox", "cat", "dog"].find((s) => q.includes(s));
+      const species = ["sheep", "cow", "pig", "chicken", "duck", "rabbit", "fox", "cat", "dog"].find((s) => q.includes(s));
       if (species) {
         const rows = await db.select().from(animals).where(eq(animals.species, species));
         const named = rows.find((r) => q.includes(r.name.toLowerCase()));

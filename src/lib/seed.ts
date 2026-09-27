@@ -171,6 +171,8 @@ const NPC_DEFS: {
 const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: number; w: number; h: number } }[] = [
   { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: tileRect(6, 48, 24, 21) },
   { species: "cow", names: ["Buttercup", "Juniper"], zone: tileRect(126, -12, 24, 21) },
+  // Pigs share the cows' pasture (the farm).
+  { species: "pig", names: ["Truffle", "Hamlet"], zone: tileRect(126, -12, 24, 21) },
   { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: tileRect(24, 33, 20, 12) },
   { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 20) },
   { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
@@ -455,9 +457,26 @@ async function syncWildlifeLayout() {
     }
     await db.delete(enemies);
     for (const def of ANIMAL_DEFS) {
+      // Re-zone to the centre and drop any scheduled move: it was planned
+      // from the old position, so clients would replay it from there.
       await db.update(animals)
-        .set({ zone: def.zone, x: def.zone.x + def.zone.w / 2, y: def.zone.y + def.zone.h / 2, targetX: null, targetY: null })
+        .set({
+          zone: def.zone, x: def.zone.x + def.zone.w / 2, y: def.zone.y + def.zone.h / 2, targetX: null, targetY: null,
+          movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null,
+        })
         .where(eq(animals.species, def.species));
+      // Species / names added to ANIMAL_DEFS after the DB was seeded
+      // (e.g. pigs) are created here so existing worlds get them too.
+      const existing = await db.select({ name: animals.name }).from(animals).where(eq(animals.species, def.species));
+      const have = new Set(existing.map((r) => r.name));
+      for (const name of def.names) {
+        if (have.has(name)) continue;
+        await db.insert(animals).values({
+          species: def.species, name,
+          x: def.zone.x + def.zone.w / 2, y: def.zone.y + def.zone.h / 2,
+          zone: def.zone, hunger: Math.floor(Math.random() * 40),
+        });
+      }
     }
   } catch (e) {
     wildlifeSynced = false;

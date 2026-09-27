@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       const reactions: Record<string, string[]> = {
         sheep: ["baas softly and leans into your hand", "closes its eyes and hums"],
         cow: ["moos approvingly", "licks your sleeve"],
+        pig: ["oinks happily and snuffles your boots", "flops over for a belly rub"],
         chicken: ["clucks and fluffs up", "pecks your shoe affectionately"],
         duck: ["quacks twice", "wiggles its tail"],
         rabbit: ["twitches its nose", "flops over contentedly"],
