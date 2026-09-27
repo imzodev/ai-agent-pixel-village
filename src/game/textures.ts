@@ -33,9 +33,8 @@ export function pixelTexture(scene: Scene, key: string, rows: string[], palette:
 
 // ---------- Animals & creatures ----------
 const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {
-  duck: { rows: ["...gg....", "...ggo...", "...gg....", ".wwwww...", "wwwwwww..", ".wwwwww..", "..wwww...", "...o.o..."], palette: { g: "#3f8a4a", o: "#f0a020", w: "#e7dcc6" } },
   rabbit: { rows: ["..t.t...", "..t.t...", "..ttt...", ".ttttt..", ".tttttt.", ".tttttt.", ".ttttt.t", "..t.t..."], palette: { t: "#d9b38c" } },
-  // cow, sheep, chicken, fox: rendered from spritesheets (src/game/animalSprites.ts).
+  // cow, sheep, chicken, duck, fox: rendered from spritesheets (src/game/animalSprites.ts).
   // Species listed there are skipped below so a procedural texture can
   // never overwrite the sheet.
   cat: { rows: [".g.g......", ".ggg......", ".gggggggg.", ".gggggggg.", ".ggggggg.g", "..g.g..g.g", "..g.g..gg."], palette: { g: "#e8985a" } },

@@ -25,6 +25,13 @@ include this file (or a link to it) in your distribution.
 - **License**: GPL 2.0 or later / CC-BY. **Attribution required** when
   redistributing: credit Daniel Eddeland and link to the OpenGameArt submission.
 
+## Duck sprite (`animals/duck.png`)
+
+Original art made for this project: a mallard drawn procedurally by
+`scripts/draw-duck.mjs` (32×32 frames, 4 directions, waddle + dabble) in
+the format of the LPC chicken above. Not derived from any third-party
+asset; regenerate with `node scripts/draw-duck.mjs`.
+
 ## Wheat field tiles
 
 Rendered at runtime as a sub-region of `food/crops.png` (LPC Crops,
