@@ -14,6 +14,17 @@ chain; however, OGA BY 3.0 / CC BY 3.0 are the practical upstream licenses for
 the assembled sheet, so we keep credit visible here. If you fork the project,
 include this file (or a link to it) in your distribution.
 
+## Cow sprite (`animals/cow.png`)
+
+- **Author**: Daniel Eddeland — *LPC style farm animals*, commissioned by
+  tebruno99 (https://opengameart.org/forumtopic/filledlpc-style-farm-animals-needed).
+  Submission: https://opengameart.org/content/lpc-style-farm-animals
+- **Contents**: the cow walk and eat sheets (128×128 frames, 4 directions ×
+  4 frames each), combined here into one sheet: rows 0–3 walk, rows 4–7 eat
+  (see `scripts/build-animal-sheet.mjs`).
+- **License**: GPL 2.0 or later / CC-BY. **Attribution required** when
+  redistributing: credit Daniel Eddeland and link to the OpenGameArt submission.
+
 ## Wheat field tiles
 
 Rendered at runtime as a sub-region of `food/crops.png` (LPC Crops,
