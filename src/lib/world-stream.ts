@@ -28,7 +28,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, sessions, users } from "@/db/schema";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
-import { getSnapshot, invalidateSnapshots } from "@/lib/snapshot";
+import { getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
 import { WORLD_CHANGE_CHANNEL } from "@/lib/sim";
@@ -36,7 +36,11 @@ import { metrics } from "@/lib/metrics";
 import { log } from "@/lib/logger";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
-import type { WorldChange, WorldSnapshot, Facing } from "@/lib/protocol";
+import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
+import { beatIndex, nextBeatAt } from "@/lib/motion";
+import { planMoveFanout } from "@/lib/moveFanout";
+import { fetchMovesStartingAt } from "@/lib/moveStore";
+import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import type { Connection, WsSharedState } from "@/types/websocket";
 
 const WS_PATH = "/ws";
@@ -146,7 +150,9 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
     applyLivePositions(snap);
     conn.lastVersion = snap.version;
     try {
-      conn.ws.send(JSON.stringify({ type: "snapshot", data: snap }));
+      // Stamp the send time (the shared snapshot may be cached) so the
+      // client can sync its clock to the server's.
+      conn.ws.send(JSON.stringify({ type: "snapshot", data: { ...snap, now: Date.now() } }));
       return true;
     } catch {
       return false;
@@ -312,7 +318,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
 }
 
 function onMessage(conn: Connection, raw: string): void {
-  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string };
+  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number };
   try {
     msg = JSON.parse(raw);
   } catch {
@@ -320,7 +326,9 @@ function onMessage(conn: Connection, raw: string): void {
   }
   if (msg.type === "ping") {
     try {
-      conn.ws.send(JSON.stringify({ type: "pong" }));
+      // Echo the client's send time with ours: the client derives its
+      // clock offset from the lowest round-trip sample.
+      conn.ws.send(JSON.stringify({ type: "pong", t: msg.t, serverTime: Date.now() }));
     } catch {
       /* socket overflow — drop */
     }
@@ -418,27 +426,39 @@ async function flushDeltas(conn: Connection): Promise<void> {
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
-// Periodic full-snapshot refresh per connection.
+// Beat broadcaster.
 //
-// We rely solely on the periodic refresh for client updates — no pub/sub.
-// Reasons:
+// NPC / animal / enemy motion is deterministic (src/lib/motion.ts): the
+// sim worker decides each move on beat k and it starts on beat k+1. So
+// instead of pushing positions, this process wakes BROADCAST_OFFSET_MS
+// after every epoch-aligned beat boundary (the same boundaries the sim
+// worker uses — no coordination needed), reads that beat's new moves
+// with ONE query per mover table, and fans a small `moves` message out.
+// Every client therefore holds each move ~4 s before it starts and
+// starts it at the same server instant.
 //
-//   - Upstash HTTP subscribe is unreliable in this SDK version (the
-//     AbortController streaming fetch often aborts silently, leaving
-//     the WS process disconnected from world_change events).
-//   - Per-entity change publishes would burn ~40 Redis commands/sec of
-//     sim time even when coalesced — too expensive at any meaningful
-//     player count.
-//   - 60 s periodic refresh × 3 Redis ops per snapshot = 3 ops/min per
-//     connection. At 1000 connections that's 3000 ops/min, dominated
-//     by per-connection overhead rather than Redis.
+// Scaling properties:
+//   - DB cost is 3 indexed lookups per beat per WS process, independent
+//     of the number of connections.
+//   - Each message is serialised once per spatial bucket, not once per
+//     connection; every socket in the bucket gets the same string.
+//   - Sends are skipped for sockets with a backed-up buffer (the next
+//     beat / resync heals them) so one slow client never stalls others.
 //
-// The trade-off is up to 60 s of staleness between sim updates reaching
-// clients. For a pixel village with chunk-cache proximity filter this
-// is invisible — the next snapshot is usually indistinguishable from
-// the previous.
+// Full snapshots remain the safety net: on connect, after mutations
+// (markWorldDirty), and every WS_RESYNC_MS for everything else (chat,
+// items, spawns). Upstash HTTP subscribe proved unreliable (see the
+// pub/sub note below), so the per-beat read goes to Postgres.
 
-const PERIODIC_REFRESH_MS = Number(process.env.WS_REFRESH_MS ?? 5000);
+// Connections are bucketed on a coarse pixel grid; a bucket's message
+// carries every move within PROXIMITY_RADIUS_PX of any point in it, so
+// it covers each member's own proximity window.
+const BUCKET_PX = 512;
+// Skip (rather than queue) a beat message when this much is still
+// buffered for the socket.
+const SKIP_BUFFERED_BYTES = Number(process.env.WS_SKIP_BUFFERED_BYTES ?? 64 * 1024);
+const RESYNC_EVERY_BEATS = Math.max(1, Math.round(WS_RESYNC_MS / WORLD_TICK_MS));
+const RESYNC_CONCURRENCY = 32;
 
 let periodicStarted = false;
 let periodicTimer: NodeJS.Timeout | null = null;
@@ -446,22 +466,75 @@ let periodicTimer: NodeJS.Timeout | null = null;
 export function startPeriodicRefresh(): void {
   if (periodicStarted) return;
   periodicStarted = true;
-  console.log(`[ws] periodic snapshot refresh every ${PERIODIC_REFRESH_MS}ms`);
-  periodicTimer = setInterval(() => {
-    void refreshAllConnections();
-  }, PERIODIC_REFRESH_MS);
+  log.info({ beatMs: WORLD_TICK_MS, offsetMs: BROADCAST_OFFSET_MS, resyncMs: WS_RESYNC_MS }, "beat broadcaster armed");
+  scheduleNextBroadcast();
 }
 
 export function stopPeriodicRefresh(): void {
-  if (periodicTimer) clearInterval(periodicTimer);
+  if (periodicTimer) clearTimeout(periodicTimer);
   periodicTimer = null;
   periodicStarted = false;
 }
 
-async function refreshAllConnections(): Promise<void> {
-  for (const conn of connections.values()) {
-    await sendSnapshot(conn);
+function scheduleNextBroadcast(): void {
+  if (!periodicStarted) return;
+  // Fire at the next boundary + offset that is still in the future.
+  const now = Date.now();
+  let at = nextBeatAt(now - BROADCAST_OFFSET_MS) + BROADCAST_OFFSET_MS;
+  if (at <= now) at += WORLD_TICK_MS;
+  periodicTimer = setTimeout(() => {
+    void onBeat(at - BROADCAST_OFFSET_MS).finally(scheduleNextBroadcast);
+  }, at - now);
+}
+
+async function onBeat(boundary: number): Promise<void> {
+  // Moves decided on this beat start on the next one. (A late tick
+  // schedules for the beat after; that beat's broadcast carries it.)
+  const startAt = boundary + WORLD_TICK_MS;
+  // Drop cached snapshots so anything built from now on includes them.
+  invalidateSnapshots();
+  if (connections.size === 0) return;
+  try {
+    const moves = await fetchMovesStartingAt(startAt);
+    if (moves.length > 0) broadcastMoves(startAt, moves);
+  } catch (err) {
+    log.error({ err }, "beat move broadcast failed");
   }
+  if (beatIndex(boundary) % RESYNC_EVERY_BEATS === 0) await resyncAll();
+}
+
+function isBackedUp(conn: Connection): boolean {
+  const buffered = (conn.ws as unknown as { bufferedAmount?: number }).bufferedAmount ?? 0;
+  return buffered > SKIP_BUFFERED_BYTES;
+}
+
+/** Fan one beat's moves out, serialising once per spatial bucket. */
+function broadcastMoves(startAt: number, moves: ScheduledMove[]): void {
+  const peers = [];
+  for (const conn of connections.values()) {
+    if (conn.ws.readyState !== conn.ws.OPEN) continue;
+    peers.push({ x: conn.homePx, y: conn.homePy, backedUp: isBackedUp(conn), conn });
+  }
+  const serverTime = Date.now();
+  for (const bucket of planMoveFanout(peers, moves, BUCKET_PX, PROXIMITY_RADIUS_PX)) {
+    const msg = JSON.stringify({ type: "moves", serverTime, startAt, moves: bucket.moves });
+    for (const { conn } of bucket.peers) {
+      try {
+        conn.ws.send(msg);
+      } catch {
+        /* socket overflow — the next beat / resync heals it */
+      }
+    }
+  }
+}
+
+/** Safety resync: a full snapshot to every healthy connection, bounded concurrency. */
+async function resyncAll(): Promise<void> {
+  const queue = [...connections.values()].filter((c) => !isBackedUp(c));
+  const worker = async (): Promise<void> => {
+    for (let conn = queue.shift(); conn; conn = queue.shift()) await sendSnapshot(conn);
+  };
+  await Promise.all(Array.from({ length: Math.min(RESYNC_CONCURRENCY, queue.length) }, worker));
 }
 
 // Pub/sub bridge. DISABLED by default.

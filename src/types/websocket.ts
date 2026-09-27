@@ -6,7 +6,7 @@
 // build time; nothing here pulls Node code into the browser bundle.
 
 import type { WebSocket } from "ws";
-import type { WorldSnapshot } from "@/lib/protocol";
+import type { ScheduledMove, WorldSnapshot } from "@/lib/protocol";
 import type { Facing } from "@/types/world";
 
 /** Per-connection state held by the WS server. */
@@ -46,6 +46,8 @@ export type StreamHandlers = {
   onDelta: () => void;
   /** Another player's live position (movement relay). */
   onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing }) => void;
+  /** Moves scheduled on the last beat (all starting at `startAt`). */
+  onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;
   onClose?: () => void;
 };
@@ -59,3 +61,6 @@ export type WorldStreamOptions = {
 
 /** A position the client has reported to the stream. */
 export type StreamPosition = { x: number; y: number; facing: Facing };
+
+/** Best clock-offset sample so far (server clock − client clock). */
+export type ClockSample = { offsetMs: number; rttMs: number };

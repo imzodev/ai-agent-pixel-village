@@ -7,6 +7,9 @@ import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import { TRADES } from "@/lib/trade";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
+import { positionAt } from "@/lib/motion";
+import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
+import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
@@ -16,8 +19,15 @@ type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { t
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
 
 async function api<T = unknown>(url: string, body?: unknown, method = body ? "POST" : "GET"): Promise<T & { error?: string }> {
-  const res = await fetch(url, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
-  return res.json();
+  try {
+    const res = await fetch(url, { method, headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+    return await res.json();
+  } catch (err) {
+    // Network error (server down, CORS, dropped connection). Surface as a
+    // soft error so callers can show a toast instead of throwing an
+    // unhandled rejection into the browser console.
+    return { error: err instanceof Error ? err.message : "Network error" } as T & { error?: string };
+  }
 }
 
 export default function Hud() {
@@ -90,13 +100,25 @@ export default function Hud() {
 
   // Close the talk panel when the NPC drifts out of range (e.g. they walked
   // away, or you did) — without waiting for the next failed send.
+  // Both positions must be live: the player's from the sprite (`snap.me`
+  // can be a full resync old) and the NPC's from its scheduled move (row
+  // x/y is where the move ENDS, not where the NPC is).
   useEffect(() => {
     if (!talk || !snap) return;
     const n = snap.npcs.find((x) => x.id === talk.npcId);
-    if (!n) return;
-    const dist = Math.hypot(n.x - (snap.me?.x ?? 0), n.y - (snap.me?.y ?? 0));
-    if (dist > 160) setTalk(null);
-  }, [snap, talk]);
+    const self = selfPos ?? snap.me;
+    if (!n || !self) return;
+    const p = livePos(n);
+    if (Math.hypot(p.x - self.x, p.y - self.y) > 160) setTalk(null);
+  }, [snap, talk, selfPos]);
+  // While the dialog is open, keep the NPC holding still (the server
+  // stops scheduling its moves until the hold lapses after we close).
+  const talkNpcId = talk?.npcId;
+  useEffect(() => {
+    if (talkNpcId == null) return;
+    const t = setInterval(() => void api(`/api/npc/${talkNpcId}/hold`, {}), NPC_TALK_KEEPALIVE_MS);
+    return () => clearInterval(t);
+  }, [talkNpcId]);
   // Tell the canvas when a modal is open so Phaser can ignore clicks behind it.
   useEffect(() => {
     bus.emit("modalOpen", !!talk);
@@ -643,12 +665,18 @@ function SourceBadge({ source }: { source: ConversationSource }) {
 function Btn({ children, on, subtle, disabled }: { children: React.ReactNode; on: () => void; subtle?: boolean; disabled?: boolean }) {
   return <button disabled={disabled} onClick={on} className={`rounded-lg px-3 py-1.5 font-bold shadow disabled:opacity-40 ${subtle ? "bg-stone-200 text-stone-800 hover:bg-stone-300" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}>{children}</button>;
 }
+/** Where a moving entity is right now (row x/y is where its move ends). */
+function livePos(e: { x: number; y: number; move: Move | null }): { x: number; y: number } {
+  if (!e.move) return { x: e.x, y: e.y };
+  const p = positionAt(e.move, Date.now());
+  return { x: p.x, y: p.y };
+}
 function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | null {
-  if (sel.type === "npc") { const n = snap.npcs.find((x) => x.id === sel.id); return n ? { x: n.x, y: n.y } : null; }
-  if (sel.type === "animal") { const a = snap.animals.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
+  if (sel.type === "npc") { const n = snap.npcs.find((x) => x.id === sel.id); return n ? livePos(n) : null; }
+  if (sel.type === "animal") { const a = snap.animals.find((x) => x.id === sel.id); return a ? livePos(a) : null; }
   if (sel.type === "item") { const a = snap.groundItems.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
   if (sel.type === "node") { const a = snap.nodes.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
-  if (sel.type === "enemy") { const a = snap.enemies.find((x) => x.id === sel.id); return a ? { x: a.x, y: a.y } : null; }
+  if (sel.type === "enemy") { const a = snap.enemies.find((x) => x.id === sel.id); return a ? livePos(a) : null; }
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   return null;

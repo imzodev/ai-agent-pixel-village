@@ -2,15 +2,34 @@ import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
 import { getCropKind } from "@/lib/crops";
+import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
-import { stepTowardWalkable } from "./movement";
+import {
+  ANIMAL_MOVE_INTERVAL_MS,
+  ANIMAL_RAID_SPEED,
+  ANIMAL_SPEED,
+  BROADCAST_OFFSET_MS,
+  ENEMY_MOVE_INTERVAL_MS,
+  ENEMY_SPEED,
+  MOVE_MAX_TILES,
+  MOVE_MIN_TILES,
+  NPC_LEASH_TILES,
+  NPC_MOVE_INTERVAL_MS,
+  NPC_MOVE_MAX_TILES,
+  NPC_MOVE_MIN_TILES,
+  NPC_SPEED,
+  PLANNER_MAX_TILES_EGG_PICK,
+  WORLD_TICK_MS,
+} from "./constants";
+import { beatIndex, beatStartAt, isDue, moveEndAt, moveOfRow, nextBeatAt, rowPositionAt, tileCenter, tileOf } from "./motion";
+import { buildMoveWrite, writeMoves } from "./moveStore";
+import { leashAround, leashOfRect, pickWanderMove, planGoalMove } from "./wander";
 import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
+import type { Point } from "@/types/world";
+import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
-const ANIMAL_SPEED = 28; // px/s
-const NPC_SPEED = 38;
-const ENEMY_SPEED = 22;
 const TARGET_ENEMIES = 7;
 
 // The WS server pushes fresh snapshots periodically. We don't publish
@@ -22,17 +41,11 @@ export const WORLD_CHANGE_CHANNEL = "world_changes";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
-// Wanderers (NPCs, animals, enemies) carry an optional (targetX, targetY)
-// pair. These two helpers collapse the `!= null && != null` ceremony and
-// the `targetX = null; targetY = null` reset into single readable calls.
-const hasTarget = (tx: number | null, ty: number | null): boolean => tx != null && ty != null;
-const clearTarget = (): { targetX: null; targetY: null } => ({ targetX: null, targetY: null });
-
 async function randomPointIn(zone: Rect, tries = 12) {
   for (let i = 0; i < tries; i++) {
-    const x = zone.x + Math.random() * zone.w;
-    const y = zone.y + Math.random() * zone.h;
-    if (await isWalkableServer(x, y)) return { x, y };
+    // Snap to a tile centre: every moving entity rests on the grid.
+    const p = tileCenter(tileOf(zone.x + Math.random() * zone.w, zone.y + Math.random() * zone.h));
+    if (await isWalkableServer(p.x, p.y)) return p;
   }
   return null;
 }
@@ -44,122 +57,178 @@ function zoneForEnemy(x: number, y: number): Rect {
   return WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
 }
 
+/** True when the row's current move is still running when the next beat starts. */
+function busyAt(row: MovingRow, t: number): boolean {
+  const move = moveOfRow(row);
+  return move !== null && moveEndAt(move) > t;
+}
+
 /**
- * Advance the world. Called opportunistically by API requests; the first
- * caller after >= 1s of quiet wins the tick (atomic update), so many clients
- * polling never double-simulate.
+ * Roll a wander step for one entity. The move starts at the next beat
+ * from the tile the entity rests on (its row x/y).
  */
-export async function tickWorld() {
-  const now = new Date();
+async function wanderWrite(
+  row: MovingRow & { id: number },
+  leash: TileLeash,
+  speed: number,
+  beat: TickBeat,
+  minTiles = MOVE_MIN_TILES,
+  maxTiles = MOVE_MAX_TILES,
+  after?: string,
+): Promise<MoveWrite | null> {
+  const from = tileOf(row.x, row.y);
+  const step = await pickWanderMove(from, isWalkableServer, { minTiles, maxTiles, leash });
+  if (!step) return null;
+  return buildMoveWrite(row.id, [from, step.to], beat.startAt, speed, after);
+}
+
+/**
+ * Advance the world by one beat. Called by the sim worker on every
+ * epoch-aligned beat boundary (and opportunistically by /api/world).
+ * At most one tick runs per beat: the claim on `lastTickAt` is keyed to
+ * the beat start, so a second caller in the same beat is a no-op.
+ *
+ * Returns the number of moves scheduled (for logging), or null when
+ * another caller already ticked this beat.
+ */
+export async function tickWorld(): Promise<number | null> {
+  const nowMs = Date.now();
+  const now = new Date(nowMs);
   const [before] = await db.select().from(worldState).where(eq(worldState.id, 1));
-  if (!before) return;
+  if (!before) return null;
   const claimed = await db
     .update(worldState)
     .set({ lastTickAt: now })
-    .where(and(eq(worldState.id, 1), lt(worldState.lastTickAt, new Date(now.getTime() - 1000))))
+    .where(and(eq(worldState.id, 1), lt(worldState.lastTickAt, new Date(beatStartAt(nowMs)))))
     .returning();
-  if (claimed.length === 0) return;
+  if (claimed.length === 0) return null;
   const ws = claimed[0];
-  const elapsedSec = Math.min(3600, Math.max(1, (now.getTime() - before.lastTickAt.getTime()) / 1000));
-  const moveDt = Math.min(elapsedSec, 4); // movement is smoothed; long gaps teleport to target
-  const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes, now.getTime());
+  const elapsedSec = Math.min(3600, Math.max(1, (nowMs - before.lastTickAt.getTime()) / 1000));
+  const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes, nowMs);
   const night = hour < 6 || hour >= 21;
+  // tickd wakes right on the boundary. A tick that runs late in its beat
+  // (e.g. the opportunistic /api/world caller) would land after the WS
+  // broadcast for that beat, so its moves start one beat later instead.
+  const late = nowMs - beatStartAt(nowMs) > BROADCAST_OFFSET_MS / 2;
+  const beat: TickBeat = { index: beatIndex(nowMs), nowMs, startAt: nextBeatAt(nowMs) + (late ? WORLD_TICK_MS : 0) };
 
-  await Promise.all([
-    tickAnimals(moveDt, elapsedSec, night, now),
-    tickNpcs(moveDt, night),
+  const [animalMoves, npcMoves, , , enemyMoves] = await Promise.all([
+    tickAnimals(beat, elapsedSec, night, now),
+    tickNpcs(beat),
     tickWeather(ws, now),
     tickResources(now),
-    tickEnemies(moveDt, now),
+    tickEnemies(beat, now),
   ]);
-  await runRandomEvents({ db, hour, weather: ws.weather, now });
+  await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);
-  // No publish here — the WS server pushes fresh snapshots periodically
-  // via WS_REFRESH_MS. Per-entity change events were too expensive
-  // at any meaningful scale (1 command per entity per tick).
+  return animalMoves + npcMoves + enemyMoves;
 }
 
-async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: Date) {
+async function tickNpcs(beat: TickBeat): Promise<number> {
+  const rows = await db
+    .select({
+      id: npcs.id, kind: npcs.kind, x: npcs.x, y: npcs.y,
+      homeX: npcs.homeX, homeY: npcs.homeY, wanderRadius: npcs.wanderRadius, holdUntil: npcs.holdUntil,
+      movePath: npcs.movePath, moveStartAt: npcs.moveStartAt, moveSpeed: npcs.moveSpeed,
+    })
+    .from(npcs)
+    .where(eq(npcs.active, true));
+  const writes: MoveWrite[] = [];
+  for (const n of rows) {
+    if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
+    if (!isDue("npc", n.id, beat.index, NPC_MOVE_INTERVAL_MS)) continue;
+    if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it
+    if (busyAt(n, beat.startAt)) continue;
+    const radius = Math.max(Math.floor(n.wanderRadius / CHUNK_TILE_PX), NPC_LEASH_TILES);
+    const leash = leashAround({ x: n.homeX, y: n.homeY }, radius);
+    const w = await wanderWrite(n, leash, NPC_SPEED, beat, NPC_MOVE_MIN_TILES, NPC_MOVE_MAX_TILES);
+    if (w) writes.push(w);
+  }
+  await writeMoves("npc", writes);
+  return writes.length;
+}
+
+async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, now: Date): Promise<number> {
   const rows = await db.select().from(animals);
+  const writes: MoveWrite[] = [];
   for (const a of rows) {
-    let { x, y, targetX, targetY, facing, state } = a;
+    let { state, targetX, targetY, stateUntil } = a;
     let hunger = a.hunger;
     // hunger rises ~1 point / 2 minutes
     if (Math.random() < elapsedSec / 120) hunger = Math.min(100, hunger + Math.ceil(elapsedSec / 120));
-    const stateExpired = !a.stateUntil || a.stateUntil < now;
+    const stateExpired = !stateUntil || stateUntil < now;
+    const move = moveOfRow(a);
+    // Arrived = the current move (if any) has finished by now. Row x/y
+    // is always the move's destination, so on arrival it's exact.
+    const arrived = !move || moveEndAt(move) <= beat.nowMs;
+    let busy = busyAt(a, beat.startAt);
+    const home = homePointForAnimal(a);
 
     // ─── Fox raid states ───
-    // "raid": walking toward the coop target. On arrival, steal a nearby
-    // ground egg (if any survived the trip) and head home.
+    // "raid": walking to the egg. On arrival, steal a nearby ground egg
+    // (if any survived the trip) and walk home. An expired raid also
+    // heads home, but only once the current leg is finished.
     // "return": walking home. On arrival, back to normal idle life.
-    const raiding = a.species === "fox" && (state === "raid" || state === "return");
-    if (raiding && stateExpired) {
-      // Raid window lapsed (egg was picked up by a player, etc.) — go home.
-      state = "return";
-      const home = await randomPointIn(a.zone);
-      targetX = home?.x ?? null; targetY = home?.y ?? null;
+    if (a.species === "fox" && state === "raid" && arrived) {
+      if (!stateExpired) {
+        const rowsE = await db
+          .select({ id: groundItems.id })
+          .from(groundItems)
+          .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${a.x - 60} AND ${a.x + 60}`, sql`${groundItems.y} BETWEEN ${a.y - 60} AND ${a.y + 60}`))
+          .limit(1);
+        const stolen = rowsE[0];
+        if (stolen) {
+          await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
+          await logEvent("event", "The fox made off with an egg!", undefined, a.id, a.x, a.y);
+        } else {
+          await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, a.x, a.y);
+        }
+      }
+      targetX = null; targetY = null;
+      const path = await planGoalMove(tileOf(a.x, a.y), home, isWalkableServer, PLANNER_MAX_TILES_EGG_PICK);
+      if (path) {
+        writes.push(buildMoveWrite(a.id, path, beat.startAt, ANIMAL_RAID_SPEED));
+        busy = true;
+        state = "return";
+        stateUntil = new Date(now.getTime() + 180_000);
+      } else {
+        state = "idle";
+      }
+    } else if (a.species === "fox" && state === "return" && arrived) {
+      state = "idle";
     }
+    const raiding = a.species === "fox" && (state === "raid" || state === "return");
 
-    if (night && a.species !== "fox" && a.species !== "cat" && state !== "sleep" && !raiding && Math.random() < 0.3) {
+    if (night && a.species !== "fox" && a.species !== "cat" && state !== "sleep" && !raiding && !busy && Math.random() < 0.3) {
       state = "sleep";
-      ({ targetX, targetY } = clearTarget());
     } else if (state === "sleep" && (!night || Math.random() < 0.05)) {
       state = "idle";
     }
-    if (state !== "sleep") {
-      if (hasTarget(targetX, targetY)) {
-        // Raiding foxes hustle — 60 px/s vs the normal 28.
-        const speed = raiding ? 60 : ANIMAL_SPEED;
-        const s = await stepTowardWalkable(x, y, targetX!, targetY!, speed * dt, isWalkableServer);
-        x = s.x; y = s.y; facing = s.facing;
-        if (s.arrived) {
-          ({ targetX, targetY } = clearTarget());
-          if (state === "raid") {
-            // Steal the nearest ground egg at the coop, then head home.
-            const rowsE = await db
-              .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
-              .from(groundItems)
-              .where(and(eq(groundItems.itemKey, "egg"), sql`${groundItems.x} BETWEEN ${x - 60} AND ${x + 60}`, sql`${groundItems.y} BETWEEN ${y - 60} AND ${y + 60}`))
-              .limit(1);
-            const stolen = rowsE[0];
-            if (stolen) {
-              await db.delete(groundItems).where(eq(groundItems.id, stolen.id));
-              await logEvent("event", "The fox made off with an egg!", undefined, a.id, x, y);
-            } else {
-              await logEvent("event", "The fox searched the yard but found nothing.", undefined, a.id, x, y);
-            }
-            state = "return";
-            const home = await randomPointIn(a.zone);
-            targetX = home?.x ?? null; targetY = home?.y ?? null;
-          } else if (state === "return") {
-            state = "idle";
-          } else {
-            state = Math.random() < 0.5 ? "graze" : "idle";
-          }
-        }
-        else if (s.stuck) {
-          // Pressed against a wall — abandon target and pick a new walkable
-          // destination on the next idle window.
-          ({ targetX, targetY } = clearTarget());
-          state = "idle";
-        } else {
-          state = state === "raid" || state === "return" ? state : "walk";
-        }
-      } else if (a.species === "fox" ? Math.random() < 0.5 : Math.random() < 0.02) {
-        // Foxes are restless hunters — pick a new target ~twice per second
-        // (50% per tick). Other animals wander ~2% of ticks (~ once per
-        // minute on average) so the world feels alive without every
-        // sheep walking constantly.
-        const p = await randomPointIn(a.zone);
-        if (p) { targetX = p.x; targetY = p.y; state = "walk"; }
+
+    // Wander on this animal's beat. Sleeping / raiding animals and
+    // animals still finishing a move sit this one out.
+    if (!raiding && state !== "sleep" && !busy && isDue("animal", a.id, beat.index, ANIMAL_MOVE_INTERVAL_MS)) {
+      // Decide now what it does once it arrives; the client plays the
+      // matching animation (e.g. graze → eat) as soon as the walk ends.
+      const after = Math.random() < 0.5 ? "graze" : "idle";
+      const w = await wanderWrite(a, leashOfRect(a.zone), ANIMAL_SPEED, beat, MOVE_MIN_TILES, MOVE_MAX_TILES, after);
+      if (w) {
+        writes.push(w);
+        state = "walk";
+      } else {
+        state = Math.random() < 0.5 ? "graze" : "idle";
       }
+    } else if (!raiding && state === "walk" && arrived) {
+      state = move?.after ?? (Math.random() < 0.5 ? "graze" : "idle");
     }
+
     const petFresh = a.lastPettedAt && now.getTime() - a.lastPettedAt.getTime() < 10 * 60_000;
     const mood = raiding ? "sly" : hunger > 70 ? "hungry" : state === "sleep" ? "sleepy" : petFresh ? "delighted" : hunger < 30 ? "content" : "peckish";
 
     // Chickens sometimes lay an egg at their feet (separate from pet bonuses).
     // Skip if there's already an egg nearby so they don't pile up.
     if (a.species === "chicken" && state !== "sleep" && !raiding && Math.random() < 0.04) {
+      const { x, y } = rowPositionAt(a, beat.nowMs);
       const [nearby] = await db
         .select({ n: sql<number>`count(*)::int` })
         .from(groundItems)
@@ -169,37 +238,28 @@ async function tickAnimals(dt: number, elapsedSec: number, night: boolean, now: 
       }
     }
 
-    await db
-      .update(animals)
-      .set({
-        x, y, targetX, targetY, facing, state, hunger, mood,
-        // While a fox raid is underway, keep the raid's own stateUntil (set
-        // by the event) — the generic 2-8s window would expire the raid
-        // almost immediately and collapse the whole flow.
-        stateUntil: raiding ? (a.stateUntil ?? new Date(now.getTime() + 120_000)) : new Date(now.getTime() + 2000 + Math.random() * 6000),
-      })
-      .where(eq(animals.id, a.id));
+    // Only write the row when a non-movement field changed. Movement
+    // columns go out in one batched statement below.
+    const changed =
+      state !== a.state || hunger !== a.hunger || mood !== a.mood ||
+      targetX !== a.targetX || targetY !== a.targetY || stateUntil !== a.stateUntil;
+    if (changed) {
+      await db
+        .update(animals)
+        .set({ targetX, targetY, state, hunger, mood, stateUntil })
+        .where(eq(animals.id, a.id));
+    }
   }
+  await writeMoves("animal", writes);
+  return writes.length;
 }
 
-async function tickNpcs(dt: number, night: boolean) {
-  const rows = await db.select().from(npcs).where(eq(npcs.active, true));
-  for (const n of rows) {
-    if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
-    let { x, y, targetX, targetY, facing } = n;
-    if (hasTarget(targetX, targetY)) {
-      const s = await stepTowardWalkable(x, y, targetX!, targetY!, NPC_SPEED * dt, isWalkableServer);
-      x = s.x; y = s.y; facing = s.facing;
-      // Arrived or pinned against a wall — drop the target. The wander
-      // branch below will pick a new walkable destination next tick.
-      if (s.arrived || s.stuck) ({ targetX, targetY } = clearTarget());
-    } else if (Math.random() < (night ? 0.05 : 0.18)) {
-      const r = night ? 30 : n.wanderRadius;
-      const p = await randomPointIn({ x: n.homeX - r, y: n.homeY - r, w: r * 2, h: r * 2 });
-      if (p) { targetX = p.x; targetY = p.y; }
-    }
-    await db.update(npcs).set({ x, y, targetX, targetY, facing }).where(eq(npcs.id, n.id));
-  }
+/**
+ * Animals don't carry a `homeX/homeY` the way NPCs do; their home is
+ * the centre of their `zone`.
+ */
+function homePointForAnimal(a: { zone: { x: number; y: number; w: number; h: number } }): Point {
+  return { x: a.zone.x + a.zone.w / 2, y: a.zone.y + a.zone.h / 2 };
 }
 
 async function tickWeather(ws: typeof worldState.$inferSelect, now: Date) {
@@ -247,22 +307,16 @@ async function tickResources(now: Date) {
   }
 }
 
-async function tickEnemies(dt: number, now: Date) {
+async function tickEnemies(beat: TickBeat, now: Date): Promise<number> {
   const rows = await db.select().from(enemies);
+  const writes: MoveWrite[] = [];
   for (const e of rows) {
-    let { x, y, targetX, targetY } = e;
-    let needsNewTarget = !hasTarget(targetX, targetY);
-    if (!needsNewTarget) {
-      const s = await stepTowardWalkable(x, y, targetX!, targetY!, ENEMY_SPEED * dt, isWalkableServer);
-      x = s.x; y = s.y;
-      needsNewTarget = s.arrived || s.stuck;
-    }
-    if (needsNewTarget) {
-      const p = await randomPointIn(zoneForEnemy(x, y));
-      if (p) { targetX = p.x; targetY = p.y; }
-    }
-    await db.update(enemies).set({ x, y, targetX, targetY }).where(eq(enemies.id, e.id));
+    if (!isDue("enemy", e.id, beat.index, ENEMY_MOVE_INTERVAL_MS)) continue;
+    if (busyAt(e, beat.startAt)) continue;
+    const w = await wanderWrite(e, leashOfRect(zoneForEnemy(e.x, e.y)), ENEMY_SPEED, beat);
+    if (w) writes.push(w);
   }
+  await writeMoves("enemy", writes);
   if (rows.length < TARGET_ENEMIES && Math.random() < 0.4) {
     const zone = pick(WILD_ZONES);
     const p = await randomPointIn(zone);
@@ -272,6 +326,7 @@ async function tickEnemies(dt: number, now: Date) {
       await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
     }
   }
+  return writes.length;
 }
 
 /** Things happened while nobody was watching. Write a few plausible entries. */

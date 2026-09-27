@@ -11,7 +11,7 @@
 
 import type { WsClientMessage, WsServerMessage } from "@/lib/protocol";
 import type { Facing } from "@/types/world";
-import type { StreamHandlers, WorldStreamOptions } from "@/types/websocket";
+import type { ClockSample, StreamHandlers, WorldStreamOptions } from "@/types/websocket";
 
 export type { StreamHandlers, WorldStreamOptions };
 
@@ -19,6 +19,15 @@ export type { StreamHandlers, WorldStreamOptions };
 // nearby players. Separate from the slower presence heartbeat so the DB
 // write stays throttled.
 const POS_INTERVAL_MS = Number(process.env.NEXT_PUBLIC_WS_POS_MS ?? 200);
+
+// Clock sync. NPC / animal / enemy motion is a pure function of SERVER
+// time (see src/lib/motion.ts), so every client must agree on "now".
+// We fire a short burst of pings on connect and one every
+// CLOCK_PING_EVERY_MS after, and keep the sample with the lowest
+// round-trip time (its one-way-delay error is smallest).
+const CLOCK_BURST = 5;
+const CLOCK_BURST_GAP_MS = 250;
+const CLOCK_PING_EVERY_MS = 30_000;
 
 export class WorldStream {
   private ws: WebSocket | null = null;
@@ -28,8 +37,32 @@ export class WorldStream {
   private posTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   private lastPosition: { x: number; y: number; facing: Facing } | null = null;
+  private clockTimers: ReturnType<typeof setTimeout>[] = [];
+  private clock: ClockSample | null = null;
+  /** Rough offset from message stamps, used until the first pong lands. */
+  private roughOffsetMs: number | null = null;
 
   constructor(private readonly opts: WorldStreamOptions) {}
+
+  /** Current server time (epoch ms), as best this client can tell. */
+  serverNow(): number {
+    return Date.now() + (this.clock?.offsetMs ?? this.roughOffsetMs ?? 0);
+  }
+
+  private noteServerStamp(serverTime: number | undefined): void {
+    if (typeof serverTime === "number" && !this.clock) this.roughOffsetMs = serverTime - Date.now();
+  }
+
+  private startClockSync(): void {
+    const ping = () => this.send({ type: "ping", t: Date.now() });
+    for (let i = 0; i < CLOCK_BURST; i++) this.clockTimers.push(setTimeout(ping, i * CLOCK_BURST_GAP_MS));
+    this.clockTimers.push(setInterval(ping, CLOCK_PING_EVERY_MS));
+  }
+
+  private stopClockSync(): void {
+    for (const t of this.clockTimers) clearTimeout(t);
+    this.clockTimers = [];
+  }
 
   start(): void {
     this.closed = false;
@@ -41,6 +74,7 @@ export class WorldStream {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     if (this.posTimer) clearInterval(this.posTimer);
+    this.stopClockSync();
     if (this.ws) {
       try {
         this.ws.close();
@@ -69,6 +103,7 @@ export class WorldStream {
       this.opts.handlers.onOpen?.();
       this.startHeartbeat();
       this.startPositionStream();
+      this.startClockSync();
       // Send a hello so the server knows we're a fresh client. lastVersion
       // is unknown on first connect — server sends a full snapshot.
       this.send({ type: "hello" });
@@ -82,18 +117,31 @@ export class WorldStream {
         return;
       }
       if (msg.type === "snapshot") {
+        this.noteServerStamp(msg.data.now);
         this.opts.handlers.onSnapshot(msg.data);
+      } else if (msg.type === "moves") {
+        this.noteServerStamp(msg.serverTime);
+        this.opts.handlers.onMoves({ startAt: msg.startAt, moves: msg.moves });
+      } else if (msg.type === "pong") {
+        if (typeof msg.t === "number" && typeof msg.serverTime === "number") {
+          const now = Date.now();
+          const rttMs = now - msg.t;
+          // Server stamped mid-flight: assume symmetric latency.
+          const offsetMs = msg.serverTime + rttMs / 2 - now;
+          if (!this.clock || rttMs <= this.clock.rttMs) this.clock = { offsetMs, rttMs };
+        }
       } else if (msg.type === "delta") {
         this.opts.handlers.onDelta();
       } else if (msg.type === "playerPos") {
         this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing });
       }
-      // "pong" and "error" are observable via close events; nothing to do.
+      // "error" is observable via close events; nothing to do.
     };
 
     this.ws.onclose = () => {
       this.stopHeartbeat();
       this.stopPositionStream();
+      this.stopClockSync();
       this.opts.handlers.onClose?.();
       if (!this.closed) this.scheduleReconnect();
     };

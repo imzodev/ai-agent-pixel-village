@@ -7,6 +7,11 @@ import { ensureSeeded } from "@/lib/seed";
 import { SPAWN } from "@/lib/worldmap";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import { logEvent } from "@/lib/game";
+import { BROADCAST_OFFSET_MS, NPC_SPEED, PLANNER_MAX_TILES_DEFAULT } from "@/lib/constants";
+import { moveEndAt, moveOfRow, nextBeatAt, pathTiles, rowPositionAt, tileOf } from "@/lib/motion";
+import { buildMoveWrite, writeMoves } from "@/lib/moveStore";
+import { planGoalMove } from "@/lib/wander";
+import { markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +90,7 @@ export async function GET(req: Request) {
     const nearby = players.filter((p) => Date.now() - p.lastSeenAt.getTime() < 60_000 && Math.hypot(p.x - me.x, p.y - me.y) < 300);
     const recent = await db.select().from(conversations).where(eq(conversations.npcId, me.id)).orderBy(desc(conversations.id)).limit(20);
     const myMissions = await db.select().from(missions).where(eq(missions.npcId, me.id));
-    return Response.json({ agent: { id: me.id, name: me.name, x: me.x, y: me.y, mood: me.mood, webhookUrl: me.webhookUrl, sponsorId: me.sponsorId }, nearbyPlayers: nearby, recentConversation: recent.reverse(), missions: myMissions });
+    return Response.json({ agent: { id: me.id, name: me.name, ...rowPositionAt(me, Date.now()), mood: me.mood, webhookUrl: me.webhookUrl, sponsorId: me.sponsorId }, nearbyPlayers: nearby, recentConversation: recent.reverse(), missions: myMissions });
   } catch (e) {
     return handleApiError(e);
   }
@@ -100,8 +105,18 @@ export async function PUT(req: Request) {
     if (action === "move") {
       const x = Number(b.x), y = Number(b.y);
       if (!Number.isFinite(x) || !Number.isFinite(y) || !(await isWalkableServer(x, y))) return Response.json({ error: "not walkable" }, { status: 400 });
-      await db.update(npcs).set({ targetX: x, targetY: y, x: Math.hypot(x - me.x, y - me.y) > 400 ? x : me.x, y: Math.hypot(x - me.x, y - me.y) > 400 ? y : me.y, lastSeenAt: new Date() }).where(eq(npcs.id, me.id));
-      return Response.json({ ok: true });
+      // Walk there along an A* path, starting on a beat so every client
+      // animates it identically, and never before the current move ends.
+      const current = moveOfRow(me);
+      const startAt = nextBeatAt(Math.max(Date.now() + BROADCAST_OFFSET_MS, current ? moveEndAt(current) : 0) - 1);
+      const path = await planGoalMove(tileOf(me.x, me.y), { x, y }, isWalkableServer, PLANNER_MAX_TILES_DEFAULT);
+      if (!path) return Response.json({ error: "no walkable path" }, { status: 400 });
+      await writeMoves("npc", [buildMoveWrite(me.id, path, startAt, NPC_SPEED)]);
+      await db.update(npcs).set({ targetX: x, targetY: y, lastSeenAt: new Date() }).where(eq(npcs.id, me.id));
+      // The beat broadcast may already have gone out for this start beat;
+      // push a snapshot to nearby players so they get the move in time.
+      markWorldDirty(me.x, me.y);
+      return Response.json({ ok: true, startAt, tiles: pathTiles(path) });
     }
     if (action === "say") {
       const text = String(b.text ?? "").trim().slice(0, 140);

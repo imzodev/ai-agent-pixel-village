@@ -5,13 +5,16 @@
 
 import type { Appearance } from "@/types/domain";
 import type { Facing } from "@/types/world";
+import type { Move, ScheduledMove } from "@/types/motion";
 
 // Re-exported for callers that already import protocol types together.
-export type { Facing };
+export type { Facing, Move, ScheduledMove };
 
 export type WsClientMessage =
   | { type: "hello"; sessionId?: string; lastVersion?: number }
-  | { type: "ping" }
+  // Clock-sync probe. `t` is the client's Date.now() at send; the server
+  // echoes it back in `pong` together with its own clock.
+  | { type: "ping"; t?: number }
   // Presence heartbeat: slow (1.5 s) and drives the DB lastSeenAt write.
   | { type: "heartbeat"; x: number; y: number; facing: Facing }
   // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
@@ -25,7 +28,11 @@ export type WsServerMessage =
   // existing sprite if present; ignored otherwise (the next snapshot
   // creates it).
   | { type: "playerPos"; id: number; x: number; y: number; facing: Facing }
-  | { type: "pong" }
+  // Moves scheduled on the last beat, all starting at `startAt`. Sent
+  // once per beat, ~BROADCAST_OFFSET_MS after the boundary, so clients
+  // hold every move before it starts. `serverTime` feeds clock sync.
+  | { type: "moves"; serverTime: number; startAt: number; moves: ScheduledMove[] }
+  | { type: "pong"; t?: number; serverTime?: number }
   | { type: "error"; message: string };
 
 // The same shape the /api/world HTTP endpoint returns. The WS path
@@ -34,6 +41,7 @@ export type WsServerMessage =
 // `lastVersion` on reconnect and the server replies with deltas since.
 export type WorldSnapshot = {
   version: number;
+  /** Server clock (epoch ms) when the snapshot was sent. Feeds clock sync. */
   now: number;
   hour: number;
   weather: string;
@@ -78,8 +86,8 @@ export type NpcSnapshot = {
   role: string;
   x: number;
   y: number;
-  targetX: number | null;
-  targetY: number | null;
+  /** Current scheduled move; position = positionAt(move, serverNow). Null = resting at x/y. */
+  move: Move | null;
   facing: string;
   appearance: Appearance;
   mood: string;
@@ -95,8 +103,8 @@ export type AnimalSnapshot = {
   name: string;
   x: number;
   y: number;
-  targetX: number | null;
-  targetY: number | null;
+  /** Current scheduled move; position = positionAt(move, serverNow). Null = resting at x/y. */
+  move: Move | null;
   facing: string;
   state: string;
   mood: string;
@@ -145,8 +153,8 @@ export type EnemySnapshot = {
   kind: string;
   x: number;
   y: number;
-  targetX: number | null;
-  targetY: number | null;
+  /** Current scheduled move; position = positionAt(move, serverNow). Null = resting at x/y. */
+  move: Move | null;
   hp: number;
   maxHp: number;
 };

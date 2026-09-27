@@ -7,6 +7,8 @@
 import type Phaser from "phaser";
 import type { Facing } from "@/types/world";
 import type { EquippedCosmetics } from "@/types/cosmetic";
+import type { Move } from "@/types/motion";
+import type { AnimalSpriteDef } from "@/types/animalSprite";
 
 export type CharEnt = {
   sprite: Phaser.GameObjects.Sprite;
@@ -14,6 +16,8 @@ export type CharEnt = {
   badge?: Phaser.GameObjects.Text;
   tx: number;
   ty: number;
+  /** Server-scheduled move (NPCs). When set, position = positionAt(move, serverNow). */
+  move?: Move | null;
   facing: Facing;
   speed: number;
   texKey: string | null;
@@ -28,8 +32,16 @@ export type CharEnt = {
 export type CritterEnt = {
   sprite: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
   kind: string;
+  /** Spritesheet definition when this species is animated (cow, fox, …). */
+  def?: AnimalSpriteDef;
+  /** Height of the art above the anchor, in world px (label / hp bar placement). */
+  top: number;
+  /** Last one-shot animation played, keyed `${anim}@${move.startAt}`. */
+  oneShot?: string;
   tx: number;
   ty: number;
+  /** Server-scheduled move. When set, position = positionAt(move, serverNow). */
+  move?: Move | null;
   facing: string;
   state: string;
   speed: number;

@@ -14,6 +14,30 @@ chain; however, OGA BY 3.0 / CC BY 3.0 are the practical upstream licenses for
 the assembled sheet, so we keep credit visible here. If you fork the project,
 include this file (or a link to it) in your distribution.
 
+## Farm animal sprites (`animals/cow.png`, `animals/sheep.png`, `animals/pig.png`, `animals/llama.png`, `animals/chicken.png`)
+
+- **Author**: Daniel Eddeland — *LPC style farm animals*, commissioned by
+  tebruno99 (https://opengameart.org/forumtopic/filledlpc-style-farm-animals-needed).
+  Submission: https://opengameart.org/content/lpc-style-farm-animals
+- **Contents**: the cow, sheep, pig and llama (128×128 frames) and chicken (32×32 frames) walk
+  and eat sheets, 4 directions × 4 frames each, combined into one sheet per
+  animal: rows 0–3 walk, rows 4–7 eat (see `scripts/build-animal-sheet.mjs`).
+- **License**: GPL 2.0 or later / CC-BY. **Attribution required** when
+  redistributing: credit Daniel Eddeland and link to the OpenGameArt submission.
+
+## Duck, rabbit, cat and dog sprites (`animals/duck.png`, `animals/rabbit.png`, `animals/cat.png`, `animals/dog.png`)
+
+Original art made for this project, drawn procedurally in the format of
+the LPC chicken above (32×32 frames, 4 directions):
+- a mallard by `scripts/draw-duck.mjs` (waddle + dabble);
+- a cottontail rabbit by `scripts/draw-rabbit.mjs` (hop + nibble);
+- an orange tabby cat by `scripts/draw-cat.mjs` (walk + groom);
+- a brown dog by `scripts/draw-dog.mjs` (walk + sit, panting and wagging).
+
+Not derived from any third-party asset; regenerate with
+`node scripts/draw-<animal>.mjs`. Shared
+drawing helpers live in `scripts/pixel-art.mjs`.
+
 ## Wheat field tiles
 
 Rendered at runtime as a sub-region of `food/crops.png` (LPC Crops,

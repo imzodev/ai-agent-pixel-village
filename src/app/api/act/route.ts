@@ -6,6 +6,7 @@ import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { rowPositionAt } from "@/lib/motion";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +45,16 @@ export async function POST(req: Request) {
       const [a] = await db.select().from(animals).where(eq(animals.id, Number(body.id)));
       if (!a) return Response.json({ error: "It scampered off." }, { status: 404 });
       const p = livePos(me);
-      if (Math.hypot(a.x - p.x, a.y - p.y) > 90) return Response.json({ error: "Get a little closer." }, { status: 400 });
+      // Animals may be mid-walk: compare against where they are right now.
+      const ap = rowPositionAt(a, Date.now());
+      if (Math.hypot(ap.x - p.x, ap.y - p.y) > 90) return Response.json({ error: "Get a little closer." }, { status: 400 });
       const recently = a.lastPettedAt && Date.now() - a.lastPettedAt.getTime() < 20_000;
       await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5) }).where(eq(animals.id, a.id));
       const reactions: Record<string, string[]> = {
         sheep: ["baas softly and leans into your hand", "closes its eyes and hums"],
         cow: ["moos approvingly", "licks your sleeve"],
+        pig: ["oinks happily and snuffles your boots", "flops over for a belly rub"],
+        llama: ["hums softly and nuzzles your hat", "gives you a long, judgmental look — then leans in"],
         chicken: ["clucks and fluffs up", "pecks your shoe affectionately"],
         duck: ["quacks twice", "wiggles its tail"],
         rabbit: ["twitches its nose", "flops over contentedly"],
@@ -128,7 +133,8 @@ export async function POST(req: Request) {
       const [e] = await db.select().from(enemies).where(eq(enemies.id, Number(body.id)));
       if (!e) return Response.json({ error: "It's gone." }, { status: 404 });
       const p = livePos(me);
-      if (Math.hypot(e.x - p.x, e.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
+      const ep = rowPositionAt(e, Date.now());
+      if (Math.hypot(ep.x - p.x, ep.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
       const [sword] = await db.select().from(inventory).where(sql`${inventory.characterId} = ${me.id} and ${inventory.itemKey} = 'wooden_sword' and ${inventory.equipped} = true`);
       const dmg = 2 + Math.floor(Math.random() * 3) + (sword ? 2 : 0) + Math.floor(me.level / 2);
       const hp = e.hp - dmg;
@@ -139,7 +145,7 @@ export async function POST(req: Request) {
         await db.delete(enemies).where(eq(enemies.id, e.id));
         message = `You defeated the ${e.kind}!`;
         if (e.kind === "slime" || Math.random() < 0.5) {
-          await db.insert(groundItems).values({ itemKey: e.kind === "slime" ? "slime_gel" : "mushroom", qty: 1, x: e.x, y: e.y + 6 });
+          await db.insert(groundItems).values({ itemKey: e.kind === "slime" ? "slime_gel" : "mushroom", qty: 1, x: ep.x, y: ep.y + 6 });
         }
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
         await db.update(characters).set({ xp: sql`${characters.xp} + 10` }).where(eq(characters.id, me.id));

@@ -1,6 +1,7 @@
 import type Phaser from "phaser";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
+import { ANIMAL_SPRITES } from "./animalSprites";
 
 export type { BuildingView };
 export { buildingTextureKey, makeBuildingTexture };
@@ -32,22 +33,19 @@ export function pixelTexture(scene: Scene, key: string, rows: string[], palette:
 
 // ---------- Animals & creatures ----------
 const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {
-  sheep: { rows: ["....wwwww...", "...wwwwwww..", "..wwwwwwwwkk", ".wwwwwwwwwkk", ".wwwwwwwwwk.", ".wwwwwwwww..", "..wwwwwww...", "..d.d..d.d..", "..d.d..d.d.."], palette: { w: "#f6f2ea", k: "#3a3230", d: "#3a3230" } },
-  cow: { rows: ["..............", "..bbbbbbbb..hh", ".bbssbbbbbbbhh", ".bsssbbssbbbpp", ".bbbbbbssbbbpp", ".bbbbbbbbbbb..", ".bbbbbbbbbb...", "..b..b..b..b..", "..b..b..b..b.."], palette: { b: "#f7f5ef", s: "#2f2a28", h: "#f7f5ef", p: "#e9a0a0" } },
-  chicken: { rows: ["....rr..", "...wwwo.", "...www..", ".wwwwww.", "wwwwwww.", ".wwwww..", "..www...", "..y.y...", "..y.y..."], palette: { r: "#d94a3a", w: "#fbf7f0", o: "#f0a020", y: "#f0a020" } },
-  duck: { rows: ["...gg....", "...ggo...", "...gg....", ".wwwww...", "wwwwwww..", ".wwwwww..", "..wwww...", "...o.o..."], palette: { g: "#3f8a4a", o: "#f0a020", w: "#e7dcc6" } },
-  rabbit: { rows: ["..t.t...", "..t.t...", "..ttt...", ".ttttt..", ".tttttt.", ".tttttt.", ".ttttt.t", "..t.t..."], palette: { t: "#d9b38c" } },
-  // fox: rendered from the fox-NESW spritesheet (WorldScene preload) — do
-  // NOT add a procedural cr_fox here, it would overwrite the sheet frames.
-  cat: { rows: [".g.g......", ".ggg......", ".gggggggg.", ".gggggggg.", ".ggggggg.g", "..g.g..g.g", "..g.g..gg."], palette: { g: "#e8985a" } },
-  dog: { rows: ["..b.........", "..bb........", ".bbbbbbbbbb.", ".bbbbbbbbbbb", ".bbbbbbbbbb.", "..bbbbbbbb..", "..b..b..b.b.", "..b..b..b..."], palette: { b: "#a5682a" } },
+  // cow, sheep, chicken, duck, rabbit, cat, dog, fox: rendered from spritesheets (src/game/animalSprites.ts).
+  // Species listed there are skipped below so a procedural texture can
+  // never overwrite the sheet.
   slime: { rows: ["...gggg...", "..gggggg..", ".gggggggg.", ".gkggggkg.", ".gggggggg.", "gggggggggg", "gggggggggg", ".gggggggg."], palette: { g: "#6ccf7a", k: "#1e3a22" } },
   bat: { rows: ["p.........p.", "pp...kk..pp.", "ppp.kkkk.ppp", "pppkkkkkkppp", ".ppkkwkkwpp.", "..kkkkkkkk..", "...kk..kk..."], palette: { p: "#6b4a8a", k: "#2e2340", w: "#f8e16c" } },
   thornling: { rows: ["...t..t...", "..tttttt..", ".tttttttt.", ".twttttwt.", ".tttttttt.", "tttttttttt", ".tttttttt.", "..t.tt.t.."], palette: { t: "#4f7a3a", w: "#f8e16c" } },
 };
 
 export function makeCreatureTextures(scene: Scene) {
-  for (const [k, def] of Object.entries(CREATURES)) pixelTexture(scene, `cr_${k}`, def.rows, def.palette, 2);
+  for (const [k, def] of Object.entries(CREATURES)) {
+    if (ANIMAL_SPRITES[k]) continue;
+    pixelTexture(scene, `cr_${k}`, def.rows, def.palette, 2);
+  }
 }
 
 // ---------- Nodes / props ----------

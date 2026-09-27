@@ -41,6 +41,7 @@ import { redis, initRedis } from "@/lib/redis";
 import { withReadDb } from "@/lib/db";
 import { metrics } from "@/lib/metrics";
 import { CROP_KINDS } from "@/lib/crops";
+import { moveOfRow } from "@/lib/motion";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -80,7 +81,7 @@ const SNAPSHOT_TTL_SECONDS = Math.max(1, Math.floor(Number(process.env.SNAPSHOT_
 // Default 1152 px = 3 chunk-widths, comfortably larger than the
 // viewport (clamped to a 3×3 chunk area ≈ 1152×720 px) so entities
 // slightly off-screen are still tracked and can walk into view.
-const PROXIMITY_RADIUS_PX = Number(process.env.PROXIMITY_RADIUS_PX ?? 1152);
+export const PROXIMITY_RADIUS_PX = Number(process.env.PROXIMITY_RADIUS_PX ?? 1152);
 
 const PRESENCE_WINDOW_MS = 45_000;
 const CHAT_WINDOW_MS = 12_000;
@@ -368,8 +369,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
         role: n.role,
         x: n.x,
         y: n.y,
-        targetX: n.targetX,
-        targetY: n.targetY,
+        move: moveOfRow(n),
         facing: n.facing,
         appearance: n.appearance,
         mood: n.mood,
@@ -384,8 +384,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       name: a.name,
       x: a.x,
       y: a.y,
-      targetX: a.targetX,
-      targetY: a.targetY,
+      move: moveOfRow(a),
       facing: a.facing,
       state: a.state,
       mood: a.mood,
@@ -426,8 +425,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       kind: e.kind,
       x: e.x,
       y: e.y,
-      targetX: e.targetX,
-      targetY: e.targetY,
+      move: moveOfRow(e),
       hp: e.hp,
       maxHp: e.maxHp,
     })),

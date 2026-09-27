@@ -14,7 +14,7 @@
     },
     {
       "key": "cabin_2",
-      "file": "/buildings/cabin_1.json",
+      "file": "/buildings/cabin_2.json",
       "name": "Cabin Two",
       "kind": "home",
       "description": "The far-west cabin, with a view of the path.",

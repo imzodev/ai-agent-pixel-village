@@ -8,6 +8,14 @@ export type Facing = "up" | "down" | "left" | "right";
 
 export type Point = { x: number; y: number };
 
+/**
+ * Tile-grid coordinates. Cell (0, 0) spans world pixels (0..CELL_PX) —
+ * `CELL_PX` aliases the chunk tile size so the planner's per-cell
+ * walkability check aligns with the production `isWalkableAt`
+ * foot-box check. Used by `src/lib/nav/`.
+ */
+export type GridPoint = { tx: number; ty: number };
+
 export type StepResult = Point & {
   arrived: boolean;
   facing: Facing;

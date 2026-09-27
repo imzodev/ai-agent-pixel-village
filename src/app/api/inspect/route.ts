@@ -4,6 +4,7 @@ import { animals, buildings, characters, enemies, leads, missions, npcs, resourc
 import { handleApiError } from "@/lib/auth";
 import { getCropKind } from "@/lib/crops";
 import { ensureSeeded } from "@/lib/seed";
+import { rowPositionAt } from "@/lib/motion";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export async function GET(req: Request) {
 
     if (q && !type) {
       const dist = (x: number, y: number) => Math.hypot(x - px, y - py);
-      const species = ["sheep", "cow", "chicken", "duck", "rabbit", "fox", "cat", "dog"].find((s) => q.includes(s));
+      const species = ["sheep", "cow", "pig", "llama", "chicken", "duck", "rabbit", "fox", "cat", "dog"].find((s) => q.includes(s));
       if (species) {
         const rows = await db.select().from(animals).where(eq(animals.species, species));
         const named = rows.find((r) => q.includes(r.name.toLowerCase()));
@@ -66,7 +67,7 @@ export async function GET(req: Request) {
           `Home range: ${Math.round(a.zone.w / 32)}×${Math.round(a.zone.h / 32)} tiles`,
         ],
         events: await eventsFor("animal", a.id),
-        target: { type: "animal", id: a.id, x: a.x, y: a.y },
+        target: { type: "animal", id: a.id, ...rowPositionAt(a, Date.now()) },
       });
     }
     if (type === "building") {
@@ -95,7 +96,7 @@ export async function GET(req: Request) {
         title: n.name, subtitle: n.role,
         lines: [n.persona, `Mood: ${n.mood}`, `Kind: ${n.kind === "remote" ? "external AI agent (connected over HTTP)" : "village agent"}`, sp ? `Sponsored by ${sp.businessName} — this character hands out missions and also mentions the sponsor's offers in conversation.` : "Unsponsored — a pure character, no pitch.", ms.length ? `Missions: ${ms.map((m) => m.title).join(", ")}` : "No missions right now."],
         events: await eventsFor("npc", n.id),
-        target: { type: "npc", id: n.id, x: n.x, y: n.y },
+        target: { type: "npc", id: n.id, ...rowPositionAt(n, Date.now()) },
       });
     }
     if (type === "player") {

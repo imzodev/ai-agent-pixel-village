@@ -2,10 +2,15 @@
 // per world tick; the manager picks one eligible event by weight, respects
 // cooldowns, and runs it. Adding a new event = pushing one entry into
 // `simEvents` below — no edits anywhere else.
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, groundItems } from "@/db/schema";
 import type { RandomEvent, SimCtx } from "./types";
+import { isWalkableServer } from "./chunkCollisionServer";
+import { ANIMAL_RAID_SPEED, PLANNER_MAX_TILES_EGG_PICK } from "./constants";
+import { moveEndAt, moveOfRow, tileOf } from "./motion";
+import { buildMoveWrite, writeMoves } from "./moveStore";
+import { pickClosestEggByWalkablePath, planGoalMove } from "./wander";
 
 const lastFired = new Map<string, number>();
 export const simEvents: RandomEvent[] = [];
@@ -62,16 +67,29 @@ simEvents.push({
   fire: async (ctx) => {
     const [fox] = await ctx.db.select().from(animals).where(eq(animals.species, "fox"));
     if (!fox) return;
-    const target = await ctx.db
+    // Still finishing a wander step when the next beat starts — a new
+    // move can't start until it ends. The event will be rolled again.
+    const current = moveOfRow(fox);
+    if (current && moveEndAt(current) > ctx.moveStartAt) return;
+    // Pick the egg closest by walkable path, not by straight-line
+    // distance, so the fox never commits to an egg behind a coop wall.
+    const eggRows = await ctx.db
       .select({ id: groundItems.id, x: groundItems.x, y: groundItems.y })
       .from(groundItems)
-      .where(eq(groundItems.itemKey, "egg"))
-      .orderBy(sql`(ground_items.x - ${fox.x}) * (ground_items.x - ${fox.x}) + (ground_items.y - ${fox.y}) * (ground_items.y - ${fox.y})`)
-      .limit(1);
-    const egg = target[0];
-    if (!egg) return;
+      .where(eq(groundItems.itemKey, "egg"));
+    const egg = await pickClosestEggByWalkablePath({ x: fox.x, y: fox.y }, eggRows, isWalkableServer);
+    const path = egg
+      ? await planGoalMove(tileOf(fox.x, fox.y), egg, isWalkableServer, PLANNER_MAX_TILES_EGG_PICK)
+      : null;
+    if (!egg || !path) return; // no reachable egg — the fox stays home
+    await writeMoves("animal", [buildMoveWrite(fox.id, path, ctx.moveStartAt, ANIMAL_RAID_SPEED)]);
     await ctx.db.update(animals)
-      .set({ state: "raid", targetX: egg.x, targetY: egg.y, stateUntil: new Date(ctx.now.getTime() + 180_000) })
+      .set({
+        state: "raid",
+        targetX: egg.x,
+        targetY: egg.y,
+        stateUntil: new Date(ctx.now.getTime() + 180_000),
+      })
       .where(eq(animals.id, fox.id));
     const { logEvent } = await import("./game");
     await logEvent("event", "A fox left the north woods — it's eyeing the chicken yard!", undefined, undefined, fox.x, fox.y);

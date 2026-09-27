@@ -1,4 +1,6 @@
 import {
+  bigint,
+  pgMaterializedView,
   pgTable,
   serial,
   text,
@@ -9,6 +11,7 @@ import {
   real,
   uniqueIndex,
   index,
+  varchar,
 } from "drizzle-orm/pg-core";
 import type {
   Appearance,
@@ -24,6 +27,7 @@ import type {
   GemTransaction,
 } from "@/types/cosmetic";
 import type { SponsorEvent } from "@/types/sponsor";
+import type { GridPoint } from "@/types/world";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { Activity, ActivityParticipant } from "@/types/activity";
@@ -153,11 +157,21 @@ export const npcs = pgTable(
     apiKey: text("api_key").unique(),
     webhookUrl: text("webhook_url"),
     mood: text("mood").notNull().default("cheerful"),
+    // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+    // resting position the move ends on; the live position is
+    // `positionAt(move, now)`. Null when the entity has never moved.
+    movePath: jsonb("move_path").$type<GridPoint[]>(),
+    moveStartAt: bigint("move_start_at", { mode: "number" }),
+    moveSpeed: real("move_speed"),
+    moveAfter: text("move_after"),
+    // Epoch ms until which the NPC must not start a new move (a player
+    // is talking to it). See holdNpc in src/lib/moveStore.ts.
+    holdUntil: bigint("hold_until", { mode: "number" }),
     lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("npcs_sponsor_idx").on(t.sponsorId)],
+  (t) => [index("npcs_sponsor_idx").on(t.sponsorId), index("npcs_move_start_idx").on(t.moveStartAt)],
 );
 
 // ---------- Animals ----------
@@ -178,7 +192,14 @@ export const animals = pgTable("animals", {
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
   stateUntil: timestamp("state_until"),
-});
+  // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+  // resting position the move ends on; the live position is
+  // `positionAt(move, now)`. Null when the entity has never moved.
+  movePath: jsonb("move_path").$type<GridPoint[]>(),
+  moveStartAt: bigint("move_start_at", { mode: "number" }),
+  moveSpeed: real("move_speed"),
+  moveAfter: text("move_after"),
+}, (t) => [index("animals_move_start_idx").on(t.moveStartAt)]);
 
 // ---------- Items ----------
 // ItemKind re-exported above
@@ -366,7 +387,14 @@ export const enemies = pgTable("enemies", {
   hp: integer("hp").notNull(),
   maxHp: integer("max_hp").notNull(),
   spawnedAt: timestamp("spawned_at").defaultNow().notNull(),
-});
+  // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+  // resting position the move ends on; the live position is
+  // `positionAt(move, now)`. Null when the entity has never moved.
+  movePath: jsonb("move_path").$type<GridPoint[]>(),
+  moveStartAt: bigint("move_start_at", { mode: "number" }),
+  moveSpeed: real("move_speed"),
+  moveAfter: text("move_after"),
+}, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
   id: serial("id").primaryKey(),
@@ -524,5 +552,25 @@ export type { SponsorEvent };
 export type { FriendRequest, Friendship };
 export type { DailyQuest, StreakState };
 export type { Activity, ActivityParticipant };
+
+// Registered with Drizzle so `drizzle-kit push` doesn't try to drop it.
+// The view body itself is created at runtime by ensureOnlinePlayersView
+// in `src/lib/onlinePlayers.ts` on every tickd / server boot — Drizzle
+// leaves the body alone; we just acknowledge the relation exists.
+export const onlinePlayersView = pgMaterializedView("online_players", {
+  id: bigint("id", { mode: "number" }).notNull(),
+  name: varchar("name").notNull(),
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  facing: varchar("facing").notNull(),
+  appearance: jsonb("appearance").notNull(),
+  level: integer("level").notNull(),
+  hp: integer("hp").notNull(),
+  max_hp: integer("max_hp").notNull(),
+  coins: integer("coins").notNull(),
+  gems: integer("gems").notNull(),
+  xp: integer("xp").notNull(),
+  last_seen_at: timestamp("last_seen_at").notNull(),
+}).existing();
 
 export const _drizzleHelpers = { uniqueIndex };
