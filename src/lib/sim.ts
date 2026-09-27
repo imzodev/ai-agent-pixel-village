@@ -74,11 +74,12 @@ async function wanderWrite(
   beat: TickBeat,
   minTiles = MOVE_MIN_TILES,
   maxTiles = MOVE_MAX_TILES,
+  after?: string,
 ): Promise<MoveWrite | null> {
   const from = tileOf(row.x, row.y);
   const step = await pickWanderMove(from, isWalkableServer, { minTiles, maxTiles, leash });
   if (!step) return null;
-  return buildMoveWrite(row.id, [from, step.to], beat.startAt, speed);
+  return buildMoveWrite(row.id, [from, step.to], beat.startAt, speed, after);
 }
 
 /**
@@ -207,7 +208,10 @@ async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, n
     // Wander on this animal's beat. Sleeping / raiding animals and
     // animals still finishing a move sit this one out.
     if (!raiding && state !== "sleep" && !busy && isDue("animal", a.id, beat.index, ANIMAL_MOVE_INTERVAL_MS)) {
-      const w = await wanderWrite(a, leashOfRect(a.zone), ANIMAL_SPEED, beat);
+      // Decide now what it does once it arrives; the client plays the
+      // matching animation (e.g. graze → eat) as soon as the walk ends.
+      const after = Math.random() < 0.5 ? "graze" : "idle";
+      const w = await wanderWrite(a, leashOfRect(a.zone), ANIMAL_SPEED, beat, MOVE_MIN_TILES, MOVE_MAX_TILES, after);
       if (w) {
         writes.push(w);
         state = "walk";
@@ -215,7 +219,7 @@ async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, n
         state = Math.random() < 0.5 ? "graze" : "idle";
       }
     } else if (!raiding && state === "walk" && arrived) {
-      state = Math.random() < 0.5 ? "graze" : "idle";
+      state = move?.after ?? (Math.random() < 0.5 ? "graze" : "idle");
     }
 
     const petFresh = a.lastPettedAt && now.getTime() - a.lastPettedAt.getTime() < 10 * 60_000;

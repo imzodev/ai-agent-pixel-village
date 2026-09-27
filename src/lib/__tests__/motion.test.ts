@@ -9,6 +9,7 @@ import {
   isDue,
   moveDurationMs,
   moveEndAt,
+  moveOfRow,
   nextBeatAt,
   pathTiles,
   positionAt,
@@ -55,6 +56,12 @@ describe("move timing helpers", () => {
     expect(pathTiles(lShape.path)).toBe(4);
     expect(moveDurationMs(east3)).toBe(3000);
     expect(moveEndAt(east3)).toBe(13_000);
+  });
+
+  it("moveOfRow carries the post-move state", () => {
+    const row = { x: 56, y: 8, movePath: east3.path, moveStartAt: east3.startAt, moveSpeed: 16 };
+    expect(moveOfRow({ ...row, moveAfter: "graze" })?.after).toBe("graze");
+    expect(moveOfRow({ ...row, moveAfter: null })).not.toHaveProperty("after");
   });
 
   it("rowPositionAt falls back to x/y when the row has no move", () => {

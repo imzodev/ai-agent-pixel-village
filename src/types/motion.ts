@@ -25,6 +25,12 @@ export type Move = {
   startAt: number;
   /** World pixels per second along the path. */
   speed: number;
+  /**
+   * State the entity rests in once the move ends (e.g. "graze"). Rides
+   * along with the move so clients can start the matching animation
+   * (graze → eat) the instant the walk finishes.
+   */
+  after?: string;
 };
 
 /** What `positionAt` returns: where the entity is and how to draw it. */
@@ -78,6 +84,7 @@ export type MovingRow = {
   movePath: GridPoint[] | null;
   moveStartAt: number | null;
   moveSpeed: number | null;
+  moveAfter?: string | null;
 };
 
 /** Parsed env-overridable movement interval. */

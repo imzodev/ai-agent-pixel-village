@@ -1,0 +1,38 @@
+// Animal spritesheet registry: frame indexing and sheet consistency.
+
+import { describe, expect, it } from "vitest";
+import { ANIMAL_SPRITES, animKey, frameIndex } from "@/game/animalSprites";
+
+describe("frameIndex", () => {
+  it("keeps the fox's original frame mapping (up 0-2, right 3-5, down 6-8, left 9-11)", () => {
+    const fox = ANIMAL_SPRITES.fox;
+    const f = (dir: "up" | "right" | "down" | "left") => [0, 1, 2].map((i) => frameIndex(fox, "walk", dir, i));
+    expect(f("up")).toEqual([0, 1, 2]);
+    expect(f("right")).toEqual([3, 4, 5]);
+    expect(f("down")).toEqual([6, 7, 8]);
+    expect(f("left")).toEqual([9, 10, 11]);
+  });
+
+  it("puts the cow's eat block below its walk block", () => {
+    const cow = ANIMAL_SPRITES.cow;
+    expect(frameIndex(cow, "walk", "up", 0)).toBe(0);
+    expect(frameIndex(cow, "walk", "right", 3)).toBe(15);
+    expect(frameIndex(cow, "eat", "up", 0)).toBe(16);
+    expect(frameIndex(cow, "eat", "right", 3)).toBe(31);
+  });
+});
+
+describe("registry", () => {
+  it("every species has a walk action and only maps states to known actions", () => {
+    for (const def of Object.values(ANIMAL_SPRITES)) {
+      expect(def.actions.walk).toBeDefined();
+      for (const action of Object.values(def.stateActions)) expect(def.actions[action]).toBeDefined();
+      for (const a of Object.values(def.actions)) expect(a.frames).toBeLessThanOrEqual(def.columns);
+    }
+  });
+
+  it("cow grazes with the eat animation", () => {
+    expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
+    expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");
+  });
+});

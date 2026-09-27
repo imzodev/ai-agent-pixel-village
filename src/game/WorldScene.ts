@@ -26,6 +26,7 @@ import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
 import type { Move, ScheduledMove } from "@/types/motion";
 import { positionAt } from "@/lib/motion";
+import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
@@ -148,10 +149,11 @@ export class WorldScene extends Phaser.Scene {
   preload() {
     loadTilemapAssets(this);
     loadPropSprites(this);
-    // Animated fox sprite — the sheet is a 3x-scaled export: 144×256 total,
-    // 3 cols × 4 rows of 48×64 frames (up / right / down / left).
-    // See public/assets/ATTRIBUTION.md for licensing.
-    this.load.spritesheet("cr_fox", "/assets/animals/fox-NESW.png", { frameWidth: 48, frameHeight: 64 });
+    // Animated animals (cow, fox, …) — one sheet per species, see
+    // src/game/animalSprites.ts. Licensing: public/assets/ATTRIBUTION.md.
+    for (const [species, def] of Object.entries(ANIMAL_SPRITES)) {
+      this.load.spritesheet(sheetKey(species), def.url, { frameWidth: def.frameWidth, frameHeight: def.frameHeight });
+    }
   }
 
   async create() {
@@ -171,14 +173,19 @@ export class WorldScene extends Phaser.Scene {
     // (wheat_field, …) so node rendering can pick the right one via a frame
     // name. Must run after preload, hence here in create().
     registerCropFrames(this);
-    // Fox walk animations — 4 directions × 3 frames each (see ATTRIBUTION.md).
-    for (const [dir, frames] of [["up", [0, 1, 2] as number[]], ["right", [3, 4, 5] as number[]], ["down", [6, 7, 8] as number[]], ["left", [9, 10, 11] as number[]]] as const) {
-      this.anims.create({
-        key: `cr_fox_walk_${dir}`,
-        frames: this.anims.generateFrameNumbers("cr_fox", { frames }),
-        frameRate: 7,
-        repeat: -1,
-      });
+    // One animation per species × action × direction, from the registry.
+    for (const [species, def] of Object.entries(ANIMAL_SPRITES)) {
+      for (const [action, a] of Object.entries(def.actions)) {
+        for (const dir of def.dirRows) {
+          const frames = Array.from({ length: a.frames }, (_, f) => frameIndex(def, action, dir, f));
+          this.anims.create({
+            key: animKey(species, action, dir),
+            frames: this.anims.generateFrameNumbers(sheetKey(species), { frames }),
+            frameRate: a.frameRate,
+            repeat: a.loop ? -1 : 0,
+          });
+        }
+      }
     }
     // Initial chunk window: central chunk (0, 0). Streaming kicks in once the
     // player crosses a chunk boundary in updatePlayer.
@@ -605,28 +612,31 @@ export class WorldScene extends Phaser.Scene {
       seen.add(a.id);
       let ent = map.get(a.id);
       if (!ent) {
-        // Foxes use an animated spritesheet — they need a real Sprite to
-        // play walk animations (Images are static).
-        const sprite = a.kind === "fox"
-          ? this.add.sprite(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1).setScale(1)
+        // Spritesheet animals need a real Sprite to play animations
+        // (Images are static); everyone else uses a procedural texture.
+        const def = ANIMAL_SPRITES[a.kind];
+        const sprite = def
+          ? this.add.sprite(a.x, a.y, sheetKey(a.kind), frameIndex(def, "walk", def.dirRows[0], 0)).setOrigin(def.originX, def.originY).setScale(def.scale)
           : this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1);
         sprite.setDepth(DEPTH_CHAR_BASE + a.y);
         sprite.setInteractive({ useHandCursor: true });
         sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
-        ent = { sprite, kind: a.kind, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
-        if (a.name) ent.label = this.add.text(a.x, a.y - sprite.height - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
+        // Height of the art above the anchor (frames are padded, so not sprite.height).
+        const top = def ? def.labelHeight * def.scale : sprite.height;
+        ent = { sprite, kind: a.kind, def, top, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
+        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
       }
       ent.tx = a.x; ent.ty = a.y; ent.state = a.state; ent.hp = a.hp; ent.maxHp = a.maxHp;
       acceptMove(ent, a.move);
-      // Fox has 4-direction art — accept every facing from the server.
-      // Other critters only have left/right art.
-      if (a.kind === "fox" ? ["up", "down", "left", "right"].includes(a.facing) : (a.facing === "left" || a.facing === "right")) ent.facing = a.facing;
+      // Sheet animals have 4-direction art — accept every facing from the
+      // server. Procedural critters only have left/right art.
+      if (ent.def ? ["up", "down", "left", "right"].includes(a.facing) : (a.facing === "left" || a.facing === "right")) ent.facing = a.facing;
       if (Math.hypot(ent.sprite.x - a.x, ent.sprite.y - a.y) > 300) ent.sprite.setPosition(a.x, a.y);
       if (ent.hpBar) {
         ent.hpBar.clear();
-        if (a.hp < a.maxHp) { ent.hpBar.fillStyle(0x000000, 0.5); ent.hpBar.fillRect(-10, -ent.sprite.height - 6, 20, 3); ent.hpBar.fillStyle(0xe63946, 1); ent.hpBar.fillRect(-10, -ent.sprite.height - 6, 20 * (a.hp / a.maxHp), 3); }
+        if (a.hp < a.maxHp) { ent.hpBar.fillStyle(0x000000, 0.5); ent.hpBar.fillRect(-10, -ent.top - 6, 20, 3); ent.hpBar.fillStyle(0xe63946, 1); ent.hpBar.fillRect(-10, -ent.top - 6, 20 * (a.hp / a.maxHp), 3); }
       }
     }
     for (const [id, ent] of map) if (!seen.has(id)) { ent.sprite.destroy(); ent.label?.destroy(); ent.zz?.destroy(); ent.hpBar?.destroy(); map.delete(id); }
@@ -869,37 +879,63 @@ export class WorldScene extends Phaser.Scene {
         e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
       }
     }
-    let bob = 0;
-    if (moving) {
-      // Fox has 4-direction art — pick facing from the dominant axis.
-      // Other critters only have left/right art, so horizontal-only.
-      if (e.kind === "fox") e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
-      else if (dx !== 0) e.facing = dx > 0 ? "right" : "left";
-      bob = Math.abs(Math.sin(time / 90 + e.phase)) * 2;
-    } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
-    else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
-    // Fox sprite has real per-direction frames — never mirror with setFlipX.
-    if (e.kind !== "fox") e.sprite.setFlipX(e.facing === "left");
-    e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
-    e.sprite.y -= 0; // keep base
-    e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
-    // Play the matching walk animation when the fox is moving, freeze on frame 0 when stopped.
-    if (e.kind === "fox") {
-      const key = `cr_fox_walk_${e.facing}`;
-      const sprite = e.sprite as Phaser.GameObjects.Sprite;
+    if (e.def) {
+      // Sheet animals: real 4-direction frames, motion comes from the art.
+      if (moving) e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+      this.animateSheetCritter(e, moving);
+    } else {
+      let bob = 0;
       if (moving) {
-        if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key, true);
-      } else {
-        sprite.stop();
-        sprite.setFrame(e.facing === "up" ? 0 : e.facing === "right" ? 3 : e.facing === "down" ? 6 : 9);
-      }
+        // Procedural critters only have left/right art.
+        if (dx !== 0) e.facing = dx > 0 ? "right" : "left";
+        bob = Math.abs(Math.sin(time / 90 + e.phase)) * 2;
+      } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
+      else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
+      e.sprite.setFlipX(e.facing === "left");
+      e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
     }
-    e.label?.setPosition(e.sprite.x, e.sprite.y - e.sprite.height - 4);
+    e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
+    e.label?.setPosition(e.sprite.x, e.sprite.y - e.top - 4);
     e.hpBar?.setPosition(e.sprite.x, e.sprite.y);
     if (e.state === "sleep") {
-      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.sprite.height - 10, "z", { fontFamily: "monospace", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(DEPTH_CHAR_BASE + e.sprite.y + 1);
-      e.zz.setPosition(e.sprite.x + 8, e.sprite.y - e.sprite.height - 8 - Math.abs(Math.sin(time / 500)) * 4);
+      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.top - 10, "z", { fontFamily: "monospace", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(DEPTH_CHAR_BASE + e.sprite.y + 1);
+      e.zz.setPosition(e.sprite.x + 8, e.sprite.y - e.top - 8 - Math.abs(Math.sin(time / 500)) * 4);
     } else if (e.zz) { e.zz.destroy(); e.zz = undefined; }
+  }
+
+  /**
+   * Pick and play a sheet animal's animation: `walk` while moving, else
+   * the action mapped from its resting state (e.g. graze → eat), else
+   * the idle pose (first walk frame). The resting state is the move's
+   * `after` once the move has ended — it rides along with the move, so
+   * clients don't wait for a snapshot to learn the animal started eating.
+   */
+  private animateSheetCritter(e: CritterEnt, moving: boolean) {
+    const def = e.def!;
+    const sprite = e.sprite as Phaser.GameObjects.Sprite;
+    const dir = (def.dirRows.includes(e.facing as Facing) ? e.facing : def.dirRows[0]) as Facing;
+    let action: string | undefined;
+    let restToken = 0;
+    if (moving) action = "walk";
+    else {
+      const ended = e.move ? this.serverNow() >= e.move.startAt : false;
+      const rest = (ended ? e.move!.after : undefined) ?? e.state;
+      action = def.stateActions[rest];
+      restToken = e.move?.startAt ?? 0;
+    }
+    const a = action ? def.actions[action] : undefined;
+    const key = action ? animKey(e.kind, action, dir) : "";
+    // One-shot actions (jump, poop, …) play once per rest, then idle.
+    const spent = a && !a.loop && e.oneShot === `${key}@${restToken}` && !sprite.anims.isPlaying;
+    if (a && !spent) {
+      if (sprite.anims.currentAnim?.key !== key || (!sprite.anims.isPlaying && a.loop)) {
+        sprite.play(key, true);
+        if (!a.loop) e.oneShot = `${key}@${restToken}`;
+      }
+    } else if (sprite.anims.isPlaying || sprite.frame.name !== String(frameIndex(def, "walk", dir, 0))) {
+      sprite.stop();
+      sprite.setFrame(frameIndex(def, "walk", dir, 0));
+    }
   }
 
   private updateAtmosphere() {

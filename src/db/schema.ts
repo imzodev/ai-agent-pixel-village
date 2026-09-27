@@ -163,6 +163,7 @@ export const npcs = pgTable(
     movePath: jsonb("move_path").$type<GridPoint[]>(),
     moveStartAt: bigint("move_start_at", { mode: "number" }),
     moveSpeed: real("move_speed"),
+    moveAfter: text("move_after"),
     // Epoch ms until which the NPC must not start a new move (a player
     // is talking to it). See holdNpc in src/lib/moveStore.ts.
     holdUntil: bigint("hold_until", { mode: "number" }),
@@ -197,6 +198,7 @@ export const animals = pgTable("animals", {
   movePath: jsonb("move_path").$type<GridPoint[]>(),
   moveStartAt: bigint("move_start_at", { mode: "number" }),
   moveSpeed: real("move_speed"),
+  moveAfter: text("move_after"),
 }, (t) => [index("animals_move_start_idx").on(t.moveStartAt)]);
 
 // ---------- Items ----------
@@ -391,6 +393,7 @@ export const enemies = pgTable("enemies", {
   movePath: jsonb("move_path").$type<GridPoint[]>(),
   moveStartAt: bigint("move_start_at", { mode: "number" }),
   moveSpeed: real("move_speed"),
+  moveAfter: text("move_after"),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {

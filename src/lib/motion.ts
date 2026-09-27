@@ -123,7 +123,9 @@ export function truncateMove(move: Move, t: number): Move {
 /** Rebuild a `Move` from DB columns, or null when the row has none. */
 export function moveOfRow(row: MovingRow): Move | null {
   if (!row.movePath || row.movePath.length < 2 || row.moveStartAt == null || row.moveSpeed == null) return null;
-  return { path: row.movePath, startAt: Number(row.moveStartAt), speed: row.moveSpeed };
+  const move: Move = { path: row.movePath, startAt: Number(row.moveStartAt), speed: row.moveSpeed };
+  if (row.moveAfter) move.after = row.moveAfter;
+  return move;
 }
 
 /** Where a DB row's entity is at time `t` (its resting x/y if it has no move). */

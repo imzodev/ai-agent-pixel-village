@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { animals, enemies, npcs } from "@/db/schema";
 import { moveDestination, moveEndAt, moveOfRow, positionAt, tileCenter, truncateMove } from "./motion";
 import type { GridPoint } from "@/types/world";
-import type { HoldResult, MoverKind, MoveWrite, ScheduledMove } from "@/types/motion";
+import type { HoldResult, Move, MoverKind, MoveWrite, ScheduledMove } from "@/types/motion";
 
 const TABLE: Record<MoverKind, string> = { npc: "npcs", animal: "animals", enemy: "enemies" };
 
@@ -16,8 +16,8 @@ const TABLE: Record<MoverKind, string> = { npc: "npcs", animal: "animals", enemy
  * destination tile centre (where the entity rests once the move ends)
  * and `facing` the direction of the last leg.
  */
-export function buildMoveWrite(id: number, path: GridPoint[], startAt: number, speed: number): MoveWrite {
-  const move = { path, startAt, speed };
+export function buildMoveWrite(id: number, path: GridPoint[], startAt: number, speed: number, after?: string): MoveWrite {
+  const move: Move = after ? { path, startAt, speed, after } : { path, startAt, speed };
   const end = tileCenter(moveDestination(move));
   return { id, x: end.x, y: end.y, facing: positionAt(move, Infinity).facing, move };
 }
@@ -29,7 +29,7 @@ export function buildMoveWrite(id: number, path: GridPoint[], startAt: number, s
 export async function writeMoves(kind: MoverKind, writes: readonly MoveWrite[]): Promise<void> {
   if (writes.length === 0) return;
   const values = sql.join(
-    writes.map((w) => sql`(${w.id}::int, ${w.x}::real, ${w.y}::real, ${w.facing}::text, ${JSON.stringify(w.move.path)}::jsonb, ${w.move.startAt}::bigint, ${w.move.speed}::real)`),
+    writes.map((w) => sql`(${w.id}::int, ${w.x}::real, ${w.y}::real, ${w.facing}::text, ${JSON.stringify(w.move.path)}::jsonb, ${w.move.startAt}::bigint, ${w.move.speed}::real, ${w.move.after ?? null}::text)`),
     sql`, `,
   );
   const setFacing = kind === "enemy" ? sql`` : sql`facing = v.facing, `;
@@ -38,8 +38,8 @@ export async function writeMoves(kind: MoverKind, writes: readonly MoveWrite[]):
   const notHeld = kind === "npc" ? sql` AND (t.hold_until IS NULL OR t.hold_until <= v.start_at)` : sql``;
   await db.execute(sql`
     UPDATE ${sql.raw(TABLE[kind])} AS t
-    SET x = v.x, y = v.y, ${setFacing}move_path = v.path, move_start_at = v.start_at, move_speed = v.speed
-    FROM (VALUES ${values}) AS v(id, x, y, facing, path, start_at, speed)
+    SET x = v.x, y = v.y, ${setFacing}move_path = v.path, move_start_at = v.start_at, move_speed = v.speed, move_after = v.after
+    FROM (VALUES ${values}) AS v(id, x, y, facing, path, start_at, speed, after)
     WHERE t.id = v.id${notHeld}
   `);
 }
@@ -78,7 +78,7 @@ export async function holdNpc(npcId: number, now: number, holdMs: number): Promi
  * every connection on this process.
  */
 export async function fetchMovesStartingAt(startAt: number): Promise<ScheduledMove[]> {
-  const cols = { id: sql<number>`id`, x: sql<number>`x`, y: sql<number>`y`, path: sql<GridPoint[]>`move_path`, speed: sql<number>`move_speed` };
+  const cols = { id: sql<number>`id`, x: sql<number>`x`, y: sql<number>`y`, path: sql<GridPoint[]>`move_path`, speed: sql<number>`move_speed`, after: sql<string | null>`move_after` };
   const [n, a, e] = await Promise.all([
     db.select({ ...cols }).from(npcs).where(eq(npcs.moveStartAt, startAt)),
     db.select({ ...cols }).from(animals).where(eq(animals.moveStartAt, startAt)),
@@ -86,7 +86,11 @@ export async function fetchMovesStartingAt(startAt: number): Promise<ScheduledMo
   ]);
   const out: ScheduledMove[] = [];
   const push = (kind: MoverKind, rows: typeof n) => {
-    for (const r of rows) out.push({ kind, id: r.id, x: r.x, y: r.y, move: { path: r.path, startAt, speed: r.speed } });
+    for (const r of rows) {
+      const move: Move = { path: r.path, startAt, speed: r.speed };
+      if (r.after) move.after = r.after;
+      out.push({ kind, id: r.id, x: r.x, y: r.y, move });
+    }
   };
   push("npc", n);
   push("animal", a);
