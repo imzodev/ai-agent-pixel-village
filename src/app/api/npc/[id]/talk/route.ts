@@ -8,6 +8,9 @@ import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
 import { gameHour } from "@/lib/worldmap";
 import { rowPositionAt } from "@/lib/motion";
+import { holdNpc } from "@/lib/moveStore";
+import { NPC_TALK_HOLD_MS } from "@/lib/constants";
+import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
@@ -37,11 +40,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const [npc] = await db.select().from(npcs).where(eq(npcs.id, Number(id)));
     if (!npc || !npc.active) return Response.json({ error: "Nobody there." }, { status: 404 });
-    // The NPC may be mid-step: measure from where it is right now.
+    // The NPC may be mid-step and the character row can be ~10 s stale:
+    // compare where both are right now.
     const npcPos = rowPositionAt(npc, Date.now());
-    if (Math.hypot(npcPos.x - character.x, npcPos.y - character.y) > 160) {
+    const me = getLivePlayerPosition(character.id) ?? character;
+    if (Math.hypot(npcPos.x - me.x, npcPos.y - me.y) > 160) {
       return Response.json({ error: "Walk a little closer first." }, { status: 400 });
     }
+    // Keep the NPC standing still while the conversation lasts.
+    const hold = await holdNpc(npc.id, Date.now(), NPC_TALK_HOLD_MS);
+    if (hold?.stopped) markWorldDirty(hold.x, hold.y);
     const body = await req.json().catch(() => ({}));
     const message = String(body.message ?? "").trim().slice(0, 400);
 

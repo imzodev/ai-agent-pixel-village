@@ -14,6 +14,7 @@ import {
   positionAt,
   rowPositionAt,
   tileCenter,
+  truncateMove,
 } from "@/lib/motion";
 import { parseMoveInterval, parseTiles, WORLD_TICK_MS } from "@/lib/constants";
 import type { Move } from "@/types/motion";
@@ -148,5 +149,36 @@ describe("parseTiles", () => {
     expect(parseTiles("7", 10)).toBe(7);
     expect(parseTiles(undefined, 10)).toBe(10);
     for (const bad of ["", "0", "-2", "3.5", "abc"]) expect(parseTiles(bad, 10)).toBe(10);
+  });
+});
+
+describe("truncateMove", () => {
+  it("before the start: zero-length, the entity never leaves its tile", () => {
+    const cut = truncateMove(east3, 9_000);
+    expect(cut.path).toEqual([{ tx: 0, ty: 0 }, { tx: 0, ty: 0 }]);
+    expect(cut.startAt).toBe(east3.startAt);
+    expect(positionAt(cut, 12_000)).toMatchObject({ x: 8, y: 8, moving: false });
+  });
+
+  it("mid-leg: finishes the current tile and stops there", () => {
+    const cut = truncateMove(east3, 11_250); // 1.25 tiles walked
+    expect(cut.path).toEqual([{ tx: 0, ty: 0 }, { tx: 2, ty: 0 }]);
+    // Identical to the original up to the stop tile, never past it.
+    expect(positionAt(cut, 11_250)).toEqual(positionAt(east3, 11_250));
+    expect(positionAt(cut, 99_999)).toMatchObject({ x: 40, y: 8, moving: false });
+  });
+
+  it("exactly on a tile centre: stops on that tile", () => {
+    expect(truncateMove(east3, 12_000).path).toEqual([{ tx: 0, ty: 0 }, { tx: 2, ty: 0 }]);
+  });
+
+  it("after the end: unchanged", () => {
+    expect(truncateMove(east3, 20_000)).toBe(east3);
+  });
+
+  it("cuts a multi-leg path on the right leg", () => {
+    const cut = truncateMove(lShape, 2_500); // 2.5 tiles: past the corner
+    expect(cut.path).toEqual([{ tx: 0, ty: 0 }, { tx: 2, ty: 0 }, { tx: 2, ty: -1 }]);
+    expect(positionAt(cut, 99_999)).toMatchObject({ x: 40, y: -8, facing: "up", moving: false });
   });
 });

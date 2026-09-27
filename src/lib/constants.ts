@@ -113,6 +113,13 @@ export const NPC_MOVE_MIN_TILES = Math.min(parseTiles(process.env.NPC_MOVE_MIN_T
  */
 export const NPC_LEASH_TILES = NPC_MOVE_MAX_TILES;
 
+/**
+ * How long a talk request keeps an NPC standing still, and how often the
+ * open dialog renews it. The hold simply lapses after the dialog closes.
+ */
+export const NPC_TALK_HOLD_MS = 20_000;
+export const NPC_TALK_KEEPALIVE_MS = 8_000;
+
 /** A* bound for goal moves (fox raid, remote-agent "move" action). */
 export const PLANNER_MAX_TILES_DEFAULT = 80;
 

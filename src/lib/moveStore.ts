@@ -5,9 +5,9 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, enemies, npcs } from "@/db/schema";
-import { moveDestination, positionAt, tileCenter } from "./motion";
+import { moveDestination, moveEndAt, moveOfRow, positionAt, tileCenter, truncateMove } from "./motion";
 import type { GridPoint } from "@/types/world";
-import type { MoverKind, MoveWrite, ScheduledMove } from "@/types/motion";
+import type { HoldResult, MoverKind, MoveWrite, ScheduledMove } from "@/types/motion";
 
 const TABLE: Record<MoverKind, string> = { npc: "npcs", animal: "animals", enemy: "enemies" };
 
@@ -33,12 +33,43 @@ export async function writeMoves(kind: MoverKind, writes: readonly MoveWrite[]):
     sql`, `,
   );
   const setFacing = kind === "enemy" ? sql`` : sql`facing = v.facing, `;
+  // A held NPC (someone is talking to it) must not get a move that starts
+  // during the hold — even from a tick that was already in flight.
+  const notHeld = kind === "npc" ? sql` AND (t.hold_until IS NULL OR t.hold_until <= v.start_at)` : sql``;
   await db.execute(sql`
     UPDATE ${sql.raw(TABLE[kind])} AS t
     SET x = v.x, y = v.y, ${setFacing}move_path = v.path, move_start_at = v.start_at, move_speed = v.speed
     FROM (VALUES ${values}) AS v(id, x, y, facing, path, start_at, speed)
-    WHERE t.id = v.id
+    WHERE t.id = v.id${notHeld}
   `);
+}
+
+/**
+ * Keep an NPC standing still for `holdMs` (a player is talking to it).
+ * Extends any existing hold, and cuts a running or pending move short
+ * so the NPC stops on the next tile it reaches. The cut move keeps its
+ * `startAt`, so clients that already hold the original accept it as a
+ * replacement. Callers should push a snapshot when `stopped` is true.
+ */
+export async function holdNpc(npcId: number, now: number, holdMs: number): Promise<HoldResult | null> {
+  const [row] = await db
+    .select({ x: npcs.x, y: npcs.y, movePath: npcs.movePath, moveStartAt: npcs.moveStartAt, moveSpeed: npcs.moveSpeed, holdUntil: npcs.holdUntil })
+    .from(npcs)
+    .where(eq(npcs.id, npcId));
+  if (!row) return null;
+  const holdUntil = Math.max(row.holdUntil ?? 0, now + holdMs);
+  const move = moveOfRow(row);
+  if (!move || moveEndAt(move) <= now) {
+    await db.update(npcs).set({ holdUntil }).where(eq(npcs.id, npcId));
+    return { x: row.x, y: row.y, stopped: false };
+  }
+  const cut = truncateMove(move, now);
+  const w = buildMoveWrite(npcId, cut.path, cut.startAt, cut.speed);
+  await db
+    .update(npcs)
+    .set({ holdUntil, x: w.x, y: w.y, facing: w.facing, movePath: cut.path })
+    .where(eq(npcs.id, npcId));
+  return { x: w.x, y: w.y, stopped: true };
 }
 
 /**

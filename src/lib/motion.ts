@@ -26,6 +26,7 @@ export function tileOf(x: number, y: number): GridPoint {
 }
 
 function facingOfDelta(dx: number, dy: number): Facing {
+  if (dx === 0 && dy === 0) return "down";
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left";
   return dy > 0 ? "down" : "up";
 }
@@ -86,6 +87,37 @@ export function positionAt(move: Move, t: number): MotionSample {
   }
   // Unreachable: the loop always returns on the last leg.
   return { ...tileCenter(path[path.length - 1]), facing: "down", moving: false };
+}
+
+/**
+ * Cut a move short so the entity stops on the next tile it reaches at
+ * time `t` (it never stops between tiles). `startAt` and `speed` are
+ * kept, so every client that samples the cut move agrees with the
+ * original up to the stop tile.
+ *   - `t` before the start: zero-length path `[origin, origin]`.
+ *   - `t` after the end: the move is returned unchanged.
+ */
+export function truncateMove(move: Move, t: number): Move {
+  const origin = move.path[0];
+  if (t <= move.startAt) return { ...move, path: [origin, origin] };
+  if (t >= moveEndAt(move)) return move;
+  // Whole tiles walked by the time the entity reaches its next tile centre.
+  let budget = Math.ceil((((t - move.startAt) / 1000) * move.speed) / TILE - 1e-9);
+  const path: GridPoint[] = [origin];
+  for (let i = 1; i < move.path.length && budget > 0; i++) {
+    const a = move.path[i - 1];
+    const b = move.path[i];
+    const len = Math.abs(b.tx - a.tx) + Math.abs(b.ty - a.ty);
+    if (len <= budget) {
+      path.push(b);
+      budget -= len;
+    } else {
+      path.push({ tx: a.tx + Math.sign(b.tx - a.tx) * budget, ty: a.ty + Math.sign(b.ty - a.ty) * budget });
+      budget = 0;
+    }
+  }
+  if (path.length < 2) path.push(origin);
+  return { ...move, path };
 }
 
 /** Rebuild a `Move` from DB columns, or null when the row has none. */

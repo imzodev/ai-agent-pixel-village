@@ -163,6 +163,9 @@ export const npcs = pgTable(
     movePath: jsonb("move_path").$type<GridPoint[]>(),
     moveStartAt: bigint("move_start_at", { mode: "number" }),
     moveSpeed: real("move_speed"),
+    // Epoch ms until which the NPC must not start a new move (a player
+    // is talking to it). See holdNpc in src/lib/moveStore.ts.
+    holdUntil: bigint("hold_until", { mode: "number" }),
     lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),

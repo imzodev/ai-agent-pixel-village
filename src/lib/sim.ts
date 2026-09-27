@@ -127,7 +127,7 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
   const rows = await db
     .select({
       id: npcs.id, kind: npcs.kind, x: npcs.x, y: npcs.y,
-      homeX: npcs.homeX, homeY: npcs.homeY, wanderRadius: npcs.wanderRadius,
+      homeX: npcs.homeX, homeY: npcs.homeY, wanderRadius: npcs.wanderRadius, holdUntil: npcs.holdUntil,
       movePath: npcs.movePath, moveStartAt: npcs.moveStartAt, moveSpeed: npcs.moveSpeed,
     })
     .from(npcs)
@@ -136,6 +136,7 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
   for (const n of rows) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
     if (!isDue("npc", n.id, beat.index, NPC_MOVE_INTERVAL_MS)) continue;
+    if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it
     if (busyAt(n, beat.startAt)) continue;
     const radius = Math.max(Math.floor(n.wanderRadius / CHUNK_TILE_PX), NPC_LEASH_TILES);
     const leash = leashAround({ x: n.homeX, y: n.homeY }, radius);

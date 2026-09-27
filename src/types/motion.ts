@@ -101,3 +101,12 @@ export type FanoutPeer = { x: number; y: number; backedUp: boolean };
 
 /** One serialise-once group: every peer gets the same `moves` payload. */
 export type FanoutBucket<P> = { peers: P[]; moves: ScheduledMove[] };
+
+/** Outcome of holding an NPC in place (`holdNpc`). */
+export type HoldResult = {
+  /** Where the NPC will stand for the hold. */
+  x: number;
+  y: number;
+  /** True when a running or pending move was cut short. */
+  stopped: boolean;
+};
