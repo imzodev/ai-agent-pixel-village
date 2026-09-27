@@ -95,6 +95,30 @@
       "reservable": true,
       "tx": 2,
       "ty": 30
+    },
+    {
+      "key": "house_2",
+      "file": "/buildings/house_2.json",
+      "name": "Brick House",
+      "kind": "home",
+      "description": "A two-storey brick house with a terracotta roof, north of the village.",
+      "color": "#b0503a",
+      "menu": [],
+      "reservable": true,
+      "tx": 4,
+      "ty": -21
+    },
+    {
+      "key": "rose_cottage",
+      "file": "/buildings/rose_cottage.json",
+      "name": "Rose Cottage",
+      "kind": "home",
+      "description": "A slate-roofed cottage with window boxes, a tulip bed and a white picket fence, by the llama meadow.",
+      "color": "#4a628c",
+      "menu": [],
+      "reservable": true,
+      "tx": 98,
+      "ty":20
     }
   ]
 }
