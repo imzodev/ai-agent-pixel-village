@@ -1,5 +1,6 @@
 import {
   bigint,
+  pgMaterializedView,
   pgTable,
   serial,
   text,
@@ -10,6 +11,7 @@ import {
   real,
   uniqueIndex,
   index,
+  varchar,
 } from "drizzle-orm/pg-core";
 import type {
   Appearance,
@@ -544,5 +546,25 @@ export type { SponsorEvent };
 export type { FriendRequest, Friendship };
 export type { DailyQuest, StreakState };
 export type { Activity, ActivityParticipant };
+
+// Registered with Drizzle so `drizzle-kit push` doesn't try to drop it.
+// The view body itself is created at runtime by ensureOnlinePlayersView
+// in `src/lib/onlinePlayers.ts` on every tickd / server boot — Drizzle
+// leaves the body alone; we just acknowledge the relation exists.
+export const onlinePlayersView = pgMaterializedView("online_players", {
+  id: bigint("id", { mode: "number" }).notNull(),
+  name: varchar("name").notNull(),
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  facing: varchar("facing").notNull(),
+  appearance: jsonb("appearance").notNull(),
+  level: integer("level").notNull(),
+  hp: integer("hp").notNull(),
+  max_hp: integer("max_hp").notNull(),
+  coins: integer("coins").notNull(),
+  gems: integer("gems").notNull(),
+  xp: integer("xp").notNull(),
+  last_seen_at: timestamp("last_seen_at").notNull(),
+}).existing();
 
 export const _drizzleHelpers = { uniqueIndex };
