@@ -132,6 +132,24 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "eat" },
   },
+  cat: {
+    // Original orange tabby drawn by scripts/draw-cat.mjs (block 0 = walk,
+    // block 1 = groom). Cats don't graze: their rest state grooms instead.
+    url: "/assets/animals/cat.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8, // same as the duck and rabbit
+    originX: 0.5,
+    originY: 0.87, // paws sit at y≈28 of 32
+    labelHeight: 21,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      groom: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { graze: "groom" },
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

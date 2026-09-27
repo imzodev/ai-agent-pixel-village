@@ -33,10 +33,9 @@ export function pixelTexture(scene: Scene, key: string, rows: string[], palette:
 
 // ---------- Animals & creatures ----------
 const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {
-  // cow, sheep, chicken, duck, rabbit, fox: rendered from spritesheets (src/game/animalSprites.ts).
+  // cow, sheep, chicken, duck, rabbit, cat, fox: rendered from spritesheets (src/game/animalSprites.ts).
   // Species listed there are skipped below so a procedural texture can
   // never overwrite the sheet.
-  cat: { rows: [".g.g......", ".ggg......", ".gggggggg.", ".gggggggg.", ".ggggggg.g", "..g.g..g.g", "..g.g..gg."], palette: { g: "#e8985a" } },
   dog: { rows: ["..b.........", "..bb........", ".bbbbbbbbbb.", ".bbbbbbbbbbb", ".bbbbbbbbbb.", "..bbbbbbbb..", "..b..b..b.b.", "..b..b..b..."], palette: { b: "#a5682a" } },
   slime: { rows: ["...gggg...", "..gggggg..", ".gggggggg.", ".gkggggkg.", ".gggggggg.", "gggggggggg", "gggggggggg", ".gggggggg."], palette: { g: "#6ccf7a", k: "#1e3a22" } },
   bat: { rows: ["p.........p.", "pp...kk..pp.", "ppp.kkkk.ppp", "pppkkkkkkppp", ".ppkkwkkwpp.", "..kkkkkkkk..", "...kk..kk..."], palette: { p: "#6b4a8a", k: "#2e2340", w: "#f8e16c" } },

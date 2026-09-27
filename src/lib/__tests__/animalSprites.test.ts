@@ -69,6 +69,13 @@ describe("registry", () => {
     expect(rabbit.stateActions.graze).toBe("eat");
   });
 
+  it("cats groom instead of grazing", () => {
+    const cat = ANIMAL_SPRITES.cat;
+    expect(cat.stateActions.graze).toBe("groom");
+    expect(frameIndex(cat, "groom", "up", 0)).toBe(16);
+    expect(animKey("cat", "groom", "left")).toBe("cr_cat_groom_left");
+  });
+
   it("cow grazes with the eat animation", () => {
     expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
     expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");
