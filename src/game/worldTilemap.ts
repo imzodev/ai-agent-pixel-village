@@ -161,8 +161,9 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "Rocks", file: "Rocks.png" },
   { name: "Trees_Size_03", file: "Trees_Size_03.png" },
   { name: "Furniture", file: "Furniture.png" },
-  // Baked building tilesets (scripts/build-cabin-2.mjs).
+  // Baked building tilesets (scripts/build-cabin-2.mjs, scripts/build-house.mjs).
   { name: "Cabin2", file: "Cabin2.png" },
+  { name: "House1", file: "House1.png" },
 ];
 
 // 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,
