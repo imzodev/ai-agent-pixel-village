@@ -8,7 +8,7 @@
 //
 //   node scripts/draw-cat.mjs             → public/assets/animals/cat.png
 
-import { blank, block, ellipse, outline as trace, put, rect, shiftX, writeSheet } from "./pixel-art.mjs";
+import { blank, block, ellipse, line, outline as trace, put, rect, shiftX, writeSheet } from "./pixel-art.mjs";
 
 const C = {
   outline: [48, 30, 24],
@@ -23,20 +23,6 @@ const C = {
   nose: [214, 116, 124],
 };
 const outline = (fr) => trace(fr, C.outline);
-
-/** Thick polyline through `pts` (used for the tail). */
-function line(fr, pts, c, w = 2) {
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1];
-    const [x1, y1] = pts[i];
-    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2;
-    for (let s = 0; s <= n; s++) {
-      const x = x0 + ((x1 - x0) * s) / n;
-      const y = y0 + ((y1 - y0) * s) / n;
-      rect(fr, Math.round(x - (w - 1) / 2), Math.round(y - (w - 1) / 2), w, w, c);
-    }
-  }
-}
 
 /** Pointy ear: 3 rows tall, `dir` -1 leans left, 1 leans right. */
 function ear(fr, x, y, dir, inner = true) {

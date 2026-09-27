@@ -150,6 +150,24 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "groom" },
   },
+  dog: {
+    // Original brown dog drawn by scripts/draw-dog.mjs (block 0 = walk,
+    // block 1 = sit: pants and wags). Dogs don't graze: they sit instead.
+    url: "/assets/animals/dog.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8, // same as the other hand-drawn animals
+    originX: 0.5,
+    originY: 0.88, // paws sit at y≈28 of 32
+    labelHeight: 21,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      sit: { block: 1, frames: 4, frameRate: 5, loop: true },
+    },
+    stateActions: { graze: "sit" },
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

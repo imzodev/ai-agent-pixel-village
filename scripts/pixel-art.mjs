@@ -36,6 +36,20 @@ export function rect(fr, x0, y0, w, h, c) {
   for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(fr, x, y, c);
 }
 
+/** Thick polyline through `pts` (tails and the like). */
+export function line(fr, pts, c, w = 2) {
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1];
+    const [x1, y1] = pts[i];
+    const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1) * 2;
+    for (let s = 0; s <= n; s++) {
+      const x = x0 + ((x1 - x0) * s) / n;
+      const y = y0 + ((y1 - y0) * s) / n;
+      rect(fr, Math.round(x - (w - 1) / 2), Math.round(y - (w - 1) / 2), w, w, c);
+    }
+  }
+}
+
 /** Trace a 1-px outline of colour `c` around every opaque pixel. */
 export function outline(fr, c) {
   const out = fr.map((r) => r.slice());
