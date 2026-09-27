@@ -7,6 +7,7 @@ import { characters, inventory, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { addItem, logEvent, removeItem } from "@/lib/game";
 import { maxCraftable, recipeByKey } from "@/lib/recipes";
+import { rowPositionAt } from "@/lib/motion";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,8 @@ async function performCraft(opts: {
   const [me] = await db.select().from(characters).where(eq(characters.id, opts.characterId));
   if (!me) return { ok: false, error: "You don't have that." };
 
-  if (Math.hypot(crafter.x - me.x, crafter.y - me.y) > 160) {
+  const crafterPos = rowPositionAt(crafter, Date.now());
+  if (Math.hypot(crafterPos.x - me.x, crafterPos.y - me.y) > 160) {
     return { ok: false, error: `Walk closer to ${crafter.name} first.` };
   }
 

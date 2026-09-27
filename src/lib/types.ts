@@ -78,6 +78,8 @@ export type SimCtx = {
   hour: number;
   weather: string;
   now: Date;
+  /** Epoch ms of the next beat — when moves scheduled this tick start. */
+  moveStartAt: number;
 };
 
 

@@ -1,4 +1,5 @@
 import {
+  bigint,
   pgTable,
   serial,
   text,
@@ -24,6 +25,7 @@ import type {
   GemTransaction,
 } from "@/types/cosmetic";
 import type { SponsorEvent } from "@/types/sponsor";
+import type { GridPoint } from "@/types/world";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { Activity, ActivityParticipant } from "@/types/activity";
@@ -153,11 +155,17 @@ export const npcs = pgTable(
     apiKey: text("api_key").unique(),
     webhookUrl: text("webhook_url"),
     mood: text("mood").notNull().default("cheerful"),
+    // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+    // resting position the move ends on; the live position is
+    // `positionAt(move, now)`. Null when the entity has never moved.
+    movePath: jsonb("move_path").$type<GridPoint[]>(),
+    moveStartAt: bigint("move_start_at", { mode: "number" }),
+    moveSpeed: real("move_speed"),
     lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("npcs_sponsor_idx").on(t.sponsorId)],
+  (t) => [index("npcs_sponsor_idx").on(t.sponsorId), index("npcs_move_start_idx").on(t.moveStartAt)],
 );
 
 // ---------- Animals ----------
@@ -178,7 +186,13 @@ export const animals = pgTable("animals", {
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
   stateUntil: timestamp("state_until"),
-});
+  // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+  // resting position the move ends on; the live position is
+  // `positionAt(move, now)`. Null when the entity has never moved.
+  movePath: jsonb("move_path").$type<GridPoint[]>(),
+  moveStartAt: bigint("move_start_at", { mode: "number" }),
+  moveSpeed: real("move_speed"),
+}, (t) => [index("animals_move_start_idx").on(t.moveStartAt)]);
 
 // ---------- Items ----------
 // ItemKind re-exported above
@@ -366,7 +380,13 @@ export const enemies = pgTable("enemies", {
   hp: integer("hp").notNull(),
   maxHp: integer("max_hp").notNull(),
   spawnedAt: timestamp("spawned_at").defaultNow().notNull(),
-});
+  // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
+  // resting position the move ends on; the live position is
+  // `positionAt(move, now)`. Null when the entity has never moved.
+  movePath: jsonb("move_path").$type<GridPoint[]>(),
+  moveStartAt: bigint("move_start_at", { mode: "number" }),
+  moveSpeed: real("move_speed"),
+}, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
   id: serial("id").primaryKey(),

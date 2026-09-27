@@ -7,6 +7,7 @@ import { npcLlmLimiter } from "@/lib/rateLimit";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
 import { gameHour } from "@/lib/worldmap";
+import { rowPositionAt } from "@/lib/motion";
 import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
@@ -36,7 +37,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const [npc] = await db.select().from(npcs).where(eq(npcs.id, Number(id)));
     if (!npc || !npc.active) return Response.json({ error: "Nobody there." }, { status: 404 });
-    if (Math.hypot(npc.x - character.x, npc.y - character.y) > 160) {
+    // The NPC may be mid-step: measure from where it is right now.
+    const npcPos = rowPositionAt(npc, Date.now());
+    if (Math.hypot(npcPos.x - character.x, npcPos.y - character.y) > 160) {
       return Response.json({ error: "Walk a little closer first." }, { status: 400 });
     }
     const body = await req.json().catch(() => ({}));

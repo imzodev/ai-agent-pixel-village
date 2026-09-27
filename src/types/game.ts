@@ -7,6 +7,7 @@
 import type Phaser from "phaser";
 import type { Facing } from "@/types/world";
 import type { EquippedCosmetics } from "@/types/cosmetic";
+import type { Move } from "@/types/motion";
 
 export type CharEnt = {
   sprite: Phaser.GameObjects.Sprite;
@@ -14,6 +15,8 @@ export type CharEnt = {
   badge?: Phaser.GameObjects.Text;
   tx: number;
   ty: number;
+  /** Server-scheduled move (NPCs). When set, position = positionAt(move, serverNow). */
+  move?: Move | null;
   facing: Facing;
   speed: number;
   texKey: string | null;
@@ -30,6 +33,8 @@ export type CritterEnt = {
   kind: string;
   tx: number;
   ty: number;
+  /** Server-scheduled move. When set, position = positionAt(move, serverNow). */
+  move?: Move | null;
   facing: string;
   state: string;
   speed: number;

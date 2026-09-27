@@ -24,6 +24,8 @@ import {
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
+import type { Move, ScheduledMove } from "@/types/motion";
+import { positionAt } from "@/lib/motion";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
@@ -50,6 +52,16 @@ function cosmeticsListToEquipped(list: { slot: string; itemKey: string }[] | und
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Keep the newest scheduled move. Snapshots can be served from a cache
+ * built before the latest beat's `moves` message, so never let an older
+ * move (or a missing one) overwrite a newer one.
+ */
+function acceptMove(ent: { move?: Move | null }, move: Move | null): void {
+  if (!move) return;
+  if (!ent.move || move.startAt >= ent.move.startAt) ent.move = move;
 }
 
 function zoneOf(rect: Phaser.Geom.Rectangle): Phaser.Types.GameObjects.Particles.ParticleEmitterRandomZoneConfig {
@@ -314,6 +326,10 @@ export class WorldScene extends Phaser.Scene {
           // next full snapshot. Phase 3+ can implement targeted delta
           // fetches per affected chunk.
         },
+        onMoves: ({ moves }) => {
+          if (!this.alive()) return;
+          this.applyMoves(moves);
+        },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
@@ -453,9 +469,9 @@ export class WorldScene extends Phaser.Scene {
     // npcs
     this.syncChars(this.npcs, s.npcs, 46, "#fff2b3", (n) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) }), (n) => (n.sponsor ? `★ ${n.sponsor.businessName}` : n.kind === "remote" ? "◇ agent" : n.role));
     // animals
-    this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
+    this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name, move: a.move })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
     // enemies
-    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) }));
+    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) }));
     // ground items
     const seenItems = new Set<number>();
     for (const it of s.groundItems) {
@@ -547,7 +563,7 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[] }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
@@ -573,6 +589,7 @@ export class WorldScene extends Phaser.Scene {
         void this.ensureCharTexture(ent, p.appearance, eq);
       }
       ent.tx = p.x; ent.ty = p.y;
+      if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
       if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Facing;
       if (Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) > 400) ent.sprite.setPosition(p.x, p.y);
@@ -580,7 +597,7 @@ export class WorldScene extends Phaser.Scene {
     for (const [id, ent] of map) if (!seen.has(id)) { this.destroyChar(ent); map.delete(id); }
   }
 
-  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string }>(
+  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string; move: Move | null }>(
     map: Map<number, CritterEnt>, list: T[], speed: number, sel: (t: T) => Selection,
   ) {
     const seen = new Set<number>();
@@ -602,6 +619,7 @@ export class WorldScene extends Phaser.Scene {
         map.set(a.id, ent);
       }
       ent.tx = a.x; ent.ty = a.y; ent.state = a.state; ent.hp = a.hp; ent.maxHp = a.maxHp;
+      acceptMove(ent, a.move);
       // Fox has 4-direction art — accept every facing from the server.
       // Other critters only have left/right art.
       if (a.kind === "fox" ? ["up", "down", "left", "right"].includes(a.facing) : (a.facing === "left" || a.facing === "right")) ent.facing = a.facing;
@@ -775,7 +793,31 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Apply one beat's scheduled moves to the sprites we already track. */
+  private applyMoves(moves: ScheduledMove[]) {
+    for (const m of moves) {
+      const ent = m.kind === "npc" ? this.npcs.get(m.id) : m.kind === "animal" ? this.animals.get(m.id) : this.enemies.get(m.id);
+      if (!ent) continue; // outside our window — the next snapshot creates it
+      ent.tx = m.x; ent.ty = m.y;
+      acceptMove(ent, m.move);
+    }
+  }
+
+  /** Server clock, so every client samples a move at the same instant. */
+  private serverNow(): number {
+    return this.stream?.serverNow() ?? Date.now();
+  }
+
   private moveChar(e: CharEnt, dt: number) {
+    if (e.move) {
+      // Scheduled (NPC) motion: exact position from the shared clock.
+      const p = positionAt(e.move, this.serverNow());
+      e.sprite.setPosition(p.x, p.y);
+      e.facing = p.facing;
+      this.playWalk(e, p.moving);
+      this.placeChar(e);
+      return;
+    }
     const dx = e.tx - e.sprite.x, dy = e.ty - e.sprite.y;
     const d = Math.hypot(dx, dy);
     if (d > 0.5) {
@@ -806,16 +848,33 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private moveCritter(e: CritterEnt, dt: number, time: number) {
-    const dx = e.tx - e.sprite.x, dy = e.ty - e.sprite.y;
-    const d = Math.hypot(dx, dy);
+    let moving: boolean;
+    let dx = 0, dy = 0;
+    if (e.move) {
+      // Scheduled motion: exact position from the shared clock.
+      const p = positionAt(e.move, this.serverNow());
+      dx = p.x - e.sprite.x; dy = p.y - e.sprite.y;
+      e.sprite.setPosition(p.x, p.y);
+      moving = p.moving;
+      if (moving) {
+        dx = p.facing === "right" ? 1 : p.facing === "left" ? -1 : 0;
+        dy = p.facing === "down" ? 1 : p.facing === "up" ? -1 : 0;
+      }
+    } else {
+      dx = e.tx - e.sprite.x; dy = e.ty - e.sprite.y;
+      const d = Math.hypot(dx, dy);
+      moving = d > 0.5;
+      if (moving) {
+        const step = Math.min(d, Math.max(e.speed * dt, d * 2.5 * dt));
+        e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
+      }
+    }
     let bob = 0;
-    if (d > 0.5) {
-      const step = Math.min(d, Math.max(e.speed * dt, d * 2.5 * dt));
-      e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
+    if (moving) {
       // Fox has 4-direction art — pick facing from the dominant axis.
       // Other critters only have left/right art, so horizontal-only.
       if (e.kind === "fox") e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
-      else if (Math.abs(dx) > 1) e.facing = dx > 0 ? "right" : "left";
+      else if (dx !== 0) e.facing = dx > 0 ? "right" : "left";
       bob = Math.abs(Math.sin(time / 90 + e.phase)) * 2;
     } else if (e.state === "graze") bob = Math.sin(time / 400 + e.phase) > 0.8 ? 1 : 0;
     else if (e.maxHp > 1) bob = Math.abs(Math.sin(time / 300 + e.phase)) * 1.5;
@@ -826,9 +885,9 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
     // Play the matching walk animation when the fox is moving, freeze on frame 0 when stopped.
     if (e.kind === "fox") {
-      const key = `cr_fox_walk_${d > 0.5 ? e.facing : e.facing}`;
+      const key = `cr_fox_walk_${e.facing}`;
       const sprite = e.sprite as Phaser.GameObjects.Sprite;
-      if (d > 0.5) {
+      if (moving) {
         if (sprite.anims.currentAnim?.key !== key || !sprite.anims.isPlaying) sprite.play(key, true);
       } else {
         sprite.stop();

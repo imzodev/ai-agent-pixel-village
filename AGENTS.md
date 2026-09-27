@@ -51,3 +51,37 @@ Selection:
 
 Without any key, NPCs fall back to the scripted brain (`scriptedReply`).
 No application code change needed to add providers — config only.
+
+## Movement (NPCs, animals, enemies)
+
+Movement is deterministic and beat-synced. **Never stream or tick
+positions for these entities.**
+
+- A move is data: `{ path: GridPoint[], startAt, speed }` (`src/types/motion.ts`).
+  The position at any instant is `positionAt(move, t)` (`src/lib/motion.ts`),
+  and the server, the WS server and every client compute it the same way.
+- Row `x`/`y` hold the move's **destination** (the resting spot). For
+  "where is it right now" (range checks and the like), use `rowPositionAt(row, Date.now())`.
+- Beats are epoch-aligned `WORLD_TICK_MS` (5 s) slots. tickd wakes on
+  each boundary. Entities due on beat k (`isDue`, staggered per id) get a
+  move that starts on beat k+1. The WS server reads that beat's moves at
+  boundary + `BROADCAST_OFFSET_MS` and sends one small `moves` message per
+  spatial bucket, so clients hold every move before it starts.
+- Wander steps are one cardinal direction, an exact whole number of tiles
+  (NPCs `NPC_MOVE_MIN_TILES..NPC_MOVE_MAX_TILES`, others
+  `MOVE_MIN_TILES..MOVE_MAX_TILES`), never through blocked tiles, and
+  inside a leash (`pickWanderMove`). NPC leash radius is at least
+  `NPC_LEASH_TILES` (= max step) even if `wander_radius` is smaller. Goal walks (fox raid, remote agents)
+  use A* → `compressToLegs` (`planGoalMove`).
+- Persist moves with `buildMoveWrite` + `writeMoves` (one batched UPDATE
+  per table). A new move must not start before the current one ends.
+
+| Env | Default | Meaning |
+| --- | --- | --- |
+| `NPC_MOVE_INTERVAL_MS` | 10000 | how often each NPC steps (rounded up to whole beats) |
+| `NPC_MOVE_MIN_TILES` / `NPC_MOVE_MAX_TILES` | 1 / 10 | NPC step length range (animals/enemies: 1–4) |
+| `ANIMAL_MOVE_INTERVAL_MS` | 10000 | same for animals |
+| `ENEMY_MOVE_INTERVAL_MS` | 10000 | same for enemies |
+| `WS_RESYNC_MS` | 30000 | full-snapshot safety resync per client |
+
+tickd refuses to start if a `MOVE_MAX_TILES` walk can't finish within an interval.

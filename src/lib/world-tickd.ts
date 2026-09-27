@@ -22,12 +22,25 @@
 
 import { pool } from "@/db";
 import { tickWorld } from "./sim";
+import {
+  ANIMAL_MOVE_INTERVAL_MS,
+  ANIMAL_SPEED,
+  ENEMY_MOVE_INTERVAL_MS,
+  ENEMY_SPEED,
+  MOVE_INTERVAL_WARNINGS,
+  MOVE_MAX_TILES,
+  NPC_MOVE_INTERVAL_MS,
+  NPC_MOVE_MAX_TILES,
+  NPC_SPEED,
+  WORLD_TICK_MS,
+} from "./constants";
+import { CHUNK_TILE_PX } from "./chunkCollision";
+import { beatIndex, nextBeatAt } from "./motion";
 import { initRedis } from "./redis";
 import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 import { metrics } from "@/lib/metrics";
 import { log } from "@/lib/logger";
 
-const TICK_INTERVAL_MS = Number(process.env.WORLD_TICK_INTERVAL_MS ?? 1000);
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
 const ADVISORY_LOCK_KEY = 42;
@@ -61,7 +74,29 @@ async function acquireWithWait(): Promise<boolean> {
   return false;
 }
 
+/**
+ * A wander move of MOVE_MAX_TILES must finish before the same entity's
+ * next move starts, otherwise moves would overlap. Fail fast at boot.
+ */
+function assertMoveTimings(): void {
+  const checks = [
+    ["NPC", NPC_MOVE_INTERVAL_MS, NPC_SPEED, NPC_MOVE_MAX_TILES],
+    ["ANIMAL", ANIMAL_MOVE_INTERVAL_MS, ANIMAL_SPEED, MOVE_MAX_TILES],
+    ["ENEMY", ENEMY_MOVE_INTERVAL_MS, ENEMY_SPEED, MOVE_MAX_TILES],
+  ] as const;
+  for (const [kind, interval, speed, maxTiles] of checks) {
+    const longestMs = ((maxTiles * CHUNK_TILE_PX) / speed) * 1000;
+    if (longestMs > interval) {
+      throw new Error(
+        `${kind}_MOVE_INTERVAL_MS=${interval} is shorter than the longest wander move (${Math.ceil(longestMs)} ms); raise the interval or lower the max tiles`,
+      );
+    }
+  }
+  for (const w of MOVE_INTERVAL_WARNINGS) log.warn(w);
+}
+
 async function main(): Promise<void> {
+  assertMoveTimings();
   await initRedis();
 
   if (!(await acquireWithWait())) {
@@ -71,7 +106,10 @@ async function main(): Promise<void> {
     await pool.end();
     process.exit(1);
   }
-  console.log(`[tickd] acquired advisory lock; ticking every ${TICK_INTERVAL_MS} ms`);
+  log.info(
+    { beatMs: WORLD_TICK_MS, npcMoveMs: NPC_MOVE_INTERVAL_MS, animalMoveMs: ANIMAL_MOVE_INTERVAL_MS, enemyMoveMs: ENEMY_MOVE_INTERVAL_MS },
+    "acquired advisory lock; ticking on epoch-aligned beats",
+  );
 
   // Create the online_players view if it doesn't exist, then refresh it on
   // its own cadence. Best-effort: if the DB user can't manage views the
@@ -89,9 +127,14 @@ async function main(): Promise<void> {
     await refreshOnlinePlayers();
   };
 
+  let beatTimer: ReturnType<typeof setTimeout> | null = null;
+  let wakeBeat: (() => void) | null = null;
+
   const shutdown = async (signal: string): Promise<void> => {
     log.info({ signal }, "draining");
     running = false;
+    if (beatTimer) clearTimeout(beatTimer);
+    wakeBeat?.();
     if (inFlight) await inFlight;
     await releaseAdvisoryLock();
     await pool.end();
@@ -102,11 +145,22 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
 
+  // Beat loop. Sleep until the next epoch-aligned boundary (k * WORLD_TICK_MS)
+  // rather than "WORLD_TICK_MS minus however long the tick took": the WS
+  // servers compute the same boundaries independently, so both sides stay
+  // phase-locked without talking to each other and nothing drifts. A tick
+  // that overruns a beat simply skips to the following boundary.
   while (running) {
+    await new Promise<void>((resolve) => {
+      wakeBeat = resolve;
+      beatTimer = setTimeout(resolve, nextBeatAt(Date.now()) - Date.now());
+    });
+    if (!running) break;
     const start = Date.now();
     inFlight = tickWorld()
-      .then(() => {
+      .then((scheduled) => {
         metrics.simTickDuration.observe((Date.now() - start) / 1000);
+        log.info({ beat: beatIndex(start), lagMs: start % WORLD_TICK_MS, scheduled, tookMs: Date.now() - start }, "beat");
       })
       .catch((err) => {
         metrics.simTickFailuresTotal.inc();
@@ -117,9 +171,6 @@ async function main(): Promise<void> {
       });
     await inFlight;
     await maybeRefreshView();
-    const elapsed = Date.now() - start;
-    const sleepMs = Math.max(0, TICK_INTERVAL_MS - elapsed);
-    if (sleepMs > 0) await new Promise((r) => setTimeout(r, sleepMs));
   }
 }
 
