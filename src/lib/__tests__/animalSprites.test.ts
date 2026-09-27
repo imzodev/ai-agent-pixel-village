@@ -31,6 +31,13 @@ describe("registry", () => {
     }
   });
 
+  it("puts the chicken's pecking block below its walk block", () => {
+    const chicken = ANIMAL_SPRITES.chicken;
+    expect(frameIndex(chicken, "walk", "down", 0)).toBe(8);
+    expect(frameIndex(chicken, "eat", "up", 0)).toBe(16);
+    expect(chicken.stateActions.graze).toBe("eat");
+  });
+
   it("cow grazes with the eat animation", () => {
     expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
     expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");

@@ -26,6 +26,25 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "eat" },
   },
+  chicken: {
+    // Combined from chicken_walk + chicken_eat (block 0 = walk, block 1 = eat).
+    // Unlike the cow, the chicken's eat row is a pecking loop, so it
+    // simply repeats all 4 frames.
+    url: "/assets/animals/chicken.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.6, // same relative scale as the cow
+    originX: 0.5,
+    originY: 0.9, // feet sit at y≈29 of 32
+    labelHeight: 27,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 6, loop: true },
+    },
+    stateActions: { graze: "eat" },
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

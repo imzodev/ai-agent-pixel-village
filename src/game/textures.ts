@@ -34,10 +34,9 @@ export function pixelTexture(scene: Scene, key: string, rows: string[], palette:
 // ---------- Animals & creatures ----------
 const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {
   sheep: { rows: ["....wwwww...", "...wwwwwww..", "..wwwwwwwwkk", ".wwwwwwwwwkk", ".wwwwwwwwwk.", ".wwwwwwwww..", "..wwwwwww...", "..d.d..d.d..", "..d.d..d.d.."], palette: { w: "#f6f2ea", k: "#3a3230", d: "#3a3230" } },
-  chicken: { rows: ["....rr..", "...wwwo.", "...www..", ".wwwwww.", "wwwwwww.", ".wwwww..", "..www...", "..y.y...", "..y.y..."], palette: { r: "#d94a3a", w: "#fbf7f0", o: "#f0a020", y: "#f0a020" } },
   duck: { rows: ["...gg....", "...ggo...", "...gg....", ".wwwww...", "wwwwwww..", ".wwwwww..", "..wwww...", "...o.o..."], palette: { g: "#3f8a4a", o: "#f0a020", w: "#e7dcc6" } },
   rabbit: { rows: ["..t.t...", "..t.t...", "..ttt...", ".ttttt..", ".tttttt.", ".tttttt.", ".ttttt.t", "..t.t..."], palette: { t: "#d9b38c" } },
-  // cow, fox: rendered from spritesheets (src/game/animalSprites.ts).
+  // cow, chicken, fox: rendered from spritesheets (src/game/animalSprites.ts).
   // Species listed there are skipped below so a procedural texture can
   // never overwrite the sheet.
   cat: { rows: [".g.g......", ".ggg......", ".gggggggg.", ".gggggggg.", ".ggggggg.g", "..g.g..g.g", "..g.g..gg."], palette: { g: "#e8985a" } },
