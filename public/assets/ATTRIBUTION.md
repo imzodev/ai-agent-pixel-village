@@ -25,12 +25,16 @@ include this file (or a link to it) in your distribution.
 - **License**: GPL 2.0 or later / CC-BY. **Attribution required** when
   redistributing: credit Daniel Eddeland and link to the OpenGameArt submission.
 
-## Duck sprite (`animals/duck.png`)
+## Duck and rabbit sprites (`animals/duck.png`, `animals/rabbit.png`)
 
-Original art made for this project: a mallard drawn procedurally by
-`scripts/draw-duck.mjs` (32×32 frames, 4 directions, waddle + dabble) in
-the format of the LPC chicken above. Not derived from any third-party
-asset; regenerate with `node scripts/draw-duck.mjs`.
+Original art made for this project, drawn procedurally in the format of
+the LPC chicken above (32×32 frames, 4 directions):
+- a mallard by `scripts/draw-duck.mjs` (waddle + dabble);
+- a cottontail rabbit by `scripts/draw-rabbit.mjs` (hop + nibble).
+
+Not derived from any third-party asset; regenerate with
+`node scripts/draw-duck.mjs` / `node scripts/draw-rabbit.mjs`. Shared
+drawing helpers live in `scripts/pixel-art.mjs`.
 
 ## Wheat field tiles
 

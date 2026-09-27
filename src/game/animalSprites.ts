@@ -114,6 +114,24 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "eat" },
   },
+  rabbit: {
+    // Original cottontail drawn by scripts/draw-rabbit.mjs (block 0 = hop,
+    // block 1 = nibble).
+    url: "/assets/animals/rabbit.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8, // same as the duck
+    originX: 0.5,
+    originY: 0.9, // feet sit at y≈29 of 32
+    labelHeight: 24, // ears reach y≈5
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 9, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { graze: "eat" },
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

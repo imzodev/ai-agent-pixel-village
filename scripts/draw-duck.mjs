@@ -12,12 +12,7 @@
 // outline is traced around the silhouette like the LPC art. The right-
 // facing rows are mirrors of the left-facing ones.
 
-import sharp from "sharp";
-import path from "node:path";
-
-const F = 32; // frame size
-const COLS = 4;
-const DIRS = ["up", "left", "down", "right"];
+import { blank, block, ellipse, outline as trace, put, rect, shiftX, writeSheet } from "./pixel-art.mjs";
 
 const C = {
   outline: [38, 32, 30],
@@ -40,42 +35,7 @@ const C = {
   eye: [20, 20, 22],
 };
 
-/** A frame: 32×32 of [r,g,b] | null. */
-function blank() {
-  return Array.from({ length: F }, () => Array(F).fill(null));
-}
-function put(fr, x, y, c) {
-  x = Math.round(x); y = Math.round(y);
-  if (x >= 0 && y >= 0 && x < F && y < F) fr[y][x] = c;
-}
-function ellipse(fr, cx, cy, rx, ry, c, shade) {
-  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
-    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-      const d = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
-      if (d <= 1) put(fr, x, y, shade && y > cy + ry * 0.35 ? shade : c);
-    }
-  }
-}
-function rect(fr, x0, y0, w, h, c) {
-  for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(fr, x, y, c);
-}
-/** Trace a 1-px dark outline around every opaque pixel. */
-function outline(fr) {
-  const out = fr.map((r) => r.slice());
-  for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
-    if (fr[y][x]) continue;
-    const n = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => fr[y + dy]?.[x + dx]);
-    if (n) out[y][x] = C.outline;
-  }
-  return out;
-}
-/** Move a frame `dx` px to the right (content is drawn with margin to spare). */
-function shiftX(fr, dx) {
-  return fr.map((r) => [...Array(dx).fill(null), ...r.slice(0, F - dx)]);
-}
-function mirror(fr) {
-  return fr.map((r) => r.slice().reverse());
-}
+const outline = (fr) => trace(fr, C.outline);
 
 // ── Side view (facing left) ───────────────────────────────────────────
 // `bob` lifts the body 1px mid-stride; `step` 0..3 places the feet;
@@ -180,38 +140,5 @@ function back({ bob = 0, step = 0, dip = 0 }) {
 const WALK = [0, 1, 2, 3].map((i) => ({ bob: i % 2, step: i }));
 const EAT = [{ dip: 0 }, { dip: 1 }, { dip: 2 }, { dip: 3 }];
 
-function row(view, frames) {
-  return frames.map((f) => view(f));
-}
-function block(frames) {
-  const left = row(side, frames);
-  return {
-    up: row(back, frames),
-    left,
-    down: row(front, frames),
-    right: left.map(mirror),
-  };
-}
-
-const blocks = [block(WALK), block(EAT)];
-const width = F * COLS;
-const height = F * DIRS.length * blocks.length;
-const buf = Buffer.alloc(width * height * 4);
-blocks.forEach((b, bi) => {
-  DIRS.forEach((dir, di) => {
-    b[dir].forEach((fr, col) => {
-      for (let y = 0; y < F; y++) for (let x = 0; x < F; x++) {
-        const c = fr[y][x];
-        if (!c) continue;
-        const gx = col * F + x;
-        const gy = (bi * DIRS.length + di) * F + y;
-        const o = (gy * width + gx) * 4;
-        buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = 255;
-      }
-    });
-  });
-});
-
-const out = path.resolve("public/assets/animals/duck.png");
-await sharp(buf, { raw: { width, height, channels: 4 } }).png().toFile(out);
-console.log(`wrote ${out} (${width}×${height})`);
+const views = { side, front, back };
+await writeSheet("duck", [block(views, WALK), block(views, EAT)]);

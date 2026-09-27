@@ -62,6 +62,13 @@ describe("registry", () => {
     expect(duck.stateActions.graze).toBe("eat");
   });
 
+  it("rabbits nibble with the eat block below the hop block", () => {
+    const rabbit = ANIMAL_SPRITES.rabbit;
+    expect(frameIndex(rabbit, "walk", "down", 2)).toBe(10);
+    expect(frameIndex(rabbit, "eat", "right", 3)).toBe(31);
+    expect(rabbit.stateActions.graze).toBe("eat");
+  });
+
   it("cow grazes with the eat animation", () => {
     expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
     expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");
