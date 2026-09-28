@@ -55,4 +55,6 @@ export type Selection =
       reservable: boolean;
       hasSponsor: boolean;
       distance: number;
-    };
+    }
+  // An empty garden plot (a crop in it is selected as its `node` instead).
+  | { type: "plot"; lotKey: string; plot: number; x: number; y: number; distance: number };

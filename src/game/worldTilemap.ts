@@ -103,7 +103,7 @@ const ANCHOR_LAYERS: ReadonlySet<string> = new Set([
 
 // Layers that exist as data-only markers (server-side collision,
 // interaction anchors) — never rendered.
-const SKIP_LAYERS: ReadonlySet<string> = new Set(["Collision", "Interactive"]);
+const SKIP_LAYERS: ReadonlySet<string> = new Set(["Collision", "Interactive", "Garden"]);
 
 // Render order matches the JSON layer array order, minus the data-only
 // SKIP_LAYERS and minus SORTED_LAYERS (whose tiles are lifted to

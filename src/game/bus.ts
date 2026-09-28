@@ -23,6 +23,7 @@ class Bus {
 export const bus = new Bus();
 
 export const ITEM_ICONS: Record<string, string> = {
+  radish_seeds: "🌱", carrot_seeds: "🌱", tomato_seeds: "🌱", pumpkin_seeds: "🌱", radish: "🔴", carrot: "🥕", tomato: "🍅", pumpkin: "🎃",
   herb: "🌿", berry: "🫐", stone: "🪨", mushroom: "🍄", flour: "🌾", egg: "🥚", wool: "🧶", slime_gel: "🟢", honey_bun: "🥐",
   recipe_cinnamon: "📜", recipe_tea: "📜", wooden_sword: "🗡️", straw_hat: "👒", lantern: "🏮", chair: "🪑", table: "🟤", plant: "🪴",
   rug: "🟥", bed: "🛏️", lamp: "💡", bookshelf: "📚", painting: "🖼️", discount: "🎟️", fox_charm: "🦊", elder_seal: "🔏",

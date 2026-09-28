@@ -138,7 +138,8 @@ export type ItemKind =
   | "discount"
   | "recipe"
   | "hat"
-  | "trophy";
+  | "trophy"
+  | "seed";
 
 export type Item = {
   id: number;

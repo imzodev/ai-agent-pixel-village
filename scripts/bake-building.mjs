@@ -139,8 +139,10 @@ const TEMPLATE_LAYERS = [
   "Ground", "GroundUpper", "DecorationLowerShadow", "DecorationLower",
   "DecorationMiddle", "DecorationMiddle1", "DecorationMiddle2",
   "DecorationUpperShadow", "DecorationUpper", "DecorationUpper1",
-  "DecorationUpper2", "Collision", "Overlay", "Interactive",
+  "DecorationUpper2", "Collision", "Overlay", "Interactive", "Garden",
 ];
+// Data-only layers (never rendered): blocked cells, the door, garden plots.
+const DATA_LAYERS = new Set(["Collision", "Interactive", "Garden"]);
 
 /**
  * Bake hand-painted layer canvases (scripts/canvas-art.mjs) into a tileset
@@ -154,10 +156,13 @@ const TEMPLATE_LAYERS = [
  *   keyed by template layer name; each must be width×16 by height×16 px
  * @param {Array<[number, number]>} o.collision  blocked [row, col] cells
  * @param {[number, number]} o.door  [row, col] of the door (Interactive)
+ * @param {Array<[number, number]>} [o.garden]  [row, col] of each garden
+ *   plot's left cell (a plot spans col..col+1; the crop's bottom-centre
+ *   sits on the row's bottom edge). Order = plot index.
  * @param {number} [o.width=24]  template width in tiles
  * @param {number} [o.height=15] template height in tiles
  */
-export async function bakeCanvases({ name, jsonName, layers, collision, door, width = 24, height = 15 }) {
+export async function bakeCanvases({ name, jsonName, layers, collision, door, garden = [], width = 24, height = 15 }) {
   const slots = [];
   const slotByKey = new Map();
   const data = {};
@@ -178,6 +183,10 @@ export async function bakeCanvases({ name, jsonName, layers, collision, door, wi
   }
   for (const [r, c] of collision) data.Collision[r * width + c] = 1;
   data.Interactive[door[0] * width + door[1]] = 1;
+  // Plot indices follow scan order, so the cells must be given in it.
+  const order = garden.map(([r, c]) => r * width + c);
+  if (order.some((v, i) => i > 0 && v <= order[i - 1])) throw new Error("garden cells must be in row-major order");
+  for (const [r, c] of garden) data.Garden[r * width + c] = 1;
 
   const rows = Math.max(1, Math.ceil(slots.length / SHEET_COLS));
   const sw = SHEET_COLS * T;
@@ -202,7 +211,7 @@ export async function bakeCanvases({ name, jsonName, layers, collision, door, wi
       name: layerName,
       opacity: 1,
       type: "tilelayer",
-      visible: layerName !== "Collision" && layerName !== "Interactive",
+      visible: !DATA_LAYERS.has(layerName),
       width,
       x: 0,
       y: 0,

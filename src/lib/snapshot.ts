@@ -42,6 +42,7 @@ import { withReadDb } from "@/lib/db";
 import { metrics } from "@/lib/metrics";
 import { CROP_KINDS } from "@/lib/crops";
 import { moveOfRow } from "@/lib/motion";
+import { lotsInBox } from "@/lib/lots";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -259,7 +260,13 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
         gte(groundItems.y, yMin), lt(groundItems.y, yMax),
       ),
     ),
-    rdb.select().from(resourceNodes),
+    // Proximity-filtered like NPCs: gardens make nodes grow with players.
+    rdb.select().from(resourceNodes).where(
+      and(
+        gte(resourceNodes.x, xMin), lt(resourceNodes.x, xMax),
+        gte(resourceNodes.y, yMin), lt(resourceNodes.y, yMax),
+      ),
+    ),
     rdb.select().from(enemies).where(
       and(
         gte(enemies.x, xMin), lt(enemies.x, xMax),
@@ -276,6 +283,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
   ]);
 
   const spById = new Map<number, SponsorLite>(sponsorRows.map((s) => [s.id, s]));
+  const lotRows = await lotsInBox({ xMin, xMax, yMin, yMax });
   const doors = await getBuildingDoors();
 
   // Equipment for the (proximity-filtered) players we are actually
@@ -328,6 +336,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     sponsors: sponsorRows,
     groundItems: ground,
     resourceNodes: nodes,
+    lots: lotRows,
     enemies: enemyRows,
     chat,
     events,
@@ -419,7 +428,11 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       stage: n.stage,
       stages: CROP_KINDS[n.kind]?.stages ?? 1,
       nextAdvanceAt: n.nextAdvanceAt ? n.nextAdvanceAt.getTime() : null,
+      ownerId: n.ownerId,
+      plot: n.plot,
+      watered: n.wateredStage != null && n.wateredStage === n.stage,
     })),
+    lots: raw.lots,
     enemies: raw.enemies.map((e) => ({
       id: e.id,
       kind: e.kind,

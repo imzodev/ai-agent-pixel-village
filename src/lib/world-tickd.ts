@@ -37,6 +37,7 @@ import {
 import { CHUNK_TILE_PX } from "./chunkCollision";
 import { beatIndex, nextBeatAt } from "./motion";
 import { initRedis } from "./redis";
+import { releaseInactiveLots } from "./lots";
 import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 import { metrics } from "@/lib/metrics";
 import { log } from "@/lib/logger";
@@ -48,6 +49,7 @@ const ADVISORY_LOCK_KEY = 42;
 // Snapshot reads hit the view, so this bounds how stale the online window
 // can be. 5s keeps `me` fresh enough while staying cheap.
 const VIEW_REFRESH_MS = Number(process.env.ONLINE_PLAYERS_REFRESH_MS ?? 5000);
+const LOT_SWEEP_MS = 60 * 60 * 1000;
 
 async function tryAcquireAdvisoryLock(): Promise<boolean> {
   const result = await pool.query<{ locked: boolean }>(
@@ -120,6 +122,20 @@ async function main(): Promise<void> {
   let inFlight: Promise<void> | null = null;
   let lastViewRefresh = 0;
 
+  // Free lots whose owners haven't logged in for 14 days (hourly check).
+  let lastLotSweep = 0;
+  const maybeReleaseInactiveLots = async (): Promise<void> => {
+    const now = Date.now();
+    if (now - lastLotSweep < LOT_SWEEP_MS) return;
+    lastLotSweep = now;
+    try {
+      const freed = await releaseInactiveLots(now);
+      if (freed > 0) log.info({ freed }, "released inactive lots");
+    } catch (err) {
+      log.error({ err }, "lot sweep failed");
+    }
+  };
+
   const maybeRefreshView = async (): Promise<void> => {
     const now = Date.now();
     if (now - lastViewRefresh < VIEW_REFRESH_MS) return;
@@ -171,6 +187,7 @@ async function main(): Promise<void> {
       });
     await inFlight;
     await maybeRefreshView();
+    await maybeReleaseInactiveLots();
   }
 }
 

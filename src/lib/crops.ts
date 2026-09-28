@@ -8,6 +8,8 @@
 // time; the action route and sim worker pull timing + yield from the
 // same record.
 
+import type { GardenCropDef } from "@/types/garden";
+
 export type CropRect = { x: number; y: number; w: number; h: number };
 
 export type CropKindConfig = {
@@ -49,7 +51,28 @@ const WHEAT_FRAMES: CropRect[] = [
   { x: 992, y: 192, w: 32, h: 64 }, // stage 4 — mature wheat
 ];
 
+// Garden crops (planted by players in their home garden plots). Frames are
+// 32×64 cells of food/crops.png on a 64 px row pitch: rows y = 0, 64, 128,
+// 192 are the growth stages (sprout → mature) and y = 256 is dug soil.
+// A planted crop starts at stage 1 and grows to stage 4; `regrowthMs` is
+// the time per stage (tickResources advances it). Stage 0 is never shown
+// for a planted crop (harvesting removes the node).
+function gardenFrames(x: number): CropRect[] {
+  return [
+    { x: 0, y: 256, w: 32, h: 64 }, // stage 0 — dug soil
+    { x, y: 0, w: 32, h: 64 }, // stage 1 — sprout
+    { x, y: 64, w: 32, h: 64 }, // stage 2
+    { x, y: 128, w: 32, h: 64 }, // stage 3
+    { x, y: 192, w: 32, h: 64 }, // stage 4 — ready to harvest
+  ];
+}
+
 export const CROP_KINDS: Record<string, CropKindConfig> = {
+  // Garden crops: quick → slow. Longer crops pay more per plot.
+  radish_crop:  { stages: 5, regrowthMs: 5 * 60_000,  yield: 2, frames: gardenFrames(256) },
+  carrot_crop:  { stages: 5, regrowthMs: 10 * 60_000, yield: 3, frames: gardenFrames(32) },
+  tomato_crop:  { stages: 5, regrowthMs: 30 * 60_000, yield: 4, frames: gardenFrames(608) },
+  pumpkin_crop: { stages: 5, regrowthMs: 60 * 60_000, yield: 1, frames: gardenFrames(864) },
   wheat_field: {
     stages: 5,
     regrowthMs: 60_000, // 1 min per regrowth tick → ~4 min full regrowth
@@ -64,6 +87,35 @@ export const CROP_KINDS: Record<string, CropKindConfig> = {
   mushroom_ring: { stages: 2, regrowthMs: 0, yield: 1, frames: [] },
   // Rock (stone): 1 per pick, no regrowth.
   rock:          { stages: 2, regrowthMs: 0, yield: 1, frames: [] },
+};
+
+/** Seeds players can plant, keyed by seed item. */
+export const GARDEN_CROPS: Record<string, GardenCropDef> = {
+  radish_seeds:  { kind: "radish_crop",  seedKey: "radish_seeds",  produceKey: "radish" },
+  carrot_seeds:  { kind: "carrot_crop",  seedKey: "carrot_seeds",  produceKey: "carrot" },
+  tomato_seeds:  { kind: "tomato_crop",  seedKey: "tomato_seeds",  produceKey: "tomato" },
+  pumpkin_seeds: { kind: "pumpkin_crop", seedKey: "pumpkin_seeds", produceKey: "pumpkin" },
+};
+
+/**
+ * Seeds from harvests: chance that a harvest also gives back seeds of the
+ * same crop, and how many (inclusive range). Keeps a garden going without
+ * constant shop trips; buying stays the way to try new crops.
+ */
+export const HARVEST_SEED_CHANCE = 0.3;
+export const HARVEST_SEED_QTY: readonly [number, number] = [1, 2];
+
+/**
+ * Seeds from foraging: chance that gathering a wild node (herbs, berries,
+ * wheat, …) turns up a seed, and the relative odds of each — weighted
+ * toward the quick, cheap crops so rare pumpkins stay a treat.
+ */
+export const FORAGE_SEED_CHANCE = 0.15;
+export const FORAGE_SEED_WEIGHTS: Readonly<Record<string, number>> = {
+  radish_seeds: 50,
+  carrot_seeds: 30,
+  tomato_seeds: 15,
+  pumpkin_seeds: 5,
 };
 
 /** Returns the config for a kind, or undefined if it's not a crop kind. */
