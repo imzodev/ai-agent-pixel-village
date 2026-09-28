@@ -3,9 +3,9 @@
 
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isRipe, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
+import { isRipe, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
 import { gardenCellsOf, gardenPlotsAt } from "@/lib/buildingManifest";
-import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
+import { CROP_KINDS, FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, GARDEN_CROPS, HARVEST_SEED_CHANCE } from "@/lib/crops";
 import { SHOP_STOCK, findBuyer } from "@/lib/trade";
 
 describe("growth rules", () => {
@@ -82,5 +82,40 @@ describe("crop data", () => {
     const order = ["radish_seeds", "carrot_seeds", "tomato_seeds", "pumpkin_seeds"].map(profit);
     for (let i = 1; i < order.length; i++) expect(order[i]).toBeGreaterThan(order[i - 1]);
     expect(order[0]).toBeGreaterThan(0);
+  });
+});
+
+/** A rand() that returns the given values in order. */
+const seq = (...v: number[]) => { let i = 0; return () => v[i++]; };
+
+describe("seed sources", () => {
+  it("harvests sometimes return 1–2 seeds", () => {
+    expect(rollHarvestSeeds(seq(0.99))).toBe(0); // no luck
+    expect(rollHarvestSeeds(seq(0.0, 0.0))).toBe(1);
+    expect(rollHarvestSeeds(seq(0.0, 0.99))).toBe(2);
+  });
+
+  it("foraging sometimes finds a seed, weighted toward cheap crops", () => {
+    expect(rollForageSeed(seq(0.99))).toBeNull();
+    expect(rollForageSeed(seq(0.0, 0.0))).toBe("radish_seeds");
+    expect(rollForageSeed(seq(0.0, 0.999))).toBe("pumpkin_seeds");
+    for (const key of Object.keys(FORAGE_SEED_WEIGHTS)) expect(GARDEN_CROPS[key], key).toBeDefined();
+  });
+
+  it("real rates match the tuning (large sample)", () => {
+    const N = 40_000;
+    let harvestHits = 0;
+    const forage: Record<string, number> = {};
+    let forageHits = 0;
+    for (let i = 0; i < N; i++) {
+      if (rollHarvestSeeds() > 0) harvestHits++;
+      const s = rollForageSeed();
+      if (s) { forageHits++; forage[s] = (forage[s] ?? 0) + 1; }
+    }
+    expect(harvestHits / N).toBeCloseTo(HARVEST_SEED_CHANCE, 1);
+    expect(forageHits / N).toBeCloseTo(FORAGE_SEED_CHANCE, 1);
+    expect(forage.radish_seeds).toBeGreaterThan(forage.carrot_seeds);
+    expect(forage.carrot_seeds).toBeGreaterThan(forage.tomato_seeds);
+    expect(forage.tomato_seeds).toBeGreaterThan(forage.pumpkin_seeds);
   });
 });

@@ -97,6 +97,27 @@ export const GARDEN_CROPS: Record<string, GardenCropDef> = {
   pumpkin_seeds: { kind: "pumpkin_crop", seedKey: "pumpkin_seeds", produceKey: "pumpkin" },
 };
 
+/**
+ * Seeds from harvests: chance that a harvest also gives back seeds of the
+ * same crop, and how many (inclusive range). Keeps a garden going without
+ * constant shop trips; buying stays the way to try new crops.
+ */
+export const HARVEST_SEED_CHANCE = 0.3;
+export const HARVEST_SEED_QTY: readonly [number, number] = [1, 2];
+
+/**
+ * Seeds from foraging: chance that gathering a wild node (herbs, berries,
+ * wheat, …) turns up a seed, and the relative odds of each — weighted
+ * toward the quick, cheap crops so rare pumpkins stay a treat.
+ */
+export const FORAGE_SEED_CHANCE = 0.15;
+export const FORAGE_SEED_WEIGHTS: Readonly<Record<string, number>> = {
+  radish_seeds: 50,
+  carrot_seeds: 30,
+  tomato_seeds: 15,
+  pumpkin_seeds: 5,
+};
+
 /** Returns the config for a kind, or undefined if it's not a crop kind. */
 export function getCropKind(kind: string): CropKindConfig | undefined {
   return CROP_KINDS[kind];

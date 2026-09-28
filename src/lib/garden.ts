@@ -15,7 +15,7 @@ import { characters, lots, resourceNodes } from "@/db/schema";
 import { CROP_KINDS, GARDEN_CROPS } from "./crops";
 import { addItem, countItem, progressMissions, recalcLevel, removeItem } from "./game";
 import { plotsOfLot } from "./lots";
-import { isRipe, wateredAdvanceAt, waterCheck } from "./gardenRules";
+import { isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
 import type { GardenResult } from "@/types/garden";
 
 export { isRipe, wateredAdvanceAt, waterCheck };
@@ -94,13 +94,21 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
     .returning({ id: resourceNodes.id });
   if (gone.length === 0) return { ok: false, error: "It's already been harvested." };
   await addItem(characterId, node.itemKey, node.qty);
+  const gained = [{ itemKey: node.itemKey, qty: node.qty }];
+  // Sometimes the harvest leaves seeds to replant.
+  const seedKey = Object.values(GARDEN_CROPS).find((c) => c.kind === node.kind)?.seedKey;
+  const seeds = seedKey ? rollHarvestSeeds() : 0;
+  if (seedKey && seeds > 0) {
+    await addItem(characterId, seedKey, seeds);
+    gained.push({ itemKey: seedKey, qty: seeds });
+  }
   await progressMissions(characterId, (r) => r.type === "collect" && r.itemKey === node.itemKey, node.qty);
   await db.update(characters).set({ xp: sql`${characters.xp} + ${HARVEST_XP}` }).where(eq(characters.id, characterId));
   await recalcLevel(characterId);
   return {
     ok: true,
-    message: `Harvested ${node.qty} ${node.itemKey}${node.qty > 1 ? "s" : ""}!`,
-    gained: [{ itemKey: node.itemKey, qty: node.qty }],
+    message: `Harvested ${node.qty} ${node.itemKey}${node.qty > 1 ? "s" : ""}!${seeds > 0 ? ` …and saved ${seeds} seed${seeds > 1 ? "s" : ""} to replant.` : ""}`,
+    gained,
     x: node.x,
     y: node.y,
   };

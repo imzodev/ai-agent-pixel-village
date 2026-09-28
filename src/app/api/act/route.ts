@@ -7,6 +7,7 @@ import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 import { rowPositionAt } from "@/lib/motion";
+import { rollForageSeed } from "@/lib/gardenRules";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,9 @@ export async function POST(req: Request) {
       }).where(eq(resourceNodes.id, n.id));
 
       await addItem(me.id, n.itemKey, yieldAmt);
+      // Foraging now and then turns up seeds for a home garden.
+      const found = rollForageSeed();
+      if (found) await addItem(me.id, found, 1);
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
       await recalcLevel(me.id);
@@ -126,8 +130,8 @@ export async function POST(req: Request) {
       markWorldDirty(n.x, n.y);
       return Response.json({
         ok: true,
-        message: `Gathered ${yieldAmt} ${n.itemKey.replace("_", " ")}.`,
-        gained: [{ itemKey: n.itemKey, qty: yieldAmt }],
+        message: `Gathered ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
+        gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
       });
     }
 
