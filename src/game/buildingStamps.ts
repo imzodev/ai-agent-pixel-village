@@ -7,6 +7,7 @@
 // in DecorationUpper1 sorts correctly against the player as the player
 // walks past it). Static layers keep their LAYER_DEPTH.
 import type Phaser from "phaser";
+import type { GardenPlot } from "@/types/garden";
 import {
   CHUNK_TILE_PX,
   CHUNK_TILE_W,
@@ -16,6 +17,7 @@ import {
 import {
   doorTileOf,
   footprintOf,
+  gardenPlotsAt,
   type BuildingManifest,
   type BuildingManifestEntry,
 } from "@/lib/buildingManifest";
@@ -35,6 +37,8 @@ export type StampedBuilding = {
   door: { x: number; y: number } | null;
   /** Interactive/selection rect in world px (collision bbox offset inside the template). */
   zone: { x: number; y: number; w: number; h: number };
+  /** Garden plots (crop anchors in world px) from the template's Garden layer. */
+  garden: GardenPlot[];
 };
 
 // Load a template's Tiled JSON into the Tilemap cache. Mirrors loadChunk's
@@ -98,10 +102,12 @@ export async function stampBuildings(
     const sortedSprites: Phaser.GameObjects.Image[] = [];
     instantiateSortedSprites(scene, tilesets, sortedTiles, anchorGrid, anchorByObjectId, origin, sortedSprites);
     registerStampCollision(scene, key, origin.x, origin.y);
+    const cached = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
     out.push({
       entry,
       origin,
       ...deriveDoorAndZone(scene, key, origin),
+      garden: gardenPlotsAt(entry.tx, entry.ty, cached?.data ?? cached),
     });
   }
   return out;

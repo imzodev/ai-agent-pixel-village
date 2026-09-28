@@ -16,6 +16,7 @@ import type {
 } from "@/db/schema";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type { Appearance } from "@/types/domain";
+import type { LotSnapshot } from "@/types/garden";
 
 export type Snapshot = WorldSnapshot;
 
@@ -58,6 +59,8 @@ export type RawSnapshot = {
   sponsors: SponsorLite[];
   groundItems: Array<typeof groundItems.$inferSelect>;
   resourceNodes: Array<typeof resourceNodes.$inferSelect>;
+  /** Lots overlapping the proximity box, with owner names. */
+  lots: LotSnapshot[];
   enemies: Array<typeof enemies.$inferSelect>;
   chat: Array<typeof worldChat.$inferSelect>;
   events: Array<typeof worldEvents.$inferSelect>;

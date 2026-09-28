@@ -89,6 +89,8 @@ export async function POST(req: Request) {
     if (action === "gather") {
       const [n] = await db.select().from(resourceNodes).where(eq(resourceNodes.id, Number(body.id)));
       if (!n) return Response.json({ error: "Nothing here." }, { status: 404 });
+      // Garden crops belong to a player: they're harvested via /api/garden.
+      if (n.lotId != null) return Response.json({ error: "That's someone's garden. Only the owner can harvest it." }, { status: 403 });
       const p = livePos(me);
       if (Math.hypot(n.x - p.x, n.y - p.y) > 90) return Response.json({ error: "Too far." }, { status: 400 });
 

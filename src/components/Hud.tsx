@@ -5,7 +5,8 @@ import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
 import { inputRouter } from "@/game/input/router";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
-import { TRADES } from "@/lib/trade";
+import { TRADES, stockForNpc } from "@/lib/trade";
+import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
@@ -156,6 +157,23 @@ export default function Hud() {
     else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
+  // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
+  const post = async (url: string, body: Record<string, unknown>) => {
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[] }>(url, body);
+    if (r.error) toast(r.error, "bad");
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); void refreshMe(); bus.emit("poke", undefined); }
+    return r;
+  };
+  const garden = (body: Record<string, unknown>) => post("/api/garden", body);
+  const lotAction = (action: "acquire" | "release", key: string) => post("/api/lots", { action, key });
+  const buy = async (npcKey: string, itemKey: string) => {
+    const r = await api<{ ok?: boolean; spent?: number }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
+    if (r.error) toast(r.error, "bad");
+    else { showGain([{ itemKey, qty: 1 }]); void refreshMe(); }
+  };
+  const myId = me?.me?.id ?? null;
+  const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
+
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
     if (r.error) toast(r.error, "bad"); else setInspect(r);
@@ -278,10 +296,27 @@ export default function Hud() {
         if (d <= 90) void invAction({ action: "pickup", groundItemId: s.id }).then(() => setSel(null));
         else walk();
         break;
-      case "node":
+      case "node": {
+        const crop = snap.nodes.find((n) => n.id === s.id);
+        if (crop?.ownerId != null) {
+          // Garden crop: harvest when ripe (owner), otherwise water it.
+          if (d > 90) { walk(); break; }
+          if (crop.stage >= crop.stages - 1) {
+            if (crop.ownerId === myId) void garden({ action: "harvest", nodeId: s.id });
+            else toast("It's ready — but it isn't yours to harvest.", "info");
+          } else if (!crop.watered) void garden({ action: "water", nodeId: s.id });
+          else toast("Already watered. Check back when it grows.", "info");
+          break;
+        }
         if (s.stage < 1) { toast("Picked clean. It'll grow back.", "info"); return; }
         if (d <= 90) void act({ action: "gather", id: s.id });
         else walk();
+        break;
+      }
+      case "plot":
+        if (d > 90) { walk(); break; }
+        if (seedsInBag[0]) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: seedsInBag[0].itemKey });
+        else toast("You need seeds. The shopkeeper sells them.", "info");
         break;
       case "animal":
         if (d <= 90) void act({ action: "pet", id: s.id });
@@ -465,6 +500,12 @@ export default function Hud() {
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
+                {npcKey && stockForNpc(npcKey).map((t) => (
+                  // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
+                  <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle>
+                    🌱 Buy {t.itemKey.replace(/_seeds$/, "")} · {t.price}🪙
+                  </Btn>
+                ))}
               </>
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
@@ -472,6 +513,38 @@ export default function Hud() {
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🫳 Pick up {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "node" && (() => {
+            const crop = snap?.nodes.find((n) => n.id === sel.id);
+            if (crop?.ownerId == null) return null;
+            // Garden crop: growth status, water (anyone), harvest (owner).
+            const ripe = crop.stage >= crop.stages - 1;
+            // Snapshot server time keeps render pure; minutes-level accuracy is plenty.
+            const mins = crop.nextAdvanceAt ? Math.max(1, Math.ceil((crop.nextAdvanceAt - (snap?.now ?? 0)) / 60_000)) : 0;
+            const stageMs = CROP_KINDS[crop.kind]?.regrowthMs ?? 0;
+            const left = ripe ? 0 : mins + Math.round(((crop.stages - 2 - crop.stage) * stageMs) / 60_000);
+            const status = ripe ? "Ready to harvest!" : `Stage ${crop.stage}/${crop.stages - 1} · ready in ~${left} min${crop.watered ? " · 💧" : ""}`;
+            if (sel.distance > 90) return <><span className="text-[11px] text-stone-600">{status}</span><WalkBtn snap={snap} sel={sel} /></>;
+            return (
+              <>
+                <span className="text-[11px] text-stone-600">{status}</span>
+                {/* eslint-disable-next-line react-hooks/refs -- garden() only touches refs (toast ids) inside the click handler, not during render. */}
+                {!ripe && <Btn on={() => void garden({ action: "water", nodeId: sel.id })} disabled={crop.watered}>💧 Water</Btn>}
+                {ripe && crop.ownerId === myId && <Btn on={() => void garden({ action: "harvest", nodeId: sel.id })}>🧺 Harvest {interactHint}</Btn>}
+              </>
+            );
+          })()}
+          {loggedIn && sel.type === "plot" && (() => {
+            const lot = snap?.lots.find((l) => l.key === sel.lotKey);
+            if (!lot?.owner) return <span className="text-[11px] text-stone-600">An empty garden plot. Move into the house to plant here.</span>;
+            if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
+            if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            if (seedsInBag.length === 0) return <span className="text-[11px] text-stone-600">No seeds — the shopkeeper sells them.</span>;
+            return seedsInBag.map((i) => (
+              <Btn key={i.itemKey} on={() => void garden({ action: "plant", lotKey: sel.lotKey, plot: sel.plot, seedKey: i.itemKey })}>
+                🌱 Plant {i.itemKey.replace(/_seeds$/, "")} ×{i.qty}
+              </Btn>
+            ));
+          })()}
+          {loggedIn && sel.type === "node" && snap?.nodes.find((n) => n.id === sel.id)?.ownerId == null && (() => {
             // Pickable at every stage except 0 (depleted). Out-of-range
             // shows Walk over. Stage 0 shows a dimmed "empty" label.
             const empty = sel.stage === 0;
@@ -484,8 +557,17 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "building" && (() => {
+            const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
+            if (!lot) return null;
+            if (lot.owner?.id === myId) {
+              return <><span className="text-[11px] font-bold text-emerald-700">🏡 Your home</span><Btn on={() => void lotAction("release", lot.key)} subtle>Move out</Btn></>;
+            }
+            if (lot.owner) return <span className="text-[11px] text-stone-600">🏡 Home of {lot.owner.name}</span>;
+            return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
+          })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
-          <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>
+          {sel.type !== "plot" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -639,10 +721,11 @@ function selTitle(sel: Selection) {
     case "player": return `${sel.name} (villager)`;
     case "item": return `${ITEM_ICONS[sel.itemKey] ?? "📦"} ${sel.itemKey.replace("_", " ")}`;
     case "node": {
-      const base = sel.kind.replace("_", " ");
+      const base = sel.kind.replace(/_crop$/, "").replace("_", " ");
       return sel.stage === 0 ? `${base} (empty)` : base;
     }
     case "enemy": return `Wild ${sel.kind} · ${sel.hp}/${sel.maxHp} HP`;
+    case "plot": return "🌱 Garden plot";
   }
 }
 function TopBtn({ children, on, active }: { children: React.ReactNode; on: () => void; active?: boolean }) {
@@ -679,6 +762,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "enemy") { const a = snap.enemies.find((x) => x.id === sel.id); return a ? livePos(a) : null; }
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
+  if (sel.type === "plot") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

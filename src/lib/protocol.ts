@@ -6,6 +6,7 @@
 import type { Appearance } from "@/types/domain";
 import type { Facing } from "@/types/world";
 import type { Move, ScheduledMove } from "@/types/motion";
+import type { LotSnapshot } from "@/types/garden";
 
 // Re-exported for callers that already import protocol types together.
 export type { Facing, Move, ScheduledMove };
@@ -56,6 +57,8 @@ export type WorldSnapshot = {
   buildings: BuildingSnapshot[];
   groundItems: GroundItemSnapshot[];
   nodes: ResourceNodeSnapshot[];
+  /** Owned-parcel info for lots near the player (homes and, later, land). */
+  lots: LotSnapshot[];
   enemies: EnemySnapshot[];
   chat: ChatSnapshot[];
   events: EventSnapshot[];
@@ -146,6 +149,12 @@ export type ResourceNodeSnapshot = {
   stages: number;
   /** Epoch ms when the sim worker will advance `stage` by one. Null when fully grown or no regrowth. */
   nextAdvanceAt: number | null;
+  /** Garden crops: the player who planted it (null for wild nodes). */
+  ownerId: number | null;
+  /** Garden crops: plot index within its lot's garden. */
+  plot: number | null;
+  /** Garden crops: already watered in the current stage. */
+  watered: boolean;
 };
 
 export type EnemySnapshot = {

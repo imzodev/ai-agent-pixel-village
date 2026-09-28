@@ -5,6 +5,8 @@
 // rendered, never blocking). The manifest carries only placement and business
 // metadata — geometry comes from the template itself.
 
+import type { GardenCell, GardenPlot } from "@/types/garden";
+
 export const BUILDING_TILE_PX = 16;
 export const BUILDING_TEMPLATE_W = 24;
 export const BUILDING_TEMPLATE_H = 15;
@@ -19,6 +21,8 @@ export type BuildingManifestEntry = {
   color?: string;
   menu?: string[];
   reservable?: boolean;
+  /** Coins to acquire the building's home lot (default 0 = free to move in). */
+  price?: number;
   /** World tile (16px grid) of the template's top-left corner. */
   tx: number;
   ty: number;
@@ -71,6 +75,33 @@ export function footprintOf(template: unknown): { x: number; y: number; tw: numb
   }
   if (maxX < 0) return { x: 0, y: 0, tw: 1, th: 1 };
   return { x: minX, y: minY, tw: maxX - minX + 1, th: maxY - minY + 1 };
+}
+
+/**
+ * Garden plots marked in the template's data-only "Garden" layer, in scan
+ * order (the order defines each plot's stable index). A plot is a pair of
+ * cells (dx, dx+1) on row dy; the crop's bottom-centre sits at the bottom
+ * edge between them.
+ */
+export function gardenCellsOf(template: unknown): GardenCell[] {
+  const data = layerByName(template, "Garden");
+  if (!data) return [];
+  const out: GardenCell[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (typeof data[i] === "number" && data[i] > 0) {
+      out.push({ plot: out.length, dx: i % BUILDING_TEMPLATE_W, dy: Math.floor(i / BUILDING_TEMPLATE_W) });
+    }
+  }
+  return out;
+}
+
+/** World-pixel crop anchors for a placed building's garden plots. */
+export function gardenPlotsAt(tx: number, ty: number, template: unknown): GardenPlot[] {
+  return gardenCellsOf(template).map((c) => ({
+    plot: c.plot,
+    x: (tx + c.dx) * BUILDING_TILE_PX + BUILDING_TILE_PX,
+    y: (ty + c.dy) * BUILDING_TILE_PX + BUILDING_TILE_PX,
+  }));
 }
 
 /** World pixel of the door for a placed building; falls back to the

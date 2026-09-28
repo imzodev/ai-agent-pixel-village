@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import {
@@ -23,6 +23,7 @@ import { isWalkableServer } from "./chunkCollisionServer";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 import { getCropKind } from "@/lib/crops";
+import { syncLotsFromManifest } from "./lots";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -31,6 +32,14 @@ export const ITEM_DEFS = [
   { key: "mushroom", name: "Speckled Mushroom", kind: "material", icon: "🍄", description: "Probably edible.", value: 4 },
   { key: "flour", name: "Bag of Flour", kind: "material", icon: "🌾", description: "Milled fresh.", value: 3 },
   { key: "wheat", name: "Sheaf of Wheat", kind: "material", icon: "🌾", description: "Golden and ready to mill.", value: 1 },
+  { key: "radish_seeds", name: "Radish Seeds", kind: "seed", icon: "🌱", description: "Plant in your garden. Ready in about 15 minutes.", value: 2 },
+  { key: "carrot_seeds", name: "Carrot Seeds", kind: "seed", icon: "🌱", description: "Plant in your garden. Ready in about 30 minutes.", value: 3 },
+  { key: "tomato_seeds", name: "Tomato Seeds", kind: "seed", icon: "🌱", description: "Plant in your garden. Ready in about 1½ hours.", value: 5 },
+  { key: "pumpkin_seeds", name: "Pumpkin Seeds", kind: "seed", icon: "🌱", description: "Plant in your garden. Ready in about 3 hours.", value: 8 },
+  { key: "radish", name: "Radish", kind: "material", icon: "🔴", description: "Crisp and peppery.", value: 2 },
+  { key: "carrot", name: "Carrot", kind: "material", icon: "🥕", description: "Sweet, earthy, garden-fresh.", value: 2 },
+  { key: "tomato", name: "Tomato", kind: "material", icon: "🍅", description: "Sun-warm and juicy.", value: 3 },
+  { key: "pumpkin", name: "Pumpkin", kind: "material", icon: "🎃", description: "Heavy. Worth it.", value: 20 },
   { key: "egg", name: "Fresh Egg", kind: "material", icon: "🥚", description: "Still warm.", value: 2 },
   { key: "wool", name: "Tuft of Wool", kind: "material", icon: "🧶", description: "Soft and springy.", value: 3 },
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
@@ -439,7 +448,8 @@ async function syncWildlifeLayout() {
   if (wildlifeSynced) return;
   wildlifeSynced = true;
   try {
-    await db.delete(resourceNodes);
+    // Wild nodes only: garden crops (owner_id set) belong to players.
+    await db.delete(resourceNodes).where(isNull(resourceNodes.ownerId));
     for (const [kind, itemKey, tx, ty] of NODE_DEFS) {
       const p = tilePoint(tx, ty);
       const cfg = getCropKind(kind);
@@ -529,12 +539,25 @@ export function ensureSeeded() {
   if (!seededPromise) seededPromise = seed().catch((e) => { seededPromise = null; throw e; });
   return seededPromise
     .then(() => syncBuildingsFromManifest())
+    .then(() => syncLots())
     .then(() => syncWildlifeLayout())
     .then(() => syncNpcLayout())
     .then(() => syncItems())
     .then(() => syncMissions())
     .then(() => syncCosmetics())
     .then(() => seedActivities());
+}
+
+let lotsSynced = false;
+async function syncLots() {
+  if (lotsSynced) return;
+  lotsSynced = true;
+  try {
+    await syncLotsFromManifest();
+  } catch (e) {
+    lotsSynced = false;
+    console.warn("[seed] lot sync failed:", e instanceof Error ? e.message : e);
+  }
 }
 
 async function seedActivities() {

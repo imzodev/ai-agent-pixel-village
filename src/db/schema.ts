@@ -28,6 +28,7 @@ import type {
 } from "@/types/cosmetic";
 import type { SponsorEvent } from "@/types/sponsor";
 import type { GridPoint } from "@/types/world";
+import type { LotKind } from "@/types/garden";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { Activity, ActivityParticipant } from "@/types/activity";
@@ -370,11 +371,45 @@ export const resourceNodes = pgTable(
     stage: integer("stage").notNull().default(0),
     /** When the sim worker should advance `stage` by one. NULL = no regrowth scheduled. */
     nextAdvanceAt: timestamp("next_advance_at"),
+    // Garden crops only (NULL for wild nodes): who planted it, in which
+    // lot's garden plot, and the last stage that was watered.
+    ownerId: integer("owner_id"),
+    lotId: integer("lot_id"),
+    plot: integer("plot"),
+    wateredStage: integer("watered_stage"),
   },
   (t) => [
     index("resource_nodes_stage_idx").on(t.stage),
     index("resource_nodes_next_advance_idx").on(t.nextAdvanceAt),
+    index("resource_nodes_xy_idx").on(t.x, t.y),
+    uniqueIndex("resource_nodes_lot_plot_idx").on(t.lotId, t.plot),
   ],
+);
+
+// ---------- Lots (owned parcels) ----------
+// A parcel of land a player can own. Today every lot is a "home" lot (a
+// building plus its front garden); "land" lots without a building are
+// planned, as is player resale (price / for_sale). See src/lib/lots.ts.
+export const lots = pgTable(
+  "lots",
+  {
+    id: serial("id").primaryKey(),
+    key: text("key").notNull().unique(),
+    kind: text("kind").$type<LotKind>().notNull().default("home"),
+    /** Manifest key of the lot's building (home lots). */
+    buildingKey: text("building_key"),
+    /** Parcel footprint in world tiles. */
+    tx: integer("tx").notNull(),
+    ty: integer("ty").notNull(),
+    tw: integer("tw").notNull(),
+    th: integer("th").notNull(),
+    ownerId: integer("owner_id"),
+    acquiredAt: timestamp("acquired_at"),
+    /** Coins to acquire it; 0 = free to move in. */
+    price: integer("price").notNull().default(0),
+    forSale: boolean("for_sale").notNull().default(false),
+  },
+  (t) => [uniqueIndex("lots_owner_home_idx").on(t.ownerId, t.kind)],
 );
 
 export const enemies = pgTable("enemies", {

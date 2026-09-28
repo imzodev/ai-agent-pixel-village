@@ -1,12 +1,12 @@
 // Thin transport shell for the trade action. The db-touching logic lives
 // here (not in src/lib/trade.ts, which must stay client-safe to avoid
 // pulling the pg driver into the browser bundle).
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
-import { TRADES, findBuyer } from "@/lib/trade";
-import { addCoins, logEvent, removeItem } from "@/lib/game";
+import { TRADES, findBuyer, stockForNpc } from "@/lib/trade";
+import { addCoins, addItem, logEvent, removeItem } from "@/lib/game";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +50,22 @@ export async function POST(req: Request) {
     const itemKey = String(body.itemKey ?? "");
     const qty = Math.max(1, Math.min(99, Number(body.qty ?? 1)));
     const npcKey = body.npcKey ? String(body.npcKey) : undefined;
+
+    // Buying from an NPC (seeds, …): { action: "buy", npcKey, itemKey, qty }.
+    if (body.action === "buy") {
+      const offer = npcKey ? stockForNpc(npcKey).find((t) => t.itemKey === itemKey) : undefined;
+      if (!npcKey || !offer) return Response.json({ error: "They don't sell that." }, { status: 400 });
+      const cost = offer.price * qty;
+      // Conditional debit: never lets coins go negative, even on double clicks.
+      const paid = await db
+        .update(characters)
+        .set({ coins: sql`${characters.coins} - ${cost}` })
+        .where(and(eq(characters.id, me.id), gte(characters.coins, cost)))
+        .returning({ coins: characters.coins });
+      if (paid.length === 0) return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
+      await addItem(me.id, itemKey, offer.qty * qty);
+      return Response.json({ ok: true, itemKey, qty: offer.qty * qty, spent: cost, coins: paid[0].coins });
+    }
 
     const r = await performSell({ characterId: me.id, itemKey, qty, npcKey });
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });

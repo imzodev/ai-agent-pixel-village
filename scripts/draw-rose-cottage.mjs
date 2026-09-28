@@ -218,43 +218,36 @@ const garden = new Canvas(W, H);
   garden.ellipse(x - 2, y - 2, 4, 1.5, P.pathLt);
   if (i % 2) garden.put(x + 4, y + 1, P.pathDk);
 });
-// flower beds with stone edging
+// Vegetable beds: tilled soil with a stone edge. Each bed holds 2×2
+// garden plots (see GARDEN below); a crop grows from each plot's mound.
 function bed(x, y, w, h) {
   garden.rect(x - 2, y - 2, w + 4, h + 4, P.stoneDk);
   garden.rect(x - 1, y - 1, w + 2, h + 2, P.stone);
   for (let i = x; i < x + w; i += 4) garden.put(i, y - 1, P.stoneLt);
   garden.rect(x, y, w, h, P.soil);
   for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (rand(i, j) < 0.12) garden.put(i, j, P.soilDk);
+  for (let j = y + 3; j < y + h; j += 5) garden.hline(x + 1, x + w - 2, j, P.soilDk); // furrows
 }
-bed(108, 186, 60, 26);
-bed(216, 186, 60, 26);
-// tulips on the left
-const tulip = [P.red, P.yellow, P.pink, P.red, P.violet, P.yellow];
-for (let row = 0; row < 2; row++) {
-  for (let i = 0; i < 7; i++) {
-    const x = 113 + i * 8 + (row ? 4 : 0);
-    const y = 193 + row * 11;
-    garden.vline(x, y + 1, y + 5, P.leafDk);
-    garden.put(x - 1, y + 4, P.leaf); garden.put(x + 1, y + 3, P.leaf);
-    const c = tulip[(i + row * 3) % tulip.length];
+bed(113, 179, 62, 44); // left bed: plots centred at x 128, 160
+bed(209, 179, 62, 44); // right bed: plots centred at x 224, 256
+for (const x of [128, 160, 224, 256]) {
+  for (const y of [190, 222]) { // mound at each plot's base
+    garden.ellipse(x, y - 1, 9, 2.5, P.soilDk);
+    garden.ellipse(x, y - 2, 8, 1.5, hex(0x86603f));
+  }
+}
+// Flower strips along the side fences (the tulips moved here).
+const tulip = [P.red, P.yellow, P.pink, P.violet, P.white];
+for (const x0 of [101, 274]) {
+  for (let k = 0; k < 6; k++) {
+    const x = x0 + (k % 2 ? 6 : 2);
+    const y = 186 + k * 7;
+    garden.vline(x, y + 1, y + 4, P.leafDk);
+    garden.put(x - 1, y + 3, P.leaf); garden.put(x + 1, y + 2, P.leaf);
+    const c = tulip[(k + (x0 > 200 ? 2 : 0)) % tulip.length];
     garden.rect(x - 1, y - 2, 3, 3, c);
     garden.put(x - 1, y - 3, c); garden.put(x + 1, y - 3, c);
-    garden.put(x, y - 2, P.white);
   }
-}
-// rose bushes and daisies on the right
-for (const [x, y] of [[226, 197], [246, 199], [266, 197]]) {
-  garden.ellipse(x, y, 8, 7, P.leafDk);
-  garden.ellipse(x - 1, y - 1, 7, 6, P.leaf);
-  garden.ellipse(x - 3, y - 3, 3, 2, P.leafLt);
-  for (let k = 0; k < 6; k++) {
-    const rx = x - 5 + Math.floor(rand(x, k) * 11), ry = y - 5 + Math.floor(rand(y, k, 3) * 9);
-    garden.put(rx, ry, P.pink); garden.put(rx + 1, ry, P.red); garden.put(rx, ry + 1, P.red);
-  }
-}
-for (let k = 0; k < 7; k++) {
-  const x = 220 + Math.floor(rand(k, 11) * 52), y = 207 + Math.floor(rand(k, 13) * 4);
-  garden.put(x, y, P.white); garden.put(x - 1, y, P.white); garden.put(x + 1, y, P.white); garden.put(x, y - 1, P.white); garden.put(x, y, P.yellow);
 }
 garden.outline(P.ink);
 
@@ -315,4 +308,7 @@ await bakeCanvases({
   },
   collision,
   door: [FOUNDATION_ROW, 11],
+  // Garden plots (left cell of each 2-cell plot), row-major = plot index:
+  // back row bottoms at y 192 (row 11), front row at y 224 (row 13).
+  garden: [[11, 7], [11, 9], [11, 13], [11, 15], [13, 7], [13, 9], [13, 13], [13, 15]],
 });

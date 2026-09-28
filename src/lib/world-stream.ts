@@ -155,9 +155,11 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
       conn.ws.send(JSON.stringify({ type: "snapshot", data: { ...snap, now: Date.now() } }));
       return true;
     } catch {
-      return false;
+      return false; // socket closed mid-send
     }
-  } catch {
+  } catch (err) {
+    // A failed build means the client gets no world at all: never silent.
+    log.error({ err, playerId: conn.playerId, x: conn.homePx, y: conn.homePy }, "snapshot build failed");
     return false;
   }
 }

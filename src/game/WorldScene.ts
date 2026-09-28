@@ -40,6 +40,9 @@ const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
 const PLAYER_SPEED = 120;
+// Clickable height (px) at the base of a garden crop — less than the 32 px
+// between plot rows, so neighbouring plots never steal each other's clicks.
+const GARDEN_HIT_H = 22;
 
 /** Convert the snapshot's flat slot/itemKey list into an EquippedCosmetics
  *  record the LPC compositor can read. Slots not in CosmeticSlot are
@@ -83,6 +86,8 @@ export class WorldScene extends Phaser.Scene {
   private enemies = new Map<number, CritterEnt>();
   private items = new Map<number, Phaser.GameObjects.Text>();
   private nodes = new Map<number, Phaser.GameObjects.Image>();
+  /** Dark wet-soil patch under crops watered in their current stage. */
+  private wetSoil = new Map<number, Phaser.GameObjects.Ellipse>();
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -207,6 +212,7 @@ export class WorldScene extends Phaser.Scene {
         for (const s of stamped) {
           if (s.door) this.buildingDoors.set(s.entry.key, s.door);
           this.buildingZonesRects.set(s.entry.key, s.zone);
+          for (const p of s.garden) this.addPlotZone(s.entry.key, p);
         }
       }
     } catch {
@@ -510,7 +516,19 @@ export class WorldScene extends Phaser.Scene {
       }
       if (!img) {
         img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
-        img.setInteractive({ useHandCursor: true });
+        if (n.ownerId != null) {
+          // Garden crop: the frame is 32×64 but plots are only 32 px apart,
+          // so a full-frame hit area would swallow clicks meant for the plot
+          // behind it (and the house above). Only the plant's base — its own
+          // plot — is clickable.
+          img.setInteractive({
+            hitArea: new Phaser.Geom.Rectangle(4, img.height - GARDEN_HIT_H, img.width - 8, GARDEN_HIT_H),
+            hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+            useHandCursor: true,
+          });
+        } else {
+          img.setInteractive({ useHandCursor: true });
+        }
         img.on("pointerdown", () => { if (this.modalOpen) return; const cur = this.snapshot?.nodes.find((x) => x.id === n.id); this.select({ type: "node", id: n.id, kind: n.kind, stage: cur?.stage ?? n.stage, stages: cur?.stages ?? n.stages, distance: this.distTo(n.x, n.y) }); });
         this.nodes.set(n.id, img);
       } else if (img.texture.key !== targetKey) {
@@ -521,8 +539,21 @@ export class WorldScene extends Phaser.Scene {
         // Same texture, different state — just swap the frame.
         img.setFrame(frameKey);
       }
-      img.setAlpha(isReady ? 1 : 0.55);
+      // Garden crops show growth through their frames; wild regrowth fades.
+      img.setAlpha(isReady || n.ownerId != null ? 1 : 0.55);
+      let wet = this.wetSoil.get(n.id);
+      if (n.watered && !wet) {
+        wet = this.add.ellipse(n.x, n.y - 3, 22, 7, 0x3a2414, 0.55).setDepth(DEPTH_CHAR_BASE + n.y - 1);
+        this.wetSoil.set(n.id, wet);
+      } else if (!n.watered && wet) {
+        wet.destroy();
+        this.wetSoil.delete(n.id);
+      }
     }
+    // Harvested crops and nodes that left the proximity window.
+    const liveNodes = new Set(s.nodes.map((n) => n.id));
+    for (const [id, img] of this.nodes) if (!liveNodes.has(id)) { img.destroy(); this.nodes.delete(id); }
+    for (const [id, wet] of this.wetSoil) if (!liveNodes.has(id)) { wet.destroy(); this.wetSoil.delete(id); }
     // chat bubbles
     for (const c of s.chat) {
       if (this.shownChat.has(c.id)) continue;
@@ -658,6 +689,25 @@ export class WorldScene extends Phaser.Scene {
   private select(sel: Selection) {
     bus.emit("select", sel);
   }
+
+  /**
+   * Clickable area for a garden plot (its soil mound). Phaser may deliver
+   * the click to this zone even when a crop image overlaps it, so the zone
+   * itself decides: a planted plot selects its crop, an empty one the plot.
+   */
+  private addPlotZone(lotKey: string, p: { plot: number; x: number; y: number }) {
+    const zone = this.add.zone(p.x, p.y - 8, 28, 16).setDepth(DEPTH_CHAR_BASE + p.y - 20);
+    zone.setInteractive({ useHandCursor: true });
+    zone.on("pointerdown", () => {
+      if (this.modalOpen) return;
+      const crop = this.snapshot?.nodes.find((n) => n.x === p.x && n.y === p.y);
+      if (crop) {
+        this.select({ type: "node", id: crop.id, kind: crop.kind, stage: crop.stage, stages: crop.stages, distance: this.distTo(p.x, p.y) });
+        return;
+      }
+      this.select({ type: "plot", lotKey, plot: p.plot, x: p.x, y: p.y, distance: this.distTo(p.x, p.y) });
+    });
+  }
   /**
    * True when the snapshot still contains the entity the selection points
    * at. Used to detect stale selections (e.g. after a pickup, before the
@@ -674,6 +724,8 @@ export class WorldScene extends Phaser.Scene {
       case "node": return this.snapshot.nodes.some((x) => x.id === sel.id);
       case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
       case "player": return this.snapshot.players.some((x) => x.id === sel.id);
+      // An empty plot stays valid until something is planted in it.
+      case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
   }
   /**
