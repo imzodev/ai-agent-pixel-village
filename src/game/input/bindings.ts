@@ -13,6 +13,8 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   { keys: ["a", "arrowleft"], command: "move.left", mode: "hold" },
   { keys: ["d", "arrowright"], command: "move.right", mode: "hold" },
   { keys: ["e", "space"], command: "player.interact", mode: "press" },
+  // Attack: hits the nearest enemy in reach, otherwise swings freely.
+  { keys: ["j", "x"], command: "player.attack", mode: "press" },
   // Craft/Sell are NPC-contextual: the handler no-ops when the current
   // selection isn't an NPC with recipes / sellable inventory. The binding
   // still fires — the handler decides.

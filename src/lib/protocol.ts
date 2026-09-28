@@ -4,7 +4,7 @@
 // guarantees shape parity at compile time.
 
 import type { Appearance } from "@/types/domain";
-import type { Facing } from "@/types/world";
+import type { Facing, PlayerActKind } from "@/types/world";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { LotSnapshot } from "@/types/garden";
 
@@ -20,7 +20,9 @@ export type WsClientMessage =
   | { type: "heartbeat"; x: number; y: number; facing: Facing }
   // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
   // players. Never triggers a DB write.
-  | { type: "pos"; x: number; y: number; facing: Facing };
+  | { type: "pos"; x: number; y: number; facing: Facing }
+  // One-shot action (attack swing), relayed to nearby players. In-memory only.
+  | { type: "act"; kind: PlayerActKind; facing: Facing };
 
 export type WsServerMessage =
   | { type: "snapshot"; data: WorldSnapshot }
@@ -29,6 +31,8 @@ export type WsServerMessage =
   // existing sprite if present; ignored otherwise (the next snapshot
   // creates it).
   | { type: "playerPos"; id: number; x: number; y: number; facing: Facing }
+  // Another player's one-shot action (plays the matching animation).
+  | { type: "playerAct"; id: number; kind: PlayerActKind; facing: Facing }
   // Moves scheduled on the last beat, all starting at `startAt`. Sent
   // once per beat, ~BROADCAST_OFFSET_MS after the boundary, so clients
   // hold every move before it starts. `serverTime` feeds clock sync.

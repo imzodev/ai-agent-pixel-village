@@ -8,6 +8,9 @@ export type Facing = "up" | "down" | "left" | "right";
 
 export type Point = { x: number; y: number };
 
+/** A one-shot character action shown to nearby players (the attack swing). */
+export type PlayerActKind = "slash";
+
 /**
  * Tile-grid coordinates. Cell (0, 0) spans world pixels (0..CELL_PX) —
  * `CELL_PX` aliases the chunk tile size so the planner's per-cell

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
-import { appearanceKey, composeCharacter, FRAME, ROWS } from "./lpc";
+import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
 import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
@@ -25,6 +25,7 @@ import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
 import type { Move, ScheduledMove } from "@/types/motion";
+import type { EnemySnapshot } from "@/lib/protocol";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -40,6 +41,11 @@ const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
 const PLAYER_SPEED = 120;
+// Attack swing: LPC slash frames at this rate; movement pauses meanwhile.
+const SLASH_FPS = 14;
+const SLASH_MS = Math.round((SLASH_FRAMES / SLASH_FPS) * 1000);
+// How close an enemy must be for the attack key to hit it (server allows 80).
+const ATTACK_REACH_PX = 76;
 // Clickable height (px) at the base of a garden crop — less than the 32 px
 // between plot rows, so neighbouring plots never steal each other's clicks.
 const GARDEN_HIT_H = 22;
@@ -257,6 +263,11 @@ export class WorldScene extends Phaser.Scene {
       scope: "gameplay",
       run: () => this.interact(),
     }));
+    this.unsub.push(inputRouter.register({
+      id: "player.attack",
+      scope: "gameplay",
+      run: () => this.attack(),
+    }));
 
     this.input.on("wheel", (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => {
       const cam = this.cameras.main;
@@ -305,6 +316,14 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("focus", ({ x, y }) => this.cameras.main.pan(x, y, 500)));
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
+    this.unsub.push(bus.on("attack", ({ x, y }) => {
+      const p = this.player;
+      if (!p) return;
+      const dx = x - p.sprite.x, dy = y - p.sprite.y;
+      const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+      this.playSlash(p, facing);
+      this.stream?.sendAct("slash", facing);
+    }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
@@ -342,6 +361,11 @@ export class WorldScene extends Phaser.Scene {
         onMoves: ({ moves }) => {
           if (!this.alive()) return;
           this.applyMoves(moves);
+        },
+        onPlayerAct: ({ id, kind, facing }) => {
+          if (!this.alive() || id === this.meId || kind !== "slash") return;
+          const ent = this.players.get(id);
+          if (ent) this.playSlash(ent, facing);
         },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
@@ -444,6 +468,7 @@ export class WorldScene extends Phaser.Scene {
     // it regardless of what the snapshot says.
     if (s.me) {
       const meEq = cosmeticsListToEquipped(s.me.cosmetics);
+      const meWeapon = weaponOf(s.me.equipped);
       if (!this.player) {
         // First spawn — place the player at the DB position so we rejoin
         // where we left off. Fall back to the central chunk only if the DB
@@ -452,15 +477,16 @@ export class WorldScene extends Phaser.Scene {
           s.me.x >= 0 && s.me.x < 2000 && s.me.y >= -1500 && s.me.y < 1500
             ? { x: s.me.x, y: s.me.y }
             : chunkCenter(0, 0);
-        this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a", meEq);
+        this.player = this.makeChar(spawn.x, spawn.y, s.me.name, s.me.appearance, PLAYER_SPEED, "#ffe08a", meEq, meWeapon);
         this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
         this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
         this.resizeOverlays();
-      } else if (this.player.equipped !== meEq) {
-        // Re-equip or unequip (from the shop). Rebuild the texture so the
-        // new cosmetics show up without a place teleport.
+      } else if (this.player.equipped !== meEq || this.player.weapon !== meWeapon) {
+        // Re-equip or unequip (shop cosmetics, sword from the bag). Rebuild
+        // the texture so the new gear shows up without a place teleport.
         this.player.equipped = meEq;
-        void this.ensureCharTexture(this.player, s.me.appearance, meEq);
+        this.player.weapon = meWeapon;
+        void this.ensureCharTexture(this.player, s.me.appearance, meEq, meWeapon);
       }
       this.player.glow?.setVisible(s.me.equipped.includes("lantern"));
       if (s.me.equipped.includes("lantern") && !this.player.glow) {
@@ -566,28 +592,31 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------- entities ----------
-  private makeChar(x: number, y: number, name: string, app: Appearance, speed: number, labelColor: string, eq?: EquippedCosmetics): CharEnt {
+  private makeChar(x: number, y: number, name: string, app: Appearance, speed: number, labelColor: string, eq?: EquippedCosmetics, weapon?: string): CharEnt {
     const sprite = this.add.sprite(x, y, "ph_char").setOrigin(0.5, 0.9);
     sprite.setInteractive({ useHandCursor: true });
     const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
-    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq), equipped: eq };
-    void this.ensureCharTexture(ent, app, eq);
+    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon };
+    void this.ensureCharTexture(ent, app, eq, weapon);
     return ent;
   }
 
-  private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics) {
-    const key = appearanceKey(app, eq);
+  private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string) {
+    const key = appearanceKey(app, eq, weapon);
     if (!this.textures.exists(key)) {
-      const canvas = await composeCharacter(app, eq);
+      const canvas = await composeCharacter(app, eq, weapon);
       // Scene may have been destroyed during the await.
       if (!this.alive()) return;
       if (!this.textures.exists(key)) {
         const tex = this.textures.addCanvas(key, canvas);
         if (!tex) return;
         for (let r = 0; r < 4; r++) for (let c = 0; c < 9; c++) tex.add(`${r}_${c}`, 0, c * FRAME, r * FRAME, FRAME, FRAME);
+        // Slash (attack) frames sit below the walk block.
+        for (let r = 0; r < 4; r++) for (let c = 0; c < SLASH_FRAMES; c++) tex.add(`s${r}_${c}`, 0, c * FRAME, (SLASH_ROW + r) * FRAME, FRAME, FRAME);
         for (const dir of Object.keys(ROWS) as Facing[]) {
           const r = ROWS[dir];
           this.anims.create({ key: `${key}_walk_${dir}`, frames: Array.from({ length: 8 }, (_, i) => ({ key, frame: `${r}_${i + 1}` })), frameRate: 11, repeat: -1 });
+          this.anims.create({ key: `${key}_slash_${dir}`, frames: Array.from({ length: SLASH_FRAMES }, (_, i) => ({ key, frame: `s${r}_${i}` })), frameRate: SLASH_FPS, repeat: 0 });
         }
       }
     }
@@ -601,18 +630,19 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[] }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
     for (const p of list) {
       seen.add(p.id);
       const eq = cosmeticsListToEquipped(p.cosmetics);
+      const weapon = weaponOf(p.equipped);
       let ent = map.get(p.id);
-      const appKey = appearanceKey(p.appearance, eq);
+      const appKey = appearanceKey(p.appearance, eq, weapon);
       if (ent && ent.appKey !== appKey) { this.destroyChar(ent); map.delete(p.id); ent = undefined; }
       if (!ent) {
-        ent = this.makeChar(p.x, p.y, p.name, p.appearance, speed, labelColor, eq);
+        ent = this.makeChar(p.x, p.y, p.name, p.appearance, speed, labelColor, eq, weapon);
         const created = ent;
         ent.sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(p); s.distance = this.distTo(created.sprite.x, created.sprite.y); this.select(s); });
         if (badge) {
@@ -624,7 +654,7 @@ export class WorldScene extends Phaser.Scene {
         // Existing sprite, equipped gear changed (equip/unequip from shop).
         // Rebuild the texture so the new cosmetics show up.
         ent.equipped = eq;
-        void this.ensureCharTexture(ent, p.appearance, eq);
+        void this.ensureCharTexture(ent, p.appearance, eq, weapon);
       }
       ent.tx = p.x; ent.ty = p.y;
       if (p.move !== undefined) acceptMove(ent, p.move);
@@ -800,6 +830,12 @@ export class WorldScene extends Phaser.Scene {
 
   private updatePlayer(dt: number) {
     const p = this.player!;
+    if (p.actingUntil !== undefined && this.time.now < p.actingUntil) {
+      // Mid-swing: plant your feet until the slash finishes.
+      this.placeChar(p);
+      if (p.glow) p.glow.setPosition(p.sprite.x, p.sprite.y - 20);
+      return;
+    }
     // The router merges touch joystick + keyboard movement and returns 0
     // while a text field is focused. See src/game/input/router.ts.
     const axis = inputRouter.axis();
@@ -891,8 +927,44 @@ export class WorldScene extends Phaser.Scene {
     this.placeChar(e);
   }
 
+  /**
+   * Attack key: hit the nearest enemy in reach (same path as E / the
+   * Attack button, so the server resolves the hit), otherwise swing freely
+   * in the facing direction. Ignored mid-swing so holding the key can't spam.
+   */
+  private attack() {
+    const p = this.player;
+    if (!p || this.modalOpen || !this.snapshot) return;
+    if (p.actingUntil !== undefined && this.time.now < p.actingUntil) return;
+    let target: EnemySnapshot | null = null;
+    let best = ATTACK_REACH_PX;
+    for (const e of this.snapshot.enemies) {
+      const ent = this.enemies.get(e.id);
+      if (!ent) continue;
+      const d = Math.hypot(ent.sprite.x - p.sprite.x, ent.sprite.y - p.sprite.y);
+      if (d <= best) { best = d; target = e; }
+    }
+    if (target) {
+      const sel: Selection = { type: "enemy", id: target.id, kind: target.kind, hp: target.hp, maxHp: target.maxHp, distance: best };
+      this.select(sel);
+      bus.emit("primaryAction", sel); // HUD attacks: swing + server hit
+      return;
+    }
+    this.playSlash(p, p.facing);
+    this.stream?.sendAct("slash", p.facing);
+  }
+
+  /** Play the attack swing facing `facing`; walk/idle resume after it. */
+  private playSlash(e: CharEnt, facing: Facing) {
+    if (!e.texKey || !e.sprite.active) return;
+    e.facing = facing;
+    e.actingUntil = this.time.now + SLASH_MS;
+    e.sprite.play(`${e.texKey}_slash_${facing}`, true);
+  }
+
   private playWalk(e: CharEnt, moving: boolean) {
     if (!e.texKey) return;
+    if (e.actingUntil !== undefined && this.time.now < e.actingUntil) return; // mid-swing
     const anim = `${e.texKey}_walk_${e.facing}`;
     if (moving) { if (e.sprite.anims.currentAnim?.key !== anim || !e.sprite.anims.isPlaying) e.sprite.play(anim, true); }
     else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0`) { e.sprite.stop(); e.sprite.setFrame(`${ROWS[e.facing]}_0`); }

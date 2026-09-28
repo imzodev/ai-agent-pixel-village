@@ -1,5 +1,7 @@
-// Universal LPC spritesheet compositing. Layers are 576x256 walk sheets
-// (9 frames x 4 rows: up, left, down, right; 64x64 per frame).
+// Universal LPC spritesheet compositing. Layer sheets are 576x512
+// (scripts/fetch-lpc.mjs), 64x64 frames, rows up/left/down/right:
+//   rows 0-3: walk  — 9 frames (frame 0 = standing)
+//   rows 4-7: slash — 6 frames (the attack swing)
 import type { Appearance } from "@/db/schema";
 import { COSMETIC_CATALOG, cosmoByKey } from "@/lib/cosmetics";
 import type { CosmeticSlot, EquippedCosmetics } from "@/types/cosmetic";
@@ -9,6 +11,15 @@ export type { EquippedCosmetics };
 
 export const FRAME = 64;
 export const ROWS = { up: 0, left: 1, down: 2, right: 3 } as const;
+/** Composed sheet size and the slash block (see the header comment). */
+export const SHEET_W = 576;
+export const SHEET_H = 512;
+export const SLASH_ROW = 4;
+export const SLASH_FRAMES = 6;
+/** Held weapons with LPC art. The Wooden Sword uses the dagger, tinted wood. */
+export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint: string }> = {
+  wooden_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#b07a44" },
+};
 export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs", "afro", "buzzcut", "bedhead", "cowlick"];
 export const SKIN_TONES = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#a86a3d", "#7a4a2a", "#5a3a22"];
 export const HAIR_COLORS = ["#2b1d14", "#5a3a1a", "#8c5a2b", "#c94f2a", "#e8c14a", "#dcdcdc", "#4a6fa5", "#b04a8a", "#3d8a5a"];
@@ -56,14 +67,17 @@ function resolveCosmetics(eq: EquippedCosmetics | undefined) {
  * Z-order of the base sprite body. The catalog contributes additional
  * layers (glasses over eyes, apron over torso, hat over hair).
  */
-export function layersFor(a: Appearance, eq?: EquippedCosmetics): Layer[] {
+export function layersFor(a: Appearance, eq?: EquippedCosmetics, weapon?: string): Layer[] {
   const b = a.body === "female" ? "female" : "male";
+  const w = weapon ? WEAPON_LAYERS[weapon] : undefined;
   const cos = resolveCosmetics(eq);
   const glasses = cos.find((c) => c.slot === "glasses")?.item;
   const outfit = cos.find((c) => c.slot === "outfit")?.item;
   const hat = cos.find((c) => c.slot === "hat")?.item;
 
   return [
+    // The part of the weapon that passes behind the body (e.g. facing up).
+    ...(w ? [{ src: w.behind, tint: w.tint, mode: "recolor" as const }] : []),
     { src: `/lpc/body_${b}.png`, tint: a.skin, mode: "skin" },
     { src: `/lpc/head_${b}.png`, tint: a.skin, mode: "skin" },
     { src: `/lpc/eyes.png` },
@@ -103,6 +117,8 @@ export function layersFor(a: Appearance, eq?: EquippedCosmetics): Layer[] {
           },
         ]
       : []),
+    // The weapon in hand renders over everything else.
+    ...(w ? [{ src: w.front, tint: w.tint, mode: "recolor" as const }] : []),
   ];
 }
 
@@ -139,21 +155,27 @@ const composedCache = new Map<string, Promise<HTMLCanvasElement>>();
 
 /** Cache key includes appearance and equipped cosmetics so re-equipping
  *  recomposes. The catalog is cheap, so the key is just the visible gear. */
-export function appearanceKey(a: Appearance, eq?: EquippedCosmetics) {
+export function appearanceKey(a: Appearance, eq?: EquippedCosmetics, weapon?: string) {
   const cos = eq ? Object.entries(eq).sort().flat().join("|") : "";
-  return `lpc_${a.body}_${a.skin}_${a.hair}_${a.hairColor}_${a.shirtColor}_${a.pantsColor}__${cos}`.replace(/#/g, "");
+  const w = weapon && WEAPON_LAYERS[weapon] ? `__w_${weapon}` : "";
+  return `lpc_${a.body}_${a.skin}_${a.hair}_${a.hairColor}_${a.shirtColor}_${a.pantsColor}__${cos}${w}`.replace(/#/g, "");
 }
 
-/** Compose all layers into one 576x256 sheet. Cached by appearance + cosmetics. */
-export function composeCharacter(a: Appearance, eq?: EquippedCosmetics): Promise<HTMLCanvasElement> {
-  const key = appearanceKey(a, eq);
+/** The held weapon (with LPC art) among a character's equipped item keys. */
+export function weaponOf(equipped: readonly string[] | undefined): string | undefined {
+  return equipped?.find((k) => k in WEAPON_LAYERS);
+}
+
+/** Compose all layers into one sheet (walk + slash). Cached by look + gear. */
+export function composeCharacter(a: Appearance, eq?: EquippedCosmetics, weapon?: string): Promise<HTMLCanvasElement> {
+  const key = appearanceKey(a, eq, weapon);
   let p = composedCache.get(key);
   if (!p) {
     p = (async () => {
       const canvas = document.createElement("canvas");
-      canvas.width = 576; canvas.height = 256;
+      canvas.width = SHEET_W; canvas.height = SHEET_H;
       const ctx = canvas.getContext("2d")!;
-      for (const layer of layersFor(a, eq)) {
+      for (const layer of layersFor(a, eq, weapon)) {
         try {
           const img = await loadImage(layer.src);
           ctx.drawImage(layer.tint && layer.mode ? tintLayer(img, layer.tint, layer.mode) : img, 0, 0);

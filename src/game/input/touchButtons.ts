@@ -17,6 +17,7 @@ export type TouchButton = {
 
 export const TOUCH_BUTTONS: readonly TouchButton[] = [
   { id: "player.interact", label: "A", ariaLabel: "Interact", right: "8%", bottom: "20%" },
+  { id: "player.attack", label: "⚔", ariaLabel: "Attack", right: "14%", bottom: "28%" },
   { id: "ui.bag", label: "B", ariaLabel: "Bag", right: "20%", bottom: "12%" },
   { id: "ui.shop", label: "Y", ariaLabel: "Shop", right: "8%", bottom: "12%" },
   { id: "ui.map", label: "M", ariaLabel: "Map", right: "20%", bottom: "20%" },

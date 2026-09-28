@@ -272,7 +272,7 @@ export default function Hud() {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
   })();
-  const keyHint = (cmd: "player.craft" | "player.sell"): string => {
+  const keyHint = (cmd: "player.craft" | "player.sell" | "player.attack"): string => {
     const k = formatBinding(cmd);
     return k ? `(${prettyKey(k)})` : "";
   };
@@ -323,8 +323,10 @@ export default function Hud() {
         else walk();
         break;
       case "enemy":
-        if (d <= 80) void act({ action: "attack", id: s.id });
-        else walk();
+        if (d <= 80) {
+          bus.emit("attack", { x: pos.x, y: pos.y }); // swing right away; the server resolves the hit
+          void act({ action: "attack", id: s.id });
+        } else walk();
         break;
       case "building":
         if (d <= 140) void enterBuilding(s.key, s.name);
@@ -555,7 +557,7 @@ export default function Hud() {
               </Btn>
             );
           })()}
-          {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && (() => {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
