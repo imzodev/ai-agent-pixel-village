@@ -7,7 +7,7 @@
 
 import type { WebSocket } from "ws";
 import type { ScheduledMove, WorldSnapshot } from "@/lib/protocol";
-import type { Facing } from "@/types/world";
+import type { Facing, PlayerActKind } from "@/types/world";
 
 /** Per-connection state held by the WS server. */
 export type Connection = {
@@ -28,6 +28,8 @@ export type Connection = {
   flushTimer: NodeJS.Timeout | null;
   /** When the client first exceeded the slow-client buffer threshold. */
   slowSince: number;
+  /** Last relayed one-shot action (attack swing), for throttling. */
+  lastActAt: number;
 };
 
 /**
@@ -46,6 +48,8 @@ export type StreamHandlers = {
   onDelta: () => void;
   /** Another player's live position (movement relay). */
   onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing }) => void;
+  /** Another player's one-shot action (e.g. the attack swing). */
+  onPlayerAct: (data: { id: number; kind: PlayerActKind; facing: Facing }) => void;
   /** Moves scheduled on the last beat (all starting at `startAt`). */
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;

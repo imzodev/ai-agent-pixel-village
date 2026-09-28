@@ -21,6 +21,8 @@ export type Events = {
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
   /** True while any modal is open that should block canvas interaction. */
   modalOpen: boolean;
+  /** The local player attacks (plays the slash, facing the target). */
+  attack: { x: number; y: number };
 };
 
 export type Handler<T> = (payload: T) => void;

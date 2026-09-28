@@ -1,15 +1,16 @@
 // scripts/fetch-lpc.mjs
-// Downloads the Universal LPC Spritesheet layer PNGs the project needs,
-// CROPS each one to the 576x256 walking region, and saves to public/lpc/.
+// Downloads the Universal LPC Spritesheet layer PNGs the project needs and
+// saves each as ONE 576x512 sheet in public/lpc/:
 //
-// Source files (from the sanderfrenken character-generator mirror of the
-// Universal-LPC-Spritesheet-Character-Generator) are larger master templates
-// (832x2944 for body/head/eyes; 832x1344 for the rest). They contain multiple
-// animations stacked vertically. Walking animation lives at rows 8-11
-// (0-indexed, each row is 64px), columns 0-8. That's a 576x256 region.
+//   rows 0-3 (y 0..255):   walk  — 9 frames × 4 directions (up/left/down/right)
+//   rows 4-7 (y 256..511): slash — 6 frames × 4 directions (x 0..383)
 //
-// The crop produces sprites the right shape for src/game/lpc.ts:59:
-//   canvas.width = 576; canvas.height = 256; (FRAME = 64, 9 cols × 4 rows)
+// Source files come in two shapes:
+//   - master templates (sanderfrenken mirror): 832 px wide, all animations
+//     stacked; walk is rows 8-11 (y 512..767), slash rows 12-15 (y 768..1023);
+//   - per-animation files (liberatedpixelcup mirror): walk.png (576x256)
+//     and slash.png (384x256) side by side.
+// src/game/lpc.ts composes these sheets (see SHEET_W / SHEET_H there).
 //
 // License: CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0 (see public/lpc/LICENSE.txt)
 
@@ -28,12 +29,13 @@ const OUT_DIR = resolve(__dirname, "..", "public", "lpc");
 const SANDER = "https://raw.githubusercontent.com/sanderfrenken/Universal-LPC-Spritesheet-Character-Generator/master";
 const LIBERATED = "https://raw.githubusercontent.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator/master";
 
-const CROP = { left: 0, top: 8 * 64, width: 9 * 64, height: 4 * 64 };
+const WALK = { left: 0, top: 8 * 64, width: 9 * 64, height: 4 * 64 };
+const SLASH = { left: 0, top: 12 * 64, width: 6 * 64, height: 4 * 64 };
 
 /**
- * @param dest   output filename inside public/lpc/
- * @param src    path under the LPC repo (e.g. "spritesheets/hat/cloth/bandana/adult.png")
- * @param base   optional source mirror; defaults to SANDER.
+ * [dest, src, base?] — `src` is either a master-template path (walk and
+ * slash are cropped out of it) or { walk, slash } per-animation paths.
+ * `base` is the source mirror; defaults to SANDER.
  */
 const FILES = [
   ["body_male.png",   "spritesheets/body/bodies/male.png"],
@@ -61,30 +63,51 @@ const FILES = [
   ["hat_straw.png",     "spritesheets/hat/cloth/bandana/adult.png"],
   ["hat_crown.png",     "spritesheets/hat/formal/crown/adult.png"],
   ["hat_party.png",     "spritesheets/hat/holiday/elf/adult.png"],
-  // Glasses + apron (liberatedpixelcup). Same 576x256 walk sheet format.
-  ["glasses_round.png",  "spritesheets/facial/glasses/round/adult/walk.png", LIBERATED],
-  ["outfit_apron.png",   "spritesheets/torso/aprons/apron/male/walk/white.png", LIBERATED],
+  // Glasses + apron (liberatedpixelcup): per-animation files.
+  ["glasses_round.png", { walk: "spritesheets/facial/glasses/round/adult/walk.png", slash: "spritesheets/facial/glasses/round/adult/slash.png" }, LIBERATED],
+  ["outfit_apron.png", { walk: "spritesheets/torso/aprons/apron/male/walk/white.png", slash: "spritesheets/torso/aprons/apron/male/slash/white.png" }, LIBERATED],
+  // Weapon (the Wooden Sword): the LPC dagger, in front of and behind the body.
+  ["weapon_dagger.png", { walk: "spritesheets/weapon/sword/dagger/walk/dagger.png", slash: "spritesheets/weapon/sword/dagger/slash/dagger.png" }, LIBERATED],
+  ["weapon_dagger_behind.png", { walk: "spritesheets/weapon/sword/dagger/behind/walk/dagger.png", slash: "spritesheets/weapon/sword/dagger/behind/slash/dagger.png" }, LIBERATED],
 ];
+
+async function download(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/** Fit a region to exactly w×h (transparent padding / crop), as PNG. */
+async function fit(buf, w, h) {
+  const meta = await sharp(buf).metadata();
+  if (meta.width === w && meta.height === h) return buf;
+  return sharp(buf)
+    .extract({ left: 0, top: 0, width: Math.min(w, meta.width), height: Math.min(h, meta.height) })
+    .extend({ right: Math.max(0, w - meta.width), bottom: Math.max(0, h - meta.height), background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+}
 
 await mkdir(OUT_DIR, { recursive: true });
 
 let ok = 0, fail = 0;
 for (const [dest, src, base] of FILES) {
-  const url = `${base ?? SANDER}/${src}`;
-  process.stdout.write(`  ${dest.padEnd(20)} ← ${src}\n`);
+  const root = base ?? SANDER;
+  process.stdout.write(`  ${dest.padEnd(26)} ← ${typeof src === "string" ? src : src.walk}\n`);
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    const meta = await sharp(buf).metadata();
-    // The canonical LPC mirror (e.g. facial/glasses) ships the walk
-    // cycle already cropped to 576x256. Master template layers ship as
-    // 832x1344 and need the CROP. Skip the crop when the source is
-    // already the right size.
-    const out =
-      meta.width === 576 && meta.height === 256
-        ? buf
-        : await sharp(buf).extract(CROP).png().toBuffer();
+    let walk, slash;
+    if (typeof src === "string") {
+      const master = await download(`${root}/${src}`);
+      walk = await sharp(master).extract(WALK).png().toBuffer();
+      slash = await sharp(master).extract(SLASH).png().toBuffer();
+    } else {
+      walk = await fit(await download(`${root}/${src.walk}`), WALK.width, WALK.height);
+      slash = await fit(await download(`${root}/${src.slash}`), SLASH.width, SLASH.height);
+    }
+    const out = await sharp({ create: { width: 576, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: walk, left: 0, top: 0 }, { input: slash, left: 0, top: 256 }])
+      .png()
+      .toBuffer();
     await writeFile(resolve(OUT_DIR, dest), out);
     ok++;
   } catch (err) {
@@ -93,5 +116,5 @@ for (const [dest, src, base] of FILES) {
   }
 }
 
-console.log(`\n${ok} downloaded+cropped, ${fail} failed → ${OUT_DIR}`);
+console.log(`\n${ok} sheets written (walk + slash), ${fail} failed → ${OUT_DIR}`);
 process.exit(fail === 0 ? 0 : 1);

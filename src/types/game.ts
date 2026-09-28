@@ -25,6 +25,11 @@ export type CharEnt = {
   /** Currently equipped cosmetics for this character. Drives the LPC layer
    *  order (glasses over eyes, outfit over torso, hat over hair). */
   equipped?: EquippedCosmetics;
+  /** Held weapon item key with LPC art (e.g. "wooden_sword"), if any. */
+  weapon?: string;
+  /** Scene time (ms) until which a one-shot action (the slash) owns the
+   *  sprite's animation; walk/idle updates wait until it has finished. */
+  actingUntil?: number;
   bubble?: { c: Phaser.GameObjects.Container; until: number };
   glow?: Phaser.GameObjects.Arc;
 };

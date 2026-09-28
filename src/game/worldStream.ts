@@ -10,7 +10,7 @@
 // after a server restart.
 
 import type { WsClientMessage, WsServerMessage } from "@/lib/protocol";
-import type { Facing } from "@/types/world";
+import type { Facing, PlayerActKind } from "@/types/world";
 import type { ClockSample, StreamHandlers, WorldStreamOptions } from "@/types/websocket";
 
 export type { StreamHandlers, WorldStreamOptions };
@@ -84,6 +84,11 @@ export class WorldStream {
     }
   }
 
+  /** Tell nearby players about a one-shot action (sent immediately). */
+  sendAct(kind: PlayerActKind, facing: Facing): void {
+    this.send({ type: "act", kind, facing });
+  }
+
   /** Update the player's position; sent on the next pos/heartbeat tick. */
   setPosition(x: number, y: number, facing: Facing): void {
     this.lastPosition = { x, y, facing };
@@ -132,6 +137,8 @@ export class WorldStream {
         }
       } else if (msg.type === "delta") {
         this.opts.handlers.onDelta();
+      } else if (msg.type === "playerAct") {
+        this.opts.handlers.onPlayerAct({ id: msg.id, kind: msg.kind, facing: msg.facing });
       } else if (msg.type === "playerPos") {
         this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing });
       }

@@ -102,6 +102,8 @@ const SHARD_ID = localShardId();
 // coalescing window for the post-mutation snapshot push.
 const RELAY_RADIUS_PX = Number(process.env.WS_RELAY_RADIUS_PX ?? 1200);
 const DIRTY_FLUSH_MS = Math.max(50, Number(process.env.WS_DIRTY_FLUSH_MS ?? 150));
+// Minimum gap between relayed one-shot actions (attack swings) per player.
+const ACT_MIN_INTERVAL_MS = 250;
 
 // ── Live positions + shared send path ──────────────────────────────────
 
@@ -265,6 +267,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     pendingDeltas: new Set(),
     flushTimer: null,
     slowSince: 0,
+    lastActAt: 0,
   };
 
   // We don't wrap ws.send or evict "slow consumers" here. The previous
@@ -320,10 +323,28 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
 }
 
 function onMessage(conn: Connection, raw: string): void {
-  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number };
+  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string };
   try {
     msg = JSON.parse(raw);
   } catch {
+    return;
+  }
+  if (msg.type === "act" && msg.kind === "slash") {
+    // Attack swing: relay to nearby players like movement. Throttled so a
+    // client can't flood its neighbours.
+    const now = Date.now();
+    if (now - conn.lastActAt < ACT_MIN_INTERVAL_MS) return;
+    conn.lastActAt = now;
+    const out = JSON.stringify({ type: "playerAct", id: conn.playerId, kind: "slash", facing: normalizeFacing(msg.facing) });
+    for (const other of connections.values()) {
+      if (other === conn || other.ws.readyState !== other.ws.OPEN) continue;
+      if (Math.hypot(other.homePx - conn.homePx, other.homePy - conn.homePy) > RELAY_RADIUS_PX) continue;
+      try {
+        other.ws.send(out);
+      } catch {
+        /* socket overflow — drop */
+      }
+    }
     return;
   }
   if (msg.type === "ping") {
