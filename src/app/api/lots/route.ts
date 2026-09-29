@@ -6,7 +6,7 @@ import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
 
-/** How close to the door you must be to move in. */
+/** How close to the door (a land lot's gate) you must be to acquire it. */
 const DOOR_RANGE_PX = 160;
 
 /** Lot actions: acquire | release. Body: { action, key }. */
@@ -21,11 +21,12 @@ export async function POST(req: Request) {
     if (action === "acquire") {
       const p = getLivePlayerPosition(me.id) ?? me;
       if (door && Math.hypot(door.x - p.x, door.y - p.y) > DOOR_RANGE_PX) {
-        return Response.json({ error: "Walk up to the door first." }, { status: 400 });
+        return Response.json({ error: key.startsWith("land_") ? "Walk up to the gate first." : "Walk up to the door first." }, { status: 400 });
       }
       const r = await acquireLot(me.id, key);
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
-      await logEvent("home", `${me.name} moved in!`, "character", me.id, door?.x, door?.y);
+      if (key.startsWith("land_")) await logEvent("home", `${me.name} claimed a plot of land!`, "character", me.id, door?.x, door?.y);
+      else await logEvent("home", `${me.name} moved in!`, "character", me.id, door?.x, door?.y);
       if (door) markWorldDirty(door.x, door.y);
       return Response.json(r);
     }

@@ -14,24 +14,26 @@ import { db } from "@/db";
 import { characters, lots, resourceNodes } from "@/db/schema";
 import { footprintOf, gardenCellsOf, gardenPlotsAt } from "./buildingManifest";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
-import type { GardenPlot, GardenResult, LotSnapshot } from "@/types/garden";
+import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/garden";
 
 /** Owners who haven't logged in for this long lose their lot. */
 export const LOT_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
- * Create / refresh one home lot per reservable home building in the
- * manifest. Ownership is never touched here; lots whose building left the
+ * Create / refresh one lot per reservable home building and per land
+ * entry in the manifest. Ownership is never touched here; lots whose building left the
  * manifest are removed along with their gardens.
  */
 export async function syncLotsFromManifest(): Promise<void> {
   const manifest = await getBuildingsManifest();
   const keep = new Set<string>();
   for (const entry of manifest.buildings) {
-    if (entry.kind !== "home" || entry.reservable === false) continue;
+    // Home lots come from reservable houses; land lots are fenced fields.
+    const kind: LotKind | null = entry.kind === "land" ? "land" : entry.kind === "home" && entry.reservable !== false ? "home" : null;
+    if (!kind) continue;
     const template = await getTemplate(entry);
     const fp = footprintOf(template);
-    // Parcel = house footprint grown to include its garden cells.
+    // Parcel = footprint (house, or a land lot's front fence) grown to include its garden cells.
     let [x0, y0, x1, y1] = [fp.x, fp.y, fp.x + fp.tw - 1, fp.y + fp.th - 1];
     for (const c of gardenCellsOf(template)) {
       x0 = Math.min(x0, c.dx); y0 = Math.min(y0, c.dy);
@@ -39,7 +41,7 @@ export async function syncLotsFromManifest(): Promise<void> {
     }
     const values = {
       key: entry.key,
-      kind: "home" as const,
+      kind,
       buildingKey: entry.key,
       tx: entry.tx + x0,
       ty: entry.ty + y0,
@@ -54,7 +56,7 @@ export async function syncLotsFromManifest(): Promise<void> {
     });
   }
   for (const row of await db.select({ id: lots.id, key: lots.key, kind: lots.kind }).from(lots)) {
-    if (row.kind === "home" && !keep.has(row.key)) {
+    if (!keep.has(row.key)) {
       await db.delete(resourceNodes).where(eq(resourceNodes.lotId, row.id));
       await db.delete(lots).where(eq(lots.id, row.id));
     }
@@ -104,7 +106,8 @@ export async function homeLotOf(characterId: number) {
 
 /**
  * Acquire a lot: it must be free (or listed for sale — resale lands later),
- * the player must not already own a home, and must afford the price.
+ * the player must not already own a lot of that kind (one home + one
+ * land each), and must afford the price.
  * Everything happens in one transaction so two players can't both get it.
  */
 export async function acquireLot(characterId: number, key: string): Promise<GardenResult> {
@@ -112,9 +115,10 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
     const [lot] = await tx.select().from(lots).where(eq(lots.key, key)).for("update");
     if (!lot) return { ok: false, error: "There's nothing to claim here." };
     if (lot.ownerId === characterId) return { ok: false, error: "It's already yours." };
-    if (lot.ownerId != null) return { ok: false, error: "Someone already lives here." };
+    const land = lot.kind === "land";
+    if (lot.ownerId != null) return { ok: false, error: land ? "Someone already farms this land." : "Someone already lives here." };
     const [owned] = await tx.select({ id: lots.id }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, lot.kind)));
-    if (owned) return { ok: false, error: "You already have a home. Move out first." };
+    if (owned) return { ok: false, error: land ? "You already have a plot of land. Give it up first." : "You already have a home. Move out first." };
     if (lot.price > 0) {
       const paid = await tx
         .update(characters)
@@ -124,6 +128,7 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
       if (paid.length === 0) return { ok: false, error: `You need ${lot.price} coins.` };
     }
     await tx.update(lots).set({ ownerId: characterId, acquiredAt: new Date(), forSale: false }).where(eq(lots.id, lot.id));
+    if (land) return { ok: true, message: lot.price > 0 ? `The land is yours, for ${lot.price} coins. Happy planting!` : "The land is yours! Plant away." };
     return { ok: true, message: lot.price > 0 ? `It's yours, for ${lot.price} coins. Welcome home!` : "Welcome home! The garden is yours to plant." };
   });
 }
@@ -131,8 +136,9 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
 /** Give up the character's lot `key`. Clears its garden. */
 export async function releaseLot(characterId: number, key: string): Promise<GardenResult> {
   const [lot] = await db.select().from(lots).where(eq(lots.key, key));
-  if (!lot || lot.ownerId !== characterId) return { ok: false, error: "That isn't your home." };
+  if (!lot || lot.ownerId !== characterId) return { ok: false, error: lot?.kind === "land" ? "That isn't your land." : "That isn't your home." };
   await clearLot(lot.id);
+  if (lot.kind === "land") return { ok: true, message: "You gave up the land. Its crops were cleared." };
   return { ok: true, message: "You've moved out. The garden was cleared." };
 }
 
