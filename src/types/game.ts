@@ -9,6 +9,7 @@ import type { Facing } from "@/types/world";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import type { Move } from "@/types/motion";
 import type { AnimalSpriteDef } from "@/types/animalSprite";
+import type { Appearance } from "@/db/schema";
 
 export type CharEnt = {
   sprite: Phaser.GameObjects.Sprite;
@@ -27,6 +28,8 @@ export type CharEnt = {
   equipped?: EquippedCosmetics;
   /** Held weapon item key with LPC art (e.g. "wooden_sword"), if any. */
   weapon?: string;
+  /** Base look, kept so a tool swing (the axe) can compose its own sheet. */
+  app?: Appearance;
   /** Scene time (ms) until which a one-shot action (the slash) owns the
    *  sprite's animation; walk/idle updates wait until it has finished. */
   actingUntil?: number;

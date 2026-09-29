@@ -8,8 +8,9 @@ export type Facing = "up" | "down" | "left" | "right";
 
 export type Point = { x: number; y: number };
 
-/** A one-shot character action shown to nearby players (the attack swing). */
-export type PlayerActKind = "slash";
+/** A one-shot character action shown to nearby players: the attack swing,
+ *  or a chop (the same swing with the axe in hand). */
+export type PlayerActKind = "slash" | "chop";
 
 /**
  * Tile-grid coordinates. Cell (0, 0) spans world pixels (0..CELL_PX) —

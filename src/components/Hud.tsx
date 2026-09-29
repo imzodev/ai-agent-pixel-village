@@ -317,7 +317,7 @@ export default function Hud() {
         if (s.stage < 1) { toast(chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back.", "info"); return; }
         if (d > 90) { walk(); break; }
         if (chop && !hasAxe) { toast("You need an axe. Pip sells them.", "info"); break; }
-        if (chop) bus.emit("attack", { x: pos.x, y: pos.y }); // swing at the trunk
+        if (chop) bus.emit("attack", { x: pos.x, y: pos.y, tool: "axe" }); // swing the axe at the trunk
         void act({ action: "gather", id: s.id });
         break;
       }

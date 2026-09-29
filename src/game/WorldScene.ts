@@ -326,13 +326,15 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("focus", ({ x, y }) => this.cameras.main.pan(x, y, 500)));
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
-    this.unsub.push(bus.on("attack", ({ x, y }) => {
+    this.unsub.push(bus.on("attack", (e) => {
+      const { x, y } = e;
       const p = this.player;
       if (!p) return;
       const dx = x - p.sprite.x, dy = y - p.sprite.y;
       const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
-      this.playSlash(p, facing);
-      this.stream?.sendAct("slash", facing);
+      const tool = e.tool;
+      this.playSlash(p, facing, tool);
+      this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
@@ -373,9 +375,9 @@ export class WorldScene extends Phaser.Scene {
           this.applyMoves(moves);
         },
         onPlayerAct: ({ id, kind, facing }) => {
-          if (!this.alive() || id === this.meId || kind !== "slash") return;
+          if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
-          if (ent) this.playSlash(ent, facing);
+          if (ent) this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
         },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
@@ -616,20 +618,30 @@ export class WorldScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, "ph_char").setOrigin(0.5, 0.9);
     sprite.setInteractive({ useHandCursor: true });
     const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
-    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon };
+    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon, app };
     void this.ensureCharTexture(ent, app, eq, weapon);
     return ent;
   }
 
   private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string) {
+    const key = await this.ensureSheet(app, eq, weapon);
+    if (!key || !ent.sprite.active) return;
+    ent.texKey = key;
+    ent.appKey = key;
+    ent.sprite.setTexture(key, `${ROWS[ent.facing]}_0`);
+  }
+
+  /** Compose (once) the character sheet for this look + held item, with its
+   *  walk / slash frames and animations. Resolves to the texture key. */
+  private async ensureSheet(app: Appearance, eq?: EquippedCosmetics, weapon?: string): Promise<string | null> {
     const key = appearanceKey(app, eq, weapon);
     if (!this.textures.exists(key)) {
       const canvas = await composeCharacter(app, eq, weapon);
       // Scene may have been destroyed during the await.
-      if (!this.alive()) return;
+      if (!this.alive()) return null;
       if (!this.textures.exists(key)) {
         const tex = this.textures.addCanvas(key, canvas);
-        if (!tex) return;
+        if (!tex) return null;
         for (let r = 0; r < 4; r++) for (let c = 0; c < 9; c++) tex.add(`${r}_${c}`, 0, c * FRAME, r * FRAME, FRAME, FRAME);
         // Slash (attack) frames sit below the walk block.
         for (let r = 0; r < 4; r++) for (let c = 0; c < SLASH_FRAMES; c++) tex.add(`s${r}_${c}`, 0, c * FRAME, (SLASH_ROW + r) * FRAME, FRAME, FRAME);
@@ -640,10 +652,7 @@ export class WorldScene extends Phaser.Scene {
         }
       }
     }
-    if (!ent.sprite.active) return;
-    ent.texKey = key;
-    ent.appKey = key;
-    ent.sprite.setTexture(key, `${ROWS[ent.facing]}_0`);
+    return key;
   }
 
   private destroyChar(e: CharEnt) {
@@ -978,12 +987,27 @@ export class WorldScene extends Phaser.Scene {
     this.stream?.sendAct("slash", p.facing);
   }
 
-  /** Play the attack swing facing `facing`; walk/idle resume after it. */
-  private playSlash(e: CharEnt, facing: Facing) {
+  /** Play the attack swing facing `facing`; walk/idle resume after it.
+   *  With `tool` (e.g. "axe") the swing uses a sheet holding that item. */
+  private playSlash(e: CharEnt, facing: Facing, tool?: string) {
     if (!e.texKey || !e.sprite.active) return;
     e.facing = facing;
     e.actingUntil = this.time.now + SLASH_MS;
-    e.sprite.play(`${e.texKey}_slash_${facing}`, true);
+    if (!tool || tool === e.weapon || !e.app) {
+      e.sprite.play(`${e.texKey}_slash_${facing}`, true);
+      return;
+    }
+    const toolKey = appearanceKey(e.app, e.equipped, tool);
+    if (this.textures.exists(toolKey)) {
+      e.sprite.play(`${toolKey}_slash_${facing}`, true);
+      return;
+    }
+    // First swing with this tool: compose its sheet, then swing.
+    void this.ensureSheet(e.app, e.equipped, tool).then((k) => {
+      if (!k || !e.sprite.active) return;
+      e.actingUntil = this.time.now + SLASH_MS;
+      e.sprite.play(`${k}_slash_${facing}`, true);
+    });
   }
 
   private playWalk(e: CharEnt, moving: boolean) {
@@ -991,7 +1015,11 @@ export class WorldScene extends Phaser.Scene {
     if (e.actingUntil !== undefined && this.time.now < e.actingUntil) return; // mid-swing
     const anim = `${e.texKey}_walk_${e.facing}`;
     if (moving) { if (e.sprite.anims.currentAnim?.key !== anim || !e.sprite.anims.isPlaying) e.sprite.play(anim, true); }
-    else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0`) { e.sprite.stop(); e.sprite.setFrame(`${ROWS[e.facing]}_0`); }
+    else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0` || e.sprite.texture.key !== e.texKey) {
+      // Back to the character's own sheet (a tool swing may have swapped it).
+      e.sprite.stop();
+      e.sprite.setTexture(e.texKey, `${ROWS[e.facing]}_0`);
+    }
   }
 
   private placeChar(e: CharEnt) {
