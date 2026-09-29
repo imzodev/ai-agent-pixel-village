@@ -105,8 +105,13 @@ export async function POST(req: Request) {
       // Pickable at every stage except stage 0 (depleted). With stages=5
       // the user can pick 4 times before the node hits 0 and refuses
       // further picks until it regrows.
+      const chop = cfg?.needsAxe === true;
       if (n.stage < 1) {
-        return Response.json({ error: "Picked clean. It'll grow back." }, { status: 400 });
+        return Response.json({ error: chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back." }, { status: 400 });
+      }
+      if (chop) {
+        const [axe] = await db.select({ qty: inventory.qty }).from(inventory).where(sql`${inventory.characterId} = ${me.id} and ${inventory.itemKey} = 'axe' and ${inventory.qty} > 0`);
+        if (!axe) return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
       }
 
       // Pick: decrement toward empty (stage 0). If regrowthMs > 0, the
@@ -120,8 +125,8 @@ export async function POST(req: Request) {
       }).where(eq(resourceNodes.id, n.id));
 
       await addItem(me.id, n.itemKey, yieldAmt);
-      // Foraging now and then turns up seeds for a home garden.
-      const found = rollForageSeed();
+      // Foraging now and then turns up seeds for a home garden (not chopping).
+      const found = chop ? null : rollForageSeed();
       if (found) await addItem(me.id, found, 1);
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
@@ -130,7 +135,7 @@ export async function POST(req: Request) {
       markWorldDirty(n.x, n.y);
       return Response.json({
         ok: true,
-        message: `Gathered ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
+        message: `${chop ? "Chopped" : "Gathered"} ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
         gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
       });
     }

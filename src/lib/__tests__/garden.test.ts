@@ -68,7 +68,7 @@ describe("crop data", () => {
 
   it("every seed on sale is plantable, and every harvest has a buyer", () => {
     for (const stock of Object.values(SHOP_STOCK)) {
-      for (const t of stock) expect(GARDEN_CROPS[t.itemKey], t.itemKey).toBeDefined();
+      for (const t of stock) if (t.itemKey.endsWith("_seeds")) expect(GARDEN_CROPS[t.itemKey], t.itemKey).toBeDefined();
     }
     for (const def of Object.values(GARDEN_CROPS)) expect(findBuyer(def.produceKey), def.produceKey).not.toBeNull();
   });

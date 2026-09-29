@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
-import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeTextureKey, registerCropFrames } from "./textures";
+import { CROP_KINDS } from "@/lib/crops";
+import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { stampBuildings } from "./buildingStamps";
@@ -56,6 +57,8 @@ const ATTACK_REACH_PX = 76;
 // Clickable height (px) at the base of a garden crop — less than the 32 px
 // between plot rows, so neighbouring plots never steal each other's clicks.
 const GARDEN_HIT_H = 22;
+// Clickable height of a tree node (its trunk base).
+const TREE_HIT_H = 22;
 
 /** Convert the snapshot's flat slot/itemKey list into an EquippedCosmetics
  *  record the LPC compositor can read. Slots not in CosmeticSlot are
@@ -539,7 +542,9 @@ export class WorldScene extends Phaser.Scene {
       // frame so the player sees the "regrowing" tile.
       const isReady = n.stage >= n.stages - 1;
       const frameKey = nodeFrameKey(n.kind, n.stage);
-      const targetKey = frameKey ? "lpc_crops" : nodeTextureKey(n.kind);
+      const targetKey = frameKey ? nodeSheetKey(n.kind) : nodeTextureKey(n.kind);
+      // Kinds with their own sheet (trees) show growth through frames.
+      const ownSheet = !!CROP_KINDS[n.kind]?.sheet;
       const depleted = n.stage === 0 && !frameKey; // procedural kind with no regrowth
       if (depleted) {
         // Static kinds (rock, berry, herb, mushroom) — regrowthMs = 0,
@@ -559,6 +564,14 @@ export class WorldScene extends Phaser.Scene {
             hitAreaCallback: Phaser.Geom.Rectangle.Contains,
             useHandCursor: true,
           });
+        } else if (ownSheet) {
+          // Tree: only the trunk base is clickable, so a canopy never
+          // steals clicks from what's behind it.
+          img.setInteractive({
+            hitArea: new Phaser.Geom.Rectangle(img.width / 2 - 10, img.height - TREE_HIT_H, 20, TREE_HIT_H),
+            hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+            useHandCursor: true,
+          });
         } else {
           img.setInteractive({ useHandCursor: true });
         }
@@ -573,7 +586,7 @@ export class WorldScene extends Phaser.Scene {
         img.setFrame(frameKey);
       }
       // Garden crops show growth through their frames; wild regrowth fades.
-      img.setAlpha(isReady || n.ownerId != null ? 1 : 0.55);
+      img.setAlpha(isReady || n.ownerId != null || ownSheet ? 1 : 0.55);
       let wet = this.wetSoil.get(n.id);
       if (n.watered && !wet) {
         wet = this.add.ellipse(n.x, n.y - 3, 22, 7, 0x3a2414, 0.55).setDepth(DEPTH_CHAR_BASE + n.y - 1);

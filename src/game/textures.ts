@@ -52,7 +52,7 @@ export function makeCreatureTextures(scene: Scene) {
 // route) and client (texture frame registration, snapshot assembly)
 // agree on the same source of truth.
 
-import { CROP_KINDS } from "@/lib/crops";
+import { CROP_KINDS, NODE_SHEETS } from "@/lib/crops";
 
 const LPC_CROPS_KEY = "lpc_crops";
 
@@ -60,19 +60,22 @@ export function loadPropSprites(scene: Scene): void {
   // Master LPC crops spritesheet. One texture, many sub-region frames —
   // crops don't need per-state PNGs.
   scene.load.image(LPC_CROPS_KEY, "/assets/food/crops.png");
+  // Other node sheets (e.g. choppable trees).
+  for (const [key, url] of Object.entries(NODE_SHEETS)) scene.load.image(key, url);
 }
 
 /**
- * Registers named sub-region frames on the `lpc_crops` texture. Call
+ * Registers named sub-region frames on each kind's sheet (`lpc_crops`
+ * unless the kind names its own `sheet`). Call
  * once during scene create, after preload has finished. Each crop kind
  * gets one frame per stage — `kind_stage_0` (picked) through
  * `kind_stage_(stages-1)` (fully grown) — that Phaser renders at the
  * frame's native w×h.
  */
 export function registerCropFrames(scene: Scene): void {
-  const tex = scene.textures.get(LPC_CROPS_KEY);
-  if (!tex) return;
   for (const [kind, cfg] of Object.entries(CROP_KINDS)) {
+    const tex = scene.textures.get(cfg.sheet ?? LPC_CROPS_KEY);
+    if (!tex) continue;
     cfg.frames.forEach((rect, stage) => {
       tex.add(`${kind}_stage_${stage}`, 0, rect.x, rect.y, rect.w, rect.h);
     });
@@ -80,7 +83,7 @@ export function registerCropFrames(scene: Scene): void {
 }
 
 /**
- * Returns the `lpc_crops` frame name to use for a crop node, or `null`
+ * Returns the frame name (on `nodeSheetKey(kind)`) to use for a node, or `null`
  * if the kind falls back to its own procedural `node_<kind>` sprite.
  */
 export function nodeFrameKey(kind: string, stage: number): string | null {
@@ -88,6 +91,11 @@ export function nodeFrameKey(kind: string, stage: number): string | null {
   if (!cfg || cfg.frames.length === 0) return null;
   const clamped = Math.max(0, Math.min(stage, cfg.frames.length - 1));
   return `${kind}_stage_${clamped}`;
+}
+
+/** Texture a node's frames are cut from (see `nodeFrameKey`). */
+export function nodeSheetKey(kind: string): string {
+  return CROP_KINDS[kind]?.sheet ?? LPC_CROPS_KEY;
 }
 
 /**

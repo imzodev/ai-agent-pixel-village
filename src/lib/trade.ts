@@ -22,6 +22,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "stone", qty: 1, price: 1, line: "I'll take river stones off your hands. A copper each." },
     { itemKey: "wool", qty: 1, price: 2, line: "Wool tufts? Two coppers. I can always use more." },
     { itemKey: "slime_gel", qty: 1, price: 2, line: "Slime gel — two coppers. The bearings need the slip." },
+    { itemKey: "wood", qty: 1, price: 2, line: "Oak logs! Two coppers each — or let me make you something with them." },
   ],
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
@@ -54,6 +55,7 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "carrot_seeds", qty: 1, price: 3, line: "Carrot seeds, three coppers. Patience pays." },
     { itemKey: "tomato_seeds", qty: 1, price: 5, line: "Tomato seeds, five coppers. Water them well!" },
     { itemKey: "pumpkin_seeds", qty: 1, price: 8, line: "Pumpkin seeds — eight coppers. Slow, but oh, the payoff." },
+    { itemKey: "axe", qty: 1, price: 25, line: "A woodcutter's axe, twenty-five coppers. The oaks are out west, past the woods." },
   ],
 };
 
