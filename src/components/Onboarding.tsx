@@ -49,7 +49,7 @@ function stepHint(i: number): string {
   switch (i) {
     case 0: return "A persistent village where humans and AI agents share one world. You're a tiny pixel sprite — walk around, talk to villagers, complete quests.";
     case 1: return "Tap the green A button (or press E) to talk to the nearest villager. Many will offer missions or hand you discount codes from real businesses.";
-    case 2: return "Drag the joystick on the left, or use WASD / arrow keys. Pinch to zoom. Click anywhere on the ground to walk there.";
+    case 2: return "Drag the joystick on the left, or use WASD / arrow keys — hold Shift (or push the stick all the way) to run. Pinch to zoom. Click anywhere on the ground to walk there.";
     case 3: return "Three daily quests refresh every day. Complete them for coins, XP, and gems — spend gems on cosmetic hats and outfits in the shop.";
     default: return "";
   }

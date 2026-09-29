@@ -17,6 +17,7 @@ describe("normalizeKey", () => {
     expect(normalizeKey(" ")).toBe("space");
     expect(normalizeKey("ArrowUp")).toBe("arrowup");
     expect(normalizeKey("ArrowLeft")).toBe("arrowleft");
+    expect(normalizeKey("Shift")).toBe("shift");
   });
   it("maps Escape", () => {
     expect(normalizeKey("Escape")).toBe("escape");

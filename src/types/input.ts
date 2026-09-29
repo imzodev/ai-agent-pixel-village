@@ -24,7 +24,9 @@ export type CommandId =
   | "move.up"
   | "move.down"
   | "move.left"
-  | "move.right";
+  | "move.right"
+  // Held: move at run speed (Shift on keyboard, full joystick push on touch).
+  | "move.run";
 
 /** "press" fires once on keydown; "hold" reports its state each frame. */
 export type BindingMode = "press" | "hold";

@@ -577,7 +577,7 @@ export default function Hud() {
       {/* Chat input */}
       {loggedIn && !talk && (
         <form className="pointer-events-auto absolute bottom-3 left-3 flex w-[min(90vw,360px)] gap-1" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); }}>
-          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Say something to the plaza… (WASD to walk, E to interact)" className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
+          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Say something to the plaza… (WASD to walk, Shift to run, E to interact)" className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
           <button className="rounded-lg bg-amber-700 px-3 text-white">Say</button>
         </form>
       )}
