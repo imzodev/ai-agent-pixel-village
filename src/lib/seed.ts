@@ -178,14 +178,14 @@ const NPC_DEFS: {
 // Village species stay near the houses (chunks 1..2, south of them);
 // wild species live in the WILD_ZONES outskirts ring.
 const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: number; w: number; h: number } }[] = [
-  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: tileRect(6, 48, 24, 21) },
+  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: tileRect(6, 48, 24, 11) },
   { species: "cow", names: ["Buttercup", "Juniper"], zone: tileRect(126, -12, 24, 21) },
   // Pigs share the cows' pasture (the farm).
   { species: "pig", names: ["Truffle", "Hamlet"], zone: tileRect(126, -12, 24, 21) },
   // Llamas get their own meadow east of the village (chunk 3_0, fully open).
   { species: "llama", names: ["Paco", "Luna"], zone: tileRect(76, 5, 18, 12) },
   { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: tileRect(24, 33, 20, 12) },
-  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 20) },
+  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 10) },
   { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
   { species: "fox", names: ["Ember"], zone: tileRect(36, -59, 30, 24) },
   { species: "cat", names: ["Marmalade"], zone: tileRect(28, 18, 18, 9) },
@@ -195,10 +195,10 @@ const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: num
 // Resource nodes scattered through the wild ring (world-tile units), all in
 // unauthored chunks so they never collide with map art.
 const NODE_DEFS: [string, string, number, number][] = [
-  ["herb_patch", "herb", 8, 54], ["herb_patch", "herb", 28, 62], ["herb_patch", "herb", 48, 51],
+  ["herb_patch", "herb", 8, 54], ["herb_patch", "herb", 26, 55], ["herb_patch", "herb", 48, 51],
   ["herb_patch", "herb", 22, -55], ["herb_patch", "herb", 44, -57],
   ["berry_bush", "berry", 14, 49], ["berry_bush", "berry", 64, 56], ["berry_bush", "berry", 130, -21],
-  ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 56, 71],
+  ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 52, 54],
   ["mushroom_ring", "mushroom", -76, -15], ["mushroom_ring", "mushroom", 130, 54],
   ["wheat_field", "wheat", 38, -45], ["wheat_field", "wheat", 44, -47], ["wheat_field", "wheat", 32, -42],
 ];
@@ -560,14 +560,24 @@ async function syncLots() {
   }
 }
 
+/** The fishing dock's spot, just north of the land lots' road. */
+const FISHING_DOCK = { x: 1080, y: 900 };
+/** Pixel rows of the land-lot strip (chunk row cy −4, ty 60..74). */
+const LAND_STRIP_Y0 = 60 * 16, LAND_STRIP_Y1 = 75 * 16;
+
 async function seedActivities() {
+  // Existing worlds: a dock seeded inside the land-lot strip moves out.
+  await db
+    .update(activities)
+    .set(FISHING_DOCK)
+    .where(sql`${activities.kind} = 'fishing_dock' and ${activities.y} >= ${LAND_STRIP_Y0} and ${activities.y} < ${LAND_STRIP_Y1}`);
   const [any] = await db.select().from(activities).limit(1);
   if (any) return;
-  // Fishing dock — south of the pond, near the trees. 2-player co-op.
+  // Fishing dock — 2-player co-op.
   await db.insert(activities).values({
     kind: "fishing_dock",
     status: "live",
-    x: 1080, y: 1100,
+    ...FISHING_DOCK,
     config: { capacity: 2, durationSec: 60, rewardCoins: 25, rewardXp: 12 },
   });
 }

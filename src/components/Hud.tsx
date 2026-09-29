@@ -35,6 +35,8 @@ export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number } | null>(null);
   const [sel, setSel] = useState<Selection | null>(null);
+  // Lot key whose "move out / give up" is waiting for a second tap.
+  const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
@@ -165,7 +167,9 @@ export default function Hud() {
     return r;
   };
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
-  const lotAction = (action: "acquire" | "release", key: string) => post("/api/lots", { action, key });
+  const lotAction = (action: "acquire" | "release", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
+  // Land lots are fenced fields, not buildings you can walk into.
+  const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string) => {
     const r = await api<{ ok?: boolean; spent?: number }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
     if (r.error) toast(r.error, "bad");
@@ -329,7 +333,8 @@ export default function Hud() {
         } else walk();
         break;
       case "building":
-        if (d <= 140) void enterBuilding(s.key, s.name);
+        if (isLandKey(s.key)) { if (d > 140) walk(); } // nothing to enter
+        else if (d <= 140) void enterBuilding(s.key, s.name);
         else walk();
         break;
       case "npc":
@@ -536,7 +541,7 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "plot" && (() => {
             const lot = snap?.lots.find((l) => l.key === sel.lotKey);
-            if (!lot?.owner) return <span className="text-[11px] text-stone-600">An empty garden plot. Move into the house to plant here.</span>;
+            if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "land" ? "Empty farmland. Claim this lot at its gate to plant here." : "An empty garden plot. Move into the house to plant here."}</span>;
             if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
             if (seedsInBag.length === 0) return <span className="text-[11px] text-stone-600">No seeds — the shopkeeper sells them.</span>;
@@ -558,14 +563,23 @@ export default function Hud() {
             );
           })()}
           {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "building" && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "building" && isLandKey(sel.key) && sel.distance > 140 && <WalkBtn snap={snap} sel={sel} />}
           {loggedIn && sel.type === "building" && (() => {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
             if (!lot) return null;
+            const land = lot.kind === "land";
             if (lot.owner?.id === myId) {
-              return <><span className="text-[11px] font-bold text-emerald-700">🏡 Your home</span><Btn on={() => void lotAction("release", lot.key)} subtle>Move out</Btn></>;
+              const confirming = confirmRelease === lot.key;
+              return <>
+                <span className="text-[11px] font-bold text-emerald-700">{land ? "🌱 Your land" : "🏡 Your home"}</span>
+                <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>
+                  {confirming ? "Sure? Crops are cleared" : land ? "Give up" : "Move out"}
+                </Btn>
+              </>;
             }
-            if (lot.owner) return <span className="text-[11px] text-stone-600">🏡 Home of {lot.owner.name}</span>;
+            if (lot.owner) return <span className="text-[11px] text-stone-600">{land ? `🌱 Land of ${lot.owner.name}` : `🏡 Home of ${lot.owner.name}`}</span>;
+            if (land) return <Btn on={() => void lotAction("acquire", lot.key)}>🌱 {lot.price > 0 ? `Buy land · ${lot.price}🪙` : "Claim land (free)"}</Btn>;
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}

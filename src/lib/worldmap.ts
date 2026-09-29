@@ -77,7 +77,7 @@ export function tilePoint(tx: number, ty: number): { x: number; y: number } {
  *  west woods. */
 export const WILD_ZONES: Rect[] = [
   chunkRect(0, 4, 3, 2),   // north woods (chunks 0..2, cy 3..4)
-  chunkRect(0, -4, 3, 2),  // south meadow (chunks 0..2, cy -4..-3)
+  chunkRect(0, -6, 3, 2),  // south meadow (chunks 0..2, ty 90..119, south of the land lots)
   chunkRect(5, 2, 2, 5),   // east field (chunks 5..6, cy -2..2)
   chunkRect(-4, 2, 2, 5),  // west woods (chunks -4..-3, cy -2..2)
 ];
