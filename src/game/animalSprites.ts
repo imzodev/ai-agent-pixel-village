@@ -168,6 +168,61 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { graze: "sit" },
   },
+  slime: {
+    // Enemy. Original art drawn by scripts/draw-slime.mjs: block 0 = hop
+    // (squash → stretch → airborne → splat), block 1 = idle jiggle.
+    url: "/assets/animals/slime.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8,
+    originX: 0.5,
+    originY: 0.875, // base line at y≈28 of 32
+    labelHeight: 14,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 5, loop: true },
+    },
+    stateActions: { walk: "idle" },
+  },
+  thornling: {
+    // Enemy. Original art drawn by scripts/draw-thornling.mjs: block 0 =
+    // waddle on its roots, block 1 = idle sway with rustling leaves.
+    url: "/assets/animals/thornling.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8,
+    originX: 0.5,
+    originY: 0.94, // root tips at y≈30 of 32
+    labelHeight: 26, // thorn tips reach y≈4
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { walk: "idle" },
+  },
+  bat: {
+    // Enemy. Original art drawn by scripts/draw-bat.mjs: one wing-flap
+    // block. It flaps fast while flying and slower while hovering (enemy
+    // rest state is "walk"), so a bat never freezes in mid-air.
+    url: "/assets/animals/bat.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8,
+    originX: 0.5,
+    originY: 0.88, // ground shadow sits at y≈28 of 32
+    labelHeight: 25, // raised wingtips reach y≈3
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 12, loop: true },
+      hover: { block: 0, frames: 4, frameRate: 7, loop: true },
+    },
+    stateActions: { walk: "hover" },
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

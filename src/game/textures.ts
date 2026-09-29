@@ -32,14 +32,11 @@ export function pixelTexture(scene: Scene, key: string, rows: string[], palette:
 }
 
 // ---------- Animals & creatures ----------
-const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {
-  // cow, sheep, chicken, duck, rabbit, cat, dog, fox: rendered from spritesheets (src/game/animalSprites.ts).
-  // Species listed there are skipped below so a procedural texture can
-  // never overwrite the sheet.
-  slime: { rows: ["...gggg...", "..gggggg..", ".gggggggg.", ".gkggggkg.", ".gggggggg.", "gggggggggg", "gggggggggg", ".gggggggg."], palette: { g: "#6ccf7a", k: "#1e3a22" } },
-  bat: { rows: ["p.........p.", "pp...kk..pp.", "ppp.kkkk.ppp", "pppkkkkkkppp", ".ppkkwkkwpp.", "..kkkkkkkk..", "...kk..kk..."], palette: { p: "#6b4a8a", k: "#2e2340", w: "#f8e16c" } },
-  thornling: { rows: ["...t..t...", "..tttttt..", ".tttttttt.", ".twttttwt.", ".tttttttt.", "tttttttttt", ".tttttttt.", "..t.tt.t.."], palette: { t: "#4f7a3a", w: "#f8e16c" } },
-};
+// Quick procedural placeholders for creatures without a spritesheet yet
+// (rows of palette letters, drawn at 2x). Every current animal and enemy
+// has a real sheet in src/game/animalSprites.ts; species listed there are
+// skipped below so a placeholder can never overwrite the sheet.
+const CREATURES: Record<string, { rows: string[]; palette: Record<string, string> }> = {};
 
 export function makeCreatureTextures(scene: Scene) {
   for (const [k, def] of Object.entries(CREATURES)) {
