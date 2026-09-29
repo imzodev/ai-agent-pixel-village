@@ -41,6 +41,13 @@ const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
 const PLAYER_SPEED = 120;
+// Running (hold Shift / push the joystick all the way): speed multiplier
+// and how much faster the legs cycle.
+const RUN_SPEED_MULT = 1.75;
+const RUN_ANIM_SCALE = 1.6;
+// Remote characters covering ground faster than this (px/s) are shown
+// running (their positions arrive via the relay, not as a run flag).
+const REMOTE_RUN_PX_S = 170;
 // Attack swing: LPC slash frames at this rate; movement pauses meanwhile.
 const SLASH_FPS = 14;
 const SLASH_MS = Math.round((SLASH_FRAMES / SLASH_FPS) * 1000);
@@ -858,7 +865,9 @@ export class WorldScene extends Phaser.Scene {
     const moving = vx !== 0 || vy !== 0;
     if (moving) {
       const len = Math.hypot(vx, vy);
-      const step = PLAYER_SPEED * dt;
+      const running = inputRouter.isHeld("move.run"); // also Shift+click to run somewhere
+      const step = PLAYER_SPEED * (running ? RUN_SPEED_MULT : 1) * dt;
+      p.sprite.anims.timeScale = running ? RUN_ANIM_SCALE : 1;
       const nx = p.sprite.x + (vx / len) * step, ny = p.sprite.y + (vy / len) * step;
       let movedAny = false;
       if (isWalkable(nx, p.sprite.y)) { p.sprite.x = nx; movedAny = true; }
@@ -922,6 +931,8 @@ export class WorldScene extends Phaser.Scene {
       const step = Math.min(d, Math.max(e.speed * dt, d * 3 * dt));
       e.sprite.x += (dx / d) * step; e.sprite.y += (dy / d) * step;
       e.facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+      // A player who is running shows up as fast catch-up: speed the legs up.
+      e.sprite.anims.timeScale = dt > 0 && step / dt > REMOTE_RUN_PX_S ? RUN_ANIM_SCALE : 1;
       this.playWalk(e, true);
     } else this.playWalk(e, false);
     this.placeChar(e);

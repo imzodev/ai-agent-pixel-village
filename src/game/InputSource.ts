@@ -13,6 +13,8 @@ export type InputSource = {
 };
 
 const DEADZONE = 0.18;
+// Joystick push (0..1) at which movement switches from walking to running.
+const RUN_STICK_MAG = 0.95;
 const MAX_DIST = 50;
 
 export function createInputSource(opts: {
@@ -42,8 +44,13 @@ export function createInputSource(opts: {
       Math.abs(dx) < DEADZONE ? 0 : dx * mag,
       Math.abs(dy) < DEADZONE ? 0 : dy * mag,
     );
+    // Pushing the stick all the way runs; a partial push walks.
+    opts.router.setHeld("move.run", mag >= RUN_STICK_MAG);
   });
-  joy.on("end", () => opts.router.setVirtualAxis(0, 0));
+  joy.on("end", () => {
+    opts.router.setVirtualAxis(0, 0);
+    opts.router.setHeld("move.run", false);
+  });
 
   // --- Action buttons (right thumb) ---
   for (const b of TOUCH_BUTTONS) {

@@ -12,6 +12,7 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   { keys: ["s", "arrowdown"], command: "move.down", mode: "hold" },
   { keys: ["a", "arrowleft"], command: "move.left", mode: "hold" },
   { keys: ["d", "arrowright"], command: "move.right", mode: "hold" },
+  { keys: ["shift"], command: "move.run", mode: "hold" },
   { keys: ["e", "space"], command: "player.interact", mode: "press" },
   // Attack: hits the nearest enemy in reach, otherwise swings freely.
   { keys: ["j", "x"], command: "player.attack", mode: "press" },
@@ -39,6 +40,7 @@ export function normalizeKey(key: string): string | null {
   if (key === " ") return "space";
   if (key === "Enter") return "enter";
   if (key === "Tab") return "tab";
+  if (key === "Shift") return "shift";
   const lower = key.toLowerCase();
   if (lower === "escape" || lower.startsWith("arrow")) return lower;
   if (/^[a-z0-9]$/.test(lower)) return lower;
