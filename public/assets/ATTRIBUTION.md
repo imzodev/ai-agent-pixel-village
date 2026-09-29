@@ -25,7 +25,7 @@ include this file (or a link to it) in your distribution.
 - **License**: GPL 2.0 or later / CC-BY. **Attribution required** when
   redistributing: credit Daniel Eddeland and link to the OpenGameArt submission.
 
-## Duck, rabbit, cat, dog and bat sprites (`animals/duck.png`, `animals/rabbit.png`, `animals/cat.png`, `animals/dog.png`, `animals/bat.png`)
+## Duck, rabbit, cat, dog, bat, slime and thornling sprites (`animals/duck.png`, `animals/rabbit.png`, `animals/cat.png`, `animals/dog.png`, `animals/bat.png`, `animals/slime.png`, `animals/thornling.png`)
 
 Original art made for this project, drawn procedurally in the format of
 the LPC chicken above (32×32 frames, 4 directions):
@@ -33,7 +33,9 @@ the LPC chicken above (32×32 frames, 4 directions):
 - a cottontail rabbit by `scripts/draw-rabbit.mjs` (hop + nibble);
 - an orange tabby cat by `scripts/draw-cat.mjs` (walk + groom);
 - a brown dog by `scripts/draw-dog.mjs` (walk + sit, panting and wagging);
-- a bat (enemy) by `scripts/draw-bat.mjs` (wing-flap cycle, flying + hovering).
+- a bat (enemy) by `scripts/draw-bat.mjs` (wing-flap cycle, flying + hovering);
+- a slime (enemy) by `scripts/draw-slime.mjs` (hop + idle jiggle);
+- a thornling (enemy) by `scripts/draw-thornling.mjs` (root waddle + idle sway).
 
 Not derived from any third-party asset; regenerate with
 `node scripts/draw-<animal>.mjs`. Shared

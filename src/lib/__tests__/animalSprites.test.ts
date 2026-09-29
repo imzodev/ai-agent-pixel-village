@@ -90,6 +90,17 @@ describe("registry", () => {
     expect(frameIndex(bat, "hover", "down", 3)).toBe(11);
   });
 
+  it("every enemy keeps animating at rest (enemy rest state is walk)", () => {
+    for (const kind of ["slime", "thornling", "bat"]) {
+      const def = ANIMAL_SPRITES[kind];
+      const rest = def.stateActions.walk;
+      expect(rest, kind).toBeDefined();
+      expect(def.actions[rest].loop, kind).toBe(true);
+    }
+    expect(frameIndex(ANIMAL_SPRITES.slime, "idle", "up", 0)).toBe(16);
+    expect(frameIndex(ANIMAL_SPRITES.thornling, "walk", "right", 3)).toBe(15);
+  });
+
   it("cow grazes with the eat animation", () => {
     expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
     expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");
