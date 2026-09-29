@@ -1,7 +1,9 @@
 // Tiny pixel-art toolkit for the procedurally drawn animal sheets
 // (scripts/draw-duck.mjs, scripts/draw-rabbit.mjs).
 //
-// A frame is an F×F grid of [r, g, b] | null. Draw with ellipse/rect/put,
+// A frame is an F×F grid of [r, g, b] | [r, g, b, a] | null (alpha
+// defaults to opaque; translucent pixels, e.g. a flying creature's ground
+// shadow, should be drawn after outline() so they don't get outlined). Draw with ellipse/rect/put,
 // finish with outline(), then writeSheet() lays the frames out in the
 // format src/game/animalSprites.ts expects: columns = animation frames,
 // rows = directions (up / left / down / right), one block of 4 rows per
@@ -34,6 +36,24 @@ export function ellipse(fr, cx, cy, rx, ry, c, shade) {
 
 export function rect(fr, x0, y0, w, h, c) {
   for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(fr, x, y, c);
+}
+
+/** Filled polygon (even-odd scanline), points as [[x, y], …]. */
+export function poly(fr, pts, c) {
+  const ys = pts.map((p) => p[1]);
+  for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++) {
+    const yc = y + 0.5;
+    const xs = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[(i + 1) % pts.length];
+      if ((y0 <= yc && y1 > yc) || (y1 <= yc && y0 > yc)) xs.push(x0 + ((yc - y0) / (y1 - y0)) * (x1 - x0));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      for (let x = Math.round(xs[k]); x < Math.round(xs[k + 1]); x++) put(fr, x, y, c);
+    }
+  }
 }
 
 /** Thick polyline through `pts` (tails and the like). */
@@ -97,7 +117,7 @@ export async function writeSheet(name, blocks) {
           const c = fr[y][x];
           if (!c) continue;
           const o = (((bi * DIRS.length + di) * F + y) * width + col * F + x) * 4;
-          buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = 255;
+          buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = c[3] ?? 255;
         }
       });
     });

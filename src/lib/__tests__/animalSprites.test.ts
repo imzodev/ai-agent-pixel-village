@@ -82,6 +82,14 @@ describe("registry", () => {
     expect(frameIndex(dog, "sit", "down", 1)).toBe(25);
   });
 
+  it("bats keep flapping while hovering (enemy rest state is walk)", () => {
+    const bat = ANIMAL_SPRITES.bat;
+    expect(bat.stateActions.walk).toBe("hover");
+    expect(bat.actions.hover.block).toBe(bat.actions.walk.block);
+    expect(bat.actions.hover.loop).toBe(true);
+    expect(frameIndex(bat, "hover", "down", 3)).toBe(11);
+  });
+
   it("cow grazes with the eat animation", () => {
     expect(ANIMAL_SPRITES.cow.stateActions.graze).toBe("eat");
     expect(animKey("cow", "eat", "left")).toBe("cr_cow_eat_left");
