@@ -794,22 +794,57 @@ export class WorldScene extends Phaser.Scene {
    * thing.
    */
   private interact() {
-    const sel = this.lastSelection;
-    if (sel && this.isActionable(sel) && this.selectionExists(sel)) {
-      bus.emit("primaryAction", sel);
-      return;
+    let sel = this.lastSelection;
+    if (sel && !(this.isActionable(sel) && this.selectionExists(sel))) {
+      // Stale selection (entity just got picked up / killed / respawned).
+      this.lastSelection = sel = null;
     }
-    // Stale selection (entity just got picked up / killed / respawned);
-    // clear it and re-target so the next E always opens the menu.
-    this.lastSelection = null;
-    this.interactNearest();
+    // 1. The selection is within reach: act on it.
+    if (sel && this.inReach(sel)) { bus.emit("primaryAction", sel); return; }
+    // 2. Something is close by: target it instead of a far-away selection.
+    const near = this.nearestCandidate();
+    if (near && !(sel && this.sameTarget(near, sel))) { this.select(near); return; }
+    // 3. Nothing near: walk back to the selection (its primary action).
+    if (sel) { bus.emit("primaryAction", sel); return; }
+    bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+  }
+  private sameTarget(a: Selection, b: Selection): boolean {
+    if (a.type === "plot") return b.type === "plot" && a.x === b.x && a.y === b.y;
+    if (b.type === "plot") return false;
+    return a.type === b.type && a.id === b.id;
+  }
+  /** Whether the player stands close enough to use the selection (same
+   *  distances as the HUD card's action buttons). */
+  private inReach(sel: Selection): boolean {
+    const pos = this.selectionPos(sel);
+    if (!pos) return false;
+    const reach = sel.type === "npc" ? 160 : sel.type === "building" ? 140 : sel.type === "enemy" ? 80 : 90;
+    return this.distTo(pos.x, pos.y) <= reach;
+  }
+  /** Live world position of a selection (sprites for moving entities). */
+  private selectionPos(sel: Selection): { x: number; y: number } | null {
+    const s = this.snapshot;
+    switch (sel.type) {
+      case "npc": { const e = this.npcs.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "player": { const e = this.players.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "animal": { const e = this.animals.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "enemy": { const e = this.enemies.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "item": { const i = s?.groundItems.find((x) => x.id === sel.id); return i ? { x: i.x, y: i.y } : null; }
+      case "node": { const n = s?.nodes.find((x) => x.id === sel.id); return n ? { x: n.x, y: n.y } : null; }
+      case "building": {
+        const b = s?.buildings.find((x) => x.id === sel.id);
+        return b ? this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY } : null;
+      }
+      case "plot": return { x: sel.x, y: sel.y };
+    }
   }
   /** Selection types that have a primary action the player can perform. */
   private isActionable(sel: Selection): boolean {
     return sel.type !== "player";
   }
-  private interactNearest() {
-    if (!this.player || !this.snapshot) return;
+  /** The closest interactable thing within 110 px, or null. */
+  private nearestCandidate(): Selection | null {
+    if (!this.player || !this.snapshot) return null;
     const s = this.snapshot;
     const cands: { d: number; sel: Selection }[] = [];
     for (const n of s.npcs) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) } });
@@ -819,8 +854,7 @@ export class WorldScene extends Phaser.Scene {
     for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: this.distTo(n.x, n.y) } });
     for (const b of s.buildings) { const d = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
     cands.sort((a, b) => a.d - b.d);
-    if (cands[0] && cands[0].d < 110) this.select(cands[0].sel);
-    else bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+    return cands[0] && cands[0].d < 110 ? cands[0].sel : null;
   }
 
   // ---------- update loop ----------
