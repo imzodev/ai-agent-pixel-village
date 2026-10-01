@@ -85,6 +85,34 @@ export const RECIPES: Recipe[] = [
     output: { itemKey: "rug", qty: 1 },
     line: "Four tufts of wool, felted tight. Ties the room together.",
   },
+  // Woodwork: oak logs from the west forest (needs an axe).
+  {
+    key: "chair",
+    name: "Oak Chair",
+    icon: "🪑",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wood", qty: 6 }],
+    output: { itemKey: "chair", qty: 1 },
+    line: "Six oak logs and an afternoon. Sturdy enough for Bram.",
+  },
+  {
+    key: "table",
+    name: "Round Table",
+    icon: "🟤",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wood", qty: 10 }],
+    output: { itemKey: "table", qty: 1 },
+    line: "Ten logs, planed and pegged. Seats four friends.",
+  },
+  {
+    key: "bookshelf",
+    name: "Bookshelf",
+    icon: "📚",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wood", qty: 14 }],
+    output: { itemKey: "bookshelf", qty: 1 },
+    line: "Fourteen logs of good oak. Room for every cookbook you own.",
+  },
 ];
 
 /** Recipes the given NPC can craft. */

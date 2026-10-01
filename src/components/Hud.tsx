@@ -177,6 +177,7 @@ export default function Hud() {
   };
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
+  const hasAxe = (me?.inventory ?? []).some((i) => i.itemKey === "axe" && i.qty > 0);
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -312,9 +313,12 @@ export default function Hud() {
           else toast("Already watered. Check back when it grows.", "info");
           break;
         }
-        if (s.stage < 1) { toast("Picked clean. It'll grow back.", "info"); return; }
-        if (d <= 90) void act({ action: "gather", id: s.id });
-        else walk();
+        const chop = CROP_KINDS[s.kind]?.needsAxe === true;
+        if (s.stage < 1) { toast(chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back.", "info"); return; }
+        if (d > 90) { walk(); break; }
+        if (chop && !hasAxe) { toast("You need an axe. Pip sells them.", "info"); break; }
+        if (chop) bus.emit("attack", { x: pos.x, y: pos.y, tool: "axe" }); // swing the axe at the trunk
+        void act({ action: "gather", id: s.id });
         break;
       }
       case "plot":
@@ -555,10 +559,12 @@ export default function Hud() {
             // Pickable at every stage except 0 (depleted). Out-of-range
             // shows Walk over. Stage 0 shows a dimmed "empty" label.
             const empty = sel.stage === 0;
+            const chop = CROP_KINDS[sel.kind]?.needsAxe === true;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            if (chop && !empty && !hasAxe) return <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>;
             return (
               <Btn on={() => commitSelection(sel)} disabled={empty}>
-                {empty ? "🌱 Empty" : "🧺 Gather"} {interactHint}
+                {chop ? (empty ? "🪵 Stump — regrowing" : "🪓 Chop") : empty ? "🌱 Empty" : "🧺 Gather"} {interactHint}
               </Btn>
             );
           })()}
@@ -738,6 +744,7 @@ function selTitle(sel: Selection) {
     case "item": return `${ITEM_ICONS[sel.itemKey] ?? "📦"} ${sel.itemKey.replace("_", " ")}`;
     case "node": {
       const base = sel.kind.replace(/_crop$/, "").replace("_", " ");
+      if (sel.kind === "oak_tree") return sel.stage === 0 ? "Oak stump" : "Oak tree";
       return sel.stage === 0 ? `${base} (empty)` : base;
     }
     case "enemy": return `Wild ${sel.kind} · ${sel.hp}/${sel.maxHp} HP`;

@@ -329,13 +329,13 @@ function onMessage(conn: Connection, raw: string): void {
   } catch {
     return;
   }
-  if (msg.type === "act" && msg.kind === "slash") {
+  if (msg.type === "act" && (msg.kind === "slash" || msg.kind === "chop")) {
     // Attack swing: relay to nearby players like movement. Throttled so a
     // client can't flood its neighbours.
     const now = Date.now();
     if (now - conn.lastActAt < ACT_MIN_INTERVAL_MS) return;
     conn.lastActAt = now;
-    const out = JSON.stringify({ type: "playerAct", id: conn.playerId, kind: "slash", facing: normalizeFacing(msg.facing) });
+    const out = JSON.stringify({ type: "playerAct", id: conn.playerId, kind: msg.kind, facing: normalizeFacing(msg.facing) });
     for (const other of connections.values()) {
       if (other === conn || other.ws.readyState !== other.ws.OPEN) continue;
       if (Math.hypot(other.homePx - conn.homePx, other.homePy - conn.homePy) > RELAY_RADIUS_PX) continue;

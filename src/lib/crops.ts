@@ -8,24 +8,14 @@
 // time; the action route and sim worker pull timing + yield from the
 // same record.
 
+import type { CropKindConfig, CropRect } from "@/types/crops";
 import type { GardenCropDef } from "@/types/garden";
 
-export type CropRect = { x: number; y: number; w: number; h: number };
+export type { CropKindConfig, CropRect } from "@/types/crops";
 
-export type CropKindConfig = {
-  /** Total visual stages. Stage 0 = picked/empty; (stages-1) = fully grown. */
-  stages: number;
-  /** Milliseconds per regrowth tick. 0 disables auto-regrowth. */
-  regrowthMs: number;
-  /** Items given to the player per pick. */
-  yield: number;
-  /**
-   * Source-pixel rectangle for each stage, in row-major order:
-   * `frames[0]` is the picked/empty tile, `frames[stages-1]` is the
-   * fully-grown tile. Empty array = use the procedural node_<kind>
-   * sprite (no lpc_crops frame).
-   */
-  frames: CropRect[];
+/** Extra node spritesheets (texture key → URL), besides lpc_crops. */
+export const NODE_SHEETS: Readonly<Record<string, string>> = {
+  tree_oak: "/assets/trees/oak.png",
 };
 
 // 5-stage wheat progression harvested from public/assets/food/crops.png
@@ -87,6 +77,17 @@ export const CROP_KINDS: Record<string, CropKindConfig> = {
   mushroom_ring: { stages: 2, regrowthMs: 0, yield: 1, frames: [] },
   // Rock (stone): 1 per pick, no regrowth.
   rock:          { stages: 2, regrowthMs: 0, yield: 1, frames: [] },
+  // Oak (wood, needs an axe): a full tree takes 3 chops of 3 wood each,
+  // then the stump grows back stage by stage (3 × 90 s ≈ 4.5 min).
+  // Frames come from scripts/draw-tree.mjs: stump, sapling, young, full.
+  oak_tree: {
+    stages: 4,
+    regrowthMs: 90_000,
+    yield: 3,
+    frames: [0, 1, 2, 3].map((i) => ({ x: i * 48, y: 0, w: 48, h: 64 })),
+    sheet: "tree_oak",
+    needsAxe: true,
+  },
 };
 
 /** Seeds players can plant, keyed by seed item. */

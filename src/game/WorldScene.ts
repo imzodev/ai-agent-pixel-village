@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
-import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeTextureKey, registerCropFrames } from "./textures";
+import { CROP_KINDS } from "@/lib/crops";
+import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { stampBuildings } from "./buildingStamps";
@@ -56,6 +57,8 @@ const ATTACK_REACH_PX = 76;
 // Clickable height (px) at the base of a garden crop — less than the 32 px
 // between plot rows, so neighbouring plots never steal each other's clicks.
 const GARDEN_HIT_H = 22;
+// Clickable height of a tree node (its trunk base).
+const TREE_HIT_H = 22;
 
 /** Convert the snapshot's flat slot/itemKey list into an EquippedCosmetics
  *  record the LPC compositor can read. Slots not in CosmeticSlot are
@@ -323,13 +326,15 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("focus", ({ x, y }) => this.cameras.main.pan(x, y, 500)));
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
-    this.unsub.push(bus.on("attack", ({ x, y }) => {
+    this.unsub.push(bus.on("attack", (e) => {
+      const { x, y } = e;
       const p = this.player;
       if (!p) return;
       const dx = x - p.sprite.x, dy = y - p.sprite.y;
       const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
-      this.playSlash(p, facing);
-      this.stream?.sendAct("slash", facing);
+      const tool = e.tool;
+      this.playSlash(p, facing, tool);
+      this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
@@ -370,9 +375,9 @@ export class WorldScene extends Phaser.Scene {
           this.applyMoves(moves);
         },
         onPlayerAct: ({ id, kind, facing }) => {
-          if (!this.alive() || id === this.meId || kind !== "slash") return;
+          if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
-          if (ent) this.playSlash(ent, facing);
+          if (ent) this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
         },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
@@ -539,7 +544,9 @@ export class WorldScene extends Phaser.Scene {
       // frame so the player sees the "regrowing" tile.
       const isReady = n.stage >= n.stages - 1;
       const frameKey = nodeFrameKey(n.kind, n.stage);
-      const targetKey = frameKey ? "lpc_crops" : nodeTextureKey(n.kind);
+      const targetKey = frameKey ? nodeSheetKey(n.kind) : nodeTextureKey(n.kind);
+      // Kinds with their own sheet (trees) show growth through frames.
+      const ownSheet = !!CROP_KINDS[n.kind]?.sheet;
       const depleted = n.stage === 0 && !frameKey; // procedural kind with no regrowth
       if (depleted) {
         // Static kinds (rock, berry, herb, mushroom) — regrowthMs = 0,
@@ -559,6 +566,14 @@ export class WorldScene extends Phaser.Scene {
             hitAreaCallback: Phaser.Geom.Rectangle.Contains,
             useHandCursor: true,
           });
+        } else if (ownSheet) {
+          // Tree: only the trunk base is clickable, so a canopy never
+          // steals clicks from what's behind it.
+          img.setInteractive({
+            hitArea: new Phaser.Geom.Rectangle(img.width / 2 - 10, img.height - TREE_HIT_H, 20, TREE_HIT_H),
+            hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+            useHandCursor: true,
+          });
         } else {
           img.setInteractive({ useHandCursor: true });
         }
@@ -573,7 +588,7 @@ export class WorldScene extends Phaser.Scene {
         img.setFrame(frameKey);
       }
       // Garden crops show growth through their frames; wild regrowth fades.
-      img.setAlpha(isReady || n.ownerId != null ? 1 : 0.55);
+      img.setAlpha(isReady || n.ownerId != null || ownSheet ? 1 : 0.55);
       let wet = this.wetSoil.get(n.id);
       if (n.watered && !wet) {
         wet = this.add.ellipse(n.x, n.y - 3, 22, 7, 0x3a2414, 0.55).setDepth(DEPTH_CHAR_BASE + n.y - 1);
@@ -603,20 +618,30 @@ export class WorldScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, "ph_char").setOrigin(0.5, 0.9);
     sprite.setInteractive({ useHandCursor: true });
     const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
-    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon };
+    const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon, app };
     void this.ensureCharTexture(ent, app, eq, weapon);
     return ent;
   }
 
   private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string) {
+    const key = await this.ensureSheet(app, eq, weapon);
+    if (!key || !ent.sprite.active) return;
+    ent.texKey = key;
+    ent.appKey = key;
+    ent.sprite.setTexture(key, `${ROWS[ent.facing]}_0`);
+  }
+
+  /** Compose (once) the character sheet for this look + held item, with its
+   *  walk / slash frames and animations. Resolves to the texture key. */
+  private async ensureSheet(app: Appearance, eq?: EquippedCosmetics, weapon?: string): Promise<string | null> {
     const key = appearanceKey(app, eq, weapon);
     if (!this.textures.exists(key)) {
       const canvas = await composeCharacter(app, eq, weapon);
       // Scene may have been destroyed during the await.
-      if (!this.alive()) return;
+      if (!this.alive()) return null;
       if (!this.textures.exists(key)) {
         const tex = this.textures.addCanvas(key, canvas);
-        if (!tex) return;
+        if (!tex) return null;
         for (let r = 0; r < 4; r++) for (let c = 0; c < 9; c++) tex.add(`${r}_${c}`, 0, c * FRAME, r * FRAME, FRAME, FRAME);
         // Slash (attack) frames sit below the walk block.
         for (let r = 0; r < 4; r++) for (let c = 0; c < SLASH_FRAMES; c++) tex.add(`s${r}_${c}`, 0, c * FRAME, (SLASH_ROW + r) * FRAME, FRAME, FRAME);
@@ -627,10 +652,7 @@ export class WorldScene extends Phaser.Scene {
         }
       }
     }
-    if (!ent.sprite.active) return;
-    ent.texKey = key;
-    ent.appKey = key;
-    ent.sprite.setTexture(key, `${ROWS[ent.facing]}_0`);
+    return key;
   }
 
   private destroyChar(e: CharEnt) {
@@ -772,22 +794,57 @@ export class WorldScene extends Phaser.Scene {
    * thing.
    */
   private interact() {
-    const sel = this.lastSelection;
-    if (sel && this.isActionable(sel) && this.selectionExists(sel)) {
-      bus.emit("primaryAction", sel);
-      return;
+    let sel = this.lastSelection;
+    if (sel && !(this.isActionable(sel) && this.selectionExists(sel))) {
+      // Stale selection (entity just got picked up / killed / respawned).
+      this.lastSelection = sel = null;
     }
-    // Stale selection (entity just got picked up / killed / respawned);
-    // clear it and re-target so the next E always opens the menu.
-    this.lastSelection = null;
-    this.interactNearest();
+    // 1. The selection is within reach: act on it.
+    if (sel && this.inReach(sel)) { bus.emit("primaryAction", sel); return; }
+    // 2. Something is close by: target it instead of a far-away selection.
+    const near = this.nearestCandidate();
+    if (near && !(sel && this.sameTarget(near, sel))) { this.select(near); return; }
+    // 3. Nothing near: walk back to the selection (its primary action).
+    if (sel) { bus.emit("primaryAction", sel); return; }
+    bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+  }
+  private sameTarget(a: Selection, b: Selection): boolean {
+    if (a.type === "plot") return b.type === "plot" && a.x === b.x && a.y === b.y;
+    if (b.type === "plot") return false;
+    return a.type === b.type && a.id === b.id;
+  }
+  /** Whether the player stands close enough to use the selection (same
+   *  distances as the HUD card's action buttons). */
+  private inReach(sel: Selection): boolean {
+    const pos = this.selectionPos(sel);
+    if (!pos) return false;
+    const reach = sel.type === "npc" ? 160 : sel.type === "building" ? 140 : sel.type === "enemy" ? 80 : 90;
+    return this.distTo(pos.x, pos.y) <= reach;
+  }
+  /** Live world position of a selection (sprites for moving entities). */
+  private selectionPos(sel: Selection): { x: number; y: number } | null {
+    const s = this.snapshot;
+    switch (sel.type) {
+      case "npc": { const e = this.npcs.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "player": { const e = this.players.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "animal": { const e = this.animals.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "enemy": { const e = this.enemies.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
+      case "item": { const i = s?.groundItems.find((x) => x.id === sel.id); return i ? { x: i.x, y: i.y } : null; }
+      case "node": { const n = s?.nodes.find((x) => x.id === sel.id); return n ? { x: n.x, y: n.y } : null; }
+      case "building": {
+        const b = s?.buildings.find((x) => x.id === sel.id);
+        return b ? this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY } : null;
+      }
+      case "plot": return { x: sel.x, y: sel.y };
+    }
   }
   /** Selection types that have a primary action the player can perform. */
   private isActionable(sel: Selection): boolean {
     return sel.type !== "player";
   }
-  private interactNearest() {
-    if (!this.player || !this.snapshot) return;
+  /** The closest interactable thing within 110 px, or null. */
+  private nearestCandidate(): Selection | null {
+    if (!this.player || !this.snapshot) return null;
     const s = this.snapshot;
     const cands: { d: number; sel: Selection }[] = [];
     for (const n of s.npcs) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) } });
@@ -797,8 +854,7 @@ export class WorldScene extends Phaser.Scene {
     for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: this.distTo(n.x, n.y) } });
     for (const b of s.buildings) { const d = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
     cands.sort((a, b) => a.d - b.d);
-    if (cands[0] && cands[0].d < 110) this.select(cands[0].sel);
-    else bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+    return cands[0] && cands[0].d < 110 ? cands[0].sel : null;
   }
 
   // ---------- update loop ----------
@@ -965,12 +1021,27 @@ export class WorldScene extends Phaser.Scene {
     this.stream?.sendAct("slash", p.facing);
   }
 
-  /** Play the attack swing facing `facing`; walk/idle resume after it. */
-  private playSlash(e: CharEnt, facing: Facing) {
+  /** Play the attack swing facing `facing`; walk/idle resume after it.
+   *  With `tool` (e.g. "axe") the swing uses a sheet holding that item. */
+  private playSlash(e: CharEnt, facing: Facing, tool?: string) {
     if (!e.texKey || !e.sprite.active) return;
     e.facing = facing;
     e.actingUntil = this.time.now + SLASH_MS;
-    e.sprite.play(`${e.texKey}_slash_${facing}`, true);
+    if (!tool || tool === e.weapon || !e.app) {
+      e.sprite.play(`${e.texKey}_slash_${facing}`, true);
+      return;
+    }
+    const toolKey = appearanceKey(e.app, e.equipped, tool);
+    if (this.textures.exists(toolKey)) {
+      e.sprite.play(`${toolKey}_slash_${facing}`, true);
+      return;
+    }
+    // First swing with this tool: compose its sheet, then swing.
+    void this.ensureSheet(e.app, e.equipped, tool).then((k) => {
+      if (!k || !e.sprite.active) return;
+      e.actingUntil = this.time.now + SLASH_MS;
+      e.sprite.play(`${k}_slash_${facing}`, true);
+    });
   }
 
   private playWalk(e: CharEnt, moving: boolean) {
@@ -978,7 +1049,11 @@ export class WorldScene extends Phaser.Scene {
     if (e.actingUntil !== undefined && this.time.now < e.actingUntil) return; // mid-swing
     const anim = `${e.texKey}_walk_${e.facing}`;
     if (moving) { if (e.sprite.anims.currentAnim?.key !== anim || !e.sprite.anims.isPlaying) e.sprite.play(anim, true); }
-    else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0`) { e.sprite.stop(); e.sprite.setFrame(`${ROWS[e.facing]}_0`); }
+    else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0` || e.sprite.texture.key !== e.texKey) {
+      // Back to the character's own sheet (a tool swing may have swapped it).
+      e.sprite.stop();
+      e.sprite.setTexture(e.texKey, `${ROWS[e.facing]}_0`);
+    }
   }
 
   private placeChar(e: CharEnt) {

@@ -117,4 +117,12 @@ for (const [dest, src, base] of FILES) {
 }
 
 console.log(`\n${ok} sheets written (walk + slash), ${fail} failed → ${OUT_DIR}`);
+
+// Derived layers: the held axe is drawn from the dagger sheet above.
+try {
+  await import("./draw-axe.mjs");
+} catch (err) {
+  console.error(`    ✗ axe layers: ${err.message}`);
+  fail++;
+}
 process.exit(fail === 0 ? 0 : 1);

@@ -22,7 +22,8 @@ export type Events = {
   /** True while any modal is open that should block canvas interaction. */
   modalOpen: boolean;
   /** The local player attacks (plays the slash, facing the target). */
-  attack: { x: number; y: number };
+  /** Swing toward (x, y); `tool` swaps the held item for the swing (e.g. "axe"). */
+  attack: { x: number; y: number; tool?: string };
 };
 
 export type Handler<T> = (payload: T) => void;

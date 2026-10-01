@@ -24,6 +24,7 @@ import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
+import { forestTrees } from "./forest";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -40,6 +41,7 @@ export const ITEM_DEFS = [
   { key: "carrot", name: "Carrot", kind: "material", icon: "🥕", description: "Sweet, earthy, garden-fresh.", value: 2 },
   { key: "tomato", name: "Tomato", kind: "material", icon: "🍅", description: "Sun-warm and juicy.", value: 3 },
   { key: "pumpkin", name: "Pumpkin", kind: "material", icon: "🎃", description: "Heavy. Worth it.", value: 20 },
+  { key: "wood", name: "Log of Wood", kind: "material", icon: "🪵", description: "Oak, freshly chopped. Greta turns it into furniture.", value: 2 },
   { key: "egg", name: "Fresh Egg", kind: "material", icon: "🥚", description: "Still warm.", value: 2 },
   { key: "wool", name: "Tuft of Wool", kind: "material", icon: "🧶", description: "Soft and springy.", value: 3 },
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
@@ -50,6 +52,7 @@ export const ITEM_DEFS = [
   { key: "recipe_cinnamon", name: "Recipe: Cinnamon Knots", kind: "recipe", icon: "📜", description: "A handwritten recipe card from the bakery.", value: 10 },
   { key: "recipe_tea", name: "Recipe: Calming Tea", kind: "recipe", icon: "📜", description: "Three herbs, hot water, patience.", value: 10 },
   { key: "wooden_sword", name: "Wooden Sword", kind: "tool", icon: "🗡️", description: "+2 attack. Splinters included.", value: 15, equippable: true },
+  { key: "axe", name: "Woodcutter's Axe", kind: "tool", icon: "🪓", description: "Chops oaks in the west forest. Keep it in your bag.", value: 25 },
   { key: "lantern", name: "Brass Lantern", kind: "tool", icon: "🏮", description: "Glows softly at night.", value: 12, equippable: true },
   { key: "chair", name: "Oak Chair", kind: "furniture", icon: "🪑", description: "Sturdy. Place it at home.", value: 10, placeable: true },
   { key: "table", name: "Round Table", kind: "furniture", icon: "🟤", description: "Fits four friends.", value: 14, placeable: true },
@@ -153,7 +156,7 @@ const NPC_DEFS: {
     name: "Greta",
     role: "Cabin Dweller",
     persona:
-      "Greta is a focused cabin dweller with a workshop corner. Clanking, whirring, the occasional small explosion. Always glad to show a working gadget and trade repair work for firewood.",
+      "Greta is a focused cabin dweller with a workshop corner. Clanking, whirring, the occasional small explosion. Always glad to show a working gadget and trade repair work for firewood. Buys oak logs from the west forest and turns them into chairs, tables and bookshelves.",
     greeting: "Careful with that wrench — the small explosion was on purpose. Need something fixed?",
     tilePos: [50, 32],
     wanderRadius: 80,
@@ -450,7 +453,8 @@ async function syncWildlifeLayout() {
   try {
     // Wild nodes only: garden crops (owner_id set) belong to players.
     await db.delete(resourceNodes).where(isNull(resourceNodes.ownerId));
-    for (const [kind, itemKey, tx, ty] of NODE_DEFS) {
+    const trees = forestTrees().map(([tx, ty]): [string, string, number, number] => ["oak_tree", "wood", tx, ty]);
+    for (const [kind, itemKey, tx, ty] of [...NODE_DEFS, ...trees]) {
       const p = tilePoint(tx, ty);
       const cfg = getCropKind(kind);
       // Crop kinds start fully grown (stage = stages-1). Non-crop kinds

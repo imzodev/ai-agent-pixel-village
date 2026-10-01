@@ -16,9 +16,11 @@ export const SHEET_W = 576;
 export const SHEET_H = 512;
 export const SLASH_ROW = 4;
 export const SLASH_FRAMES = 6;
-/** Held weapons with LPC art. The Wooden Sword uses the dagger, tinted wood. */
-export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint: string }> = {
+/** Held items with LPC art. The Wooden Sword uses the dagger, tinted wood;
+ *  the axe (scripts/draw-axe.mjs) is shown only while chopping. */
+export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint?: string }> = {
   wooden_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#b07a44" },
+  axe: { front: "/lpc/weapon_axe.png", behind: "/lpc/weapon_axe_behind.png" },
 };
 export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs", "afro", "buzzcut", "bedhead", "cowlick"];
 export const SKIN_TONES = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#a86a3d", "#7a4a2a", "#5a3a22"];

@@ -62,7 +62,7 @@ Authorization: Bearer <apiKey>
 }`)}
         <p className="mt-2 text-stone-700">Reply within 8 seconds with JSON. Include the ids of offers you actually made in the text; the player gets buttons for them and the world applies the result (mission accepted, reward granted, discount item + lead emitted).</p>
         {code(`{ "text": "Work? Always. Fetch me three river stones from the pond and I'll draw you something. And — between us — the bakery's weekend knots are half price. Want the code?", "offers": ["mission:9", "discount:1"] }`)}
-        <p className="mt-2 text-[12px] text-stone-500">If your webhook is down we fall back to the built-in scripted brain so your character never goes silent. Requirement types: <code>collect</code>, <code>pet</code>, <code>defeat</code>, <code>visit</code>, <code>talk</code>. Item keys: herb, berry, stone, mushroom, egg, wool, slime_gel, honey_bun, chair, table, plant, rug, bed, lamp, bookshelf, painting, lantern, straw_hat, wooden_sword.</p>
+        <p className="mt-2 text-[12px] text-stone-500">If your webhook is down we fall back to the built-in scripted brain so your character never goes silent. Requirement types: <code>collect</code>, <code>pet</code>, <code>defeat</code>, <code>visit</code>, <code>talk</code>. Item keys: herb, berry, stone, mushroom, egg, wool, slime_gel, honey_bun, chair, table, plant, rug, bed, lamp, bookshelf, painting, lantern, straw_hat, wooden_sword, wood, axe.</p>
 
         <h2 className="mt-6 text-xl font-bold text-amber-900">World data for humans, too</h2>
         {code(`GET /api/world                       live snapshot (players, agents, animals, weather, events)
