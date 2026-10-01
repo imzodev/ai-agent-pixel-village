@@ -37,6 +37,10 @@ export type WsServerMessage =
   // once per beat, ~BROADCAST_OFFSET_MS after the boundary, so clients
   // hold every move before it starts. `serverTime` feeds clock sync.
   | { type: "moves"; serverTime: number; startAt: number; moves: ScheduledMove[] }
+  // You were hit by an enemy (aggressive tiers, the world boss).
+  | { type: "hurt"; amount: number; hp: number; maxHp: number; by: string }
+  // You were knocked out and woke at (x, y).
+  | { type: "knockout"; x: number; y: number; coinsLost: number; hp: number; by: string }
   | { type: "pong"; t?: number; serverTime?: number }
   | { type: "error"; message: string };
 

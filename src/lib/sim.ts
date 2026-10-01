@@ -1,9 +1,11 @@
-import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
+import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
-import { WILD_ZONES, gameHour, type Rect } from "./worldmap";
+import { gameHour, type Rect } from "./worldmap";
+import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyKind, pickEnemyKind } from "./progression";
+import { perksOfMany } from "./combat";
 import { isWalkableServer } from "./chunkCollisionServer";
 import {
   ANIMAL_MOVE_INTERVAL_MS,
@@ -30,7 +32,8 @@ import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
-const TARGET_ENEMIES = 7;
+/** Enemies kept alive per wild zone (zones refill so they can be farmed). */
+const ZONE_TARGET_ENEMIES = 4;
 
 // The WS server pushes fresh snapshots periodically. We don't publish
 // per-entity change events to Upstash — that approach burns too many
@@ -54,7 +57,8 @@ async function randomPointIn(zone: Rect, tries = 12) {
 // wanderer that just stepped past a border still snaps back to its origin
 // zone instead of teleporting across the map).
 function zoneForEnemy(x: number, y: number): Rect {
-  return WILD_ZONES.find((z) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40) ?? pick(WILD_ZONES);
+  const inZone = (z: Rect) => x >= z.x - 40 && x <= z.x + z.w + 40 && y >= z.y - 40 && y <= z.y + z.h + 40;
+  return ENEMY_ZONES.find((z) => inZone(z.rect))?.rect ?? pick(ENEMY_ZONES).rect;
 }
 
 /** True when the row's current move is still running when the next beat starts. */
@@ -117,8 +121,9 @@ export async function tickWorld(): Promise<number | null> {
     tickNpcs(beat),
     tickWeather(ws, now),
     tickResources(now),
-    tickEnemies(beat, now),
+    tickEnemies(beat, now, night),
   ]);
+  if (beat.index % HP_REGEN_EVERY_BEATS === 0) await regenHp(now);
   await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);
   return animalMoves + npcMoves + enemyMoves;
@@ -146,6 +151,35 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
   }
   await writeMoves("npc", writes);
   return writes.length;
+}
+
+/**
+ * The weekly world boss: rises at the start of its window (once per
+ * window, even if defeated early) and sinks back when the window ends.
+ */
+async function tickBoss(rows: (typeof enemies.$inferSelect)[], now: Date): Promise<void> {
+  const nowMs = now.getTime();
+  const windowStart = bossWindowStart(nowMs, process.env.BOSS_SCHEDULE ?? "6@18", process.env.BOSS_FORCE === "1");
+  const boss = rows.find((e) => e.kind === BOSS_KIND);
+  if (windowStart === null) {
+    if (boss) {
+      await db.delete(enemies).where(eq(enemies.id, boss.id));
+      await logEvent("boss", "The Old Rootking sinks back into the earth. Until next week…", "enemy", boss.id, boss.x, boss.y);
+    }
+    return;
+  }
+  if (boss) return;
+  const [risen] = await db
+    .select({ id: worldEvents.id })
+    .from(worldEvents)
+    .where(and(eq(worldEvents.kind, "boss"), gt(worldEvents.createdAt, new Date(windowStart))));
+  if (risen) return; // already rose this window (and was defeated or left)
+  const hp = enemyKind(BOSS_KIND).hp;
+  const [row] = await db
+    .insert(enemies)
+    .values({ kind: BOSS_KIND, x: BOSS_SPOT.x, y: BOSS_SPOT.y, hp, maxHp: hp, spawnedAt: now, damage: {} })
+    .returning({ id: enemies.id });
+  await logEvent("boss", "🌳 The Old Rootking has awoken in the north woods! Gather your friends and drive it back.", "enemy", row.id, BOSS_SPOT.x, BOSS_SPOT.y);
 }
 
 async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, now: Date): Promise<number> {
@@ -287,13 +321,17 @@ async function tickResources(now: Date) {
   // get a `nextAdvanceAt` set by the action route, so they're naturally
   // skipped here.
   const due = await db
-    .select({ id: resourceNodes.id, kind: resourceNodes.kind, stage: resourceNodes.stage })
+    .select({ id: resourceNodes.id, kind: resourceNodes.kind, stage: resourceNodes.stage, ownerId: resourceNodes.ownerId })
     .from(resourceNodes)
     .where(and(isNotNull(resourceNodes.nextAdvanceAt), lt(resourceNodes.nextAdvanceAt, now)));
+  // Green Thumb owners' crops grow faster.
+  const owners = [...new Set(due.map((r) => r.ownerId).filter((id): id is number => id != null))];
+  const perks = await perksOfMany(owners);
   for (const row of due) {
     const cfg = getCropKind(row.kind);
     const stages = cfg?.stages ?? 2;
-    const regrowthMs = cfg?.regrowthMs ?? 0;
+    const thumb = row.ownerId != null && perks.get(row.ownerId)?.has("green_thumb");
+    const regrowthMs = Math.round((cfg?.regrowthMs ?? 0) * (thumb ? GREEN_THUMB_MULT : 1));
     if (regrowthMs <= 0) continue;
     const nextStage = row.stage + 1;
     const fullyGrown = nextStage >= stages - 1;
@@ -307,25 +345,49 @@ async function tickResources(now: Date) {
   }
 }
 
-async function tickEnemies(beat: TickBeat, now: Date): Promise<number> {
-  const rows = await db.select().from(enemies);
+/** Online players heal 1 HP every this many beats (3 × 5 s = 15 s). */
+const HP_REGEN_EVERY_BEATS = 3;
+const ONLINE_WINDOW_MS = 45_000;
+
+async function regenHp(now: Date): Promise<void> {
+  await db
+    .update(characters)
+    .set({ hp: sql`least(${characters.maxHp}, ${characters.hp} + 1)` })
+    .where(and(lt(characters.hp, characters.maxHp), gt(characters.lastSeenAt, new Date(now.getTime() - ONLINE_WINDOW_MS))));
+}
+
+async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<number> {
+  let rows = await db.select().from(enemies);
+  if (!night) {
+    // Night creatures fade at dawn.
+    const gone = rows.filter((e) => enemyKind(e.kind).nightOnly);
+    if (gone.length > 0) {
+      await db.delete(enemies).where(inArray(enemies.id, gone.map((e) => e.id)));
+      rows = rows.filter((e) => !enemyKind(e.kind).nightOnly);
+    }
+  }
   const writes: MoveWrite[] = [];
   for (const e of rows) {
+    if (e.kind === BOSS_KIND) continue; // the boss stands its ground
     if (!isDue("enemy", e.id, beat.index, ENEMY_MOVE_INTERVAL_MS)) continue;
     if (busyAt(e, beat.startAt)) continue;
     const w = await wanderWrite(e, leashOfRect(zoneForEnemy(e.x, e.y)), ENEMY_SPEED, beat);
     if (w) writes.push(w);
   }
   await writeMoves("enemy", writes);
-  if (rows.length < TARGET_ENEMIES && Math.random() < 0.4) {
-    const zone = pick(WILD_ZONES);
-    const p = await randomPointIn(zone);
-    if (p) {
-      const kind = Math.random() < 0.7 ? "slime" : Math.random() < 0.5 ? "bat" : "thornling";
-      const hp = kind === "slime" ? 6 : kind === "bat" ? 5 : 9;
-      await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
-    }
+  // Refill each zone toward its target, one spawn per zone per beat at most.
+  for (const zone of ENEMY_ZONES) {
+    const z = zone.rect;
+    const count = rows.filter((e) => e.kind in ENEMY_KINDS && e.kind !== BOSS_KIND && e.x >= z.x && e.x < z.x + z.w && e.y >= z.y && e.y < z.y + z.h).length;
+    if (count >= ZONE_TARGET_ENEMIES || Math.random() >= 0.35) continue;
+    const kind = pickEnemyKind(zone, night);
+    if (!kind) continue;
+    const p = await randomPointIn(z);
+    if (!p) continue;
+    const hp = enemyKind(kind).hp;
+    await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
   }
+  await tickBoss(rows, now);
   return writes.length;
 }
 

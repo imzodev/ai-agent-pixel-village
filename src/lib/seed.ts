@@ -1,4 +1,4 @@
-import { eq, isNull, sql } from "drizzle-orm";
+import { eq, isNull, ne, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import {
@@ -25,6 +25,7 @@ import { doorWorldPx, footprintOf } from "./buildingManifest";
 import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
+import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -44,6 +45,11 @@ export const ITEM_DEFS = [
   { key: "wood", name: "Log of Wood", kind: "material", icon: "🪵", description: "Oak, freshly chopped. Greta turns it into furniture.", value: 2 },
   { key: "egg", name: "Fresh Egg", kind: "material", icon: "🥚", description: "Still warm.", value: 2 },
   { key: "wool", name: "Tuft of Wool", kind: "material", icon: "🧶", description: "Soft and springy.", value: 3 },
+  { key: "bat_wing", name: "Bat Wing", kind: "material", icon: "🦇", description: "Leathery and light. Wren buys them.", value: 2 },
+  { key: "thorn", name: "Thornling Thorn", kind: "material", icon: "🌵", description: "Wickedly sharp. Greta makes blades from them.", value: 2 },
+  { key: "boar_hide", name: "Boar Hide", kind: "material", icon: "🐗", description: "Tough and bristly. Good for grips and gear.", value: 5 },
+  { key: "wisp_essence", name: "Wisp Essence", kind: "material", icon: "✨", description: "A cold glow from the night forest.", value: 10 },
+  { key: "rootking_heartwood", name: "Rootking Heartwood", kind: "trophy", icon: "🌳", description: "Still warm. Proof you fought the Old Rootking.", value: 40 },
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
   { key: "honey_bun", name: "Honey Bun", kind: "consumable", icon: "🥐", description: "Restores 8 HP. Sticky fingers guaranteed.", value: 6 },
   { key: "bread", name: "Fresh Bread", kind: "consumable", icon: "🍞", description: "Still warm. Baked by Marigold.", value: 3 },
@@ -52,6 +58,10 @@ export const ITEM_DEFS = [
   { key: "recipe_cinnamon", name: "Recipe: Cinnamon Knots", kind: "recipe", icon: "📜", description: "A handwritten recipe card from the bakery.", value: 10 },
   { key: "recipe_tea", name: "Recipe: Calming Tea", kind: "recipe", icon: "📜", description: "Three herbs, hot water, patience.", value: 10 },
   { key: "wooden_sword", name: "Wooden Sword", kind: "tool", icon: "🗡️", description: "+2 attack. Splinters included.", value: 15, equippable: true },
+  { key: "stone_sword", name: "Stone Sword", kind: "tool", icon: "🗡️", description: "+4 attack. Heavy, honest, sharp enough.", value: 20, equippable: true },
+  { key: "thorn_blade", name: "Thorn Blade", kind: "tool", icon: "🗡️", description: "+6 attack. Bound in boar hide.", value: 40, equippable: true },
+  { key: "wisp_blade", name: "Wisp Blade", kind: "tool", icon: "🗡️", description: "+9 attack. Hums faintly at night.", value: 80, equippable: true },
+  { key: "sharp_axe", name: "Sharp Axe", kind: "tool", icon: "🪓", description: "+1 wood per chop. Keep it in your bag.", value: 45 },
   { key: "axe", name: "Woodcutter's Axe", kind: "tool", icon: "🪓", description: "Chops oaks in the west forest. Keep it in your bag.", value: 25 },
   { key: "lantern", name: "Brass Lantern", kind: "tool", icon: "🏮", description: "Glows softly at night.", value: 12, equippable: true },
   { key: "chair", name: "Oak Chair", kind: "furniture", icon: "🪑", description: "Sturdy. Place it at home.", value: 10, placeable: true },
@@ -471,7 +481,8 @@ async function syncWildlifeLayout() {
         stage: startStage,
       });
     }
-    await db.delete(enemies);
+    // Enemies respawn from the current zones; a risen world boss stays.
+    await db.delete(enemies).where(ne(enemies.kind, BOSS_KIND));
     for (const def of ANIMAL_DEFS) {
       // Re-zone to the centre and drop any scheduled move: it was planned
       // from the old position, so clients would replay it from there.

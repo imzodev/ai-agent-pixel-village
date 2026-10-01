@@ -5,6 +5,8 @@ import { getCurrentCharacter, handleApiError } from "@/lib/auth";
 import { missionProgressFor, requirementTarget } from "@/lib/game";
 import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
+import { perksOf } from "@/lib/combat";
+import { perkPoints } from "@/lib/progression";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,7 @@ export async function GET() {
     await ensureSeeded();
     const me = await getCurrentCharacter();
     if (!me) return Response.json({ me: null });
+    const perks = await perksOf(me.id);
     const [inv, itemDefs, missionRows, decor, myLeads] = await Promise.all([
       db.select().from(inventory).where(eq(inventory.characterId, me.id)).orderBy(inventory.id),
       db.select().from(items),
@@ -40,6 +43,8 @@ export async function GET() {
       missions: missionList,
       decor,
       codesClaimed: myLeads.length,
+      perks: [...perks],
+      perkPoints: Math.max(0, perkPoints(me.level) - perks.size),
     });
   } catch (e) {
     return handleApiError(e);

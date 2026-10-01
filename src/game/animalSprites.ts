@@ -223,6 +223,59 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { walk: "hover" },
   },
+  boar: {
+    // Enemy (tier 2). Original art drawn by scripts/draw-boar.mjs: block 0
+    // = trot, block 1 = idle rooting with a tail flick.
+    url: "/assets/animals/boar.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.9,
+    originX: 0.5,
+    originY: 0.9, // hooves at y≈28 of 32
+    labelHeight: 22,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 9, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: { walk: "idle" },
+  },
+  wisp: {
+    // Enemy (tier 3, night only). Original art drawn by scripts/draw-wisp.mjs:
+    // one float/flicker block, faster while moving.
+    url: "/assets/animals/wisp.png",
+    frameWidth: 32,
+    frameHeight: 32,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.85,
+    originX: 0.5,
+    originY: 0.92, // shadow at y≈29 of 32
+    labelHeight: 26,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 10, loop: true },
+      hover: { block: 0, frames: 4, frameRate: 6, loop: true },
+    },
+    stateActions: { walk: "hover" },
+  },
+  rootking: {
+    // World boss. Original art drawn by scripts/draw-rootking.mjs: 64×64
+    // frames, the same front view in every row (it stands its ground).
+    url: "/assets/animals/rootking.png",
+    frameWidth: 64,
+    frameHeight: 64,
+    columns: 4,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 1.4,
+    originX: 0.5,
+    originY: 0.97, // shadow at y≈62 of 64
+    labelHeight: 56,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 4, loop: true },
+    },
+    stateActions: {},
+  },
   fox: {
     // 3x-scaled export, 3 cols × 4 rows of 48×64 (see ATTRIBUTION.md).
     url: "/assets/animals/fox-NESW.png",

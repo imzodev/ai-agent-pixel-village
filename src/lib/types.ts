@@ -30,7 +30,7 @@ export type Offer =
   | { id: string; type: "sell"; itemKey: string; qty: number; price: number; label: string; line: string };
 
 /** A single buyable item a trader NPC will pay for. */
-export type TradeItem = { itemKey: string; qty: number; price: number; line: string };
+export type TradeItem = { itemKey: string; qty: number; price: number; line: string; /** Level needed to buy it (shop stock). */ minLevel?: number };
 
 /** Per-NPC buy lists, keyed by `npc.key`. Open for extension: add a new
  *  trader = add an entry; add new items via the items seed + a TRADES row. */

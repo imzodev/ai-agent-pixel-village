@@ -8,13 +8,14 @@ import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/l
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
+import { PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -38,7 +39,7 @@ export default function Hud() {
   // Lot key whose "move out / give up" is waiting for a second tap.
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | null>(null);
+  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -86,6 +87,39 @@ export default function Hud() {
     return () => u.forEach((f) => f());
   }, [toast, refreshMe]);
   useEffect(() => { if (snap?.me && !me?.me) void refreshMe(); }, [snap?.me, me?.me, refreshMe]);
+  // HP from a `hurt` push: snapshots can lag a few seconds behind, so the
+  // pushed value wins for a short while.
+  const [hpLive, setHpLive] = useState<{ hp: number; maxHp: number } | null>(null);
+  useEffect(() => bus.on("hurt", ({ hp, maxHp }) => { if (hp != null && maxHp != null) setHpLive({ hp, maxHp }); }), []);
+  useEffect(() => {
+    if (!hpLive) return;
+    const t = setTimeout(() => setHpLive(null), 12_000);
+    return () => clearTimeout(t);
+  }, [hpLive]);
+  useEffect(() => bus.on("knockout", () => setHpLive(null)), []);
+  // World-boss news (it rose / was driven back / left) as a toast for
+  // everyone online. The first snapshot only sets the baseline.
+  const lastEventId = useRef<number | null>(null);
+  useEffect(() => {
+    const evs = snap?.events;
+    if (!evs || evs.length === 0) return;
+    const maxId = Math.max(...evs.map((e) => e.id));
+    const prev = lastEventId.current;
+    lastEventId.current = Math.max(prev ?? 0, maxId);
+    if (prev == null) return;
+    for (const e of evs) if (e.id > prev && (e.kind === "boss" || e.kind === "boss_defeated")) toast(e.text, "good");
+  }, [snap?.events, toast]);
+  // Level-up toast with what the new level unlocks.
+  const lastLevel = useRef<number | null>(null);
+  useEffect(() => {
+    const lv = me?.me?.level;
+    if (lv == null) return;
+    const prev = lastLevel.current;
+    lastLevel.current = lv;
+    if (prev == null || lv <= prev) return;
+    const unlocked = unlocksBetween(prev, lv).map((u) => u.text).join(" · ");
+    toast(`⬆️ Level ${lv}!${unlocked ? ` Unlocked: ${unlocked}` : ""}`, "good");
+  }, [me?.me?.level, toast]);
 
   // Mirror local selection changes to the bus so WorldScene's
   // `lastSelection` (which gates the context-sensitive E behavior) stays
@@ -154,7 +188,9 @@ export default function Hud() {
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[] }>("/api/act", body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
+    if (r.taken) bus.emit("hurt", { amount: r.taken });
+    if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
     else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); void refreshMe(); bus.emit("poke", undefined); }
     return r;
@@ -444,13 +480,36 @@ export default function Hud() {
         {loggedIn && me?.me && (
           <div className="flex items-center gap-2 rounded-lg bg-black/40 px-2 py-1">
             <span className="font-bold text-amber-200">{me.me.name}</span> <span>Lv {me.me.level}</span>
-            <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * (snap?.me?.hp ?? me.me.hp)) / (snap?.me?.maxHp ?? me.me.maxHp)}%` }} /></span>
-            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span><span title="xp">✨ {(snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp}</span>
+            {(() => {
+              const hp = hpLive?.hp ?? snap?.me?.hp ?? me.me.hp;
+              const maxHp = hpLive?.maxHp ?? snap?.me?.maxHp ?? me.me.maxHp;
+              return (
+                <>
+                  <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * hp) / maxHp}%` }} /></span>
+                  <span>❤️ {hp}</span>
+                </>
+              );
+            })()}<span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
+            {(() => {
+              // XP toward the next level, with the next unlock as a hint.
+              const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
+              const lv = levelForXp(xp);
+              const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
+              const next = nextUnlock(lv);
+              return (
+                <span className="flex items-center gap-1" title={`${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}`}>
+                  ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${(100 * (xp - lo)) / (hi - lo)}%` }} /></span>
+                </span>
+              );
+            })()}
           </div>
         )}
         {loggedIn ? (
           <>
             <TopBtn on={() => setPanel(panel === "bag" ? null : "bag")} active={panel === "bag"}>🎒 Bag</TopBtn>
+            {((me?.perkPoints ?? 0) > 0 || (me?.perks.length ?? 0) > 0) && (
+              <TopBtn on={() => setPanel(panel === "perks" ? null : "perks")} active={panel === "perks"}>⭐ Perks{(me?.perkPoints ?? 0) > 0 ? ` (${me?.perkPoints})` : ""}</TopBtn>
+            )}
             <TopBtn on={() => setPanel(panel === "missions" ? null : "missions")} active={panel === "missions"}>📜 Missions{me?.missions.some((m) => m.status === "active" && m.progress >= m.target) ? " ✓" : ""}</TopBtn>
             <TopBtn on={() => setPanel(panel === "quests" ? null : "quests")} active={panel === "quests"}>⚡ Quests</TopBtn>
             <TopBtn on={() => setPanel(panel === "friends" ? null : "friends")} active={panel === "friends"}>👥 Friends</TopBtn>
@@ -511,12 +570,15 @@ export default function Hud() {
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
-                {npcKey && stockForNpc(npcKey).map((t) => (
-                  // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
-                  <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle>
-                    🌱 Buy {t.itemKey.replace(/_seeds$/, "")} · {t.price}🪙
-                  </Btn>
-                ))}
+                {npcKey && stockForNpc(npcKey).map((t) => {
+                  const locked = !!t.minLevel && (me?.me?.level ?? 1) < t.minLevel;
+                  return (
+                    // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
+                    <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle disabled={locked}>
+                      {locked ? `🔒 Lv ${t.minLevel}` : t.itemKey.endsWith("_seeds") ? "🌱" : ITEM_ICONS[t.itemKey] ?? "🛒"} Buy {t.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} · {t.price}🪙
+                    </Btn>
+                  );
+                })}
               </>
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
@@ -669,11 +731,12 @@ export default function Hud() {
       {/* Side panels */}
       {panel && (
         <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto rounded-xl border-4 border-amber-900/70 bg-amber-50 p-3 shadow-2xl">
-          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : "📖 The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : "📖 The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
           {panel === "friends" && <FriendsPanel />}
+          {panel === "perks" && me && <PerksPanel me={me} onPick={async (perk) => { await post("/api/perks", { perk }); }} />}
           {panel === "home" && me && <HomePanel me={me} onAction={invAction} onTheme={async (t) => { await api("/api/me", { homeTheme: t }, "PATCH"); void refreshMe(); }} />}
           {panel === "log" && (
             <div className="space-y-2">
@@ -747,9 +810,40 @@ function selTitle(sel: Selection) {
       if (sel.kind === "oak_tree") return sel.stage === 0 ? "Oak stump" : "Oak tree";
       return sel.stage === 0 ? `${base} (empty)` : base;
     }
-    case "enemy": return `Wild ${sel.kind} · ${sel.hp}/${sel.maxHp} HP`;
+    case "enemy": {
+      const def = enemyKind(sel.kind);
+      const tier = def.tier === "boss" ? "Boss" : `Tier ${def.tier}`;
+      return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
+    }
     case "plot": return "🌱 Garden plot";
   }
+}
+/** Pick a perk (one point every 5 levels) and see the ones you have. */
+function PerksPanel({ me, onPick }: { me: Me; onPick: (perk: string) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const owned = new Set(me.perks);
+  return (
+    <div className="space-y-2">
+      <p className="text-[12px] text-stone-600">
+        {me.perkPoints > 0 ? `You have ${me.perkPoints} perk point${me.perkPoints > 1 ? "s" : ""} to spend.` : "You earn a perk point every 5 levels."}
+      </p>
+      {PERKS.map((p) => (
+        <div key={p.key} className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+          <span className="text-xl">{p.icon}</span>
+          <div className="flex-1"><div className="font-bold">{p.name}</div><div className="text-[11px] text-stone-600">{p.description}</div></div>
+          {owned.has(p.key) ? (
+            <span className="text-[11px] font-bold text-emerald-700">✓ Yours</span>
+          ) : (
+            <button
+              disabled={busy || me.perkPoints < 1}
+              onClick={async () => { setBusy(true); try { await onPick(p.key); } finally { setBusy(false); } }}
+              className="rounded bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow disabled:opacity-40"
+            >Pick</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 function TopBtn({ children, on, active }: { children: React.ReactNode; on: () => void; active?: boolean }) {
   return <button onClick={on} className={`rounded-lg px-2 py-1 ${active ? "bg-amber-300 text-amber-900" : "bg-black/40 hover:bg-black/60"}`}>{children}</button>;
@@ -873,14 +967,16 @@ function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null
   const bag = me?.inventory ?? [];
   const haveMap = new Map<string, number>();
   for (const i of bag) haveMap.set(i.itemKey, (haveMap.get(i.itemKey) ?? 0) + i.qty);
-  const max = Math.max(0, maxCraftable(recipe, bag));
+  const needLevel = recipe.requires?.level ?? 0;
+  const locked = (me?.me?.level ?? 1) < needLevel;
+  const max = locked ? 0 : Math.max(0, maxCraftable(recipe, bag));
   useEffect(() => { setQty((q) => Math.min(Math.max(1, q), Math.max(1, max))); }, [max]);
   const canMake = max >= 1;
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
       <span className="text-xl">{recipe.icon}</span>
       <div className="flex-1">
-        <div className="font-bold">{recipe.name}</div>
+        <div className="font-bold">{recipe.name}{locked && <span className="ml-1 text-[11px] font-normal text-stone-500">🔒 Lv {needLevel}</span>}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           {recipe.inputs.map((i) => {
             const have = haveMap.get(i.itemKey) ?? 0;

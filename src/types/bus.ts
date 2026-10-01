@@ -21,9 +21,13 @@ export type Events = {
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
   /** True while any modal is open that should block canvas interaction. */
   modalOpen: boolean;
-  /** The local player attacks (plays the slash, facing the target). */
-  /** Swing toward (x, y); `tool` swaps the held item for the swing (e.g. "axe"). */
+  /** The local player attacks: swing toward (x, y); `tool` swaps the held
+   *  item for the swing (e.g. "axe"). */
   attack: { x: number; y: number; tool?: string };
+  /** The local player took damage (flash + floating number). */
+  hurt: { amount: number; hp?: number; maxHp?: number };
+  /** The local player was knocked out and wakes at (x, y). */
+  knockout: { x: number; y: number; coinsLost: number };
 };
 
 export type Handler<T> = (payload: T) => void;

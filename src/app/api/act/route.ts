@@ -8,6 +8,8 @@ import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
+import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
+import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       // Every kind in CROP_KINDS has stages>=2; legacy kinds default to
       // a 2-stage binary (ready/picked) so old data still works.
       const stages = cfg?.stages ?? 2;
-      const yieldAmt = cfg?.yield ?? n.qty;
+      let yieldAmt = cfg?.yield ?? n.qty;
       const regrowthMs = cfg?.regrowthMs ?? 0;
 
       // Pickable at every stage except stage 0 (depleted). With stages=5
@@ -109,9 +111,9 @@ export async function POST(req: Request) {
       if (n.stage < 1) {
         return Response.json({ error: chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back." }, { status: 400 });
       }
-      if (chop) {
-        const [axe] = await db.select({ qty: inventory.qty }).from(inventory).where(sql`${inventory.characterId} = ${me.id} and ${inventory.itemKey} = 'axe' and ${inventory.qty} > 0`);
-        if (!axe) return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
+      const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      if (chop && !gear.bag.some((k) => AXE_ITEMS.includes(k))) {
+        return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
       }
 
       // Pick: decrement toward empty (stage 0). If regrowthMs > 0, the
@@ -124,9 +126,11 @@ export async function POST(req: Request) {
         nextAdvanceAt: newNextAdvanceAt,
       }).where(eq(resourceNodes.id, n.id));
 
+      // Better axes and the Lumberjack perk add wood per chop.
+      if (chop) yieldAmt += chopBonus(gear.bag) + (perks.has("lumberjack") ? 1 : 0);
       await addItem(me.id, n.itemKey, yieldAmt);
       // Foraging now and then turns up seeds for a home garden (not chopping).
-      const found = chop ? null : rollForageSeed();
+      const found = chop ? null : rollForageSeed(Math.random, perks.has("forager") ? 2 : 1);
       if (found) await addItem(me.id, found, 1);
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === n.itemKey, yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + 3` }).where(eq(characters.id, me.id));
@@ -146,34 +150,70 @@ export async function POST(req: Request) {
       const p = livePos(me);
       const ep = rowPositionAt(e, Date.now());
       if (Math.hypot(ep.x - p.x, ep.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
-      const [sword] = await db.select().from(inventory).where(sql`${inventory.characterId} = ${me.id} and ${inventory.itemKey} = 'wooden_sword' and ${inventory.equipped} = true`);
-      const dmg = 2 + Math.floor(Math.random() * 3) + (sword ? 2 : 0) + Math.floor(me.level / 2);
-      const hp = e.hp - dmg;
-      let message = `You hit the ${e.kind} for ${dmg}.`;
+      const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      const def = enemyKind(e.kind);
+      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped), fighter: perks.has("fighter"), roll: Math.random() });
+      const boss = e.kind === BOSS_KIND;
+      const who = String(me.id);
+      // Atomic hit: many players may strike at once (the boss especially).
+      // The boss also tallies each fighter's damage for the shared reward.
+      const [after] = await db
+        .update(enemies)
+        .set({
+          hp: sql`${enemies.hp} - ${dmg}`,
+          ...(boss ? { damage: sql`coalesce(${enemies.damage}, '{}'::jsonb) || jsonb_build_object(${who}::text, coalesce((${enemies.damage} ->> ${who})::int, 0) + ${dmg})` } : {}),
+        })
+        .where(eq(enemies.id, e.id))
+        .returning({ hp: enemies.hp, maxHp: enemies.maxHp, damage: enemies.damage });
+      if (!after) return Response.json({ error: "It's gone." }, { status: 404 });
+      let message = `You hit the ${def.name} for ${dmg}.`;
       let taken = 0;
+      let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
-      if (hp <= 0) {
-        await db.delete(enemies).where(eq(enemies.id, e.id));
-        message = `You defeated the ${e.kind}!`;
-        if (e.kind === "slime" || Math.random() < 0.5) {
-          await db.insert(groundItems).values({ itemKey: e.kind === "slime" ? "slime_gel" : "mushroom", qty: 1, x: ep.x, y: ep.y + 6 });
+      // Only the request that removes the row gets the kill.
+      const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
+      const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
+      if (killed.length > 0 && boss) {
+        const winners = bossRewardees(after.damage ?? {}, after.maxHp);
+        for (const id of winners) {
+          await db.update(characters).set({ xp: sql`${characters.xp} + ${BOSS_REWARD.xp}`, coins: sql`${characters.coins} + ${BOSS_REWARD.coins}` }).where(eq(characters.id, id));
+          await addItem(id, BOSS_REWARD.itemKey, 1);
+          await recalcLevel(id);
         }
+        if (winners.includes(me.id)) gained.push({ itemKey: BOSS_REWARD.itemKey, qty: 1 });
+        message = winners.includes(me.id)
+          ? `The Old Rootking falls! +${BOSS_REWARD.xp} XP, +${BOSS_REWARD.coins} coins and a Rootking Heartwood.`
+          : "The Old Rootking falls! Deal more damage next time to share the reward.";
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
-        await db.update(characters).set({ xp: sql`${characters.xp} + 10` }).where(eq(characters.id, me.id));
+        daily(me.id, "defeat", { enemyKind: e.kind });
+        await logEvent("boss_defeated", `🌳 The Old Rootking was driven back by ${winners.length} brave villager${winners.length === 1 ? "" : "s"}! ${me.name} struck the final blow.`, "character", me.id, e.x, e.y);
+      } else if (killed.length > 0) {
+        // Drops go straight to the bag so a zone can be farmed without
+        // chasing loot around.
+        for (const d of rollDrops(e.kind)) {
+          await addItem(me.id, d.itemKey, d.qty);
+          gained.push(d);
+        }
+        message = `You defeated the ${def.name}! +${def.xp} XP`;
+        await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
+        await db.update(characters).set({ xp: sql`${characters.xp} + ${def.xp}` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
         daily(me.id, "defeat", { enemyKind: e.kind });
-        await logEvent("combat", `${me.name} drove off a ${e.kind}.`, "character", me.id, e.x, e.y);
-      } else {
-        await db.update(enemies).set({ hp }).where(eq(enemies.id, e.id));
+        await logEvent("combat", `${me.name} drove off a ${def.name}.`, "character", me.id, e.x, e.y);
+      } else if (!boss && after.hp > 0) {
+        // (The boss strikes on its own, every beat, see world-stream.)
         if (Math.random() < 0.5) {
-          taken = 1 + Math.floor(Math.random() * 2);
-          const myHp = Math.max(1, me.hp - taken);
-          await db.update(characters).set({ hp: myHp }).where(eq(characters.id, me.id));
+          taken = enemyHit(e.kind, perks.has("tough"));
+          const r = await damagePlayer(me.id, taken);
           message += ` It hits back for ${taken}.`;
+          if (r?.knockedOut) {
+            knockout = { x: r.x!, y: r.y!, coinsLost: r.coinsLost };
+            message += ` You're knocked out and wake in the village square${r.coinsLost ? `, ${r.coinsLost} coins lighter` : ""}.`;
+          }
         }
       }
       markWorldDirty(e.x, e.y);
-      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken });
+      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout });
     }
 
     if (action === "enter") {

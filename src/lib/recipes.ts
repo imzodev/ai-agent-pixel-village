@@ -85,6 +85,48 @@ export const RECIPES: Recipe[] = [
     output: { itemKey: "rug", qty: 1 },
     line: "Four tufts of wool, felted tight. Ties the room together.",
   },
+  // Gear: weapons and tools from wood, stone and enemy drops. Level-gated
+  // (see LEVEL_UNLOCKS in src/lib/progression.ts).
+  {
+    key: "stone_sword",
+    name: "Stone Sword",
+    icon: "🗡️",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "stone", qty: 4 }, { itemKey: "wood", qty: 4 }],
+    output: { itemKey: "stone_sword", qty: 1 },
+    line: "A good river stone, knapped to an edge, on an oak grip. +4 attack.",
+    requires: { level: 3 },
+  },
+  {
+    key: "thorn_blade",
+    name: "Thorn Blade",
+    icon: "🗡️",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "thorn", qty: 6 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "wood", qty: 4 }],
+    output: { itemKey: "thorn_blade", qty: 1 },
+    line: "Thornling thorns set in oak, wrapped in boar hide. +6 attack.",
+    requires: { level: 5 },
+  },
+  {
+    key: "sharp_axe",
+    name: "Sharp Axe",
+    icon: "🪓",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "axe", qty: 1 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "stone", qty: 4 }],
+    output: { itemKey: "sharp_axe", qty: 1 },
+    line: "I'll hone your axe and wrap the haft. +1 wood every chop.",
+    requires: { level: 5 },
+  },
+  {
+    key: "wisp_blade",
+    name: "Wisp Blade",
+    icon: "🗡️",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wisp_essence", qty: 4 }, { itemKey: "thorn_blade", qty: 1 }],
+    output: { itemKey: "wisp_blade", qty: 1 },
+    line: "Bring me wisp light and your thorn blade. +9 attack.",
+    requires: { level: 8 },
+  },
   // Woodwork: oak logs from the west forest (needs an axe).
   {
     key: "chair",

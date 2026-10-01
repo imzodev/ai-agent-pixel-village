@@ -17,6 +17,8 @@ import { addItem, countItem, progressMissions, recalcLevel, removeItem } from ".
 import { plotsOfLot } from "./lots";
 import { isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
 import type { GardenResult } from "@/types/garden";
+import { perksOf } from "./combat";
+import { GREEN_THUMB_MULT } from "./progression";
 
 export { isRipe, wateredAdvanceAt, waterCheck };
 
@@ -37,6 +39,8 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   const target = (await plotsOfLot(lot)).find((p) => p.plot === plot);
   if (!target) return { ok: false, error: "There's no plot there." };
   if ((await countItem(characterId, seedKey)) < 1) return { ok: false, error: "You don't have any of those seeds." };
+  // Green Thumb shortens every stage of the owner's crops.
+  const stageMs = Math.round(cfg.regrowthMs * ((await perksOf(characterId)).has("green_thumb") ? GREEN_THUMB_MULT : 1));
 
   const inserted = await db
     .insert(resourceNodes)
@@ -47,7 +51,7 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
       y: target.y,
       qty: cfg.yield,
       stage: 1,
-      nextAdvanceAt: new Date(Date.now() + cfg.regrowthMs),
+      nextAdvanceAt: new Date(Date.now() + stageMs),
       ownerId: characterId,
       lotId: lot.id,
       plot,

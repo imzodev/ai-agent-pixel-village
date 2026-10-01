@@ -15,6 +15,7 @@ import { characters, lots, resourceNodes } from "@/db/schema";
 import { footprintOf, gardenCellsOf, gardenPlotsAt } from "./buildingManifest";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/garden";
+import { landLotLimit } from "./progression";
 
 /** Owners who haven't logged in for this long lose their lot. */
 export const LOT_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -106,8 +107,8 @@ export async function homeLotOf(characterId: number) {
 
 /**
  * Acquire a lot: it must be free (or listed for sale — resale lands later),
- * the player must not already own a lot of that kind (one home + one
- * land each), and must afford the price.
+ * the player must be under their limit for that kind (one home; one land
+ * lot, two from level 10), and must afford the price.
  * Everything happens in one transaction so two players can't both get it.
  */
 export async function acquireLot(characterId: number, key: string): Promise<GardenResult> {
@@ -117,8 +118,14 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
     if (lot.ownerId === characterId) return { ok: false, error: "It's already yours." };
     const land = lot.kind === "land";
     if (lot.ownerId != null) return { ok: false, error: land ? "Someone already farms this land." : "Someone already lives here." };
-    const [owned] = await tx.select({ id: lots.id }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, lot.kind)));
-    if (owned) return { ok: false, error: land ? "You already have a plot of land. Give it up first." : "You already have a home. Move out first." };
+    // Lock the character row so two parallel claims can't both pass the limit.
+    const [me] = await tx.select({ level: characters.level }).from(characters).where(eq(characters.id, characterId)).for("update");
+    const limit = land ? landLotLimit(me?.level ?? 1) : 1;
+    const owned = await tx.select({ id: lots.id }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, lot.kind)));
+    if (owned.length >= limit) {
+      if (!land) return { ok: false, error: "You already have a home. Move out first." };
+      return { ok: false, error: limit > 1 ? `You already farm ${limit} plots of land.` : "You already have a plot of land. Reach level 10 for a second one, or give it up first." };
+    }
     if (lot.price > 0) {
       const paid = await tx
         .update(characters)

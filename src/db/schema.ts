@@ -409,12 +409,14 @@ export const lots = pgTable(
     price: integer("price").notNull().default(0),
     forSale: boolean("for_sale").notNull().default(false),
   },
-  (t) => [uniqueIndex("lots_owner_home_idx").on(t.ownerId, t.kind)],
+  // Not unique: high-level players may own a second land lot (the limit
+  // lives in acquireLot, see landLotLimit in src/lib/progression.ts).
+  (t) => [index("lots_owner_kind_idx").on(t.ownerId, t.kind)],
 );
 
 export const enemies = pgTable("enemies", {
   id: serial("id").primaryKey(),
-  kind: text("kind").notNull(), // slime | bat | thornling
+  kind: text("kind").notNull(), // ENEMY_KINDS key (src/lib/progression.ts) or "rootking"
   x: real("x").notNull(),
   y: real("y").notNull(),
   targetX: real("target_x"),
@@ -429,6 +431,8 @@ export const enemies = pgTable("enemies", {
   moveStartAt: bigint("move_start_at", { mode: "number" }),
   moveSpeed: real("move_speed"),
   moveAfter: text("move_after"),
+  /** World boss only: damage dealt per character id, for shared rewards. */
+  damage: jsonb("damage").$type<Record<string, number>>(),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
@@ -475,6 +479,17 @@ export const characterEquipped = pgTable(
     equippedAt: timestamp("equipped_at").defaultNow().notNull(),
   },
   (t) => [index("equipped_char_idx").on(t.characterId)],
+);
+
+/** Perks a character picked (one every 5 levels, see src/lib/progression.ts). */
+export const characterPerks = pgTable(
+  "character_perks",
+  {
+    characterId: integer("character_id").notNull(),
+    perkKey: text("perk_key").notNull(),
+    pickedAt: timestamp("picked_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_perks_pk").on(t.characterId, t.perkKey)],
 );
 
 export const gemTransactions = pgTable("gem_transactions", {

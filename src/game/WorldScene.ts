@@ -336,6 +336,16 @@ export class WorldScene extends Phaser.Scene {
       this.playSlash(p, facing, tool);
       this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
+    this.unsub.push(bus.on("hurt", ({ amount }) => this.showHurt(amount)));
+    this.unsub.push(bus.on("knockout", ({ x, y }) => {
+      const p = this.player;
+      if (!p) return;
+      p.sprite.setPosition(x, y);
+      p.tx = x; p.ty = y;
+      this.moveTarget = null;
+      this.marker.setVisible(false);
+      this.cameras.main.flash(400, 40, 0, 0);
+    }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
@@ -378,6 +388,16 @@ export class WorldScene extends Phaser.Scene {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
           if (ent) this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
+        },
+        onHurt: ({ amount, hp, maxHp }) => {
+          if (!this.alive()) return;
+          bus.emit("hurt", { amount, hp, maxHp });
+        },
+        onKnockout: ({ x, y, coinsLost, by }) => {
+          if (!this.alive()) return;
+          bus.emit("knockout", { x, y, coinsLost });
+          bus.emit("toast", { text: `The ${by} knocked you out! You wake in the village square${coinsLost ? `, ${coinsLost} coins lighter` : ""}.`, kind: "bad" });
+          bus.emit("refreshMe", undefined);
         },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
@@ -1019,6 +1039,17 @@ export class WorldScene extends Phaser.Scene {
     }
     this.playSlash(p, p.facing);
     this.stream?.sendAct("slash", p.facing);
+  }
+
+  /** Red flash on the player and a floating "−N". */
+  private showHurt(amount: number) {
+    const p = this.player;
+    if (!p || !p.sprite.active) return;
+    p.sprite.setTint(0xff6060);
+    this.time.delayedCall(180, () => { if (p.sprite.active) p.sprite.clearTint(); });
+    const t = this.add.text(p.sprite.x, p.sprite.y - 44, `−${amount}`, { fontFamily: "monospace", fontSize: "12px", color: "#ff5a5a", stroke: "#1a1a1a", strokeThickness: 3 })
+      .setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH_CHAR_BASE + p.sprite.y + 10);
+    this.tweens.add({ targets: t, y: t.y - 18, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
   /** Play the attack swing facing `facing`; walk/idle resume after it.
