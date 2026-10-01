@@ -572,14 +572,34 @@ async function getSharedSnapshot(
 }
 
 /**
- * Inject the local player's `me` row from the shared `players` list. The
- * shared snapshot has `me: null`; this produces the per-requester shape
- * without a per-player cache entry.
+ * Inject the local player's `me` row. The shared snapshot has `me: null`;
+ * this produces the per-requester shape without a per-player cache entry.
+ *
+ * `me` normally comes from the shared `players` list, but that list is
+ * filtered by each player's STORED position (persisted every ~10 s, read
+ * via a view refreshed every ~5 s). A player travelling fast can be far
+ * from their stored position, fall outside their own proximity box, and
+ * get `me: null` — which the HUD reads as "logged out". In that case the
+ * row is loaded directly by id.
  */
-export function withMe(shared: Snapshot, meId: number | null): Snapshot {
+async function withMe(shared: Snapshot, meId: number | null): Promise<Snapshot> {
   if (!meId) return shared;
-  const me = shared.players.find((p) => p.id === meId) ?? null;
-  return me ? { ...shared, me } : shared;
+  const hit = shared.players.find((p) => p.id === meId);
+  if (hit) return { ...shared, me: hit };
+  const me = await loadPlayer(meId);
+  return me ? { ...shared, me, players: [...shared.players, me] } : shared;
+}
+
+/** One player's snapshot row (with equipment and cosmetics), by id. */
+async function loadPlayer(id: number): Promise<Snapshot["players"][number] | null> {
+  const rdb = withReadDb();
+  const [row] = await rdb.select(playerColumns).from(characters).where(eq(characters.id, id));
+  if (!row) return null;
+  const [equipped, cosmetics] = await Promise.all([
+    rdb.select({ itemKey: inventory.itemKey }).from(inventory).where(and(eq(inventory.characterId, id), eq(inventory.equipped, true))),
+    rdb.select({ slot: characterEquipped.slot, itemKey: characterEquipped.itemKey }).from(characterEquipped).where(eq(characterEquipped.characterId, id)),
+  ]);
+  return { ...row, equipped: equipped.map((e) => e.itemKey), cosmetics };
 }
 
 /**
@@ -599,5 +619,5 @@ export async function getSnapshot(
     void initRedis();
   }
   const shared = await getSharedSnapshot(playerX, playerY, opts);
-  return withMe(shared, meId);
+  return await withMe(shared, meId);
 }
