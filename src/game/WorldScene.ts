@@ -875,75 +875,56 @@ export class WorldScene extends Phaser.Scene {
     }
   }
   /**
-   * Context-sensitive E/Space handler. If the player already has an
-   * actionable selection that still exists in the snapshot, ask the HUD
-   * to run its primary action; otherwise target the nearest interactable
-   * thing.
+   * Context-sensitive E/Space handler: act on the closest usable thing
+   * (facing wins ties); with nothing nearby, walk to the clicked selection.
    */
   private interact() {
     // While fishing, E strikes / reels like R.
     if (this.fishing?.active) { this.fishing.press(this.time.now); return; }
-    let sel = this.lastSelection;
-    if (sel && !(this.isActionable(sel) && this.selectionExists(sel))) {
-      // Stale selection (entity just got picked up / killed / respawned).
-      this.lastSelection = sel = null;
-    }
-    // 1. The selection is within reach: act on it.
-    if (sel && this.inReach(sel)) { bus.emit("primaryAction", sel); return; }
-    // 2. Something is close by: target it instead of a far-away selection.
+    // 1. E acts on what's right here: the closest usable thing, preferring
+    //    what you face. If you moved, you want what's next to you now.
     const near = this.nearestCandidate();
-    if (near && !(sel && this.sameTarget(near, sel))) { this.select(near); return; }
-    // 3. Nothing near: walk back to the selection (its primary action).
-    if (sel) { bus.emit("primaryAction", sel); return; }
+    if (near) { this.select(near); bus.emit("primaryAction", near); return; }
+    // 2. Nothing close: walk to the (clicked) selection, if it's still there.
+    const sel = this.lastSelection;
+    if (sel && this.isActionable(sel) && this.selectionExists(sel) && !this.isSpent(sel)) { bus.emit("primaryAction", sel); return; }
+    this.lastSelection = null;
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
   }
-  private sameTarget(a: Selection, b: Selection): boolean {
-    if (a.type === "plot") return b.type === "plot" && a.x === b.x && a.y === b.y;
-    if (b.type === "plot") return false;
-    return a.type === b.type && a.id === b.id;
-  }
-  /** Whether the player stands close enough to use the selection (same
-   *  distances as the HUD card's action buttons). */
-  private inReach(sel: Selection): boolean {
-    const pos = this.selectionPos(sel);
-    if (!pos) return false;
-    const reach = sel.type === "npc" ? 160 : sel.type === "building" ? 140 : sel.type === "enemy" ? 80 : 90;
-    return this.distTo(pos.x, pos.y) <= reach;
-  }
-  /** Live world position of a selection (sprites for moving entities). */
-  private selectionPos(sel: Selection): { x: number; y: number } | null {
-    const s = this.snapshot;
-    switch (sel.type) {
-      case "npc": { const e = this.npcs.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
-      case "player": { const e = this.players.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
-      case "animal": { const e = this.animals.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
-      case "enemy": { const e = this.enemies.get(sel.id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; }
-      case "item": { const i = s?.groundItems.find((x) => x.id === sel.id); return i ? { x: i.x, y: i.y } : null; }
-      case "node": { const n = s?.nodes.find((x) => x.id === sel.id); return n ? { x: n.x, y: n.y } : null; }
-      case "building": {
-        const b = s?.buildings.find((x) => x.id === sel.id);
-        return b ? this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY } : null;
-      }
-      case "plot": return { x: sel.x, y: sel.y };
-    }
+  /** A felled tree / picked-clean bush: nothing to do until it regrows. */
+  private isSpent(sel: Selection): boolean {
+    if (sel.type !== "node") return false;
+    const n = this.snapshot?.nodes.find((x) => x.id === sel.id);
+    return !n || n.stage < 1;
   }
   /** Selection types that have a primary action the player can perform. */
   private isActionable(sel: Selection): boolean {
     return sel.type !== "player";
   }
-  /** The closest interactable thing within 110 px, or null. */
+  /** The closest usable thing within 110 px, or null. Things in front of
+   *  the player count as nearer, so facing a target picks it. */
   private nearestCandidate(): Selection | null {
     if (!this.player || !this.snapshot) return null;
     const s = this.snapshot;
-    const cands: { d: number; sel: Selection }[] = [];
-    for (const n of s.npcs) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) } });
-    for (const a of s.animals) cands.push({ d: this.distTo(a.x, a.y), sel: { type: "animal", id: a.id, name: a.name, species: a.species, distance: this.distTo(a.x, a.y) } });
-    for (const e of s.enemies) cands.push({ d: this.distTo(e.x, e.y), sel: { type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) } });
-    for (const i of s.groundItems) cands.push({ d: this.distTo(i.x, i.y), sel: { type: "item", id: i.id, itemKey: i.itemKey, distance: this.distTo(i.x, i.y) } });
-    for (const n of s.nodes) cands.push({ d: this.distTo(n.x, n.y), sel: { type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: this.distTo(n.x, n.y) } });
-    for (const b of s.buildings) { const d = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; cands.push({ d: this.distTo(d.x, d.y), sel: { type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: this.distTo(d.x, d.y) } }); }
-    cands.sort((a, b) => a.d - b.d);
-    return cands[0] && cands[0].d < 110 ? cands[0].sel : null;
+    const p = this.player.sprite;
+    const f = this.player.facing;
+    const [fx, fy] = f === "left" ? [-1, 0] : f === "right" ? [1, 0] : f === "up" ? [0, -1] : [0, 1];
+    const cands: { score: number; sel: Selection }[] = [];
+    const add = (x: number, y: number, mk: (d: number) => Selection) => {
+      const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
+      if (d >= 110) return;
+      const facing = d > 1 ? (dx * fx + dy * fy) / d : 1; // cos of the angle off your facing
+      cands.push({ score: d * (facing > 0.5 ? 0.6 : 1), sel: mk(Math.round(d)) });
+    };
+    const live = (m: Map<number, { sprite: { x: number; y: number } }>, id: number, x: number, y: number) => { const e = m.get(id); return e ? e.sprite : { x, y }; };
+    for (const n of s.npcs) { const q = live(this.npcs, n.id, n.x, n.y); add(q.x, q.y, (d) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: d })); }
+    for (const a of s.animals) { const q = live(this.animals, a.id, a.x, a.y); add(q.x, q.y, (d) => ({ type: "animal", id: a.id, name: a.name, species: a.species, distance: d })); }
+    for (const e of s.enemies) { const q = live(this.enemies, e.id, e.x, e.y); add(q.x, q.y, (d) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: d })); }
+    for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
+    for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
+    for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
+    cands.sort((a, b) => a.score - b.score);
+    return cands[0]?.sel ?? null;
   }
 
   // ---------- update loop ----------
