@@ -17,6 +17,10 @@ import { addItem, countItem, progressMissions, recalcLevel, removeItem } from ".
 import { plotsOfLot } from "./lots";
 import { isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
 import type { GardenResult } from "@/types/garden";
+import { perksOf } from "./combat";
+import { tutorialEvent } from "./tutorialServer";
+import { recordCollection } from "./collectionServer";
+import { GREEN_THUMB_MULT } from "./progression";
 
 export { isRipe, wateredAdvanceAt, waterCheck };
 
@@ -37,6 +41,8 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   const target = (await plotsOfLot(lot)).find((p) => p.plot === plot);
   if (!target) return { ok: false, error: "There's no plot there." };
   if ((await countItem(characterId, seedKey)) < 1) return { ok: false, error: "You don't have any of those seeds." };
+  // Green Thumb shortens every stage of the owner's crops.
+  const stageMs = Math.round(cfg.regrowthMs * ((await perksOf(characterId)).has("green_thumb") ? GREEN_THUMB_MULT : 1));
 
   const inserted = await db
     .insert(resourceNodes)
@@ -47,7 +53,7 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
       y: target.y,
       qty: cfg.yield,
       stage: 1,
-      nextAdvanceAt: new Date(Date.now() + cfg.regrowthMs),
+      nextAdvanceAt: new Date(Date.now() + stageMs),
       ownerId: characterId,
       lotId: lot.id,
       plot,
@@ -58,7 +64,8 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   await removeItem(characterId, seedKey, 1);
   await db.update(characters).set({ xp: sql`${characters.xp} + ${PLANT_XP}` }).where(eq(characters.id, characterId));
   const name = crop.produceKey;
-  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y };
+  const step = await tutorialEvent(characterId, "plant");
+  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y, notices: step ? [step] : [] };
 }
 
 /** Water a garden crop. Anyone can help, once per growth stage. */
@@ -105,9 +112,11 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   await progressMissions(characterId, (r) => r.type === "collect" && r.itemKey === node.itemKey, node.qty);
   await db.update(characters).set({ xp: sql`${characters.xp} + ${HARVEST_XP}` }).where(eq(characters.id, characterId));
   await recalcLevel(characterId);
+  const isNew = await recordCollection(characterId, "crop", node.itemKey, node.qty);
   return {
     ok: true,
     message: `Harvested ${node.qty} ${node.itemKey}${node.qty > 1 ? "s" : ""}!${seeds > 0 ? ` …and saved ${seeds} seed${seeds > 1 ? "s" : ""} to replant.` : ""}`,
+    notices: isNew ? [`📖 New in your book: ${node.itemKey}!`] : [],
     gained,
     x: node.x,
     y: node.y,

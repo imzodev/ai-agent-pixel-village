@@ -21,9 +21,21 @@ export type Events = {
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
   /** True while any modal is open that should block canvas interaction. */
   modalOpen: boolean;
-  /** The local player attacks (plays the slash, facing the target). */
-  /** Swing toward (x, y); `tool` swaps the held item for the swing (e.g. "axe"). */
+  /** The local player attacks: swing toward (x, y); `tool` swaps the held
+   *  item for the swing (e.g. "axe"). */
   attack: { x: number; y: number; tool?: string };
+  /** The local player took damage (flash + floating number). */
+  hurt: { amount: number; hp?: number; maxHp?: number };
+  /** The player walked into a named region (location banner, book). */
+  region: { name: string; key: string; /** First sight on spawn: record it, no banner. */ quiet?: boolean };
+  /** Whether there's fishable water in front of the player. */
+  canFish: boolean;
+  /** Tutorial guide target (arrow), or null to hide it. */
+  guide: { x: number; y: number; npcId?: number } | null;
+  /** The local player goes through a portal and arrives at (x, y). */
+  teleport: { x: number; y: number };
+  /** The local player was knocked out and wakes at (x, y). */
+  knockout: { x: number; y: number; coinsLost: number };
 };
 
 export type Handler<T> = (payload: T) => void;

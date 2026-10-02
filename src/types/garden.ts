@@ -45,5 +45,5 @@ export type GardenCropDef = {
 
 /** Result of a lot / garden action. */
 export type GardenResult =
-  | { ok: true; message: string; gained?: { itemKey: string; qty: number }[]; x?: number; y?: number }
+  | { ok: true; message: string; gained?: { itemKey: string; qty: number }[]; x?: number; y?: number; notices?: string[] }
   | { ok: false; error: string };

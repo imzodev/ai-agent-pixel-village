@@ -20,6 +20,7 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   // selection isn't an NPC with recipes / sellable inventory. The binding
   // still fires — the handler decides.
   { keys: ["c"], command: "player.craft", mode: "press" },
+  { keys: ["r"], command: "player.fish", mode: "press" },
   { keys: ["f"], command: "player.sell", mode: "press" },
   { keys: ["b"], command: "ui.bag", mode: "press" },
   { keys: ["y"], command: "ui.shop", mode: "press" },

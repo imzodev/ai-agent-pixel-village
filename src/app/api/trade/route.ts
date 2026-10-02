@@ -7,6 +7,9 @@ import { characters, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { TRADES, findBuyer, stockForNpc } from "@/lib/trade";
 import { addCoins, addItem, logEvent, removeItem } from "@/lib/game";
+import { perksOf } from "@/lib/combat";
+import { tutorialEvent } from "@/lib/tutorialServer";
+import { HAGGLER_MULT } from "@/lib/progression";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +37,9 @@ async function performSell(opts: {
   const ok = await removeItem(opts.characterId, opts.itemKey, qty);
   if (!ok) return { ok: false, error: "You don't have that." };
 
-  const gained = buyer.trade.price * qty;
+  // Haggler: NPCs pay 20% more.
+  const haggler = (await perksOf(opts.characterId)).has("haggler");
+  const gained = Math.round(buyer.trade.price * qty * (haggler ? HAGGLER_MULT : 1));
   await addCoins(opts.characterId, gained);
   const [row] = await db
     .select({ coins: sql<number>`coalesce(${characters.coins}, 0)::int` })
@@ -55,6 +60,7 @@ export async function POST(req: Request) {
     if (body.action === "buy") {
       const offer = npcKey ? stockForNpc(npcKey).find((t) => t.itemKey === itemKey) : undefined;
       if (!npcKey || !offer) return Response.json({ error: "They don't sell that." }, { status: 400 });
+      if (offer.minLevel && me.level < offer.minLevel) return Response.json({ error: `Reach level ${offer.minLevel} to buy that.` }, { status: 400 });
       const cost = offer.price * qty;
       // Conditional debit: never lets coins go negative, even on double clicks.
       const paid = await db
@@ -78,7 +84,8 @@ export async function POST(req: Request) {
       me.x,
       me.y,
     );
-    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins });
+    const step = await tutorialEvent(me.id, "sell");
+    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins, notices: step ? [step] : [] });
   } catch (e) {
     return handleApiError(e);
   }

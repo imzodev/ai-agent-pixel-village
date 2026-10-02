@@ -32,6 +32,9 @@ async function performCraft(opts: {
 
   const [me] = await db.select().from(characters).where(eq(characters.id, opts.characterId));
   if (!me) return { ok: false, error: "You don't have that." };
+  if (recipe.requires?.level && me.level < recipe.requires.level) {
+    return { ok: false, error: `Reach level ${recipe.requires.level} to make that.` };
+  }
 
   const crafterPos = rowPositionAt(crafter, Date.now());
   if (Math.hypot(crafterPos.x - me.x, crafterPos.y - me.y) > 160) {

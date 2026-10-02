@@ -1,8 +1,5 @@
 "use client";
 import { useEffect } from "react";
-import dynamic from "next/dynamic";
-
-const Onboarding = dynamic(() => import("./Onboarding"), { ssr: false });
 
 export default function ClientShell() {
   useEffect(() => {
@@ -39,5 +36,5 @@ export default function ClientShell() {
       // ignore — service worker is an enhancement
     });
   }, []);
-  return <Onboarding />;
+  return null;
 }

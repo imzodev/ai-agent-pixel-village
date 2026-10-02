@@ -29,8 +29,8 @@ export function rollHarvestSeeds(rand: () => number = Math.random): number {
 }
 
 /** Seed found while foraging a wild node, or null (most of the time). */
-export function rollForageSeed(rand: () => number = Math.random): string | null {
-  if (rand() >= FORAGE_SEED_CHANCE) return null;
+export function rollForageSeed(rand: () => number = Math.random, chanceMult = 1): string | null {
+  if (rand() >= FORAGE_SEED_CHANCE * chanceMult) return null;
   const entries = Object.entries(FORAGE_SEED_WEIGHTS);
   const total = entries.reduce((sum, [, w]) => sum + w, 0);
   let r = rand() * total;

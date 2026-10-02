@@ -14,6 +14,8 @@ import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
+import { tutorialEvent } from "@/lib/tutorialServer";
+import { recordCollection } from "@/lib/collectionServer";
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +82,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: reply.text });
     await db.insert(worldChat).values({ speakerType: "npc", speakerId: npc.id, text: reply.text.slice(0, 140) });
 
-    // Talking counts for "talk to X" missions.
+    // Talking counts for "talk to X" missions, the tutorial, and the book.
     await progressMissions(character.id, (r) => r.type === "talk" && r.npcKey === npc.key);
+    const notices: string[] = [];
+    const step = await tutorialEvent(character.id, "talk", { npcKey: npc.key });
+    if (step) notices.push(step);
+    if (await recordCollection(character.id, "npc", npc.key)) notices.push(`📖 You met ${npc.name}.`);
     // Daily quest: talk event.
     const c = getContainer();
     await c.services.quest.recordEvent(character.id, { kind: "talk", payload: { npcKey: npc.key } });
@@ -106,7 +112,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Everything else (turnin, mission, gift, discount) is gated on the
     // brain's choice so the panel reflects only what the NPC "said".
     const shown = offers.filter((o) => o.type === "sell" || reply.offerIds.includes(o.id));
-    return Response.json({ text: reply.text, offers: shown, source: reply.source, npc: { id: npc.id, name: npc.name, role: npc.role, sponsored: !!sponsor, sponsor: sponsor ? { businessName: sponsor.businessName, brandColor: sponsor.brandColor } : null } });
+    return Response.json({ text: reply.text, offers: shown, source: reply.source, notices, npc: { id: npc.id, name: npc.name, role: npc.role, sponsored: !!sponsor, sponsor: sponsor ? { businessName: sponsor.businessName, brandColor: sponsor.brandColor } : null } });
   } catch (e) {
     return handleApiError(e);
   }

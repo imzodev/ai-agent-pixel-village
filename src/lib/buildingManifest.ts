@@ -23,6 +23,8 @@ export type BuildingManifestEntry = {
   reservable?: boolean;
   /** Coins to acquire the building's home lot (default 0 = free to move in). */
   price?: number;
+  /** Portals (kind "portal"): the building key you arrive at when you enter. */
+  portalTo?: string;
   /** World tile (16px grid) of the template's top-left corner. */
   tx: number;
   ty: number;

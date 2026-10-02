@@ -26,7 +26,7 @@ import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 import { and, eq, gt } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, sessions, users } from "@/db/schema";
+import { characters, enemies, sessions, users } from "@/db/schema";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
 import { getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
@@ -37,7 +37,9 @@ import { log } from "@/lib/logger";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
 import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
-import { beatIndex, nextBeatAt } from "@/lib/motion";
+import { beatIndex, nextBeatAt, rowPositionAt } from "@/lib/motion";
+import { enemyHit, enemyKind, isAggressive } from "@/lib/progression";
+import { damagePlayer, perksOfMany } from "@/lib/combat";
 import { planMoveFanout } from "@/lib/moveFanout";
 import { fetchMovesStartingAt } from "@/lib/moveStore";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
@@ -523,7 +525,59 @@ async function onBeat(boundary: number): Promise<void> {
   } catch (err) {
     log.error({ err }, "beat move broadcast failed");
   }
+  try {
+    await enemyAggression();
+  } catch (err) {
+    log.error({ err }, "enemy aggression failed");
+  }
   if (beatIndex(boundary) % RESYNC_EVERY_BEATS === 0) await resyncAll();
+}
+
+/** How close an aggressive enemy must be to hit a player (players attack
+ *  from 80 px, so standing in reach to fight means getting hit back). */
+const ENEMY_REACH_PX = 72;
+/** The world boss's area attack reaches further. */
+const BOSS_REACH_PX = 110;
+
+/**
+ * Aggressive enemies (tier 2+, the world boss) hit connected players who
+ * stand next to them, once per beat. Runs here because this process knows
+ * every player's live position; enemy positions come from their moves.
+ */
+async function enemyAggression(): Promise<void> {
+  const players = [...connections.values()].filter((c) => c.ws.readyState === c.ws.OPEN);
+  if (players.length === 0) return;
+  const rows = (await db.select().from(enemies)).filter((e) => isAggressive(e.kind));
+  if (rows.length === 0) return;
+  const now = Date.now();
+  const live = rows.map((e) => ({ e, p: rowPositionAt(e, now), reach: enemyKind(e.kind).tier === "boss" ? BOSS_REACH_PX : ENEMY_REACH_PX }));
+  const hits: { conn: Connection; kind: string; name: string }[] = [];
+  for (const conn of players) {
+    for (const { e, p, reach } of live) {
+      if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) <= reach) hits.push({ conn, kind: e.kind, name: enemyKind(e.kind).name });
+    }
+  }
+  if (hits.length === 0) return;
+  const perks = await perksOfMany([...new Set(hits.map((h) => h.conn.playerId))]);
+  const knockedOut = new Set<number>();
+  for (const { conn, kind, name } of hits) {
+    if (knockedOut.has(conn.playerId)) continue; // already out of the fight this beat
+    const amount = enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false);
+    const r = await damagePlayer(conn.playerId, amount);
+    if (!r) continue;
+    try {
+      if (r.knockedOut) {
+        conn.homePx = r.x!;
+        conn.homePy = r.y!;
+        knockedOut.add(conn.playerId);
+        conn.ws.send(JSON.stringify({ type: "knockout", x: r.x, y: r.y, coinsLost: r.coinsLost, hp: r.hp, by: name }));
+        continue;
+      }
+      conn.ws.send(JSON.stringify({ type: "hurt", amount, hp: r.hp, maxHp: r.maxHp, by: name }));
+    } catch {
+      /* socket closed */
+    }
+  }
 }
 
 function isBackedUp(conn: Connection): boolean {

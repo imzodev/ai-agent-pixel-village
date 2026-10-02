@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   characterMissions,
+  characterPerks,
   characters,
   inventory,
   leads,
@@ -11,6 +12,7 @@ import {
   type MissionRequirement,
   type MissionReward,
 } from "@/db/schema";
+import { levelForXp, maxHpFor, unlocksBetween } from "./progression";
 
 export async function addItem(characterId: number, itemKey: string, qty = 1, meta: Record<string, unknown> = {}) {
   const stackable = Object.keys(meta).length === 0;
@@ -82,13 +84,17 @@ export async function grantReward(characterId: number, reward: MissionReward) {
 export async function recalcLevel(characterId: number) {
   const [c] = await db.select().from(characters).where(eq(characters.id, characterId));
   if (!c) return;
-  const level = 1 + Math.floor(Math.sqrt(c.xp / 25));
+  const level = levelForXp(c.xp);
   if (level !== c.level) {
-    await db
-      .update(characters)
-      .set({ level, maxHp: 20 + (level - 1) * 5, hp: 20 + (level - 1) * 5 })
-      .where(eq(characters.id, characterId));
-    await logEvent("level", `${c.name} reached level ${level}!`, "character", characterId, c.x, c.y);
+    const [tough] = await db
+      .select({ k: characterPerks.perkKey })
+      .from(characterPerks)
+      .where(and(eq(characterPerks.characterId, characterId), eq(characterPerks.perkKey, "tough")));
+    const maxHp = maxHpFor(level, !!tough);
+    // Levelling up heals you fully.
+    await db.update(characters).set({ level, maxHp, hp: maxHp }).where(eq(characters.id, characterId));
+    const unlocked = unlocksBetween(c.level, level).map((u) => u.text).join(" · ");
+    await logEvent("level", `${c.name} reached level ${level}!${unlocked ? ` Unlocked: ${unlocked}` : ""}`, "character", characterId, c.x, c.y);
   }
 }
 

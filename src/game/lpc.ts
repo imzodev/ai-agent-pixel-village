@@ -20,6 +20,9 @@ export const SLASH_FRAMES = 6;
  *  the axe (scripts/draw-axe.mjs) is shown only while chopping. */
 export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint?: string }> = {
   wooden_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#b07a44" },
+  stone_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#a4a6ae" },
+  thorn_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#7aa548" },
+  wisp_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#a98cf0" },
   axe: { front: "/lpc/weapon_axe.png", behind: "/lpc/weapon_axe_behind.png" },
 };
 export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs", "afro", "buzzcut", "bedhead", "cowlick"];

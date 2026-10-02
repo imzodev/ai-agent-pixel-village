@@ -8,13 +8,18 @@ import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/l
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
+import { PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
+import LocationBanner from "./LocationBanner";
+import QuestTracker from "./QuestTracker";
+import CollectionBook from "./CollectionBook";
+import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -38,7 +43,7 @@ export default function Hud() {
   // Lot key whose "move out / give up" is waiting for a second tap.
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | null>(null);
+  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -49,6 +54,7 @@ export default function Hud() {
   const [chat, setChat] = useState("");
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
+  const [canFish, setCanFish] = useState(false);
   const talkInput = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
 
@@ -58,6 +64,8 @@ export default function Hud() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
   const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
+  /** Tutorial steps, book discoveries and the like ride along on responses. */
+  const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
 
   useEffect(() => {
     const u = [
@@ -66,6 +74,11 @@ export default function Hud() {
       bus.on("select", setSel),
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
+      bus.on("canFish", setCanFish),
+      // Entering a region fills the book's Places page (server checks you're there).
+      bus.on("region", ({ key }) => {
+        void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => { if (r.new && r.message) toast(r.message, "good"); });
+      }),
       bus.on("toggle", (which) => {
         if (which === "shop") {
           window.location.href = "/shop";
@@ -86,6 +99,39 @@ export default function Hud() {
     return () => u.forEach((f) => f());
   }, [toast, refreshMe]);
   useEffect(() => { if (snap?.me && !me?.me) void refreshMe(); }, [snap?.me, me?.me, refreshMe]);
+  // HP from a `hurt` push: snapshots can lag a few seconds behind, so the
+  // pushed value wins for a short while.
+  const [hpLive, setHpLive] = useState<{ hp: number; maxHp: number } | null>(null);
+  useEffect(() => bus.on("hurt", ({ hp, maxHp }) => { if (hp != null && maxHp != null) setHpLive({ hp, maxHp }); }), []);
+  useEffect(() => {
+    if (!hpLive) return;
+    const t = setTimeout(() => setHpLive(null), 12_000);
+    return () => clearTimeout(t);
+  }, [hpLive]);
+  useEffect(() => bus.on("knockout", () => setHpLive(null)), []);
+  // World-boss news (it rose / was driven back / left) as a toast for
+  // everyone online. The first snapshot only sets the baseline.
+  const lastEventId = useRef<number | null>(null);
+  useEffect(() => {
+    const evs = snap?.events;
+    if (!evs || evs.length === 0) return;
+    const maxId = Math.max(...evs.map((e) => e.id));
+    const prev = lastEventId.current;
+    lastEventId.current = Math.max(prev ?? 0, maxId);
+    if (prev == null) return;
+    for (const e of evs) if (e.id > prev && (e.kind === "boss" || e.kind === "boss_defeated")) toast(e.text, "good");
+  }, [snap?.events, toast]);
+  // Level-up toast with what the new level unlocks.
+  const lastLevel = useRef<number | null>(null);
+  useEffect(() => {
+    const lv = me?.me?.level;
+    if (lv == null) return;
+    const prev = lastLevel.current;
+    lastLevel.current = lv;
+    if (prev == null || lv <= prev) return;
+    const unlocked = unlocksBetween(prev, lv).map((u) => u.text).join(" · ");
+    toast(`⬆️ Level ${lv}!${unlocked ? ` Unlocked: ${unlocked}` : ""}`, "good");
+  }, [me?.me?.level, toast]);
 
   // Mirror local selection changes to the bus so WorldScene's
   // `lastSelection` (which gates the context-sensitive E behavior) stays
@@ -154,16 +200,18 @@ export default function Hud() {
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[] }>("/api/act", body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
+    if (r.taken) bus.emit("hurt", { amount: r.taken });
+    if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
   const post = async (url: string, body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[] }>(url, body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; notices?: string[] }>(url, body);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
@@ -178,6 +226,7 @@ export default function Hud() {
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => i.itemKey === "axe" && i.qty > 0);
+  const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -187,15 +236,16 @@ export default function Hud() {
     setTalk({ npcId, name, role, sponsor: null, lines: [], offers: [], busy: true });
     setSel(null);
     const hist = await api<{ history: { role: string; text: string }[] }>(`/api/npc/${npcId}/talk`);
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[]; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
     if (r.error) { toast(r.error, "bad"); setTalk(null); return; }
+    if (r.notices?.length) { notify(r.notices); void refreshMe(); }
     setTalk({ npcId, name, role, sponsor: r.npc.sponsor, lines: [...(hist.history ?? []).slice(-6).map((h) => ({ role: h.role as "player" | "npc", text: h.text })), { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
     setTimeout(() => talkInput.current?.focus(), 50);
   };
   const sendTalk = async (message: string) => {
     if (!talk || talk.busy) return;
     setTalk({ ...talk, lines: [...talk.lines, { role: "player", text: message }], busy: true });
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource }>(`/api/npc/${talk.npcId}/talk`, { message });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[] }>(`/api/npc/${talk.npcId}/talk`, { message });
     if (r.error) {
       toast(r.error, "bad");
       // Walked out of range? Close the panel — the conversation is no longer
@@ -204,6 +254,7 @@ export default function Hud() {
       else setTalk((t) => t && { ...t, busy: false });
       return;
     }
+    if (r.notices?.length) { notify(r.notices); void refreshMe(); }
     setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
   };
   const acceptOffer = async (offerId: string) => {
@@ -232,9 +283,10 @@ export default function Hud() {
 
   const performTrade = async (itemKey: string, qty: number) => {
     if (!trade) return;
-    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
+    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number; notices?: string[] }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
     if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return; }
     toast(`Sold ${qty} ${itemKey.replace(/_/g, " ")} for ${r.gained} 🪙.`, "good");
+    notify(r.notices);
     void refreshMe();
     // Refresh modal contents from the updated `me` (state set by refreshMe).
     setTrade((cur) => {
@@ -265,14 +317,23 @@ export default function Hud() {
     const r = await api<{ message?: string }>("/api/items", body, method);
     if (r.error) toast(r.error, "bad"); else { if (r.message) toast(r.message, "good"); void refreshMe(); bus.emit("poke", undefined); }
   };
+  const isPortalKey = (key: string) => snap?.buildings.some((b) => b.key === key && b.kind === "portal") ?? false;
   const enterBuilding = async (key: string, name: string) => {
-    await act({ action: "enter", key });
-    if (key === "homes") setPanel("home"); else setBuilding({ key, name });
+    const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number } };
+    // Portals (the cave) move you instead of opening a panel.
+    if (r.teleport) bus.emit("teleport", r.teleport);
+    else if (isPortalKey(key)) { /* refused (too far, …): act() already toasted */ }
+    else if (key === "homes") setPanel("home");
+    else setBuilding({ key, name });
     setSel(null);
   };
 
   // Computed once per render; reused below by commitSelection and the JSX.
   const loggedIn = !!snap?.me;
+  const fishHint = (() => {
+    const k = formatBinding("player.fish");
+    return k ? `(${prettyKey(k)})` : "";
+  })();
   const interactHint = (() => {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
@@ -434,31 +495,64 @@ export default function Hud() {
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none font-mono text-[13px] text-stone-800">
+    <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
+      <LocationBanner />
+      {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
+        <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
+      )}
+      {loggedIn && canFish && hasRod && !sel && !talk && (
+        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2">
+          <button onClick={() => inputRouter.trigger("player.fish")} className="pixel-btn px-3 py-1.5 font-bold">🎣 Fish {fishHint}</button>
+        </div>
+      )}
       {/* Top bar */}
       <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-wrap items-center gap-2 bg-gradient-to-b from-black/50 to-transparent p-2 text-white">
         <div className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 text-base font-bold tracking-tight text-amber-900 shadow">🌳 thegrove</div>
-        <div className="rounded-lg bg-black/40 px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]} {snap?.weather ?? "…"} · 🕰 {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
-        <div className="rounded-lg bg-black/40 px-2 py-1">👥 {snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 {snap?.npcs.length ?? 0} agents</div>
+        <div className="pixel-panel-dark px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]} {snap?.weather ?? "…"} · 🕰 {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
+        <div className="pixel-panel-dark px-2 py-1">👥 {snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 {snap?.npcs.length ?? 0} agents</div>
         <div className="flex-1" />
         {loggedIn && me?.me && (
-          <div className="flex items-center gap-2 rounded-lg bg-black/40 px-2 py-1">
+          <div className="pixel-panel-dark flex items-center gap-2 px-2 py-1">
             <span className="font-bold text-amber-200">{me.me.name}</span> <span>Lv {me.me.level}</span>
-            <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * (snap?.me?.hp ?? me.me.hp)) / (snap?.me?.maxHp ?? me.me.maxHp)}%` }} /></span>
-            <span>❤️ {snap?.me?.hp ?? me.me.hp}</span><span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span><span title="xp">✨ {(snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp}</span>
+            {(() => {
+              const hp = hpLive?.hp ?? snap?.me?.hp ?? me.me.hp;
+              const maxHp = hpLive?.maxHp ?? snap?.me?.maxHp ?? me.me.maxHp;
+              return (
+                <>
+                  <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * hp) / maxHp}%` }} /></span>
+                  <span>❤️ {hp}</span>
+                </>
+              );
+            })()}<span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
+            {(() => {
+              // XP toward the next level, with the next unlock as a hint.
+              const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
+              const lv = levelForXp(xp);
+              const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
+              const next = nextUnlock(lv);
+              return (
+                <span className="flex items-center gap-1" title={`${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}`}>
+                  ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${(100 * (xp - lo)) / (hi - lo)}%` }} /></span>
+                </span>
+              );
+            })()}
           </div>
         )}
         {loggedIn ? (
           <>
             <TopBtn on={() => setPanel(panel === "bag" ? null : "bag")} active={panel === "bag"}>🎒 Bag</TopBtn>
+            {((me?.perkPoints ?? 0) > 0 || (me?.perks.length ?? 0) > 0) && (
+              <TopBtn on={() => setPanel(panel === "perks" ? null : "perks")} active={panel === "perks"}>⭐ Perks{(me?.perkPoints ?? 0) > 0 ? ` (${me?.perkPoints})` : ""}</TopBtn>
+            )}
             <TopBtn on={() => setPanel(panel === "missions" ? null : "missions")} active={panel === "missions"}>📜 Missions{me?.missions.some((m) => m.status === "active" && m.progress >= m.target) ? " ✓" : ""}</TopBtn>
             <TopBtn on={() => setPanel(panel === "quests" ? null : "quests")} active={panel === "quests"}>⚡ Quests</TopBtn>
             <TopBtn on={() => setPanel(panel === "friends" ? null : "friends")} active={panel === "friends"}>👥 Friends</TopBtn>
             <TopBtn on={() => setPanel(panel === "home" ? null : "home")} active={panel === "home"}>🏡 Home</TopBtn>
+            <TopBtn on={() => setPanel(panel === "book" ? null : "book")} active={panel === "book"}>📖 Book</TopBtn>
             <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
           </>
         ) : null}
-        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📖 World</TopBtn>
+        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>🗺️ World</TopBtn>
         <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
         <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60">🤖 Agent API</Link>
         {loggedIn ? (
@@ -473,7 +567,7 @@ export default function Hud() {
 
       {/* Welcome card for spectators */}
       {snap && !loggedIn && !auth && (
-        <div className="pointer-events-auto absolute bottom-24 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-xl">
+        <div className="pointer-events-auto absolute bottom-24 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 pixel-panel p-4 shadow-xl">
           <div className="text-lg font-bold text-amber-900">A village that keeps going without you.</div>
           <p className="mt-1 text-stone-700">You&apos;re watching live. Animals wander, weather turns, AI agents run the shops — some of them sponsored by real businesses that hand out real discount codes. Drag to look around, scroll to zoom, click anything to learn about it.</p>
           <div className="mt-3 flex gap-2">
@@ -488,7 +582,7 @@ export default function Hud() {
 
       {/* Selection action bar */}
       {sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-20 left-1/2 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-xl border-4 border-amber-900/70 bg-amber-50 p-2 shadow-xl">
+        <div className="pointer-events-auto absolute bottom-20 left-1/2 flex -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl">
           <div className="px-2">
             <div className="font-bold text-amber-900">{selTitle(sel)}</div>
             <div className="text-[11px] text-stone-500">{sel.distance < 9000 ? `${Math.round(sel.distance / 32)} tiles away` : "spectating"}</div>
@@ -511,12 +605,15 @@ export default function Hud() {
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
-                {npcKey && stockForNpc(npcKey).map((t) => (
-                  // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
-                  <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle>
-                    🌱 Buy {t.itemKey.replace(/_seeds$/, "")} · {t.price}🪙
-                  </Btn>
-                ))}
+                {npcKey && stockForNpc(npcKey).map((t) => {
+                  const locked = !!t.minLevel && (me?.me?.level ?? 1) < t.minLevel;
+                  return (
+                    // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
+                    <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle disabled={locked}>
+                      {locked ? `🔒 Lv ${t.minLevel}` : t.itemKey.endsWith("_seeds") ? "🌱" : ITEM_ICONS[t.itemKey] ?? "🛒"} Buy {t.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} · {t.price}🪙
+                    </Btn>
+                  );
+                })}
               </>
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
@@ -569,7 +666,9 @@ export default function Hud() {
             );
           })()}
           {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? <Btn on={() => commitSelection(sel)}>🚪 Enter {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? (
+            <Btn on={() => commitSelection(sel)}>{sel.key === "cave_mouth" ? "🕳️ Enter the cave" : sel.key === "cave_exit" ? "☀️ Climb out" : "🚪 Enter"} {interactHint}</Btn>
+          ) : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && isLandKey(sel.key) && sel.distance > 140 && <WalkBtn snap={snap} sel={sel} />}
           {loggedIn && sel.type === "building" && (() => {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
@@ -627,40 +726,54 @@ export default function Hud() {
           role="dialog"
           aria-modal="true"
           onClick={() => { setTalk(null); }}
-          className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
+          className="pointer-events-auto fixed inset-0 z-50 flex items-end justify-center bg-black/20 pb-3"
         >
-        <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,560px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 shadow-2xl">
-          <div className="flex items-center gap-2 border-b-2 border-amber-900/20 px-3 py-2">
-            <div className="font-bold text-amber-900">{talk.name}</div><div className="text-stone-500">{talk.role}</div>
-            {talk.sponsor && <span className="rounded px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ sponsored by {talk.sponsor.businessName}</span>}
-            <div className="flex-1" />
-            <button className="text-stone-400 hover:text-stone-700" onClick={() => { setTalk(null); }}>✕</button>
+        <div onClick={(e) => e.stopPropagation()} className="pixel-panel relative mt-6 w-[min(96vw,720px)]">
+          {/* Speaker name tab, like a handheld RPG text box */}
+          <div className="pixel-panel-dark absolute -top-5 left-4 flex items-center gap-2 px-3 py-0.5">
+            <span className="font-bold">{talk.name}</span><span className="text-[12px] opacity-75">{talk.role}</span>
+            {talk.sponsor && <span className="rounded px-1.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ {talk.sponsor.businessName}</span>}
           </div>
-          <div className="max-h-52 space-y-1.5 overflow-y-auto px-3 py-2">
-            {talk.lines.map((l, i) => (
+          <button className="absolute right-2 top-1 text-stone-500 hover:text-stone-800" onClick={() => { setTalk(null); }}>✕</button>
+          {/* Earlier lines, small; the latest NPC line types out large below. */}
+          <div className="max-h-28 space-y-1 overflow-y-auto px-4 pt-5 text-[13px]">
+            {talk.lines.slice(0, Math.max(0, lastNpcLine(talk.lines))).map((l, i) => (
               <div key={i} className={`flex ${l.role === "player" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 ${l.role === "player" ? "bg-emerald-200 text-emerald-950" : l.text.startsWith("(") ? "bg-transparent italic text-stone-500" : "bg-white shadow"}`}>
-                  <div className="flex items-start gap-1.5">
-                    <span className="flex-1">{l.text}</span>
-                    {l.role === "npc" && l.source && <SourceBadge source={l.source} />}
-                  </div>
+                <div className={`max-w-[85%] ${l.role === "player" ? "text-emerald-800" : l.text.startsWith("(") ? "italic text-stone-500" : "text-stone-600"}`}>
+                  {l.role === "player" ? "▸ " : ""}{l.text}
                 </div>
               </div>
             ))}
-            {talk.busy && <div className="text-stone-400">…</div>}
+          </div>
+          <div className="min-h-[3.5rem] px-4 pb-2 pt-1 text-[16px] leading-snug text-stone-900">
+            {(() => {
+              const i = lastNpcLine(talk.lines);
+              const l = i >= 0 ? talk.lines[i] : null;
+              if (!l) return talk.busy ? <span className="blink-caret">▼</span> : null;
+              return (
+                <div className="flex items-start gap-1.5">
+                  <Typewriter key={`${i}:${l.text.length}`} text={l.text} />
+                  {l.source && <SourceBadge source={l.source} />}
+                </div>
+              );
+            })()}
+            {talk.lines.slice(lastNpcLine(talk.lines) + 1).map((l, k) => (
+              <div key={`after${k}`} className="mt-1 text-right text-[13px] text-emerald-800">▸ {l.text}</div>
+            ))}
+            {talk.busy && lastNpcLine(talk.lines) >= 0 && <div className="blink-caret text-right text-stone-500">▼</div>}
           </div>
           {talk.offers.length > 0 && (
-            <div className="flex flex-wrap gap-2 px-3 pb-2">
+            <div className="flex flex-wrap gap-2 px-4 pb-2">
               {talk.offers.map((o) => (
-                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`rounded-lg px-3 py-1.5 font-bold text-white shadow hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "sell" ? "bg-yellow-600" : o.type === "turnin" ? "bg-emerald-600" : o.type === "mission" ? "bg-sky-600" : "bg-violet-600"}`}>
+                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`pixel-btn px-3 py-1.5 font-bold text-white hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "sell" ? "bg-yellow-600" : o.type === "turnin" ? "bg-emerald-600" : o.type === "mission" ? "bg-sky-600" : "bg-violet-600"}`}>
                   {o.type === "discount" ? "🎟️ " : o.type === "turnin" ? "✅ " : o.type === "mission" ? "📜 " : "🎁 "}{o.label}
                 </button>
               ))}
             </div>
           )}
-          <form className="flex gap-1 border-t-2 border-amber-900/20 p-2" onSubmit={(e) => { e.preventDefault(); const v = talkInput.current?.value.trim(); if (!v) return; talkInput.current!.value = ""; void sendTalk(v); }}>
-            <input ref={talkInput} placeholder={`Say something to ${talk.name}…`} className="flex-1 rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 outline-none focus:border-amber-700" maxLength={300} />
-            <button className="rounded-lg bg-amber-700 px-3 text-white" disabled={talk.busy}>Send</button>
+          <form className="flex gap-1 border-t-2 border-[#e2c58c] p-2" onSubmit={(e) => { e.preventDefault(); const v = talkInput.current?.value.trim(); if (!v) return; talkInput.current!.value = ""; void sendTalk(v); }}>
+            <input ref={talkInput} placeholder={`Say something to ${talk.name}…`} className="flex-1 rounded border-2 border-[#3b2a1d]/50 bg-[#fffdf4] px-2 py-1.5 outline-none focus:border-[#3b2a1d]" maxLength={300} />
+            <button className="pixel-btn bg-[#4f9a4a] px-3 font-bold text-white" disabled={talk.busy}>Send</button>
           </form>
         </div>
         </div>
@@ -668,12 +781,14 @@ export default function Hud() {
 
       {/* Side panels */}
       {panel && (
-        <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto rounded-xl border-4 border-amber-900/70 bg-amber-50 p-3 shadow-2xl">
-          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : "📖 The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+        <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto pixel-panel p-3 shadow-2xl">
+          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
           {panel === "friends" && <FriendsPanel />}
+          {panel === "book" && <CollectionBook onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
+          {panel === "perks" && me && <PerksPanel me={me} onPick={async (perk) => { await post("/api/perks", { perk }); }} />}
           {panel === "home" && me && <HomePanel me={me} onAction={invAction} onTheme={async (t) => { await api("/api/me", { homeTheme: t }, "PATCH"); void refreshMe(); }} />}
           {panel === "log" && (
             <div className="space-y-2">
@@ -710,7 +825,7 @@ export default function Hud() {
 
       {/* Building interior */}
       {building && (
-        <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
@@ -747,12 +862,65 @@ function selTitle(sel: Selection) {
       if (sel.kind === "oak_tree") return sel.stage === 0 ? "Oak stump" : "Oak tree";
       return sel.stage === 0 ? `${base} (empty)` : base;
     }
-    case "enemy": return `Wild ${sel.kind} · ${sel.hp}/${sel.maxHp} HP`;
+    case "enemy": {
+      const def = enemyKind(sel.kind);
+      const tier = def.tier === "boss" ? "Boss" : `Tier ${def.tier}`;
+      return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
+    }
     case "plot": return "🌱 Garden plot";
   }
 }
+/** Pick a perk (one point every 5 levels) and see the ones you have. */
+function PerksPanel({ me, onPick }: { me: Me; onPick: (perk: string) => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const owned = new Set(me.perks);
+  return (
+    <div className="space-y-2">
+      <p className="text-[12px] text-stone-600">
+        {me.perkPoints > 0 ? `You have ${me.perkPoints} perk point${me.perkPoints > 1 ? "s" : ""} to spend.` : "You earn a perk point every 5 levels."}
+      </p>
+      {PERKS.map((p) => (
+        <div key={p.key} className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+          <span className="text-xl">{p.icon}</span>
+          <div className="flex-1"><div className="font-bold">{p.name}</div><div className="text-[11px] text-stone-600">{p.description}</div></div>
+          {owned.has(p.key) ? (
+            <span className="text-[11px] font-bold text-emerald-700">✓ Yours</span>
+          ) : (
+            <button
+              disabled={busy || me.perkPoints < 1}
+              onClick={async () => { setBusy(true); try { await onPick(p.key); } finally { setBusy(false); } }}
+              className="rounded bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow disabled:opacity-40"
+            >Pick</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+/** Index of the newest NPC line in a conversation (-1 if none). */
+function lastNpcLine(lines: TalkLine[]): number {
+  for (let i = lines.length - 1; i >= 0; i--) if (lines[i].role === "npc") return i;
+  return -1;
+}
+
+/** Text that types itself out; a click shows it all at once. */
+function Typewriter({ text }: { text: string }) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (n >= text.length) return;
+    const t = setTimeout(() => setN((k) => Math.min(text.length, k + (text[k] === " " ? 2 : 1))), 22);
+    return () => clearTimeout(t);
+  }, [n, text]);
+  return (
+    <span className="flex-1 cursor-pointer" onClick={() => setN(text.length)}>
+      {text.slice(0, n)}
+      {n < text.length && <span className="opacity-0">{text.slice(n)}</span>}
+    </span>
+  );
+}
+
 function TopBtn({ children, on, active }: { children: React.ReactNode; on: () => void; active?: boolean }) {
-  return <button onClick={on} className={`rounded-lg px-2 py-1 ${active ? "bg-amber-300 text-amber-900" : "bg-black/40 hover:bg-black/60"}`}>{children}</button>;
+  return <button onClick={on} className={`pixel-btn px-2 py-1 ${active ? "bg-[#f4d27a] text-[#3b2a1d]" : "bg-[#2c3a5a]/85 text-[#f4f0e4] hover:bg-[#3a4c74]"}`}>{children}</button>;
 }
 
 const SOURCE_LABEL: Record<ConversationSource, string> = {
@@ -769,7 +937,7 @@ function SourceBadge({ source }: { source: ConversationSource }) {
   return <span title={source} className={`mt-0.5 inline-flex shrink-0 rounded px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${SOURCE_TINT[source]}`}>{SOURCE_LABEL[source]}</span>;
 }
 function Btn({ children, on, subtle, disabled }: { children: React.ReactNode; on: () => void; subtle?: boolean; disabled?: boolean }) {
-  return <button disabled={disabled} onClick={on} className={`rounded-lg px-3 py-1.5 font-bold shadow disabled:opacity-40 ${subtle ? "bg-stone-200 text-stone-800 hover:bg-stone-300" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}>{children}</button>;
+  return <button disabled={disabled} onClick={on} className={`pixel-btn px-3 py-1.5 font-bold disabled:opacity-40 ${subtle ? "bg-[#efe4c4] text-stone-800 hover:bg-[#f7eed4]" : "bg-[#4f9a4a] text-white hover:bg-[#5aaa54]"}`}>{children}</button>;
 }
 /** Where a moving entity is right now (row x/y is where its move ends). */
 function livePos(e: { x: number; y: number; move: Move | null }): { x: number; y: number } {
@@ -799,7 +967,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   useEffect(() => { userRef.current?.focus(); }, []);
   return (
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40">
-      <form className="w-[min(92vw,340px)] rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ ok?: boolean }>("/api/auth/login", { username: u, password: p }); if (r.error) setErr(r.error); else location.reload(); }}>
+      <form className="w-[min(92vw,340px)] pixel-panel p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ ok?: boolean }>("/api/auth/login", { username: u, password: p }); if (r.error) setErr(r.error); else location.reload(); }}>
         <div className="text-lg font-bold text-amber-900">Welcome back</div>
         <input ref={userRef} value={u} onChange={(e) => setU(e.target.value)} placeholder="username" autoComplete="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
         <input value={p} onChange={(e) => setP(e.target.value)} type="password" placeholder="password" autoComplete="current-password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
@@ -873,14 +1041,16 @@ function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null
   const bag = me?.inventory ?? [];
   const haveMap = new Map<string, number>();
   for (const i of bag) haveMap.set(i.itemKey, (haveMap.get(i.itemKey) ?? 0) + i.qty);
-  const max = Math.max(0, maxCraftable(recipe, bag));
+  const needLevel = recipe.requires?.level ?? 0;
+  const locked = (me?.me?.level ?? 1) < needLevel;
+  const max = locked ? 0 : Math.max(0, maxCraftable(recipe, bag));
   useEffect(() => { setQty((q) => Math.min(Math.max(1, q), Math.max(1, max))); }, [max]);
   const canMake = max >= 1;
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
       <span className="text-xl">{recipe.icon}</span>
       <div className="flex-1">
-        <div className="font-bold">{recipe.name}</div>
+        <div className="font-bold">{recipe.name}{locked && <span className="ml-1 text-[11px] font-normal text-stone-500">🔒 Lv {needLevel}</span>}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           {recipe.inputs.map((i) => {
             const have = haveMap.get(i.itemKey) ?? 0;

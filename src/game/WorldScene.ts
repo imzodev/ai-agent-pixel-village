@@ -3,10 +3,15 @@ import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
 import { CROP_KINDS } from "@/lib/crops";
+import { REGIONS, regionAt } from "@/lib/regions";
+import { Lighting, resetLights, setLightGroup } from "./lighting";
+import { Ambience } from "./ambience";
+import { FishingController } from "./fishing";
+import type { AtmosphereState, LightSource } from "@/types/lighting";
 import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
-import { stampBuildings } from "./buildingStamps";
+import { chimneySources, stampBuildings, stampLights } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
 import { WorldStream } from "./worldStream";
 import {
@@ -36,6 +41,8 @@ import type { EquippedCosmetics } from "@/types/cosmetic";
 const DEPTH_MARKER = DEPTH_CHAR_BASE - 10_000; // ground click marker, under characters
 const DEPTH_LIGHT = DEPTH_CANOPY + 10;         // lantern / door glows over canopy
 const DEPTH_WEATHER = DEPTH_CANOPY + 20;
+// Creatures whose art already includes a ground shadow (they fly / float).
+const FLYERS = new Set(["bat", "wisp", "rootking"]);
 const DEPTH_NIGHT = DEPTH_CANOPY + 30;
 const DEPTH_FOG = DEPTH_CANOPY + 31;
 const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
@@ -116,7 +123,21 @@ export class WorldScene extends Phaser.Scene {
    *  by the context-sensitive `interact` command handler so a second
    *  press of E acts on the same selection instead of re-targeting. */
   private lastSelection: Selection | null = null;
-  private night!: Phaser.GameObjects.Rectangle;
+  private nextIdleEmote = 0;
+  private fishing!: FishingController;
+  private canFishShown = false;
+  private nextFishCheck = 0;
+  private guide: { x: number; y: number; npcId?: number } | null = null;
+  private guideArrow!: Phaser.GameObjects.Image;
+  private nextGuideEmote = 0;
+  /** Chimney smoke positions, known once the buildings are stamped. */
+  private pendingSmoke: { x: number; y: number }[] = [];
+  private ambience!: Ambience;
+  private playerMoving = false;
+  private playerRunning = false;
+  /** Region the player was last in (undefined until first placed). */
+  private lastRegionKey: string | null | undefined = undefined;
+  private lighting!: Lighting;
   private fog!: Phaser.GameObjects.Rectangle;
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
   private snow!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -178,6 +199,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   async create() {
+    resetLights(); // light groups outlive a scene restart
     this.destroyed = false;
     // Register teardown FIRST, before any await below. create() is async and
     // the scene can be shut down mid-flight (StrictMode remount, HMR); if
@@ -230,6 +252,8 @@ export class WorldScene extends Phaser.Scene {
           this.buildingZonesRects.set(s.entry.key, s.zone);
           for (const p of s.garden) this.addPlotZone(s.entry.key, p);
         }
+        setLightGroup("stamps", stampLights(stamped));
+        this.pendingSmoke = chimneySources(stamped);
       }
     } catch {
       /* manifest unavailable — decor-only world */
@@ -251,7 +275,17 @@ export class WorldScene extends Phaser.Scene {
     this.fitCameraToCanvas();
 
     // overlays
-    this.night = this.add.rectangle(0, 0, 10, 10, 0x0a1030, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_NIGHT);
+    this.lighting = new Lighting(this, { night: DEPTH_NIGHT, glow: DEPTH_NIGHT + 0.5, clouds: DEPTH_CANOPY + 5, fog: DEPTH_FOG, ground: -10 });
+    this.ambience = new Ambience(this, { charBase: DEPTH_CHAR_BASE, canopy: DEPTH_CANOPY, light: DEPTH_NIGHT + 1 });
+    this.ambience.setSmokeSources(this.pendingSmoke);
+    this.fishing = new FishingController(this, {
+      player: () => (this.player ? { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.facing } : null),
+      toast: (text, kind) => bus.emit("toast", { text, kind }),
+      refresh: () => bus.emit("refreshMe", undefined),
+      emote: (text) => { if (this.player) this.showEmote(this.player, text, 900); },
+    }, DEPTH_CANOPY - 2);
+    this.guideArrow = this.add.image(0, 0, "fx_guide_arrow").setDepth(DEPTH_NIGHT + 2).setVisible(false);
+    this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
     this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
@@ -272,6 +306,11 @@ export class WorldScene extends Phaser.Scene {
       id: "player.interact",
       scope: "gameplay",
       run: () => this.interact(),
+    }));
+    this.unsub.push(inputRouter.register({
+      id: "player.fish",
+      scope: "gameplay",
+      run: () => this.fishing?.press(this.time.now),
     }));
     this.unsub.push(inputRouter.register({
       id: "player.attack",
@@ -336,6 +375,31 @@ export class WorldScene extends Phaser.Scene {
       this.playSlash(p, facing, tool);
       this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
+    this.unsub.push(bus.on("hurt", ({ amount }) => this.showHurt(amount)));
+    this.unsub.push(bus.on("knockout", ({ x, y }) => {
+      const p = this.player;
+      if (!p) return;
+      p.sprite.setPosition(x, y);
+      p.tx = x; p.ty = y;
+      this.moveTarget = null;
+      this.marker.setVisible(false);
+      this.cameras.main.flash(400, 40, 0, 0);
+    }));
+    this.unsub.push(bus.on("teleport", ({ x, y }) => {
+      const p = this.player;
+      if (!p) return;
+      const cam = this.cameras.main;
+      cam.fadeOut(220, 0, 0, 0);
+      cam.once("camerafadeoutcomplete", () => {
+        p.sprite.setPosition(x, y);
+        p.tx = x; p.ty = y;
+        this.moveTarget = null;
+        this.marker.setVisible(false);
+        this.stream?.setPosition(x, y, p.facing);
+        this.syncStreamingChunks();
+        cam.fadeIn(320, 0, 0, 0);
+      });
+    }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
@@ -378,6 +442,16 @@ export class WorldScene extends Phaser.Scene {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
           if (ent) this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
+        },
+        onHurt: ({ amount, hp, maxHp }) => {
+          if (!this.alive()) return;
+          bus.emit("hurt", { amount, hp, maxHp });
+        },
+        onKnockout: ({ x, y, coinsLost, by }) => {
+          if (!this.alive()) return;
+          bus.emit("knockout", { x, y, coinsLost });
+          bus.emit("toast", { text: `The ${by} knocked you out! You wake in the village square${coinsLost ? `, ${coinsLost} coins lighter` : ""}.`, kind: "bad" });
+          bus.emit("refreshMe", undefined);
         },
         onPlayerPos: ({ id, x, y, facing }) => {
           if (!this.alive() || id === this.meId) return;
@@ -429,7 +503,7 @@ export class WorldScene extends Phaser.Scene {
   private resizeOverlays() {
     this.fitCameraToCanvas();
     const w = this.scale.width, h = this.scale.height;
-    this.night.setSize(w, h); this.fog.setSize(w, h);
+    this.fog.setSize(w, h);
     const zone = new Phaser.Geom.Rectangle(-w / this.cameras.main.zoom / 2 - 100, -40, w / this.cameras.main.zoom + 200, 60);
     this.rain.clearEmitZones(); this.rain.addEmitZone(zoneOf(zone));
     this.snow.clearEmitZones(); this.snow.addEmitZone(zoneOf(zone));
@@ -481,6 +555,7 @@ export class WorldScene extends Phaser.Scene {
     if (s.me) {
       const meEq = cosmeticsListToEquipped(s.me.cosmetics);
       const meWeapon = weaponOf(s.me.equipped);
+      if (this.player) this.applyTitle(this.player, s.me.title ?? null);
       if (!this.player) {
         // First spawn — place the player at the DB position so we rejoin
         // where we left off. Fall back to the central chunk only if the DB
@@ -619,6 +694,7 @@ export class WorldScene extends Phaser.Scene {
     sprite.setInteractive({ useHandCursor: true });
     const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
     const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon, app };
+    ent.shadow = this.add.image(x, y, "fx_shadow").setScale(0.9, 0.9).setDepth(DEPTH_CHAR_BASE + y - 1);
     void this.ensureCharTexture(ent, app, eq, weapon);
     return ent;
   }
@@ -656,10 +732,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy();
+    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[] }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
@@ -686,6 +762,7 @@ export class WorldScene extends Phaser.Scene {
         void this.ensureCharTexture(ent, p.appearance, eq, weapon);
       }
       ent.tx = p.x; ent.ty = p.y;
+      this.applyTitle(ent, p.title ?? null);
       if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
       if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Facing;
@@ -714,6 +791,11 @@ export class WorldScene extends Phaser.Scene {
         // Height of the art above the anchor (frames are padded, so not sprite.height).
         const top = def ? def.labelHeight * def.scale : sprite.height;
         ent = { sprite, kind: a.kind, def, top, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
+        // Flyers (and the boss) draw their own shadow into their art.
+        if (!FLYERS.has(a.kind)) {
+          const w = def ? def.frameWidth * def.scale * 0.55 : sprite.width * 0.7;
+          ent.shadow = this.add.image(a.x, a.y, "fx_shadow").setScale(w / 24, Math.max(0.7, w / 30)).setDepth(DEPTH_CHAR_BASE + a.y - 1);
+        }
         if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
@@ -729,7 +811,7 @@ export class WorldScene extends Phaser.Scene {
         if (a.hp < a.maxHp) { ent.hpBar.fillStyle(0x000000, 0.5); ent.hpBar.fillRect(-10, -ent.top - 6, 20, 3); ent.hpBar.fillStyle(0xe63946, 1); ent.hpBar.fillRect(-10, -ent.top - 6, 20 * (a.hp / a.maxHp), 3); }
       }
     }
-    for (const [id, ent] of map) if (!seen.has(id)) { ent.sprite.destroy(); ent.label?.destroy(); ent.zz?.destroy(); ent.hpBar?.destroy(); map.delete(id); }
+    for (const [id, ent] of map) if (!seen.has(id)) { ent.sprite.destroy(); ent.shadow?.destroy(); ent.label?.destroy(); ent.zz?.destroy(); ent.hpBar?.destroy(); map.delete(id); }
   }
 
   private showBubble(ent: CharEnt, text: string) {
@@ -746,6 +828,11 @@ export class WorldScene extends Phaser.Scene {
     return this.player ? Math.hypot(this.player.sprite.x - x, this.player.sprite.y - y) : 9999;
   }
   private select(sel: Selection) {
+    // An NPC you pick out nearby notices you.
+    if (sel.type === "npc" && sel.distance < 220) {
+      const n = this.npcs.get(sel.id);
+      if (n) this.showEmote(n, "!", 1100);
+    }
     bus.emit("select", sel);
   }
 
@@ -794,6 +881,8 @@ export class WorldScene extends Phaser.Scene {
    * thing.
    */
   private interact() {
+    // While fishing, E strikes / reels like R.
+    if (this.fishing?.active) { this.fishing.press(this.time.now); return; }
     let sel = this.lastSelection;
     if (sel && !(this.isActionable(sel) && this.selectionExists(sel))) {
       // Stale selection (entity just got picked up / killed / respawned).
@@ -868,7 +957,7 @@ export class WorldScene extends Phaser.Scene {
     for (const e of this.npcs.values()) this.moveChar(e, dt);
     for (const e of this.animals.values()) this.moveCritter(e, dt, time);
     for (const e of this.enemies.values()) this.moveCritter(e, dt, time);
-    this.updateAtmosphere();
+    this.updateAtmosphere(time, deltaMs);
     // spectator drift
     if (!this.player && !this.dragging && !this.input.activePointer.isDown) {
       const cam = this.cameras.main;
@@ -885,10 +974,24 @@ export class WorldScene extends Phaser.Scene {
     const cur = chunkAtPixel(this.player.sprite.x, this.player.sprite.y);
     if (this.lastPlayerChunk && this.lastPlayerChunk.cx === cur.cx && this.lastPlayerChunk.cy === cur.cy) return;
     this.lastPlayerChunk = cur;
+    this.announceRegion();
     void ensureChunks(this, cur);
     releaseOutside(this, cur);
     // No recenter: the player-follow owns the framing on chunk crossings.
     recenterCamera(this, cur, false);
+  }
+
+  /** Toast the region's name when the player walks into a new one. */
+  private announceRegion(): void {
+    if (!this.player) return;
+    const key = regionAt(this.player.sprite.x, this.player.sprite.y)?.key ?? null;
+    const prev = this.lastRegionKey;
+    this.lastRegionKey = key;
+    if (key === prev || key === null) return; // unchanged / open country
+    const r = REGIONS.find((x) => x.key === key)!;
+    // Title-case the name for the sign ("the Silverrun" → "The Silverrun").
+    // First sight (spawn) is quiet: the book records it, no banner.
+    bus.emit("region", { name: r.name.charAt(0).toUpperCase() + r.name.slice(1), key: r.key, quiet: prev === undefined });
   }
 
   private updatePlayer(dt: number) {
@@ -919,6 +1022,8 @@ export class WorldScene extends Phaser.Scene {
       else { vx = dx / d; vy = dy / d; }
     }
     const moving = vx !== 0 || vy !== 0;
+    this.playerMoving = moving;
+    this.playerRunning = moving && inputRouter.isHeld("move.run");
     if (moving) {
       const len = Math.hypot(vx, vy);
       const running = inputRouter.isHeld("move.run"); // also Shift+click to run somewhere
@@ -1021,6 +1126,75 @@ export class WorldScene extends Phaser.Scene {
     this.stream?.sendAct("slash", p.facing);
   }
 
+  /** Tutorial guide: a bouncing arrow over the target when it's on
+   *  screen, otherwise an arrow at the screen edge pointing toward it. */
+  private updateGuide(time: number) {
+    const a = this.guideArrow;
+    let g = this.guide;
+    if (!g || !a || !this.player) { a?.setVisible(false); return; }
+    // NPCs walk: follow the sprite rather than the last snapshot position.
+    const live = g.npcId ? this.npcs.get(g.npcId)?.sprite : undefined;
+    if (live) g = { ...g, x: live.x, y: live.y };
+    const v = this.cameras.main.worldView;
+    const margin = 22;
+    if (v.contains(g.x, g.y - 30)) {
+      a.setPosition(g.x, g.y - 46 - Math.abs(Math.sin(time / 220)) * 6).setRotation(Math.PI / 2).setVisible(true);
+      if (g.npcId && time > this.nextGuideEmote) {
+        this.nextGuideEmote = time + 2600;
+        const n = this.npcs.get(g.npcId);
+        if (n) this.showEmote(n, "!", 1200);
+      }
+      return;
+    }
+    const cx = v.centerX, cy = v.centerY;
+    const dx = g.x - cx, dy = g.y - cy;
+    const sx = (v.width / 2 - margin) / Math.max(1e-6, Math.abs(dx)), sy = (v.height / 2 - margin) / Math.max(1e-6, Math.abs(dy));
+    const k = Math.min(sx, sy);
+    const pulse = 1 + 0.08 * Math.sin(time / 160);
+    a.setPosition(cx + dx * k, cy + dy * k).setRotation(Math.atan2(dy, dx)).setScale(pulse).setVisible(true);
+  }
+
+  /** Show (or update) a character's title above their name. */
+  private applyTitle(e: CharEnt, title: string | null) {
+    if (e.title === title) return;
+    e.title = title;
+    e.titleText?.destroy();
+    e.titleText = title
+      ? this.add.text(e.sprite.x, e.sprite.y - 59, `« ${title} »`, { fontFamily: "monospace", fontSize: "9px", color: "#ffd166", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3)
+      : undefined;
+  }
+
+  /** A short emote bubble over a character ("!", "♪", "…"). */
+  private showEmote(e: CharEnt, text: string, ms = 1400) {
+    e.emote?.t.destroy();
+    const t = this.add.text(e.sprite.x, e.sprite.y - 64, text, {
+      fontFamily: "monospace", fontSize: "11px", color: "#2a2a2a", backgroundColor: "#fffdf4", padding: { x: 3, y: 1 },
+      stroke: "#fffdf4", strokeThickness: 1,
+    }).setOrigin(0.5, 1).setResolution(3);
+    e.emote = { t, until: this.time.now + ms };
+  }
+
+  /** Now and then an NPC on screen hums or muses. */
+  private idleEmotes(time: number) {
+    if (time < this.nextIdleEmote) return;
+    this.nextIdleEmote = time + 5000 + Math.random() * 6000;
+    const view = this.cameras.main.worldView;
+    const onScreen = [...this.npcs.values()].filter((n) => view.contains(n.sprite.x, n.sprite.y) && !n.emote && !n.bubble);
+    const n = onScreen[Math.floor(Math.random() * onScreen.length)];
+    if (n) this.showEmote(n, Math.random() < 0.55 ? "♪" : "…", 1800);
+  }
+
+  /** Red flash on the player and a floating "−N". */
+  private showHurt(amount: number) {
+    const p = this.player;
+    if (!p || !p.sprite.active) return;
+    p.sprite.setTint(0xff6060);
+    this.time.delayedCall(180, () => { if (p.sprite.active) p.sprite.clearTint(); });
+    const t = this.add.text(p.sprite.x, p.sprite.y - 44, `−${amount}`, { fontFamily: "monospace", fontSize: "12px", color: "#ff5a5a", stroke: "#1a1a1a", strokeThickness: 3 })
+      .setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH_CHAR_BASE + p.sprite.y + 10);
+    this.tweens.add({ targets: t, y: t.y - 18, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+  }
+
   /** Play the attack swing facing `facing`; walk/idle resume after it.
    *  With `tool` (e.g. "axe") the swing uses a sheet holding that item. */
   private playSlash(e: CharEnt, facing: Facing, tool?: string) {
@@ -1059,6 +1233,12 @@ export class WorldScene extends Phaser.Scene {
   private placeChar(e: CharEnt) {
     const { x, y } = e.sprite;
     e.sprite.setDepth(DEPTH_CHAR_BASE + y);
+    e.shadow?.setPosition(x, y - 4).setDepth(DEPTH_CHAR_BASE + y - 1);
+    e.titleText?.setPosition(x, y - 59).setDepth(DEPTH_CHAR_BASE + y + 2);
+    if (e.emote) {
+      if (this.time.now > e.emote.until) { e.emote.t.destroy(); e.emote = undefined; }
+      else e.emote.t.setPosition(x, y - (e.badge ? 74 : 64) - Math.abs(Math.sin(this.time.now / 160)) * 2).setDepth(DEPTH_CHAR_BASE + y + 4);
+    }
     e.label.setPosition(x, y - 50).setDepth(DEPTH_CHAR_BASE + y + 2);
     e.badge?.setPosition(x, y - 60).setDepth(DEPTH_CHAR_BASE + y + 3);
     if (e.bubble) {
@@ -1105,6 +1285,7 @@ export class WorldScene extends Phaser.Scene {
       e.sprite.setDisplayOrigin(e.sprite.width / 2, e.sprite.height + bob);
     }
     e.sprite.setDepth(DEPTH_CHAR_BASE + e.sprite.y);
+    e.shadow?.setPosition(e.sprite.x, e.sprite.y - 1).setDepth(DEPTH_CHAR_BASE + e.sprite.y - 1);
     e.label?.setPosition(e.sprite.x, e.sprite.y - e.top - 4);
     e.hpBar?.setPosition(e.sprite.x, e.sprite.y);
     if (e.state === "sleep") {
@@ -1148,7 +1329,7 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private updateAtmosphere() {
+  private updateAtmosphere(time: number, deltaMs: number) {
     const s = this.snapshot;
     if (!s) return;
     // continuous clock from epoch
@@ -1157,15 +1338,59 @@ export class WorldScene extends Phaser.Scene {
     let dark = 0;
     if (hour < 5) dark = 0.6; else if (hour < 7) dark = 0.6 * (1 - (hour - 5) / 2); else if (hour < 18) dark = 0; else if (hour < 21) dark = 0.6 * ((hour - 18) / 3); else dark = 0.6;
     const dusk = hour >= 17.5 && hour < 20 ? 1 - Math.abs(hour - 18.75) / 1.25 : 0;
-    this.night.setFillStyle(dusk > 0.2 ? 0x3a1a40 : 0x0a1030, dark + dusk * 0.12);
-    this.fog.setFillStyle(0xdfe6ea, s.weather === "fog" ? 0.38 : 0);
+    // Underground: always dark, no sky weather.
+    const underground = this.lastRegionKey === "caverns";
+    const raining = s.weather === "rain" && !underground;
+    // Golden hour before sunset, a pink dawn.
+    const golden = hour >= 16.5 && hour < 19.5 ? 1 - Math.abs(hour - 18) / 1.5 : 0;
+    const dawn = hour >= 5 && hour < 7.5 ? 1 - Math.abs(hour - 6.2) / 1.3 : 0;
+    const state: AtmosphereState = {
+      darkness: underground ? 0.82 : Math.min(0.78, dark * 1.2 + (raining ? 0.12 : 0)),
+      nightColor: underground ? 0x05040a : dusk > 0.2 ? 0x2a1438 : 0x0a1030,
+      gradeColor: golden > dawn ? 0xffa050 : 0xff8fb0,
+      gradeAlpha: underground ? 0 : Math.max(golden * 0.16, dawn * 0.12),
+      clouds: !underground && dark < 0.2 && s.weather !== "fog" && !raining,
+      fog: s.weather === "fog" && !underground ? 1 : 0,
+      rain: raining,
+    };
+    // The player's light: always underground, and the lantern by night.
+    const extra: LightSource[] = [];
+    const p = this.player;
+    if (p) {
+      const lantern = (s.me?.equipped ?? []).includes("lantern");
+      if (lantern) extra.push({ x: p.sprite.x, y: p.sprite.y - 14, radius: 130, color: 0xffd27a, flicker: true });
+      else if (underground) extra.push({ x: p.sprite.x, y: p.sprite.y - 14, radius: 86, color: 0xffe0b0 });
+      p.glow?.setVisible(false);
+    }
+    this.lighting.update(state, this.cameras.main.worldView, extra, time, deltaMs);
+    const v = this.cameras.main.worldView;
+    this.ambience.update({
+      view: { x: v.x, y: v.y, width: v.width, height: v.height, right: v.right, bottom: v.bottom },
+      player: p ? { x: p.sprite.x, y: p.sprite.y, depth: p.sprite.depth, moving: this.playerMoving, running: this.playerRunning } : null,
+      region: this.lastRegionKey ?? null,
+      darkness: state.darkness,
+      underground,
+      raining,
+    }, time, deltaMs);
+    this.idleEmotes(time);
+    // Fishing: walking away reels in; tell the HUD when you face water.
+    if (this.fishing) {
+      if (this.playerMoving && this.fishing.active) this.fishing.cancel();
+      this.fishing.update(time, deltaMs);
+      if (time > this.nextFishCheck) {
+        this.nextFishCheck = time + 250;
+        const can = this.fishing.canFish();
+        if (can !== this.canFishShown) { this.canFishShown = can; bus.emit("canFish", can); }
+      }
+    }
+    this.updateGuide(time);
+    this.fog.setFillStyle(0xdfe6ea, state.fog ? 0.16 : 0);
     const cam = this.cameras.main;
     const top = cam.worldView.y - 30;
     this.rain.setPosition(cam.midPoint.x, top); this.snow.setPosition(cam.midPoint.x, top);
-    if (s.weather === "rain") { if (!this.rain.emitting) this.rain.start(); } else if (this.rain.emitting) this.rain.stop();
-    if (s.weather === "snow") { if (!this.snow.emitting) this.snow.start(); } else if (this.snow.emitting) this.snow.stop();
-    const glowA = dark > 0.1 ? Math.min(0.28, dark * 0.5) : 0;
-    for (const b of this.buildingZones.values()) b.glow.setAlpha(glowA);
+    if (raining) { if (!this.rain.emitting) this.rain.start(); } else if (this.rain.emitting) this.rain.stop();
+    if (s.weather === "snow" && !underground) { if (!this.snow.emitting) this.snow.start(); } else if (this.snow.emitting) this.snow.stop();
   }
 }
+
 

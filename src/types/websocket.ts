@@ -50,6 +50,10 @@ export type StreamHandlers = {
   onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing }) => void;
   /** Another player's one-shot action (e.g. the attack swing). */
   onPlayerAct: (data: { id: number; kind: PlayerActKind; facing: Facing }) => void;
+  /** An enemy hit you (amount, new HP, and what hit you). */
+  onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string }) => void;
+  /** You were knocked out and woke at (x, y). */
+  onKnockout?: (data: { x: number; y: number; coinsLost: number; by: string }) => void;
   /** Moves scheduled on the last beat (all starting at `startAt`). */
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;

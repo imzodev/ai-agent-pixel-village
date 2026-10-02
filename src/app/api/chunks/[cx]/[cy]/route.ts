@@ -1,7 +1,6 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { NextResponse } from "next/server";
 import { defaultChunk } from "@/lib/chunkGen";
+import { readAuthored, restyleAuthored } from "@/lib/villageRestyle";
 
 export const dynamic = "force-dynamic";
 
@@ -20,25 +19,13 @@ export async function GET(
     const cx = Number.parseInt(cxRaw, 10);
     const cy = Number.parseInt(cyRaw, 10);
 
-    const mapPath = path.join(
-      process.cwd(),
-      "public",
-      "assets",
-      "maps",
-      `map_${cx}_${cy}.json`,
-    );
-    try {
-      const buf = await fs.readFile(mapPath);
-      return new NextResponse(new Uint8Array(buf), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
+    // Hand-authored chunks (the village) are served restyled to the Wilds
+    // look; everything else is generated on demand.
+    const authored = await readAuthored(cx, cy);
+    if (authored) {
+      return NextResponse.json(await restyleAuthored(cx, cy, authored), {
+        headers: { "Cache-Control": "no-store" },
       });
-    } catch {
-      // No hand-authored map for this chunk — fall through to the
-      // on-demand default generator so the player can always keep walking.
     }
 
     return NextResponse.json(defaultChunk(cx, cy), {
