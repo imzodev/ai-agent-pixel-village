@@ -35,6 +35,10 @@ export type CharEnt = {
   actingUntil?: number;
   bubble?: { c: Phaser.GameObjects.Container; until: number };
   glow?: Phaser.GameObjects.Arc;
+  /** Soft drop shadow under the feet. */
+  shadow?: Phaser.GameObjects.Image;
+  /** A short-lived emote bubble ("!", "♪", "…"). */
+  emote?: { t: Phaser.GameObjects.Text; until: number };
 };
 
 export type CritterEnt = {
@@ -59,4 +63,6 @@ export type CritterEnt = {
   hp: number;
   maxHp: number;
   phase: number;
+  /** Soft drop shadow (ground-walkers only; flyers draw their own). */
+  shadow?: Phaser.GameObjects.Image;
 };

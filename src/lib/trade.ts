@@ -45,6 +45,25 @@ export const TRADES: TradeConfig = {
     { itemKey: "stone", qty: 1, price: 1, line: "Stones for a copper. I stack 'em out back." },
     { itemKey: "slime_gel", qty: 1, price: 2, line: "Slime gel, two coppers. I find a use for everything." },
   ],
+  // Hollowmere: the smith buys raw materials for blades.
+  blacksmith: [
+    { itemKey: "stone", qty: 1, price: 1, line: "Good stone's always welcome at the forge. A copper each." },
+    { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns! Two coppers. They take an edge like nothing else." },
+    { itemKey: "boar_hide", qty: 1, price: 5, line: "Boar hide, five coppers. Best grip wrapping there is." },
+  ],
+  hm_innkeeper: [
+    { itemKey: "berry", qty: 1, price: 2, line: "Berries for the jam pot — two coppers a handful." },
+    { itemKey: "herb", qty: 1, price: 2, line: "Herbs for the tea, two coppers. Bless you." },
+  ],
+  // Brightwater pays a little more: it's a long road.
+  bw_fishmonger: [
+    { itemKey: "carrot", qty: 1, price: 3, line: "Carrots for the stew — three coppers each." },
+    { itemKey: "tomato", qty: 1, price: 4, line: "Tomatoes! Four coppers. The sailors love a red stew." },
+    { itemKey: "pumpkin", qty: 1, price: 24, line: "A whole pumpkin? Twenty-four coppers, and a smile." },
+  ],
+  bw_boatwright: [
+    { itemKey: "wood", qty: 1, price: 3, line: "Oak logs — three coppers each. Boats don't build themselves." },
+  ],
   // Future examples:
   //   grocer:   [{ itemKey: "grapes", ... }, { itemKey: "oranges", ... }, { itemKey: "strawberries", ... }],
 };
@@ -60,6 +79,14 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "tomato_seeds", qty: 1, price: 5, line: "Tomato seeds, five coppers. Water them well!", minLevel: 3 },
     { itemKey: "pumpkin_seeds", qty: 1, price: 8, line: "Pumpkin seeds — eight coppers. Slow, but oh, the payoff.", minLevel: 5 },
     { itemKey: "axe", qty: 1, price: 25, line: "A woodcutter's axe, twenty-five coppers. The oaks are out west, past the woods." },
+  ],
+  hm_innkeeper: [
+    { itemKey: "bread", qty: 1, price: 4, line: "Fresh bread, four coppers. Restores a body after the road." },
+    { itemKey: "tea", qty: 1, price: 6, line: "Calming tea, six coppers. Good for what ails you." },
+    { itemKey: "honey_bun", qty: 1, price: 9, line: "Honey bun — nine coppers. Worth every one." },
+  ],
+  blacksmith: [
+    { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },
   ],
 };
 

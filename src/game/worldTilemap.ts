@@ -1,4 +1,7 @@
 import type Phaser from "phaser";
+import type { LightSource } from "@/types/lighting";
+import { wildsGid } from "@/lib/terrain/wilds";
+import { clearLightGroup, setLightGroup } from "./lighting";
 import {
   CHUNK_PX_H,
   CHUNK_PX_W,
@@ -128,6 +131,11 @@ export { LAYER_RENDER_ORDER, SKIP_LAYERS, SORTED_LAYERS };
 export const DEPTH_CHAR_BASE = 100_000;
 export const DEPTH_CANOPY = 500_000;
 
+// Building stamps draw half a step above the same-named chunk layer (and
+// below the next layer up). Chunks stream in after the stamps are created,
+// so at equal depth a chunk's grass would cover a stamp's Ground tiles.
+export const STAMP_DEPTH_OFFSET = 0.5;
+
 // Fallback depth for any static layer missing from LAYER_DEPTH (defensive
 // only — every layer in LAYER_RENDER_ORDER should have an entry).
 export const FALLBACK_LAYER_DEPTH = -5;
@@ -167,6 +175,14 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "House2", file: "House2.png" },
   { name: "RoseCottage", file: "RoseCottage.png" },
   { name: "LandLot", file: "LandLot.png" },
+  { name: "Wilds", file: "Wilds.png" },
+  { name: "TownSquare", file: "TownSquare.png" },
+  { name: "CaveMouth", file: "CaveMouth.png" },
+  { name: "CaveExit", file: "CaveExit.png" },
+  { name: "CabinLog", file: "CabinLog.png" },
+  { name: "CabinBoard", file: "CabinBoard.png" },
+  { name: "HouseTimber", file: "HouseTimber.png" },
+  { name: "HouseBrick", file: "HouseBrick.png" },
 ];
 
 // 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,
@@ -524,7 +540,31 @@ export function registerReferencedTilesets(
 
 const PRELOADED_TILESET_NAMES = new Set(TILESET_FILES.map((ts) => ts.name));
 
+// Terrain tiles that give off light at night (Wilds lamps, torches,
+// crystals, glowing mushrooms): GID → light offset/size/colour.
+const TILE_LIGHTS: ReadonlyMap<number, Omit<LightSource, "x" | "y"> & { dx: number; dy: number }> = new Map([
+  [wildsGid("lamp_base"), { dx: 8, dy: -8, radius: 70, color: 0xffd27a }],
+  [wildsGid("cave_torch"), { dx: 8, dy: 4, radius: 78, color: 0xff9a40, flicker: true }],
+  [wildsGid("crystal_blue"), { dx: 8, dy: 8, radius: 44, color: 0x66ccff }],
+  [wildsGid("crystal_purple"), { dx: 8, dy: 8, radius: 44, color: 0xc49aff }],
+  [wildsGid("glowshrooms"), { dx: 8, dy: 10, radius: 30, color: 0x66d8ff }],
+]);
+
+/** Register the chunk's light-giving tiles with the lighting layer. */
+function registerChunkLights(state: ChunkState, origin: ChunkOrigin): void {
+  const lights: LightSource[] = [];
+  for (const layer of state.tilemap.layers) {
+    for (const row of layer.data) for (const tile of row) {
+      const l = tile && TILE_LIGHTS.get(tile.index);
+      if (!l) continue;
+      lights.push({ x: origin.x + tile.x * CHUNK_TILE_PX + l.dx, y: origin.y + tile.y * CHUNK_TILE_PX + l.dy, radius: l.radius, color: l.color, flicker: l.flicker });
+    }
+  }
+  setLightGroup(`chunk:${origin.x},${origin.y}`, lights);
+}
+
 function buildChunkLayers(state: ChunkState, origin: ChunkOrigin): void {
+  registerChunkLights(state, origin);
   createStaticLayers(
     state.tilemap,
     state.tilesets,
@@ -553,6 +593,8 @@ export function createStaticLayers(
   origin: ChunkOrigin,
   layerNamePrefix: string,
   out?: Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>,
+  /** Building stamps pass STAMP_DEPTH_OFFSET to draw over chunk layers. */
+  depthOffset = 0,
 ): void {
   for (const name of LAYER_RENDER_ORDER) {
     if (SKIP_LAYERS.has(name)) continue;
@@ -560,7 +602,7 @@ export function createStaticLayers(
     if (tilemap.getLayerIndex(name) === null) continue;
     const layer = tilemap.createLayer(name, tilesets, origin.x, origin.y);
     if (!layer) continue;
-    layer.setDepth(LAYER_DEPTH[name] ?? FALLBACK_LAYER_DEPTH);
+    layer.setDepth((LAYER_DEPTH[name] ?? FALLBACK_LAYER_DEPTH) + depthOffset);
     layer.name = `${layerNamePrefix}_${name}`;
     out?.set(name, layer);
   }
@@ -799,6 +841,8 @@ export function releaseOutside(
 }
 
 function destroyChunkLayers(state: ChunkState): void {
+  const first = state.layers.values().next().value;
+  if (first) clearLightGroup(`chunk:${first.x},${first.y}`);
   for (const layer of state.layers.values()) layer.destroy(false);
   state.layers.clear();
 }
@@ -832,4 +876,17 @@ export function recenterCamera(
   const bh = (2 * WINDOW_RADIUS + 1) * CHUNK_PX_H;
   cam.setBounds(bx, by, bw, bh);
   if (centerOn) cam.centerOn(ox + CHUNK_PX_W / 2, oy + CHUNK_PX_H / 2);
+}
+
+/** GID of the tile on `layerName` under world pixel (x, y), or 0 when the
+ *  chunk isn't loaded / the cell is empty. Used by the ambience layer
+ *  (e.g. "is the player standing in tall grass?"). */
+export function tileGidAt(layerName: string, x: number, y: number): number {
+  const { cx, cy } = chunkAtPixel(x, y);
+  const state = chunkStates.get(chunkKey(cx, cy));
+  if (!state) return 0;
+  const origin = chunkOrigin(cx, cy);
+  const lx = Math.floor((x - origin.x) / CHUNK_TILE_PX), ly = Math.floor((y - origin.y) / CHUNK_TILE_PX);
+  const layer = state.tilemap.layers.find((l) => l.name === layerName);
+  return layer?.data[ly]?.[lx]?.index ?? 0;
 }

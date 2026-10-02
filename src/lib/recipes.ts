@@ -157,6 +157,13 @@ export const RECIPES: Recipe[] = [
   },
 ];
 
+// Bjorn, Hollowmere's smith, forges the same gear as Greta.
+const SMITH_GEAR = ["stone_sword", "thorn_blade", "sharp_axe", "wisp_blade"];
+for (const key of SMITH_GEAR) {
+  const r = RECIPES.find((x) => x.key === key)!;
+  RECIPES.push({ ...r, key: `smith_${key}`, crafterKey: "blacksmith" });
+}
+
 /** Recipes the given NPC can craft. */
 export function recipesForNpc(npcKey: string): Recipe[] {
   return RECIPES.filter((r) => r.crafterKey === npcKey);

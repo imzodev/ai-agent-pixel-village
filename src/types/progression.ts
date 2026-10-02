@@ -24,6 +24,10 @@ export type EnemyZone = {
   rect: { x: number; y: number; w: number; h: number };
   /** Relative spawn weights of the kinds found here. */
   kinds: Record<string, number>;
+  /** Underground: night-only kinds spawn (and stay) at any hour. */
+  alwaysDark?: boolean;
+  /** Enemies kept alive here (default 4). */
+  target?: number;
 };
 
 /** Combat (or chopping) bonus of a held item. */

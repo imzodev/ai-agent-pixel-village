@@ -1,4 +1,4 @@
-import { eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import {
@@ -25,6 +25,7 @@ import { doorWorldPx, footprintOf } from "./buildingManifest";
 import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
+import { REGION_NODES } from "./regions";
 import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
@@ -185,6 +186,80 @@ const NPC_DEFS: {
     appearance: { body: "male", skin: "#f1c9a5", hair: "buzzcut", hairColor: "#5a4632", shirtColor: "#c8a06a", pantsColor: "#3a3a3a" },
     mood: "steady",
   },
+  // ── Hollowmere (woodcutters' town on the King's Road, west of Whisperwood)
+  {
+    key: "blacksmith",
+    name: "Bjorn",
+    role: "Blacksmith of Hollowmere",
+    persona:
+      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, and buys the raw stuff off anyone brave enough to fetch it from Whisperwood. Proud of Hollowmere, wary of the Greyspine caverns.",
+    greeting: "Hah! Another traveller off the King's Road. Need an edge on something? Bring me thorns and hide and I'll make you a blade worth swinging.",
+    tilePos: [-336, 10],
+    wanderRadius: 70,
+    appearance: { body: "male", skin: "#c68e5a", hair: "buzzcut", hairColor: "#2b1d14", shirtColor: "#3a3a4a", pantsColor: "#5a4632" },
+    mood: "hearty",
+  },
+  {
+    key: "hm_innkeeper",
+    name: "Ivy",
+    role: "Innkeeper of Hollowmere",
+    persona:
+      "Ivy runs the Hollowmere inn with brisk warmth. She sells bread and calming tea to tired woodcutters, knows every rumour on the road, and worries about whoever went into the Greyspine cave last.",
+    greeting: "Come in out of the pines, traveller. Bread's fresh and the tea will put the colour back in you.",
+    tilePos: [-330, 4],
+    wanderRadius: 60,
+    appearance: { body: "female", skin: "#f1c9a5", hair: "long", hairColor: "#8c5a2b", shirtColor: "#4a7c59", pantsColor: "#3d3d3d" },
+    mood: "warm",
+  },
+  {
+    key: "hm_elder",
+    name: "Old Sorrel",
+    role: "Hollowmere Elder",
+    persona:
+      "Old Sorrel has felled more pines than anyone alive and now keeps the town's ledger of jobs. Dry humour, long memory. Worries about the bramble boars growing bolder in Whisperwood and always needs more wood for winter.",
+    greeting: "Mm. You've the look of someone who can swing an axe. Hollowmere has work, if you want it.",
+    tilePos: [-342, 5],
+    wanderRadius: 50,
+    appearance: { body: "male", skin: "#e8c39e", hair: "plain", hairColor: "#dcdcdc", shirtColor: "#7a4a2a", pantsColor: "#4a4a5a" },
+    mood: "dry",
+  },
+  // ── Brightwater (fishing town past the Silverrun bridge)
+  {
+    key: "bw_fishmonger",
+    name: "Marina",
+    role: "Fishmonger of Brightwater",
+    persona:
+      "Marina is quick-witted and sun-browned, mends nets while she talks, and runs the fishing dock on the Silverrun's west bank. Buys garden produce for the fish stews she sells to sailors, and pays better than anyone east of the river.",
+    greeting: "Mind the nets! The dock's just there if you fancy a cast — and if you've grown anything, I'll buy it for the stew pot.",
+    tilePos: [-632, 3],
+    wanderRadius: 60,
+    appearance: { body: "female", skin: "#a86a3d", hair: "bob", hairColor: "#2b1d14", shirtColor: "#2a9d8f", pantsColor: "#264653" },
+    mood: "lively",
+  },
+  {
+    key: "bw_boatwright",
+    name: "Tobias",
+    role: "Boatwright of Brightwater",
+    persona:
+      "Tobias builds the little boats of Brightwater by the bridge and is always short of good oak. Gentle, slow-spoken, pays well for logs carried all the way from Whisperwood.",
+    greeting: "Ah, good timber's hard to come by this side of the mountains. Bring me logs and I'll pay you fair — fairer than Greta, I'd wager.",
+    tilePos: [-628, 11],
+    wanderRadius: 70,
+    appearance: { body: "male", skin: "#d9a066", hair: "messy1", hairColor: "#5a3a1a", shirtColor: "#5b7db1", pantsColor: "#3a3a3a" },
+    mood: "gentle",
+  },
+  {
+    key: "bw_mayor",
+    name: "Mayor Wynn",
+    role: "Mayor of Brightwater",
+    persona:
+      "Mayor Wynn is a cheerful, slightly pompous mayor who loves ceremonies and fears the wisps that drift out of the Greyspine caverns at night. Offers generous bounties for brave deeds and trophies from the Old Rootking.",
+    greeting: "Welcome, welcome to Brightwater, jewel of the Silverrun! We do so need heroes — the caverns grow restless.",
+    tilePos: [-712, 4],
+    wanderRadius: 60,
+    appearance: { body: "male", skin: "#f1c9a5", hair: "bedhead", hairColor: "#c94f2a", shirtColor: "#7b5ea7", pantsColor: "#2e2e3a" },
+    mood: "cheerful",
+  },
 ];
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
@@ -203,6 +278,9 @@ const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: num
   { species: "fox", names: ["Ember"], zone: tileRect(36, -59, 30, 24) },
   { species: "cat", names: ["Marmalade"], zone: tileRect(28, 18, 18, 9) },
   { species: "dog", names: ["Biscuit"], zone: tileRect(38, 30, 20, 14) },
+  // Out west along the King's Road.
+  { species: "sheep", names: ["Bracken", "Thistle"], zone: tileRect(-366, 22, 20, 8) },
+  { species: "duck", names: ["Pebble", "Skipper", "Reed"], zone: tileRect(-646, 14, 22, 14) },
 ];
 
 // Resource nodes scattered through the wild ring (world-tile units), all in
@@ -212,8 +290,10 @@ const NODE_DEFS: [string, string, number, number][] = [
   ["herb_patch", "herb", 22, -55], ["herb_patch", "herb", 44, -57],
   ["berry_bush", "berry", 14, 49], ["berry_bush", "berry", 64, 56], ["berry_bush", "berry", 130, -21],
   ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 52, 54],
-  ["mushroom_ring", "mushroom", -76, -15], ["mushroom_ring", "mushroom", 130, 54],
+  ["mushroom_ring", "mushroom", -76, -6], ["mushroom_ring", "mushroom", 130, 54],
   ["wheat_field", "wheat", 38, -45], ["wheat_field", "wheat", 44, -47], ["wheat_field", "wheat", 32, -42],
+  // The regions west of the village place their own nodes (props keep clear of them).
+  ...REGION_NODES.map((n): [string, string, number, number] => [n.kind, n.itemKey, n.tx, n.ty]),
 ];
 
 const MISSION_DEFS: {
@@ -374,6 +454,47 @@ const MISSION_DEFS: {
     requirement: { type: "defeat", enemyKind: "bat", qty: 2 },
     reward: { coins: 12, xp: 20, items: [{ itemKey: "painting", qty: 1 }, { itemKey: "honey_bun", qty: 2 }] },
   },
+  {
+    key: "hm_boars",
+    npc: "hm_elder",
+    title: "Thin the Boars of Whisperwood",
+    description: "Bramble boars have been charging woodcutters near Hollowmere. Old Sorrel wants 5 of them driven off.",
+    offerLine: "The boars have grown bold — tusked half a cart to splinters last week. Drive off five of 'em and Hollowmere will owe you.",
+    completeLine: "Five! The lads can work the west woods again. Here — coin, and some hides for Bjorn to make you something sharp.",
+    requirement: { type: "defeat", enemyKind: "boar", qty: 5 },
+    reward: { coins: 40, xp: 60, items: [{ itemKey: "boar_hide", qty: 2 }] },
+  },
+  {
+    key: "hm_wood",
+    npc: "hm_elder",
+    title: "Wood for the Winter",
+    description: "Hollowmere needs firewood before the frost. Bring Old Sorrel 30 logs.",
+    offerLine: "Winter comes early this close to the Greyspine. Thirty logs would see the town through. Oaks grow in the grove past the pines.",
+    completeLine: "That's a fine stack. Warm hearths all winter — and a little something for your trouble.",
+    requirement: { type: "collect", itemKey: "wood", qty: 30 },
+    reward: { coins: 50, xp: 40, items: [{ itemKey: "bread", qty: 3 }] },
+    repeatable: true,
+  },
+  {
+    key: "bw_wisps",
+    npc: "bw_mayor",
+    title: "Lights in the Dark",
+    description: "Shade wisps drift out of the Greyspine caverns. Mayor Wynn will pay a bounty for 3.",
+    offerLine: "Those cold little lights from the caverns — they frighten the fishermen something terrible. Three of them, and the town treasury is yours! Well, part of it.",
+    completeLine: "Splendid! Brightwater sleeps easier tonight. A bounty, as promised, from a grateful town.",
+    requirement: { type: "defeat", enemyKind: "wisp", qty: 3 },
+    reward: { coins: 80, xp: 120, items: [{ itemKey: "wisp_essence", qty: 1 }] },
+  },
+  {
+    key: "bw_heartwood",
+    npc: "bw_mayor",
+    title: "A Trophy for the Town Hall",
+    description: "Mayor Wynn wants a Rootking Heartwood to display in the town hall.",
+    offerLine: "They say the Old Rootking rises in the north woods each week. A piece of its heartwood in our town hall! Imagine the ceremony!",
+    completeLine: "Magnificent! Look at the grain on it! Brightwater will never forget you.",
+    requirement: { type: "collect", itemKey: "rootking_heartwood", qty: 1 },
+    reward: { coins: 150, xp: 100 },
+  },
 ];
 
 let seededPromise: Promise<void> | null = null;
@@ -491,10 +612,11 @@ async function syncWildlifeLayout() {
           zone: def.zone, x: def.zone.x + def.zone.w / 2, y: def.zone.y + def.zone.h / 2, targetX: null, targetY: null,
           movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null,
         })
-        .where(eq(animals.species, def.species));
+        // By name too: a species can have several herds in different places.
+        .where(and(eq(animals.species, def.species), inArray(animals.name, def.names)));
       // Species / names added to ANIMAL_DEFS after the DB was seeded
       // (e.g. pigs) are created here so existing worlds get them too.
-      const existing = await db.select({ name: animals.name }).from(animals).where(eq(animals.species, def.species));
+      const existing = await db.select({ name: animals.name }).from(animals).where(and(eq(animals.species, def.species), inArray(animals.name, def.names)));
       const have = new Set(existing.map((r) => r.name));
       for (const name of def.names) {
         if (have.has(name)) continue;
@@ -520,6 +642,7 @@ async function syncBuildingsFromManifest() {
   try {
     const manifest = await getBuildingsManifest();
     for (const entry of manifest.buildings) {
+      if (entry.kind === "scenery") continue; // stamped art only (town squares): no building row
       const template = await getTemplate(entry);
       const fp = footprintOf(template);
       const values = {
@@ -537,7 +660,7 @@ async function syncBuildingsFromManifest() {
       };
       await db.insert(buildings).values(values).onConflictDoUpdate({ target: buildings.key, set: values });
     }
-    const keep = new Set(manifest.buildings.map((b) => b.key));
+    const keep = new Set(manifest.buildings.filter((b) => b.kind !== "scenery").map((b) => b.key));
     const rows = await db.select().from(buildings);
     for (const row of rows) {
       if (!keep.has(row.key)) await db.delete(buildings).where(eq(buildings.key, row.key));
@@ -577,6 +700,8 @@ async function syncLots() {
 
 /** The fishing dock's spot, just north of the land lots' road. */
 const FISHING_DOCK = { x: 1080, y: 900 };
+/** Brightwater's fishing dock, on the Silverrun's west bank by the bridge. */
+const RIVER_DOCK = tilePoint(-615, 2); // the end of the pier
 /** Pixel rows of the land-lot strip (chunk row cy −4, ty 60..74). */
 const LAND_STRIP_Y0 = 60 * 16, LAND_STRIP_Y1 = 75 * 16;
 
@@ -586,8 +711,13 @@ async function seedActivities() {
     .update(activities)
     .set(FISHING_DOCK)
     .where(sql`${activities.kind} = 'fishing_dock' and ${activities.y} >= ${LAND_STRIP_Y0} and ${activities.y} < ${LAND_STRIP_Y1}`);
-  const [any] = await db.select().from(activities).limit(1);
-  if (any) return;
+  // Brightwater's dock on the Silverrun (added to existing worlds too).
+  const all = await db.select({ kind: activities.kind, x: activities.x, y: activities.y }).from(activities);
+  const hasRiverDock = all.some((a) => a.kind === "fishing_dock" && Math.hypot(a.x - RIVER_DOCK.x, a.y - RIVER_DOCK.y) < 300);
+  if (all.length > 0 && !hasRiverDock) {
+    await db.insert(activities).values({ kind: "fishing_dock", status: "live", ...RIVER_DOCK, config: { capacity: 2, durationSec: 60, rewardCoins: 30, rewardXp: 15 } });
+  }
+  if (all.length > 0) return;
   // Fishing dock — 2-player co-op.
   await db.insert(activities).values({
     kind: "fishing_dock",
@@ -595,6 +725,7 @@ async function seedActivities() {
     ...FISHING_DOCK,
     config: { capacity: 2, durationSec: 60, rewardCoins: 25, rewardXp: 12 },
   });
+  await db.insert(activities).values({ kind: "fishing_dock", status: "live", ...RIVER_DOCK, config: { capacity: 2, durationSec: 60, rewardCoins: 30, rewardXp: 15 } });
 }
 
 async function syncItems() {
@@ -711,6 +842,7 @@ async function seed() {
     // buildings.json); the Tiled template supplies footprint and door.
     const manifest = await getBuildingsManifest();
     for (const entry of manifest.buildings) {
+      if (entry.kind === "scenery") continue; // stamped art only (town squares): no building row
       const template = await getTemplate(entry);
       const fp = footprintOf(template);
       await tx

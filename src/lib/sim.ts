@@ -4,7 +4,7 @@ import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEve
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
-import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyKind, pickEnemyKind } from "./progression";
+import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyKind, inDarkZone, pickEnemyKind } from "./progression";
 import { perksOfMany } from "./combat";
 import { isWalkableServer } from "./chunkCollisionServer";
 import {
@@ -360,10 +360,11 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
   let rows = await db.select().from(enemies);
   if (!night) {
     // Night creatures fade at dawn.
-    const gone = rows.filter((e) => enemyKind(e.kind).nightOnly);
+    const gone = rows.filter((e) => enemyKind(e.kind).nightOnly && !inDarkZone(e.x, e.y));
     if (gone.length > 0) {
       await db.delete(enemies).where(inArray(enemies.id, gone.map((e) => e.id)));
-      rows = rows.filter((e) => !enemyKind(e.kind).nightOnly);
+      const goneIds = new Set(gone.map((e) => e.id));
+      rows = rows.filter((e) => !goneIds.has(e.id));
     }
   }
   const writes: MoveWrite[] = [];
@@ -379,7 +380,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
   for (const zone of ENEMY_ZONES) {
     const z = zone.rect;
     const count = rows.filter((e) => e.kind in ENEMY_KINDS && e.kind !== BOSS_KIND && e.x >= z.x && e.x < z.x + z.w && e.y >= z.y && e.y < z.y + z.h).length;
-    if (count >= ZONE_TARGET_ENEMIES || Math.random() >= 0.35) continue;
+    if (count >= (zone.target ?? ZONE_TARGET_ENEMIES) || Math.random() >= 0.35) continue;
     const kind = pickEnemyKind(zone, night);
     if (!kind) continue;
     const p = await randomPointIn(z);

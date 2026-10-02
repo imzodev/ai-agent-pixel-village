@@ -5,7 +5,7 @@
 // → deeper zones → levels unlock seeds, recipes, land and perks.
 
 import type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
-import { chunkRect } from "./worldmap";
+import { chunkRect, tileRect } from "./worldmap";
 
 export type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
 
@@ -69,11 +69,21 @@ export const ENEMY_ZONES: EnemyZone[] = [
   { name: "east field", rect: chunkRect(5, 2, 2, 5), kinds: { slime: 3, thornling: 2 } },
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
   { name: "oak forest", rect: chunkRect(-8, 1, 3, 3), kinds: { wisp: 1 } },
+  // The westward journey (src/lib/regions.ts), tougher the further you go.
+  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2 }, target: 5 },
+  { name: "greyspine pass", rect: tileRect(-576, 2, 192, 11), kinds: { boar: 2, bat: 2, thornling: 1 }, target: 6 },
+  { name: "silverrun banks", rect: tileRect(-648, -45, 72, 105), kinds: { slime: 3 }, target: 4 },
+  { name: "greyspine caverns", rect: tileRect(-528, -480, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
 ];
+
+/** True when (x, y) is in an underground zone (night-only kinds stay). */
+export function inDarkZone(x: number, y: number): boolean {
+  return ENEMY_ZONES.some((z) => z.alwaysDark && x >= z.rect.x && x < z.rect.x + z.rect.w && y >= z.rect.y && y < z.rect.y + z.rect.h);
+}
 
 /** Kinds that may spawn in `zone` right now (night-only kinds by night only). */
 export function spawnableKinds(zone: EnemyZone, night: boolean): [string, number][] {
-  return Object.entries(zone.kinds).filter(([k]) => night || !enemyKind(k).nightOnly);
+  return Object.entries(zone.kinds).filter(([k]) => night || zone.alwaysDark || !enemyKind(k).nightOnly);
 }
 
 /** Weighted pick of a kind for `zone`, or null when nothing can spawn there now. */

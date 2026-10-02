@@ -6,6 +6,7 @@ import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
 import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
@@ -222,6 +223,18 @@ export async function POST(req: Request) {
       await db.update(buildings).set({ visits: b.visits + 1 }).where(eq(buildings.id, b.id));
       await progressMissions(me.id, (r) => r.type === "visit" && r.buildingKey === b.key);
       daily(me.id, "visit", { buildingKey: b.key });
+      // Portals (the Greyspine cave) move you to their other end.
+      const entry = (await getBuildingsManifest()).buildings.find((x) => x.key === b.key);
+      if (entry?.kind === "portal" && entry.portalTo) {
+        const [from, to] = await Promise.all([getBuildingDoor(b.key), getBuildingDoor(entry.portalTo)]);
+        const p = livePos(me);
+        if (!from || !to) return Response.json({ error: "The way is blocked." }, { status: 400 });
+        if (Math.hypot(from.x - p.x, from.y - p.y) > 160) return Response.json({ error: "Walk up to it first." }, { status: 400 });
+        await db.update(characters).set({ x: to.x, y: to.y }).where(eq(characters.id, me.id));
+        const into = entry.portalTo === "cave_exit";
+        await logEvent("visit", into ? `${me.name} ventured into the Greyspine Caverns.` : `${me.name} climbed back out of the caverns.`, "building", b.id);
+        return Response.json({ ok: true, teleport: to, message: into ? "You duck under the timbers and into the dark…" : "You climb the rope ladder back into daylight." });
+      }
       await logEvent("visit", `${me.name} stepped into ${b.name}.`, "building", b.id);
       return Response.json({ ok: true });
     }

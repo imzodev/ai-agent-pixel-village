@@ -26,6 +26,10 @@ export type Events = {
   attack: { x: number; y: number; tool?: string };
   /** The local player took damage (flash + floating number). */
   hurt: { amount: number; hp?: number; maxHp?: number };
+  /** The player walked into a named region (location banner). */
+  region: { name: string };
+  /** The local player goes through a portal and arrives at (x, y). */
+  teleport: { x: number; y: number };
   /** The local player was knocked out and wakes at (x, y). */
   knockout: { x: number; y: number; coinsLost: number };
 };
