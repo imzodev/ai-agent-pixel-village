@@ -141,6 +141,8 @@ export class WorldStream {
         this.opts.handlers.onPlayerAct({ id: msg.id, kind: msg.kind, facing: msg.facing });
       } else if (msg.type === "hurt") {
         this.opts.handlers.onHurt?.({ amount: msg.amount, hp: msg.hp, maxHp: msg.maxHp, by: msg.by });
+      } else if (msg.type === "enemyAct") {
+        this.opts.handlers.onEnemyAct?.({ id: msg.id, x: msg.x, y: msg.y });
       } else if (msg.type === "knockout") {
         this.opts.handlers.onKnockout?.({ x: msg.x, y: msg.y, coinsLost: msg.coinsLost, by: msg.by });
       } else if (msg.type === "playerPos") {

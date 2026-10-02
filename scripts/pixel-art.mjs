@@ -12,7 +12,12 @@
 import sharp from "sharp";
 import path from "node:path";
 
-export const F = 32; // frame size
+export let F = 32; // frame size
+
+/** Use bigger frames for a detailed sheet (call before drawing). */
+export function setFrameSize(n) {
+  F = n;
+}
 export const DIRS = ["up", "left", "down", "right"];
 
 export function blank() {

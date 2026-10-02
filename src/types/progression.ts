@@ -16,6 +16,8 @@ export type EnemyKindDef = {
   drops: EnemyDrop[];
   /** Only spawns (and only stays) at night. */
   nightOnly?: boolean;
+  /** Runs at players who come close, instead of only biting at arm's length. */
+  hunts?: boolean;
 };
 
 /** A wild area where enemies spawn, with the kinds that live there. */

@@ -241,6 +241,27 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { walk: "idle" },
   },
+  wolf: {
+    // Enemy (tier 2, hunts players in Whisperwood). Original art drawn by
+    // scripts/draw-wolf.mjs at 48 px: block 0 = trot (6 frames), block 1 =
+    // idle breathing, block 2 = attack (crouch, lunge and snap), played
+    // once when it bites (WorldScene.playEnemyAttack).
+    url: "/assets/animals/wolf.png",
+    frameWidth: 48,
+    frameHeight: 48,
+    columns: 6,
+    dirRows: ["up", "left", "down", "right"],
+    scale: 0.8,
+    originX: 0.5,
+    originY: 0.93, // paws at y≈44 of 48
+    labelHeight: 36, // ear tips reach y≈8
+    actions: {
+      walk: { block: 0, frames: 6, frameRate: 12, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 6, frameRate: 14, loop: false },
+    },
+    stateActions: { walk: "idle", hunt: "idle" },
+  },
   wisp: {
     // Enemy (tier 3, night only). Original art drawn by scripts/draw-wisp.mjs:
     // one float/flicker block, faster while moving.

@@ -447,6 +447,10 @@ export class WorldScene extends Phaser.Scene {
           if (!this.alive()) return;
           bus.emit("hurt", { amount, hp, maxHp });
         },
+        onEnemyAct: ({ id, x, y }) => {
+          if (!this.alive()) return;
+          this.playEnemyAttack(id, x, y);
+        },
         onKnockout: ({ x, y, coinsLost, by }) => {
           if (!this.alive()) return;
           bus.emit("knockout", { x, y, coinsLost });
@@ -1253,7 +1257,8 @@ export class WorldScene extends Phaser.Scene {
     if (e.def) {
       // Sheet animals: real 4-direction frames, motion comes from the art.
       if (moving) e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
-      this.animateSheetCritter(e, moving);
+      // A strike (bite) plays out before the walk/idle loop takes over again.
+      if (!(e.actingUntil && time < e.actingUntil)) this.animateSheetCritter(e, moving);
     } else {
       let bob = 0;
       if (moving) {
@@ -1282,6 +1287,18 @@ export class WorldScene extends Phaser.Scene {
    * `after` once the move has ended — it rides along with the move, so
    * clients don't wait for a snapshot to learn the animal started eating.
    */
+  /** An enemy struck at the player standing at (x, y): face them and attack. */
+  private playEnemyAttack(id: number, x: number, y: number) {
+    const e = this.enemies.get(id);
+    const a = e?.def?.actions.attack;
+    if (!e || !a) return;
+    const dx = x - e.sprite.x, dy = y - e.sprite.y;
+    e.facing = Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+    const dir = (e.def!.dirRows.includes(e.facing as Facing) ? e.facing : e.def!.dirRows[0]) as Facing;
+    (e.sprite as Phaser.GameObjects.Sprite).play(animKey(e.kind, "attack", dir), true);
+    e.actingUntil = this.time.now + (a.frames / a.frameRate) * 1000;
+  }
+
   private animateSheetCritter(e: CritterEnt, moving: boolean) {
     const def = e.def!;
     const sprite = e.sprite as Phaser.GameObjects.Sprite;

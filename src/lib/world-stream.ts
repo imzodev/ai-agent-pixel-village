@@ -24,7 +24,7 @@ import type http from "node:http";
 import type { Duplex } from "node:stream";
 import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, enemies, sessions, users } from "@/db/schema";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
@@ -38,10 +38,12 @@ import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
 import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
 import { beatIndex, nextBeatAt, rowPositionAt } from "@/lib/motion";
-import { enemyHit, enemyKind, isAggressive } from "@/lib/progression";
+import { ENEMY_KINDS, enemyHit, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
 import { damagePlayer, perksOfMany } from "@/lib/combat";
 import { planMoveFanout } from "@/lib/moveFanout";
-import { fetchMovesStartingAt } from "@/lib/moveStore";
+import { fetchMovesStartingAt, writeMoves } from "@/lib/moveStore";
+import { planHunt } from "@/lib/hunt";
+import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import type { Connection, WsSharedState } from "@/types/websocket";
 
@@ -520,6 +522,13 @@ async function onBeat(boundary: number): Promise<void> {
   invalidateSnapshots();
   if (connections.size === 0) return;
   try {
+    // Hunters (wolves) replace their wander with a chase before the
+    // beat's moves go out, so the broadcast below already carries it.
+    await enemyHunts(startAt);
+  } catch (err) {
+    log.error({ err }, "enemy hunts failed");
+  }
+  try {
     const moves = await fetchMovesStartingAt(startAt);
     if (moves.length > 0) broadcastMoves(startAt, moves);
   } catch (err) {
@@ -531,6 +540,26 @@ async function onBeat(boundary: number): Promise<void> {
     log.error({ err }, "enemy aggression failed");
   }
   if (beatIndex(boundary) % RESYNC_EVERY_BEATS === 0) await resyncAll();
+}
+
+const HUNTER_KINDS = Object.entries(ENEMY_KINDS).filter(([, k]) => k.hunts).map(([key]) => key);
+
+/**
+ * Hunting enemies run at connected players who come close. Runs here, not
+ * in tickd, because only this process knows every player's live position.
+ */
+async function enemyHunts(startAt: number): Promise<void> {
+  const players = [...connections.values()].filter((c) => c.ws.readyState === c.ws.OPEN).map((c) => ({ x: c.homePx, y: c.homePy }));
+  if (players.length === 0 || HUNTER_KINDS.length === 0) return;
+  const rows = await db.select().from(enemies).where(inArray(enemies.kind, HUNTER_KINDS));
+  const writes = [];
+  for (const e of rows) {
+    const zone = enemyZoneAt(e.x, e.y);
+    if (!zone) continue;
+    const w = await planHunt(e, players, zone.rect, startAt, isWalkableServer);
+    if (w) writes.push(w);
+  }
+  await writeMoves("enemy", writes);
 }
 
 /** How close an aggressive enemy must be to hit a player (players attack
@@ -552,12 +581,23 @@ async function enemyAggression(): Promise<void> {
   const now = Date.now();
   const live = rows.map((e) => ({ e, p: rowPositionAt(e, now), reach: enemyKind(e.kind).tier === "boss" ? BOSS_REACH_PX : ENEMY_REACH_PX }));
   const hits: { conn: Connection; kind: string; name: string }[] = [];
+  const struck = new Map<number, { x: number; y: number; ex: number; ey: number }>(); // enemy id → its victim
   for (const conn of players) {
     for (const { e, p, reach } of live) {
-      if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) <= reach) hits.push({ conn, kind: e.kind, name: enemyKind(e.kind).name });
+      if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) > reach) continue;
+      hits.push({ conn, kind: e.kind, name: enemyKind(e.kind).name });
+      if (!struck.has(e.id)) struck.set(e.id, { x: conn.homePx, y: conn.homePy, ex: p.x, ey: p.y });
     }
   }
   if (hits.length === 0) return;
+  // Everyone nearby sees the enemy strike (bite / lunge animation).
+  for (const [id, s] of struck) {
+    const msg = JSON.stringify({ type: "enemyAct", id, x: s.x, y: s.y });
+    for (const conn of players) {
+      if (Math.hypot(conn.homePx - s.ex, conn.homePy - s.ey) > RELAY_RADIUS_PX) continue;
+      try { conn.ws.send(msg); } catch { /* socket closed */ }
+    }
+  }
   const perks = await perksOfMany([...new Set(hits.map((h) => h.conn.playerId))]);
   const knockedOut = new Set<number>();
   for (const { conn, kind, name } of hits) {

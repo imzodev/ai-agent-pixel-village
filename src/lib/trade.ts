@@ -26,6 +26,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "wood", qty: 1, price: 2, line: "Oak logs! Two coppers each — or let me make you something with them." },
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns — two coppers. Good for pins and blades." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "A boar hide! Five coppers. Makes a fine grip." },
+    { itemKey: "wolf_pelt", qty: 1, price: 6, line: "A wolf pelt? Six coppers — it'll line a good many gloves." },
   ],
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
@@ -51,6 +52,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "stone", qty: 1, price: 1, line: "Good stone's always welcome at the forge. A copper each." },
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns! Two coppers. They take an edge like nothing else." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "Boar hide, five coppers. Best grip wrapping there is." },
+    { itemKey: "wolf_pelt", qty: 1, price: 6, line: "Wolf pelt — six coppers. You've been in Whisperwood, I see." },
   ],
   hm_innkeeper: [
     { itemKey: "berry", qty: 1, price: 2, line: "Berries for the jam pot — two coppers a handful." },

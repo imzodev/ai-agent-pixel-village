@@ -14,6 +14,7 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
   bat: { name: "Bat", tier: 1, hp: 5, xp: 8, damage: 1, drops: [{ itemKey: "bat_wing", chance: 0.6, qty: 1 }] },
   thornling: { name: "Thornling", tier: 2, hp: 12, xp: 15, damage: 2, drops: [{ itemKey: "thorn", chance: 0.8, qty: 2 }] },
   boar: { name: "Bramble Boar", tier: 2, hp: 22, xp: 25, damage: 3, drops: [{ itemKey: "boar_hide", chance: 0.7, qty: 1 }] },
+  wolf: { name: "Grey Wolf", tier: 2, hp: 18, xp: 22, damage: 2, hunts: true, drops: [{ itemKey: "wolf_pelt", chance: 0.7, qty: 1 }] },
   wisp: { name: "Shade Wisp", tier: 3, hp: 30, xp: 40, damage: 4, nightOnly: true, drops: [{ itemKey: "wisp_essence", chance: 0.75, qty: 1 }] },
   // World boss: rewards are shared by everyone who fought it (BOSS_REWARD).
   rootking: { name: "Old Rootking", tier: "boss", hp: 600, xp: 300, damage: 5, drops: [] },
@@ -70,11 +71,16 @@ export const ENEMY_ZONES: EnemyZone[] = [
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
   { name: "oak forest", rect: chunkRect(-8, 1, 3, 3), kinds: { wisp: 1 } },
   // The westward journey (src/lib/regions.ts), tougher the further you go.
-  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2 }, target: 5 },
+  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2, wolf: 3 }, target: 6 },
   { name: "greyspine pass", rect: tileRect(-576, 2, 192, 11), kinds: { boar: 2, bat: 2, thornling: 1 }, target: 6 },
   { name: "silverrun banks", rect: tileRect(-648, -45, 72, 105), kinds: { slime: 3 }, target: 4 },
   { name: "greyspine caverns", rect: tileRect(-528, -480, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
 ];
+
+/** The wild zone (x, y) roams in, with a small margin at the borders. */
+export function enemyZoneAt(x: number, y: number): EnemyZone | null {
+  return ENEMY_ZONES.find((z) => x >= z.rect.x - 40 && x <= z.rect.x + z.rect.w + 40 && y >= z.rect.y - 40 && y <= z.rect.y + z.rect.h + 40) ?? null;
+}
 
 /** True when (x, y) is in an underground zone (night-only kinds stay). */
 export function inDarkZone(x: number, y: number): boolean {

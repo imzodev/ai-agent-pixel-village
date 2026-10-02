@@ -39,6 +39,8 @@ export type WsServerMessage =
   | { type: "moves"; serverTime: number; startAt: number; moves: ScheduledMove[] }
   // You were hit by an enemy (aggressive tiers, the world boss).
   | { type: "hurt"; amount: number; hp: number; maxHp: number; by: string }
+  // An enemy struck at the player standing at (x, y): plays its attack.
+  | { type: "enemyAct"; id: number; x: number; y: number }
   // You were knocked out and woke at (x, y).
   | { type: "knockout"; x: number; y: number; coinsLost: number; hp: number; by: string }
   | { type: "pong"; t?: number; serverTime?: number }
