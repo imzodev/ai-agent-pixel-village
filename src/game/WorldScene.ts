@@ -6,6 +6,7 @@ import { CROP_KINDS } from "@/lib/crops";
 import { REGIONS, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
+import { FishingController } from "./fishing";
 import type { AtmosphereState, LightSource } from "@/types/lighting";
 import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
@@ -123,6 +124,12 @@ export class WorldScene extends Phaser.Scene {
    *  press of E acts on the same selection instead of re-targeting. */
   private lastSelection: Selection | null = null;
   private nextIdleEmote = 0;
+  private fishing!: FishingController;
+  private canFishShown = false;
+  private nextFishCheck = 0;
+  private guide: { x: number; y: number; npcId?: number } | null = null;
+  private guideArrow!: Phaser.GameObjects.Image;
+  private nextGuideEmote = 0;
   /** Chimney smoke positions, known once the buildings are stamped. */
   private pendingSmoke: { x: number; y: number }[] = [];
   private ambience!: Ambience;
@@ -271,6 +278,14 @@ export class WorldScene extends Phaser.Scene {
     this.lighting = new Lighting(this, { night: DEPTH_NIGHT, glow: DEPTH_NIGHT + 0.5, clouds: DEPTH_CANOPY + 5, fog: DEPTH_FOG, ground: -10 });
     this.ambience = new Ambience(this, { charBase: DEPTH_CHAR_BASE, canopy: DEPTH_CANOPY, light: DEPTH_NIGHT + 1 });
     this.ambience.setSmokeSources(this.pendingSmoke);
+    this.fishing = new FishingController(this, {
+      player: () => (this.player ? { x: this.player.sprite.x, y: this.player.sprite.y, facing: this.player.facing } : null),
+      toast: (text, kind) => bus.emit("toast", { text, kind }),
+      refresh: () => bus.emit("refreshMe", undefined),
+      emote: (text) => { if (this.player) this.showEmote(this.player, text, 900); },
+    }, DEPTH_CANOPY - 2);
+    this.guideArrow = this.add.image(0, 0, "fx_guide_arrow").setDepth(DEPTH_NIGHT + 2).setVisible(false);
+    this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
     this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
@@ -291,6 +306,11 @@ export class WorldScene extends Phaser.Scene {
       id: "player.interact",
       scope: "gameplay",
       run: () => this.interact(),
+    }));
+    this.unsub.push(inputRouter.register({
+      id: "player.fish",
+      scope: "gameplay",
+      run: () => this.fishing?.press(this.time.now),
     }));
     this.unsub.push(inputRouter.register({
       id: "player.attack",
@@ -535,6 +555,7 @@ export class WorldScene extends Phaser.Scene {
     if (s.me) {
       const meEq = cosmeticsListToEquipped(s.me.cosmetics);
       const meWeapon = weaponOf(s.me.equipped);
+      if (this.player) this.applyTitle(this.player, s.me.title ?? null);
       if (!this.player) {
         // First spawn — place the player at the DB position so we rejoin
         // where we left off. Fall back to the central chunk only if the DB
@@ -711,10 +732,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy();
+    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[] }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
@@ -741,6 +762,7 @@ export class WorldScene extends Phaser.Scene {
         void this.ensureCharTexture(ent, p.appearance, eq, weapon);
       }
       ent.tx = p.x; ent.ty = p.y;
+      this.applyTitle(ent, p.title ?? null);
       if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
       if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Facing;
@@ -859,6 +881,8 @@ export class WorldScene extends Phaser.Scene {
    * thing.
    */
   private interact() {
+    // While fishing, E strikes / reels like R.
+    if (this.fishing?.active) { this.fishing.press(this.time.now); return; }
     let sel = this.lastSelection;
     if (sel && !(this.isActionable(sel) && this.selectionExists(sel))) {
       // Stale selection (entity just got picked up / killed / respawned).
@@ -963,10 +987,11 @@ export class WorldScene extends Phaser.Scene {
     const key = regionAt(this.player.sprite.x, this.player.sprite.y)?.key ?? null;
     const prev = this.lastRegionKey;
     this.lastRegionKey = key;
-    if (prev === undefined || key === prev || key === null) return; // first sight / unchanged / open country
+    if (key === prev || key === null) return; // unchanged / open country
     const r = REGIONS.find((x) => x.key === key)!;
     // Title-case the name for the sign ("the Silverrun" → "The Silverrun").
-    bus.emit("region", { name: r.name.charAt(0).toUpperCase() + r.name.slice(1) });
+    // First sight (spawn) is quiet: the book records it, no banner.
+    bus.emit("region", { name: r.name.charAt(0).toUpperCase() + r.name.slice(1), key: r.key, quiet: prev === undefined });
   }
 
   private updatePlayer(dt: number) {
@@ -1101,6 +1126,44 @@ export class WorldScene extends Phaser.Scene {
     this.stream?.sendAct("slash", p.facing);
   }
 
+  /** Tutorial guide: a bouncing arrow over the target when it's on
+   *  screen, otherwise an arrow at the screen edge pointing toward it. */
+  private updateGuide(time: number) {
+    const a = this.guideArrow;
+    let g = this.guide;
+    if (!g || !a || !this.player) { a?.setVisible(false); return; }
+    // NPCs walk: follow the sprite rather than the last snapshot position.
+    const live = g.npcId ? this.npcs.get(g.npcId)?.sprite : undefined;
+    if (live) g = { ...g, x: live.x, y: live.y };
+    const v = this.cameras.main.worldView;
+    const margin = 22;
+    if (v.contains(g.x, g.y - 30)) {
+      a.setPosition(g.x, g.y - 46 - Math.abs(Math.sin(time / 220)) * 6).setRotation(Math.PI / 2).setVisible(true);
+      if (g.npcId && time > this.nextGuideEmote) {
+        this.nextGuideEmote = time + 2600;
+        const n = this.npcs.get(g.npcId);
+        if (n) this.showEmote(n, "!", 1200);
+      }
+      return;
+    }
+    const cx = v.centerX, cy = v.centerY;
+    const dx = g.x - cx, dy = g.y - cy;
+    const sx = (v.width / 2 - margin) / Math.max(1e-6, Math.abs(dx)), sy = (v.height / 2 - margin) / Math.max(1e-6, Math.abs(dy));
+    const k = Math.min(sx, sy);
+    const pulse = 1 + 0.08 * Math.sin(time / 160);
+    a.setPosition(cx + dx * k, cy + dy * k).setRotation(Math.atan2(dy, dx)).setScale(pulse).setVisible(true);
+  }
+
+  /** Show (or update) a character's title above their name. */
+  private applyTitle(e: CharEnt, title: string | null) {
+    if (e.title === title) return;
+    e.title = title;
+    e.titleText?.destroy();
+    e.titleText = title
+      ? this.add.text(e.sprite.x, e.sprite.y - 59, `« ${title} »`, { fontFamily: "monospace", fontSize: "9px", color: "#ffd166", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3)
+      : undefined;
+  }
+
   /** A short emote bubble over a character ("!", "♪", "…"). */
   private showEmote(e: CharEnt, text: string, ms = 1400) {
     e.emote?.t.destroy();
@@ -1171,6 +1234,7 @@ export class WorldScene extends Phaser.Scene {
     const { x, y } = e.sprite;
     e.sprite.setDepth(DEPTH_CHAR_BASE + y);
     e.shadow?.setPosition(x, y - 4).setDepth(DEPTH_CHAR_BASE + y - 1);
+    e.titleText?.setPosition(x, y - 59).setDepth(DEPTH_CHAR_BASE + y + 2);
     if (e.emote) {
       if (this.time.now > e.emote.until) { e.emote.t.destroy(); e.emote = undefined; }
       else e.emote.t.setPosition(x, y - (e.badge ? 74 : 64) - Math.abs(Math.sin(this.time.now / 160)) * 2).setDepth(DEPTH_CHAR_BASE + y + 4);
@@ -1309,6 +1373,17 @@ export class WorldScene extends Phaser.Scene {
       raining,
     }, time, deltaMs);
     this.idleEmotes(time);
+    // Fishing: walking away reels in; tell the HUD when you face water.
+    if (this.fishing) {
+      if (this.playerMoving && this.fishing.active) this.fishing.cancel();
+      this.fishing.update(time, deltaMs);
+      if (time > this.nextFishCheck) {
+        this.nextFishCheck = time + 250;
+        const can = this.fishing.canFish();
+        if (can !== this.canFishShown) { this.canFishShown = can; bus.emit("canFish", can); }
+      }
+    }
+    this.updateGuide(time);
     this.fog.setFillStyle(0xdfe6ea, state.fog ? 0.16 : 0);
     const cam = this.cameras.main;
     const top = cam.worldView.y - 30;

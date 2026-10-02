@@ -18,6 +18,8 @@ import { plotsOfLot } from "./lots";
 import { isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
 import type { GardenResult } from "@/types/garden";
 import { perksOf } from "./combat";
+import { tutorialEvent } from "./tutorialServer";
+import { recordCollection } from "./collectionServer";
 import { GREEN_THUMB_MULT } from "./progression";
 
 export { isRipe, wateredAdvanceAt, waterCheck };
@@ -62,7 +64,8 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   await removeItem(characterId, seedKey, 1);
   await db.update(characters).set({ xp: sql`${characters.xp} + ${PLANT_XP}` }).where(eq(characters.id, characterId));
   const name = crop.produceKey;
-  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y };
+  const step = await tutorialEvent(characterId, "plant");
+  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y, notices: step ? [step] : [] };
 }
 
 /** Water a garden crop. Anyone can help, once per growth stage. */
@@ -109,9 +112,11 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   await progressMissions(characterId, (r) => r.type === "collect" && r.itemKey === node.itemKey, node.qty);
   await db.update(characters).set({ xp: sql`${characters.xp} + ${HARVEST_XP}` }).where(eq(characters.id, characterId));
   await recalcLevel(characterId);
+  const isNew = await recordCollection(characterId, "crop", node.itemKey, node.qty);
   return {
     ok: true,
     message: `Harvested ${node.qty} ${node.itemKey}${node.qty > 1 ? "s" : ""}!${seeds > 0 ? ` …and saved ${seeds} seed${seeds > 1 ? "s" : ""} to replant.` : ""}`,
+    notices: isNew ? [`📖 New in your book: ${node.itemKey}!`] : [],
     gained,
     x: node.x,
     y: node.y,

@@ -25,6 +25,6 @@ export const bus = new Bus();
 export const ITEM_ICONS: Record<string, string> = {
   radish_seeds: "🌱", carrot_seeds: "🌱", tomato_seeds: "🌱", pumpkin_seeds: "🌱", radish: "🔴", carrot: "🥕", tomato: "🍅", pumpkin: "🎃",
   herb: "🌿", berry: "🫐", stone: "🪨", mushroom: "🍄", flour: "🌾", egg: "🥚", wool: "🧶", slime_gel: "🟢", honey_bun: "🥐",
-  recipe_cinnamon: "📜", recipe_tea: "📜", wooden_sword: "🗡️", stone_sword: "🗡️", thorn_blade: "🗡️", wisp_blade: "🗡️", axe: "🪓", sharp_axe: "🪓", wood: "🪵", bat_wing: "🦇", thorn: "🌵", boar_hide: "🐗", wisp_essence: "✨", rootking_heartwood: "🌳", straw_hat: "👒", lantern: "🏮", chair: "🪑", table: "🟤", plant: "🪴",
+  recipe_cinnamon: "📜", recipe_tea: "📜", wooden_sword: "🗡️", stone_sword: "🗡️", thorn_blade: "🗡️", wisp_blade: "🗡️", axe: "🪓", sharp_axe: "🪓", wood: "🪵", fishing_rod: "🎣", silver_minnow: "🐟", river_trout: "🐟", pond_perch: "🐠", mud_carp: "🐟", bluegill: "🐠", rainbow_trout: "🐠", catfish: "🐡", golden_carp: "🐠", moonfin: "🐟", storm_eel: "🐍", ghost_koi: "🐠", silverrun_pike: "🦈", bat_wing: "🦇", thorn: "🌵", boar_hide: "🐗", wisp_essence: "✨", rootking_heartwood: "🌳", straw_hat: "👒", lantern: "🏮", chair: "🪑", table: "🟤", plant: "🪴",
   rug: "🟥", bed: "🛏️", lamp: "💡", bookshelf: "📚", painting: "🖼️", discount: "🎟️", fox_charm: "🦊", elder_seal: "🔏",
 };

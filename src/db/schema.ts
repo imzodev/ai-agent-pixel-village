@@ -83,6 +83,11 @@ export const characters = pgTable(
       .default({ wall: "#f5d7b0", floor: "#c68e5a" }),
     lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    /** Guided first session (src/lib/tutorial.ts): step index, 99 = done. */
+    tutorialStep: integer("tutorial_step").notNull().default(0),
+    tutorialProgress: integer("tutorial_progress").notNull().default(0),
+    /** Nameplate title the player picked (from achievements / book pages). */
+    title: text("title"),
   },
   (t) => [index("characters_last_seen_idx").on(t.lastSeenAt)],
 );
@@ -479,6 +484,20 @@ export const characterEquipped = pgTable(
     equippedAt: timestamp("equipped_at").defaultNow().notNull(),
   },
   (t) => [index("equipped_char_idx").on(t.characterId)],
+);
+
+/** The collection book: what each character has caught, grown, defeated,
+ *  visited and met (kind = fish | crop | enemy | region | npc | page). */
+export const characterCollection = pgTable(
+  "character_collection",
+  {
+    characterId: integer("character_id").notNull(),
+    kind: text("kind").notNull(),
+    key: text("key").notNull(),
+    count: integer("count").notNull().default(0),
+    firstAt: timestamp("first_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_collection_pk").on(t.characterId, t.kind, t.key)],
 );
 
 /** Perks a character picked (one every 5 levels, see src/lib/progression.ts). */

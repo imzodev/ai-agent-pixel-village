@@ -12,11 +12,14 @@ import { PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } 
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import LocationBanner from "./LocationBanner";
+import QuestTracker from "./QuestTracker";
+import CollectionBook from "./CollectionBook";
+import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string } } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -40,7 +43,7 @@ export default function Hud() {
   // Lot key whose "move out / give up" is waiting for a second tap.
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | null>(null);
+  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -51,6 +54,7 @@ export default function Hud() {
   const [chat, setChat] = useState("");
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
+  const [canFish, setCanFish] = useState(false);
   const talkInput = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
 
@@ -60,6 +64,8 @@ export default function Hud() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
   const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
+  /** Tutorial steps, book discoveries and the like ride along on responses. */
+  const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
 
   useEffect(() => {
     const u = [
@@ -68,6 +74,11 @@ export default function Hud() {
       bus.on("select", setSel),
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
+      bus.on("canFish", setCanFish),
+      // Entering a region fills the book's Places page (server checks you're there).
+      bus.on("region", ({ key }) => {
+        void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => { if (r.new && r.message) toast(r.message, "good"); });
+      }),
       bus.on("toggle", (which) => {
         if (which === "shop") {
           window.location.href = "/shop";
@@ -189,18 +200,18 @@ export default function Hud() {
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
     if (r.taken) bus.emit("hurt", { amount: r.taken });
     if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
   const post = async (url: string, body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[] }>(url, body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; notices?: string[] }>(url, body);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
@@ -215,6 +226,7 @@ export default function Hud() {
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => i.itemKey === "axe" && i.qty > 0);
+  const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -224,15 +236,16 @@ export default function Hud() {
     setTalk({ npcId, name, role, sponsor: null, lines: [], offers: [], busy: true });
     setSel(null);
     const hist = await api<{ history: { role: string; text: string }[] }>(`/api/npc/${npcId}/talk`);
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[]; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
     if (r.error) { toast(r.error, "bad"); setTalk(null); return; }
+    if (r.notices?.length) { notify(r.notices); void refreshMe(); }
     setTalk({ npcId, name, role, sponsor: r.npc.sponsor, lines: [...(hist.history ?? []).slice(-6).map((h) => ({ role: h.role as "player" | "npc", text: h.text })), { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
     setTimeout(() => talkInput.current?.focus(), 50);
   };
   const sendTalk = async (message: string) => {
     if (!talk || talk.busy) return;
     setTalk({ ...talk, lines: [...talk.lines, { role: "player", text: message }], busy: true });
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource }>(`/api/npc/${talk.npcId}/talk`, { message });
+    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[] }>(`/api/npc/${talk.npcId}/talk`, { message });
     if (r.error) {
       toast(r.error, "bad");
       // Walked out of range? Close the panel — the conversation is no longer
@@ -241,6 +254,7 @@ export default function Hud() {
       else setTalk((t) => t && { ...t, busy: false });
       return;
     }
+    if (r.notices?.length) { notify(r.notices); void refreshMe(); }
     setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
   };
   const acceptOffer = async (offerId: string) => {
@@ -269,9 +283,10 @@ export default function Hud() {
 
   const performTrade = async (itemKey: string, qty: number) => {
     if (!trade) return;
-    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
+    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number; notices?: string[] }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
     if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return; }
     toast(`Sold ${qty} ${itemKey.replace(/_/g, " ")} for ${r.gained} 🪙.`, "good");
+    notify(r.notices);
     void refreshMe();
     // Refresh modal contents from the updated `me` (state set by refreshMe).
     setTrade((cur) => {
@@ -315,6 +330,10 @@ export default function Hud() {
 
   // Computed once per render; reused below by commitSelection and the JSX.
   const loggedIn = !!snap?.me;
+  const fishHint = (() => {
+    const k = formatBinding("player.fish");
+    return k ? `(${prettyKey(k)})` : "";
+  })();
   const interactHint = (() => {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
@@ -478,6 +497,14 @@ export default function Hud() {
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
       <LocationBanner />
+      {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
+        <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
+      )}
+      {loggedIn && canFish && hasRod && !sel && !talk && (
+        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2">
+          <button onClick={() => inputRouter.trigger("player.fish")} className="pixel-btn px-3 py-1.5 font-bold">🎣 Fish {fishHint}</button>
+        </div>
+      )}
       {/* Top bar */}
       <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-wrap items-center gap-2 bg-gradient-to-b from-black/50 to-transparent p-2 text-white">
         <div className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 text-base font-bold tracking-tight text-amber-900 shadow">🌳 thegrove</div>
@@ -521,10 +548,11 @@ export default function Hud() {
             <TopBtn on={() => setPanel(panel === "quests" ? null : "quests")} active={panel === "quests"}>⚡ Quests</TopBtn>
             <TopBtn on={() => setPanel(panel === "friends" ? null : "friends")} active={panel === "friends"}>👥 Friends</TopBtn>
             <TopBtn on={() => setPanel(panel === "home" ? null : "home")} active={panel === "home"}>🏡 Home</TopBtn>
+            <TopBtn on={() => setPanel(panel === "book" ? null : "book")} active={panel === "book"}>📖 Book</TopBtn>
             <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
           </>
         ) : null}
-        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📖 World</TopBtn>
+        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>🗺️ World</TopBtn>
         <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
         <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60">🤖 Agent API</Link>
         {loggedIn ? (
@@ -754,11 +782,12 @@ export default function Hud() {
       {/* Side panels */}
       {panel && (
         <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto pixel-panel p-3 shadow-2xl">
-          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : "📖 The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
           {panel === "friends" && <FriendsPanel />}
+          {panel === "book" && <CollectionBook onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
           {panel === "perks" && me && <PerksPanel me={me} onPick={async (perk) => { await post("/api/perks", { perk }); }} />}
           {panel === "home" && me && <HomePanel me={me} onAction={invAction} onTheme={async (t) => { await api("/api/me", { homeTheme: t }, "PATCH"); void refreshMe(); }} />}
           {panel === "log" && (

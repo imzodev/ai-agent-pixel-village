@@ -327,9 +327,15 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     else cosmeticsByChar.set(c.characterId, [{ slot: c.slot, itemKey: c.itemKey }]);
   }
 
+  const titleRows = playerIds.length > 0
+    ? await rdb.select({ id: characters.id, title: characters.title }).from(characters).where(inArray(characters.id, playerIds))
+    : [];
+  const titleByChar = new Map(titleRows.map((r) => [r.id, r.title]));
+
   return {
     world: ws,
     players,
+    titleByChar,
     npcs: npcRows,
     animals: animalRows,
     buildings: buildingRows,
@@ -368,6 +374,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       ...p,
       equipped: raw.equippedByChar.get(p.id) ?? [],
       cosmetics: raw.cosmeticsByChar.get(p.id) ?? [],
+      title: raw.titleByChar.get(p.id) ?? null,
     })),
     npcs: raw.npcs.map((n) => {
       const sp = n.sponsorId != null ? spById[String(n.sponsorId)] : null;
@@ -599,7 +606,8 @@ async function loadPlayer(id: number): Promise<Snapshot["players"][number] | nul
     rdb.select({ itemKey: inventory.itemKey }).from(inventory).where(and(eq(inventory.characterId, id), eq(inventory.equipped, true))),
     rdb.select({ slot: characterEquipped.slot, itemKey: characterEquipped.itemKey }).from(characterEquipped).where(eq(characterEquipped.characterId, id)),
   ]);
-  return { ...row, equipped: equipped.map((e) => e.itemKey), cosmetics };
+  const [t] = await rdb.select({ title: characters.title }).from(characters).where(eq(characters.id, id));
+  return { ...row, equipped: equipped.map((e) => e.itemKey), cosmetics, title: t?.title ?? null };
 }
 
 /**

@@ -8,6 +8,7 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { TRADES, findBuyer, stockForNpc } from "@/lib/trade";
 import { addCoins, addItem, logEvent, removeItem } from "@/lib/game";
 import { perksOf } from "@/lib/combat";
+import { tutorialEvent } from "@/lib/tutorialServer";
 import { HAGGLER_MULT } from "@/lib/progression";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +84,8 @@ export async function POST(req: Request) {
       me.x,
       me.y,
     );
-    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins });
+    const step = await tutorialEvent(me.id, "sell");
+    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins, notices: step ? [step] : [] });
   } catch (e) {
     return handleApiError(e);
   }

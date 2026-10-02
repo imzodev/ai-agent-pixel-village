@@ -37,6 +37,9 @@ export type CharEnt = {
   glow?: Phaser.GameObjects.Arc;
   /** Soft drop shadow under the feet. */
   shadow?: Phaser.GameObjects.Image;
+  /** Nameplate title shown above the name, and the text object. */
+  title?: string | null;
+  titleText?: Phaser.GameObjects.Text;
   /** A short-lived emote bubble ("!", "♪", "…"). */
   emote?: { t: Phaser.GameObjects.Text; until: number };
 };

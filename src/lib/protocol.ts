@@ -88,6 +88,8 @@ export type PlayerSnapshot = {
   equipped: string[];
   /** Currently equipped cosmetic items, slot→key. One per slot. */
   cosmetics: { slot: string; itemKey: string }[];
+  /** Nameplate title (achievements / collection book). */
+  title?: string | null;
 };
 
 export type NpcSnapshot = {

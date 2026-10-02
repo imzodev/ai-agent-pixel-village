@@ -5,6 +5,14 @@ import type { QuestTemplate } from "@/types/quest";
 
 export const QUEST_TEMPLATES: QuestTemplate[] = [
   {
+    key: "catch_fish_3",
+    title: "Gone fishing",
+    description: "Catch 3 fish at the Silverrun or a pond (you'll need a rod — Pip and Marina sell them).",
+    requirement: { type: "fish", qty: 3 },
+    reward: { coins: 25, xp: 12 },
+    weight: 8,
+  },
+  {
     key: "collect_stone_3",
     title: "Gather river stones",
     description: "Bring 3 river stones from the rocks near the pond.",

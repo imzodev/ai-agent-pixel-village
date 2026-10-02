@@ -65,6 +65,18 @@ export function makeAmbienceTextures(scene: Phaser.Scene): void {
   softBlob(scene, "fx_dust", 10, 6, "214,190,140", 0.85);
   pixelTex(scene, "fx_sparkle", [".a.", "aba", ".a."], { a: "#c8f0ff", b: "#ffffff" });
   pixelTex(scene, "fx_ring", ["..aaaa..", ".a....a.", "..aaaa.."], { a: "#e4f2ff" });
+  // tutorial guide arrow (points right; rotated toward the target)
+  pixelTex(scene, "fx_guide_arrow", [
+    "....kk......",
+    "....kyk.....",
+    "kkkkkyyk....",
+    "kyyyyyyyk...",
+    "kyyyyyyyyk..",
+    "kyyyyyyyk...",
+    "kkkkkyyk....",
+    "....kyk.....",
+    "....kk......",
+  ], { k: "#3b2a1d", y: "#ffd84a" });
   // the front of a tall-grass tuft, drawn over the player's feet
   pixelTex(scene, "fx_tall_front", [
     "..a....a.....a..",

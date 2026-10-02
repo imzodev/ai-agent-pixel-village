@@ -69,6 +69,8 @@ export type RawSnapshot = {
   equippedByChar: Map<number, string[]>;
   /** Per-character equipped cosmetics (slot → itemKey). Populated from `character_equipped`. */
   cosmeticsByChar: Map<number, { slot: string; itemKey: string }[]>;
+  /** Nameplate titles of the players shipped. */
+  titleByChar: Map<number, string | null>;
   spById: Record<string, SponsorLite>;
 };
 

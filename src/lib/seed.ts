@@ -44,6 +44,19 @@ export const ITEM_DEFS = [
   { key: "tomato", name: "Tomato", kind: "material", icon: "🍅", description: "Sun-warm and juicy.", value: 3 },
   { key: "pumpkin", name: "Pumpkin", kind: "material", icon: "🎃", description: "Heavy. Worth it.", value: 20 },
   { key: "wood", name: "Log of Wood", kind: "material", icon: "🪵", description: "Oak, freshly chopped. Greta turns it into furniture.", value: 2 },
+  { key: "fishing_rod", name: "Fishing Rod", kind: "tool", icon: "🎣", description: "Face deep water and press F to cast. Keep it in your bag.", value: 30 },
+  { key: "silver_minnow", name: "Silver Minnow", kind: "material", icon: "🐟", description: "Tiny, quick and everywhere.", value: 2 },
+  { key: "river_trout", name: "River Trout", kind: "material", icon: "🐟", description: "Speckled and strong against the current.", value: 4 },
+  { key: "pond_perch", name: "Pond Perch", kind: "material", icon: "🐠", description: "Striped, curious, always hungry.", value: 3 },
+  { key: "mud_carp", name: "Mud Carp", kind: "material", icon: "🐟", description: "Lives in the soft mud at the bottom.", value: 4 },
+  { key: "bluegill", name: "Bluegill", kind: "material", icon: "🐠", description: "A flash of blue under the lily pads.", value: 7 },
+  { key: "rainbow_trout", name: "Rainbow Trout", kind: "material", icon: "🐠", description: "Every colour of the Silverrun at noon.", value: 9 },
+  { key: "catfish", name: "Whiskered Catfish", kind: "material", icon: "🐡", description: "Comes up from the deep after dark.", value: 10 },
+  { key: "golden_carp", name: "Golden Carp", kind: "material", icon: "🐠", description: "Said to bring luck. Nobody lets it go.", value: 22 },
+  { key: "moonfin", name: "Moonfin", kind: "material", icon: "🐟", description: "Its fins glow faintly under the moon.", value: 24 },
+  { key: "storm_eel", name: "Storm Eel", kind: "material", icon: "🐍", description: "Only rises when rain churns the water.", value: 26 },
+  { key: "ghost_koi", name: "Ghost Koi", kind: "material", icon: "🐠", description: "Pale as mist. Maybe it isn't there at all.", value: 80 },
+  { key: "silverrun_pike", name: "Silverrun Pike", kind: "material", icon: "🦈", description: "The old king of the river.", value: 90 },
   { key: "egg", name: "Fresh Egg", kind: "material", icon: "🥚", description: "Still warm.", value: 2 },
   { key: "wool", name: "Tuft of Wool", kind: "material", icon: "🧶", description: "Soft and springy.", value: 3 },
   { key: "bat_wing", name: "Bat Wing", kind: "material", icon: "🦇", description: "Leathery and light. Wren buys them.", value: 2 },
@@ -78,7 +91,7 @@ export const ITEM_DEFS = [
   { key: "elder_seal", name: "Elder's Seal", kind: "trophy", icon: "🔏", description: "Proof you helped the village.", value: 30 },
 ] as const;
 
-const NPC_DEFS: {
+export const NPC_DEFS: {
   key: string;
   name: string;
   role: string;

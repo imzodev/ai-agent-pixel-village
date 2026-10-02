@@ -15,6 +15,8 @@ export type CommandId =
   | "player.attack"
   | "player.craft"
   | "player.sell"
+  // Cast / strike / reel while fishing (needs a rod and deep water ahead).
+  | "player.fish"
   | "trade.sell"
   | "trade.focus_qty"
   | "ui.bag"

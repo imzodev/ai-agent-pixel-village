@@ -11,6 +11,8 @@ import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
 import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
+import { tutorialEvent } from "@/lib/tutorialServer";
+import { recordCollection } from "@/lib/collectionServer";
 
 export const dynamic = "force-dynamic";
 
@@ -138,8 +140,10 @@ export async function POST(req: Request) {
       await recalcLevel(me.id);
       daily(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
       markWorldDirty(n.x, n.y);
+      const step = await tutorialEvent(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
       return Response.json({
         ok: true,
+        notices: step ? [step] : [],
         message: `${chop ? "Chopped" : "Gathered"} ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
         gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
       });
@@ -171,6 +175,7 @@ export async function POST(req: Request) {
       let taken = 0;
       let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
+      const notices: string[] = [];
       // Only the request that removes the row gets the kill.
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
       const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
@@ -180,6 +185,7 @@ export async function POST(req: Request) {
           await db.update(characters).set({ xp: sql`${characters.xp} + ${BOSS_REWARD.xp}`, coins: sql`${characters.coins} + ${BOSS_REWARD.coins}` }).where(eq(characters.id, id));
           await addItem(id, BOSS_REWARD.itemKey, 1);
           await recalcLevel(id);
+          await recordCollection(id, "enemy", BOSS_KIND);
         }
         if (winners.includes(me.id)) gained.push({ itemKey: BOSS_REWARD.itemKey, qty: 1 });
         message = winners.includes(me.id)
@@ -196,6 +202,9 @@ export async function POST(req: Request) {
           gained.push(d);
         }
         message = `You defeated the ${def.name}! +${def.xp} XP`;
+        if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);
+        const step = await tutorialEvent(me.id, "defeat", { enemyKind: e.kind });
+        if (step) notices.push(step);
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
         await db.update(characters).set({ xp: sql`${characters.xp} + ${def.xp}` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
@@ -214,7 +223,7 @@ export async function POST(req: Request) {
         }
       }
       markWorldDirty(e.x, e.y);
-      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout });
+      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout, notices });
     }
 
     if (action === "enter") {

@@ -8,6 +8,7 @@
 // That's it — the modal, route, NPC-conversation Sell offer, and the
 // in-character "I buy X" line pick it up automatically.
 import type { TradeConfig, TradeItem } from "./types";
+import { FISH_DEFS } from "./fishing";
 
 export const TRADES: TradeConfig = {
   baker: [
@@ -57,6 +58,8 @@ export const TRADES: TradeConfig = {
   ],
   // Brightwater pays a little more: it's a long road.
   bw_fishmonger: [
+    // Every fish in the river and the ponds, at its price.
+    ...FISH_DEFS.map((f) => ({ itemKey: f.key, qty: 1, price: f.price, line: `${f.name}? ${f.price} coppers — ${f.rarity === "legendary" ? "and a story for the whole town!" : "fresh for the stew pot."}` })),
     { itemKey: "carrot", qty: 1, price: 3, line: "Carrots for the stew — three coppers each." },
     { itemKey: "tomato", qty: 1, price: 4, line: "Tomatoes! Four coppers. The sailors love a red stew." },
     { itemKey: "pumpkin", qty: 1, price: 24, line: "A whole pumpkin? Twenty-four coppers, and a smile." },
@@ -79,6 +82,10 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "tomato_seeds", qty: 1, price: 5, line: "Tomato seeds, five coppers. Water them well!", minLevel: 3 },
     { itemKey: "pumpkin_seeds", qty: 1, price: 8, line: "Pumpkin seeds — eight coppers. Slow, but oh, the payoff.", minLevel: 5 },
     { itemKey: "axe", qty: 1, price: 25, line: "A woodcutter's axe, twenty-five coppers. The oaks are out west, past the woods." },
+    { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers. Ponds, rivers — face the water and cast." },
+  ],
+  bw_fishmonger: [
+    { itemKey: "fishing_rod", qty: 1, price: 30, line: "Thirty coppers for a good rod. The Silverrun's full of them — fish, I mean." },
   ],
   hm_innkeeper: [
     { itemKey: "bread", qty: 1, price: 4, line: "Fresh bread, four coppers. Restores a body after the road." },

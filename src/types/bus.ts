@@ -26,8 +26,12 @@ export type Events = {
   attack: { x: number; y: number; tool?: string };
   /** The local player took damage (flash + floating number). */
   hurt: { amount: number; hp?: number; maxHp?: number };
-  /** The player walked into a named region (location banner). */
-  region: { name: string };
+  /** The player walked into a named region (location banner, book). */
+  region: { name: string; key: string; /** First sight on spawn: record it, no banner. */ quiet?: boolean };
+  /** Whether there's fishable water in front of the player. */
+  canFish: boolean;
+  /** Tutorial guide target (arrow), or null to hide it. */
+  guide: { x: number; y: number; npcId?: number } | null;
   /** The local player goes through a portal and arrives at (x, y). */
   teleport: { x: number; y: number };
   /** The local player was knocked out and wakes at (x, y). */

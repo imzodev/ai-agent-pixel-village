@@ -44,7 +44,7 @@ export class QuestService {
   /** Apply progress from a gameplay event. `amount` (default 1) is how
    *  much the event satisfies the requirement — e.g. a 5× berry pick
    *  emits `amount: 5` so a "pick 5 berries" quest completes at once. */
-  async recordEvent(characterId: number, evt: { kind: "collect" | "pet" | "talk" | "visit" | "spend_coins" | "defeat"; payload: Record<string, number | string> }, amount = 1): Promise<DailyQuest[]> {
+  async recordEvent(characterId: number, evt: { kind: "collect" | "pet" | "talk" | "visit" | "spend_coins" | "defeat" | "fish"; payload: Record<string, number | string> }, amount = 1): Promise<DailyQuest[]> {
     const quests = await this.repo.listForDate(characterId, utcDate());
     const updated: DailyQuest[] = [];
     for (const q of quests) {
@@ -156,6 +156,7 @@ function targetOf(req: QuestRequirement): number | null {
     case "collect": return req.qty;
     case "pet": return req.qty;
     case "defeat": return req.qty;
+    case "fish": return req.qty;
     case "spend_coins": return req.amount;
     case "talk":
     case "visit":
@@ -172,6 +173,7 @@ function questEventMatches(req: QuestRequirement, evt: { kind: string; payload: 
     case "visit": return evt.payload.buildingKey === req.buildingKey;
     case "defeat": return evt.payload.enemyKind === req.enemyKind;
     case "spend_coins": return true;
+    case "fish": return true; // any catch
     default: return false;
   }
 }

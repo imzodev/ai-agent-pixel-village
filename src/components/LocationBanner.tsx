@@ -7,7 +7,7 @@ import { bus } from "@/game/bus";
 
 export default function LocationBanner() {
   const [shown, setShown] = useState<{ name: string; n: number } | null>(null);
-  useEffect(() => bus.on("region", ({ name }) => setShown((prev) => ({ name, n: (prev?.n ?? 0) + 1 }))), []);
+  useEffect(() => bus.on("region", ({ name, quiet }) => { if (!quiet) setShown((prev) => ({ name, n: (prev?.n ?? 0) + 1 })); }), []);
   useEffect(() => {
     if (!shown) return;
     const t = setTimeout(() => setShown(null), 3300);
