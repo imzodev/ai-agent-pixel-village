@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, groundItems, homeDecor, inventory, items } from "@/db/schema";
+import { characters, groundItems, homeDecor, inventory, items, treasureMaps } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { addItem, logEvent, progressMissions } from "@/lib/game";
@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       if (Math.hypot(g.x - px, g.y - py) > 90) return Response.json({ error: "Too far away." }, { status: 400 });
       await db.delete(groundItems).where(eq(groundItems.id, g.id));
       await addItem(me.id, g.itemKey, g.qty, g.meta);
+      // A dropped treasure map is anyone's to follow.
+      if (g.itemKey === "treasure_map" && typeof g.meta.mapId === "number") await db.update(treasureMaps).set({ characterId: me.id }).where(eq(treasureMaps.id, g.meta.mapId));
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === g.itemKey, g.qty);
       daily(me.id, "collect", { itemKey: g.itemKey }, g.qty);
       // Push the removal to nearby players now instead of waiting up to

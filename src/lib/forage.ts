@@ -46,7 +46,7 @@ const BIOME_FORAGE: Readonly<Record<Biome, ForageBiome>> = {
 };
 
 /** Open ground for a patch: no water, trees, props, cliffs or road. */
-function open(tx: number, ty: number): boolean {
+export function openGround(tx: number, ty: number): boolean {
   const c = continentAt(tx, ty);
   return !c.lower && !c.canopy && !c.collide && !c.prop && !c.ground.startsWith("water_") && !c.ground.startsWith("swamp_") && !c.ground.startsWith("deep_") && !(c.upper ?? "").startsWith("path_");
 }
@@ -67,7 +67,7 @@ export function forageSpots(): [string, string, number, number][] {
     for (let k = 0; k < 8; k++) {
       const tx = cx + 2 + Math.floor(hash(cx, cy, 703 + k) * (CW - 4)), ty = cy + 2 + Math.floor(hash(cy, cx, 713 + k) * (CH - 4));
       if (inHeartland(tx, ty) || townAt(tx, ty)) continue;
-      if (!open(tx, ty) || !open(tx + 1, ty) || !open(tx - 1, ty) || !open(tx, ty + 1)) continue;
+      if (!openGround(tx, ty) || !openGround(tx + 1, ty) || !openGround(tx - 1, ty) || !openGround(tx, ty + 1)) continue;
       out.push([kind, ITEM[kind], tx, ty]);
       break;
     }

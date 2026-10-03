@@ -1,5 +1,5 @@
 // The inns. GET ?key=<inn key> → the panel (rumours, patrons, prices);
-// POST { key, action: "rest" | "stew" | "cheers" }. You must be at the door.
+// POST { key, action: "rest" | "stew" | "cheers" | "map" }. You must be at the door.
 
 import { and, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -8,6 +8,8 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { getLivePlayerPosition, livePlayersNear, markWorldDirty } from "@/lib/world-stream";
 import { addItem } from "@/lib/game";
+import { buyRumour } from "@/lib/treasureServer";
+import { RUMOUR_PRICE } from "@/lib/treasure";
 import { gameHour } from "@/lib/worldmap";
 import { nextBossWindow } from "@/lib/progression";
 import { INNS, INN_PATRON_PX, INN_REACH_PX, REST_COST, REST_FREE_BELOW, STEW_COST, rumours } from "@/lib/inn";
@@ -40,6 +42,7 @@ async function innView(key: string, me: { id: number; hp: number; maxHp: number 
     restCost: REST_COST,
     restFree: me.hp < me.maxHp * REST_FREE_BELOW,
     stewCost: STEW_COST,
+    mapCost: RUMOUR_PRICE,
     rumours: rumours({
       now,
       hour: gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes),
@@ -95,6 +98,11 @@ export async function POST(req: Request) {
       if (!r) return Response.json({ error: `Stew is ${STEW_COST} coins.` }, { status: 400 });
       await addItem(me.id, "hot_stew", 1);
       return Response.json({ ok: true, message: "🍲 A bowl of hot stew, wrapped for the road.", gained: [{ itemKey: "hot_stew", qty: 1 }] });
+    }
+    if (body.action === "map") {
+      const r = await buyRumour(me.id);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      return Response.json({ ok: true, message: r.message, gained: [{ itemKey: "treasure_map", qty: 1 }] });
     }
     if (body.action === "cheers") {
       const [b] = await db.select({ name: buildings.name }).from(buildings).where(eq(buildings.key, key));

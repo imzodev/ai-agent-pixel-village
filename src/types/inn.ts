@@ -26,6 +26,8 @@ export type InnView = {
   /** Resting is on the house when you're badly hurt. */
   restFree: boolean;
   stewCost: number;
+  /** An old rumour of buried treasure (a treasure map). */
+  mapCost: number;
   rumours: string[];
   patrons: InnPatron[];
 };

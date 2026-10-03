@@ -33,6 +33,7 @@ import { wildsNameOf } from "@/lib/terrain/wilds";
 import { treeFromTile, trunkPoint } from "@/lib/trees";
 import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
+import { RELICS, relicPoint } from "@/lib/relics";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
@@ -118,6 +119,12 @@ export class WorldScene extends Phaser.Scene {
   private nodes = new Map<number, Phaser.GameObjects.Image>();
   /** Dark wet-soil patch under crops watered in their current stage. */
   private wetSoil = new Map<number, Phaser.GameObjects.Ellipse>();
+  /** Hidden relics still to find glint where they lie (null until loaded). */
+  private relicsFound: Set<string> | null = null;
+  private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
+  /** Relics we've already pointed out ("something glints nearby"). */
+  private relicsNoticed = new Set<string>();
+  private relicCheckAt = 0;
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -408,6 +415,9 @@ export class WorldScene extends Phaser.Scene {
       });
     }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
+    this.unsub.push(bus.on("relicsFound", (keys) => { this.relicsFound = new Set(keys); this.syncRelics(); }));
+    this.unsub.push(bus.on("relicPicked", (p) => this.showRelicPicked(p.key, p.have, p.total)));
+    bus.emit("relicsRequest", undefined);
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
     // Phase 2: replace 1 Hz polling with WebSocket push.
@@ -889,6 +899,7 @@ export class WorldScene extends Phaser.Scene {
       case "player": return this.snapshot.players.some((x) => x.id === sel.id);
       case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
       case "board": return true;
+      case "relic": return !!this.relicsFound && !this.relicsFound.has(sel.key);
       // An empty plot stays valid until something is planted in it.
       case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
@@ -909,6 +920,70 @@ export class WorldScene extends Phaser.Scene {
     if (sel && this.isActionable(sel) && this.selectionExists(sel) && !this.isSpent(sel)) { bus.emit("primaryAction", sel); return; }
     this.lastSelection = null;
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+  }
+  /** The relics still to find, each with its own look and a twinkle; a
+   *  found one pops up into the air and fades. */
+  private syncRelics(): void {
+    const found = this.relicsFound;
+    if (!found) return;
+    for (const r of RELICS) {
+      const shown = this.relicGlints.get(r.key);
+      if (found.has(r.key)) {
+        if (shown) {
+          this.relicGlints.delete(r.key);
+          this.tweens.killTweensOf([shown.img, shown.glint]);
+          shown.glint.destroy();
+          shown.img.destroy();
+        }
+        continue;
+      }
+      if (shown) continue;
+      const at = relicPoint(r);
+      const img = this.add.image(at.x, at.y + 4, `relic_${r.set}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + at.y);
+      img.setInteractive({ useHandCursor: true });
+      img.on("pointerdown", () => { if (this.modalOpen) return; this.select({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: this.distTo(at.x, at.y) }); });
+      const glint = this.add.image(at.x + 5, at.y - 10, "relic_glint").setDepth(DEPTH_CHAR_BASE + at.y + 1).setAlpha(0).setScale(0.5);
+      this.tweens.add({ targets: glint, alpha: 1, scale: 1.1, angle: 45, duration: 380, yoyo: true, repeat: -1, repeatDelay: 700 + Math.floor(Math.random() * 600), ease: "Sine.inOut" });
+      this.relicGlints.set(r.key, { img, glint });
+    }
+  }
+  /** A relic you just picked up: held up over your head with a burst of
+   *  sparkles and your tally for the set, Zelda-style. */
+  private showRelicPicked(key: string, have: number, total: number): void {
+    const r = RELICS.find((x) => x.key === key);
+    if (!r || !this.player) return;
+    // Everything rides in a container that follows the player.
+    const box = this.add.container(this.player.sprite.x, this.player.sprite.y - 34).setDepth(DEPTH_CANOPY + 5);
+    const img = this.add.image(0, 6, `relic_${r.set}`).setScale(0.6).setAlpha(0);
+    const burst = this.add.particles(0, -8, "relic_glint", {
+      speed: { min: 40, max: 110 }, angle: { min: 0, max: 360 }, scale: { start: 0.9, end: 0 }, alpha: { start: 1, end: 0 },
+      lifespan: 650, quantity: 14, emitting: false,
+    });
+    const badge = this.add.text(0, -26, total ? `${r.name}  ${have}/${total}` : r.name, {
+      fontSize: "10px", color: "#fff7d6", backgroundColor: "rgba(40,24,8,0.75)", padding: { x: 4, y: 2 },
+    }).setOrigin(0.5, 1).setResolution(2).setAlpha(0);
+    box.add([burst, img, badge]);
+    const follow = () => { const q = this.player?.sprite; if (q) box.setPosition(q.x, q.y - 34); };
+    this.events.on("update", follow);
+    this.tweens.add({ targets: img, y: -8, scale: 1.6, alpha: 1, duration: 380, ease: "Back.out", onComplete: () => burst.explode() });
+    this.tweens.add({ targets: badge, alpha: 1, duration: 300, delay: 250 });
+    this.tweens.add({
+      targets: [img, badge], alpha: 0, duration: 450, delay: 1700,
+      onComplete: () => { this.events.off("update", follow); box.destroy(); },
+    });
+  }
+  /** Point out a relic the first time you come near it. */
+  private noticeRelics(time: number): void {
+    if (!this.player || !this.relicsFound || time < this.relicCheckAt) return;
+    this.relicCheckAt = time + 1000;
+    const p = this.player.sprite;
+    for (const r of RELICS) {
+      if (this.relicsFound.has(r.key) || this.relicsNoticed.has(r.key)) continue;
+      const at = relicPoint(r);
+      if (Math.hypot(at.x - p.x, at.y - p.y) > 12 * 16) continue;
+      this.relicsNoticed.add(r.key);
+      bus.emit("toast", { text: "✨ Something's glinting on the ground nearby — look around!", kind: "info" });
+    }
   }
   /** A felled tree / picked-clean bush: nothing to do until it regrows. */
   private isSpent(sel: Selection): boolean {
@@ -959,6 +1034,8 @@ export class WorldScene extends Phaser.Scene {
     for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
     for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
+    // Hidden relics you haven't found yet.
+    if (this.relicsFound) for (const r of RELICS) if (!this.relicsFound.has(r.key)) { const at = relicPoint(r); add(at.x, at.y, (d) => ({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: d })); }
     // Town bounty boards.
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
@@ -973,6 +1050,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.player) {
       this.updatePlayer(dt);
       this.syncStreamingChunks();
+      this.noticeRelics(time);
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);

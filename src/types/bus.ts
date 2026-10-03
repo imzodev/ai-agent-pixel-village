@@ -34,6 +34,12 @@ export type Events = {
   guide: { x: number; y: number; npcId?: number } | null;
   /** The local player goes through a portal and arrives at (x, y). */
   teleport: { x: number; y: number };
+  /** Hidden relics the local player has already found (they stop glinting). */
+  relicsFound: string[];
+  /** The scene is ready for the found-relics list (sent once it's loaded). */
+  relicsRequest: undefined;
+  /** The local player just picked up a relic: show it off over their head. */
+  relicPicked: { key: string; have: number; total: number };
   /** The local player was knocked out and wakes at (x, y). */
   knockout: { x: number; y: number; coinsLost: number };
 };

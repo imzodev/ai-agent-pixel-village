@@ -546,6 +546,31 @@ export const encounters = pgTable("encounters", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/** Treasure maps (src/lib/treasure.ts): where each one leads. The bag item
+ *  `treasure_map` carries only `{ mapId }`, so the spot never reaches the
+ *  client; the sketch is drawn on the server. */
+export const treasureMaps = pgTable(
+  "treasure_maps",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    tx: integer("tx").notNull(),
+    ty: integer("ty").notNull(),
+    tier: integer("tier").notNull(),
+    /** 1–3 on a trail to a legendary cache, else null. */
+    part: integer("part"),
+    /** Where the X sits in the sketch (tiles off its centre). */
+    ox: integer("ox").notNull().default(0),
+    oy: integer("oy").notNull().default(0),
+    /** Who bought it from an innkeeper (null: earned). Counts toward the
+     *  buyer's daily limit even if the map changes hands. */
+    boughtBy: integer("bought_by"),
+    dugAt: timestamp("dug_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("treasure_maps_char_idx").on(t.characterId)],
+);
+
 /** Wild patches a character has picked (src/lib/forage.ts): each player
  *  forages every patch on their own cooldown. */
 export const forageClaims = pgTable(

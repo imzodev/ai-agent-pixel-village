@@ -1,9 +1,14 @@
 "use client";
 // The 📖 Book panel: collection pages (fish, crops, creatures, places,
-// folk), page rewards, achievements and the title shown on your nameplate.
+// folk, hidden relic sets), page rewards, achievements and the title shown on your nameplate.
 import { useCallback, useEffect, useState } from "react";
 import type { CollectionBookView } from "@/types/collection";
 import type { RepView } from "@/types/reputation";
+import type { RelicSetKey } from "@/types/treasure";
+import RelicIcon from "./RelicIcon";
+
+/** A relic entry's set, from its key (`<set>_<n>`). */
+const relicSetOf = (key: string) => key.slice(0, key.lastIndexOf("_")) as RelicSetKey;
 
 export default function CollectionBook({ onMessage }: { onMessage: (text: string, kind: "good" | "bad") => void }) {
   const [book, setBook] = useState<CollectionBookView | null>(null);
@@ -51,14 +56,16 @@ export default function CollectionBook({ onMessage }: { onMessage: (text: string
           <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
             {page.entries.map((e) => (
               <div key={e.key} className={`rounded border-2 p-1.5 text-center ${e.count > 0 ? "border-amber-700/40 bg-amber-50" : "border-dashed border-stone-400/50 bg-stone-200/50"}`} title={e.count > 0 ? e.name : "Not found yet"}>
-                <div className={`text-2xl ${e.count > 0 ? "" : "opacity-40 brightness-0"}`}>{e.icon}</div>
+                <div className={`flex h-8 items-center justify-center text-2xl ${e.count > 0 ? "" : "opacity-40 brightness-0"}`}>{page.kind === "relic" ? <RelicIcon set={relicSetOf(e.key)} size={26} /> : e.icon}</div>
                 <div className="truncate text-[11px] font-bold">{e.count > 0 ? e.name : "???"}</div>
-                {e.count > 0 && page.kind !== "region" && page.kind !== "npc" && <div className="text-[10px] text-stone-500">×{e.count}</div>}
+                {e.count > 0 && page.kind !== "region" && page.kind !== "npc" && page.kind !== "relic" && <div className="text-[10px] text-stone-500">×{e.count}</div>}
+                {e.count === 0 && e.hint && <div className="text-[9px] leading-tight text-stone-500">{e.hint}</div>}
               </div>
             ))}
           </div>
+          {page.kind === "relic" && <div className="mt-2 text-[11px] text-stone-600"><b>Look for:</b> {page.blurb} A star twinkles over each one, and you&apos;ll hear about it when you&apos;re close. Walk up and press E.</div>}
           <div className="mt-2 flex items-center gap-2 rounded bg-amber-100 p-2 text-xs">
-            <span className="flex-1">Complete the page: <b>{page.reward.coins} 🪙</b> and the title <b>“{page.reward.title}”</b></span>
+            <span className="flex-1">Complete the page: <b>{page.reward.coins} 🪙</b>, the title <b>“{page.reward.title}”</b>{page.reward.treasureMap && <> and <b>a treasure map 🗺️</b></>}</span>
             {page.claimed ? <span className="font-bold text-emerald-700">✓ Claimed</span> : (
               <button disabled={busy || found(page) < page.entries.length} onClick={() => void send("/api/collection", { action: "claim", page: page.key })} className="pixel-btn px-2 py-1 disabled:opacity-40">Claim</button>
             )}

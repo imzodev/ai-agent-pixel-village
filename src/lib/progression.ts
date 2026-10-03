@@ -135,6 +135,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   stone_sword: { damage: 4 },
   thorn_blade: { damage: 6 },
   wisp_blade: { damage: 9 },
+  sunken_cutlass: { damage: 12 },
   axe: { damage: 0, chopBonus: 0 },
   sharp_axe: { damage: 0, chopBonus: 1 },
 };

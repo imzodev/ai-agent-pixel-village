@@ -1,6 +1,6 @@
 "use client";
-// Inside an inn: rest by the hearth, buy hot stew for the road, read the
-// rumour board, and see who else is here.
+// Inside an inn: rest by the hearth, buy hot stew for the road or an old
+// treasure map, read the rumour board, and see who else is here.
 import { useCallback, useEffect, useState } from "react";
 import type { InnView } from "@/types/inn";
 
@@ -14,7 +14,7 @@ export default function InnPanel({ innKey, hurt, onMessage, onGain }: { innKey: 
     return () => clearInterval(t);
   }, [load]);
 
-  const act = async (action: "rest" | "stew" | "cheers") => {
+  const act = async (action: "rest" | "stew" | "cheers" | "map") => {
     if (busy) return;
     setBusy(true);
     const r = await fetch("/api/inn", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: innKey, action }) }).then((r) => r.json()).catch(() => ({ error: "Network error" }));
@@ -35,6 +35,7 @@ export default function InnPanel({ innKey, hurt, onMessage, onGain }: { innKey: 
           🛏️ Rest by the hearth {view.restFree ? "(free)" : `· ${view.restCost} 🪙`}
         </button>
         <button disabled={busy} onClick={() => void act("stew")} className="pixel-btn bg-amber-200 px-2 py-1 text-sm font-bold disabled:opacity-40">🍲 Hot stew to go · {view.stewCost} 🪙</button>
+        <button disabled={busy} onClick={() => void act("map")} className="pixel-btn bg-amber-200 px-2 py-1 text-sm font-bold disabled:opacity-40" title="A rumour of buried treasure, scrawled on a scrap of map (3 a day)">🗺️ Buy an old map · {view.mapCost} 🪙</button>
         <button disabled={busy} onClick={() => void act("cheers")} className="pixel-btn bg-amber-100 px-2 py-1 text-sm disabled:opacity-40">🍺 Cheers!</button>
       </div>
       <div className="rounded bg-amber-50/90 p-2">

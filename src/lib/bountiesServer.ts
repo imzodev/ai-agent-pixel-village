@@ -15,6 +15,8 @@ import { tileCenter, tileOf } from "./motion";
 import { addItem, logEvent, recalcLevel, removeItem } from "./game";
 import { addReputation } from "./reputationServer";
 import { townName } from "./reputation";
+import { maybeTreasureMap } from "./treasureServer";
+import { MAP_CHANCE } from "./treasure";
 import {
   BOARD_REACH_PX, BOUNTY_TTL_MS, GATHER, MAX_ACTIVE, OPEN_PER_TOWN, SPOT_REACH_PX, WANTED_HP_MULT,
   boardPoint, describe, pickKind, rewardFor, targetOf, titleOf, wantedName,
@@ -218,5 +220,8 @@ export async function turnIn(characterId: number, id: number, pos: { x: number; 
   const [me] = await db.select({ name: characters.name }).from(characters).where(eq(characters.id, characterId));
   if (d.kind === "wanted") void logEvent("bounty", `${me?.name ?? "Someone"} brought down ${d.name} for ${townName(row.b.town)}!`, "character", characterId).catch(() => {});
   const notices = rep.reached ? [`🏘️ ${townName(row.b.town)} now sees you as ${rep.reached}!`] : [];
+  // Now and then the bounty master throws in an old map (wanted beasts more often).
+  const map = await maybeTreasureMap(characterId, d.kind === "wanted" ? MAP_CHANCE.wanted : MAP_CHANCE.bounty);
+  if (map) notices.push(map);
   return { ok: true, message: `💰 Bounty paid: +${r.coins} 🪙, +${r.xp} XP, +${r.rep} standing in ${townName(row.b.town)}.`, notices };
 }

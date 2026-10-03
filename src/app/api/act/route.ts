@@ -262,9 +262,10 @@ export async function POST(req: Request) {
         }
         notices.push(...(await progressHunts(me.id, e.kind)));
         // The last attacker of an encounter: everyone who fought is paid.
-        if (e.encounterId && (await attackerFell(e.encounterId, me.id))) {
+        const won = e.encounterId ? await attackerFell(e.encounterId, me.id) : null;
+        if (e.encounterId && won) {
           const def = ENCOUNTERS[(await encounterKindOf(e.encounterId)) ?? "beset"];
-          notices.push(`🤝 ${def.thanks} +${def.reward.coins} 🪙, +${def.reward.xp} XP`);
+          notices.push(`🤝 ${def.thanks} +${def.reward.coins} 🪙, +${def.reward.xp} XP`, ...won);
           encounterResolved = e.encounterId;
         }
         if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);

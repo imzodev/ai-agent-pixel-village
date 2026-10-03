@@ -14,6 +14,8 @@ import { isWalkableServer } from "./chunkCollisionServer";
 import { tileCenter, tileOf } from "./motion";
 import { recalcLevel, removeItem } from "./game";
 import { addReputation } from "./reputationServer";
+import { maybeTreasureMap } from "./treasureServer";
+import { MAP_CHANCE } from "./treasure";
 import {
   ENCOUNTERS, ENCOUNTER_GROUP_PX, ENCOUNTER_LINGER_MS, ENCOUNTER_REACH_PX, ENCOUNTER_SPACING_PX, ENCOUNTER_TTL_MS,
   attackersFor, encounterNpcKey, pickEncounter, rollsEncounter, strangerName,
@@ -95,22 +97,27 @@ function nearestTown(p: Point): string | null {
 
 /**
  * Resolve an encounter once (idempotent): pay every helper, thank them, and
- * let the stranger linger a while. Returns the helpers actually paid.
+ * let the stranger linger a while. Returns the helpers actually paid, and
+ * the treasure maps some of them were given.
  */
-export async function resolveEncounter(id: number, helpers: number[], now = new Date()): Promise<number[]> {
+export async function resolveEncounter(id: number, helpers: number[], now = new Date()): Promise<{ paid: number[]; maps: Map<number, string> }> {
   const ids = [...new Set(helpers)];
   const [enc] = await db.update(encounters).set({ state: "resolved", resolvedAt: now, rewarded: ids, expiresAt: new Date(now.getTime() + ENCOUNTER_LINGER_MS) })
     .where(and(eq(encounters.id, id), eq(encounters.state, "active"))).returning();
-  if (!enc || !ids.length) return [];
+  const maps = new Map<number, string>();
+  if (!enc || !ids.length) return { paid: [], maps };
   const r = ENCOUNTERS[enc.kind as EncounterKind].reward;
   await db.update(characters).set({ coins: sql`${characters.coins} + ${r.coins}`, xp: sql`${characters.xp} + ${r.xp}` }).where(inArray(characters.id, ids));
   const town = nearestTown(enc);
   for (const c of ids) {
     await recalcLevel(c);
     if (town) await addReputation(c, town, r.rep);
+    const t = tileOf(enc.x, enc.y);
+    const map = await maybeTreasureMap(c, MAP_CHANCE.encounter, tierAt(t.tx, t.ty));
+    if (map) maps.set(c, map);
   }
   if (enc.npcId) await db.update(npcs).set({ role: enc.kind === "merchant" ? "Travelling merchant" : "Grateful traveller", mood: "relieved" }).where(eq(npcs.id, enc.npcId));
-  return ids;
+  return { paid: ids, maps };
 }
 
 export async function encounterKindOf(id: number): Promise<EncounterKind | null> {
@@ -124,12 +131,16 @@ export async function noteFighter(encounterId: number, characterId: number): Pro
     .where(and(eq(encounters.id, encounterId), sql`NOT ${encounters.fighters} @> ${JSON.stringify([characterId])}::jsonb`));
 }
 
-/** A fight ends when its last attacker falls; everyone who fought is paid. */
-export async function attackerFell(encounterId: number, killer: number): Promise<boolean> {
+/** A fight ends when its last attacker falls; everyone who fought is paid.
+ *  Returns null while it goes on, else the killer's extra notices. */
+export async function attackerFell(encounterId: number, killer: number): Promise<string[] | null> {
   const [left] = await db.select({ n: sql<number>`count(*)::int` }).from(enemies).where(eq(enemies.encounterId, encounterId));
-  if ((left?.n ?? 0) > 0) return false;
+  if ((left?.n ?? 0) > 0) return null;
   const [enc] = await db.select({ fighters: encounters.fighters }).from(encounters).where(eq(encounters.id, encounterId));
-  return (await resolveEncounter(encounterId, [killer, ...(enc?.fighters ?? [])])).length > 0;
+  const r = await resolveEncounter(encounterId, [killer, ...(enc?.fighters ?? [])]);
+  if (!r.paid.length) return null;
+  const map = r.maps.get(killer);
+  return map ? [map] : [];
 }
 
 /** Hand the stranger what they need. */
@@ -142,9 +153,10 @@ export async function helpEncounter(characterId: number, id: number, pos: Point)
   let given = false;
   for (const key of def.need.itemKeys) if (await removeItem(characterId, key, def.need.qty)) { given = true; break; }
   if (!given) return { ok: false, error: `They need ${def.need.label}.` };
-  await resolveEncounter(id, [characterId]);
+  const { maps } = await resolveEncounter(id, [characterId]);
   const r = def.reward;
-  return { ok: true, message: `🤝 "${def.thanks}" +${r.coins} 🪙, +${r.xp} XP` };
+  const map = maps.get(characterId);
+  return { ok: true, message: `🤝 "${def.thanks}" +${r.coins} 🪙, +${r.xp} XP${map ? ` ${map}` : ""}` };
 }
 
 /** Encounters within ~40 tiles of a player (active, or recently resolved). */

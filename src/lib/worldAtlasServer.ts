@@ -163,6 +163,27 @@ function tileRaw(z: number, mx: number, my: number): Promise<Buffer> {
   return p;
 }
 
+/** The zoom-0 map (1 px per tile, RGBA) of `w`×`h` tiles from (tx0, ty0). */
+export async function mapPatchRaw(tx0: number, ty0: number, w: number, h: number): Promise<Buffer> {
+  const out = Buffer.alloc(w * h * 4);
+  for (let my = Math.floor(ty0 / MAP_TILE_H); my <= Math.floor((ty0 + h - 1) / MAP_TILE_H); my++) {
+    for (let mx = Math.floor(tx0 / MAP_TILE_W); mx <= Math.floor((tx0 + w - 1) / MAP_TILE_W); mx++) {
+      if (!mapTileInBounds(0, mx, my)) continue;
+      const src = await tileRaw(0, mx, my);
+      for (let y = 0; y < h; y++) {
+        const sy = ty0 + y - my * MAP_TILE_H;
+        if (sy < 0 || sy >= MAP_TILE_H) continue;
+        for (let x = 0; x < w; x++) {
+          const sx = tx0 + x - mx * MAP_TILE_W;
+          if (sx < 0 || sx >= MAP_TILE_W) continue;
+          src.copy(out, (y * w + x) * 4, (sy * MAP_TILE_W + sx) * 4, (sy * MAP_TILE_W + sx) * 4 + 4);
+        }
+      }
+    }
+  }
+  return out;
+}
+
 const EMPTY = sharp({ create: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
 
 /** The PNG of map tile (z, mx, my): from disk if rendered before. */
