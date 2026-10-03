@@ -48,10 +48,17 @@ describe("barriers", () => {
   });
 
   it("the Greyspine pass is the way through the mountains", () => {
-    for (const ty of [-100, -20, 0, 20, 100]) {
+    // A solid wall along the road; beyond the heartland the range goes on
+    // as a high crest (src/lib/continent.ts), broken by the odd saddle.
+    for (const ty of [-20, 0, 20]) {
       let solid = 0;
       for (let tx = -560; tx <= -400; tx++) if (!terrainWalkable(tx, ty)) solid++;
       expect(solid, `row ${ty}`).toBeGreaterThan(150);
+    }
+    for (const ty of [-100, 100]) {
+      let solid = 0;
+      for (let tx = -525; tx <= -435; tx++) if (!terrainWalkable(tx, ty)) solid++;
+      expect(solid, `crest row ${ty}`).toBeGreaterThan(60);
     }
     for (let tx = -576; tx <= -385; tx++) expect(terrainWalkable(tx, 7), `pass at ${tx}`).toBe(true);
   });
@@ -90,10 +97,12 @@ describe("caverns", () => {
 });
 
 describe("generator", () => {
-  it("is deterministic and leaves plain chunks as grass", () => {
+  it("is deterministic, and beyond the continent is open sea", () => {
     expect(defaultChunk(-10, 1)).toEqual(defaultChunk(-10, 1));
-    const plain = defaultChunk(10, 10);
-    for (const L of plain.layers) if (L.name !== "Ground") expect(L.data.every((g) => g === 0), L.name).toBe(true);
+    const sea = defaultChunk(30, 30);
+    const collision = sea.layers.find((L) => L.name === "Collision")!;
+    expect(collision.data.every((g) => g === 1)).toBe(true);
+    for (const L of sea.layers) if (L.name !== "Ground" && L.name !== "Collision") expect(L.data.every((g) => g === 0), L.name).toBe(true);
   });
 
   it("names the regions along the road", () => {

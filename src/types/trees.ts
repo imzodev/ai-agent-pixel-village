@@ -1,7 +1,7 @@
 // Choppable terrain trees (src/lib/trees.ts). Types only.
 
 /** A generated tree, by the lattice corner it stands on. */
-export type TreeSpot = { vx: number; vy: number; kind: "oak" | "pine" };
+export type TreeSpot = { vx: number; vy: number; kind: string };
 
 /** A chunk to re-read after the terrain in it changed. */
 export type ChunkRef = { cx: number; cy: number };

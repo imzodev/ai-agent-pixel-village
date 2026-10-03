@@ -18,9 +18,9 @@ export const MAP_MAX_ZOOM = 5;
 /** Chunks per side of a fog block (one 64-bit mask). */
 export const SEEN_BLOCK = 8;
 
-/** What the map renders today (chunks): the westward strip, the village,
- *  the fields and ranches, and the caverns. Grow it as the world grows. */
-export const MAP_BOUNDS: MapBounds = { cx0: -36, cx1: 8, cy0: -9, cy1: 33 };
+/** What the map renders (chunks): the continent (src/lib/continent.ts,
+ *  cx −40…9, cy −24…25) and, up north, the Greyspine caverns. */
+export const MAP_BOUNDS: MapBounds = { cx0: -40, cx1: 9, cy0: -24, cy1: 33 };
 
 /** Fast travel: free from beside a waystone, this much from anywhere else. */
 export const TRAVEL_COST = 10;

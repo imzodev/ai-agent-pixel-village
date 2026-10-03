@@ -17,6 +17,9 @@
 
 import type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 import { FOREST_TILES } from "./forest";
+import { hash, noise } from "./terrain/noise";
+import { isFelled, setFelledTrees } from "./terrain/felled";
+import { continentAt, continentTreeAt, inHeartland, riverCenter } from "./continent";
 
 export type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 
@@ -52,25 +55,6 @@ export function regionAt(x: number, y: number): Region | null {
 }
 
 // ── Noise ────────────────────────────────────────────────────────────────
-
-/** Deterministic hash in [0, 1) for integer coordinates. */
-function hash(a: number, b: number, salt = 0): number {
-  let h = Math.imul(a ^ 0x27d4eb2d, 0x165667b1) ^ Math.imul(b ^ 0x9e3779b9, 0x85ebca77) ^ Math.imul(salt + 1, 0xc2b2ae3d);
-  h ^= h >>> 15;
-  h = Math.imul(h, 0x2c1b3c6d);
-  h ^= h >>> 13;
-  return (h >>> 0) / 4294967296;
-}
-
-/** Smooth 2D value noise in [0, 1), feature size ≈ `scale` tiles. */
-function noise(x: number, y: number, scale: number, salt: number): number {
-  const fx = x / scale, fy = y / scale;
-  const x0 = Math.floor(fx), y0 = Math.floor(fy);
-  const s = (t: number) => t * t * (3 - 2 * t);
-  const u = s(fx - x0), v = s(fy - y0);
-  const a = hash(x0, y0, salt), b = hash(x0 + 1, y0, salt), c = hash(x0, y0 + 1, salt), d = hash(x0 + 1, y0 + 1, salt);
-  return a * (1 - u) * (1 - v) + b * u * (1 - v) + c * (1 - u) * v + d * u * v;
-}
 
 const inBox = (b: TileBox, tx: number, ty: number) => tx >= b.tx0 && tx <= b.tx1 && ty >= b.ty0 && ty <= b.ty1;
 
@@ -222,13 +206,8 @@ function inMountain(tx: number, ty: number): boolean {
 }
 
 // ── Silverrun ────────────────────────────────────────────────────────────
-const RIVER_CENTER_TX = -613;
-/** Straight stretch for the bridge (road rows) and the pier above it. */
-const STRAIGHT = { ty0: -4, ty1: 16 };
-function riverCenter(vy: number): number {
-  if (vy >= STRAIGHT.ty0 && vy <= STRAIGHT.ty1) return RIVER_CENTER_TX;
-  return RIVER_CENTER_TX + Math.round(3 * Math.sin(vy / 13) + 1.5 * Math.sin(vy / 5.3));
-}
+// Its course (riverCenter) is shared with the continent, which carries it
+// on north to its source lake and south to the sea.
 /** Brightwater's pier: deck tiles reaching into the river from the west bank. */
 export const PIER: TileBox = { tx0: -618, tx1: -614, ty0: 1, ty1: 2 };
 
@@ -339,20 +318,16 @@ const nearWater = (vx: number, vy: number, r: number) => nearField(waterV, vx, v
 const scatterTree = (vx: number, vy: number) => hash(vx, vy, 45) < 0.05;
 const even = (n: number) => ((n % 2) + 2) % 2 === 0;
 
-// Trees players have chopped down (src/lib/treesServer.ts keeps this in
-// sync with the felled_trees table): "vx,vy" lattice keys. A felled tree
-// is simply absent from the terrain — its tiles become open ground with a
-// stump — until it regrows.
-let felled: ReadonlySet<string> = new Set();
-export function setFelledTrees(keys: ReadonlySet<string>): void {
-  felled = keys;
-}
+// Trees players have chopped down (src/lib/terrain/felled.ts): a felled
+// tree is simply absent from the terrain — its tiles become open ground
+// with a stump — until it regrows.
+export { setFelledTrees };
 
 /** Forest: tree walls framing the road, Whisperwood's woods, lone trees.
  *  Trees stand on corners of a 2-tile lattice, one big 2×2 tree each. */
 function forestV(vx: number, vy: number): boolean {
   if (!even(vx) || !even(vy)) return false;
-  if (felled.size > 0 && felled.has(`${vx},${vy}`)) return false;
+  if (isFelled(vx, vy)) return false;
   if (townTree(vx, vy)) return true;
   if (vx < STRIP.tx0 || vx > -50 || vy < BARRIER_TY0 || vy > BARRIER_TY1) return false;
   if (vx >= -578 && vx <= -383) return false; // Greyspine
@@ -367,8 +342,11 @@ function forestV(vx: number, vy: number): boolean {
   return !nearPath(vx, vy, 2) && scatterTree(vx, vy);
 }
 
-/** The generated tree standing at lattice corner (vx, vy), or null. */
-export function treeAt(vx: number, vy: number): "oak" | "pine" | null {
+/** The generated tree standing at lattice corner (vx, vy), or null. The
+ *  heartland box's edges follow the lattice, so a corner's whole tree is
+ *  on one side of it. */
+export function treeAt(vx: number, vy: number): string | null {
+  if (!inHeartland(vx, vy)) return continentTreeAt(vx, vy);
   return forestV(vx, vy) ? treeKind(vx, vy) : null;
 }
 
@@ -483,6 +461,9 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     return { ground: "cave_ceiling", lower: "cave_ceiling" };
   }
 
+  // ── Beyond the heartland: the generated continent (src/lib/continent.ts).
+  if (!inHeartland(tx, ty)) return continentAt(tx, ty);
+
   // ── Greyspine: highland rock, layered faces with end caps, grassy lips.
   if (solid(tx, ty)) {
     if (underCaveMouth(tx, ty)) return { ground: "grass" }; // drawn and blocked by the stamp
@@ -560,7 +541,7 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     return cell;
   }
   // A felled tree leaves its stump (walkable) where the trunk stood.
-  if (felled.size > 0 && !cell.upper && felled.has(`${tx},${ty}`)) return { ...cell, upper: "stump" };
+  if (!cell.upper && isFelled(tx, ty)) return { ...cell, upper: "stump" };
   if (cell.upper) return cell;
 
   const tm = mask(tallV, tx, ty);

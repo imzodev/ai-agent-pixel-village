@@ -941,6 +941,7 @@ function timeAgo(at: number) {
   const m = Math.floor((Date.now() - at) / 60000);
   return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
 }
+const TREE_NAMES: Readonly<Record<string, string>> = { oak: "🌳 Oak tree", pine: "🌲 Pine tree", palm: "🌴 Palm tree", snowpine: "🌲 Snowy pine", dead: "🪵 Dead tree", dark: "🌳 Darkwood tree" };
 function selTitle(sel: Selection) {
   switch (sel.type) {
     case "npc": return `${sel.name} · ${sel.role}${sel.sponsored ? " ★" : ""}`;
@@ -959,7 +960,7 @@ function selTitle(sel: Selection) {
       return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
     }
     case "plot": return "🌱 Garden plot";
-    case "tree": return sel.kind === "pine" ? "🌲 Pine tree" : "🌳 Oak tree";
+    case "tree": return TREE_NAMES[sel.kind] ?? "🌳 Tree";
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */

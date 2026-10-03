@@ -27,12 +27,12 @@ export function trunkPoint(vx: number, vy: number): { x: number; y: number } {
 
 /** The tree drawn by a Wilds tile named `name` at tile (tx, ty), if any. */
 export function treeFromTile(name: string | null, tx: number, ty: number): TreeSpot | null {
-  const m = name ? /^tree_(oak|pine)_(\d+)$/.exec(name) : null;
+  const m = name ? /^tree_(oak|pine|palm|snowpine|dead|dark)_(\d+)$/.exec(name) : null;
   if (!m) return null;
   const fm = Number(m[2]);
   // The lattice puts exactly one tree corner on a tile (regions.ts terrainAt).
   const [vx, vy] = fm & 1 ? [tx, ty] : fm & 2 ? [tx + 1, ty] : fm & 4 ? [tx, ty + 1] : [tx + 1, ty + 1];
-  return { vx, vy, kind: m[1] as "oak" | "pine" };
+  return { vx, vy, kind: m[1] };
 }
 
 /** Chunks whose tiles depend on the tree at (vx, vy): its 2×2 tiles and the
