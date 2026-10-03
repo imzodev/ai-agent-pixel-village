@@ -3,7 +3,7 @@ import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
 import { CROP_KINDS } from "@/lib/crops";
-import { REGIONS, regionAt } from "@/lib/regions";
+import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
 import { FishingController } from "./fishing";
@@ -1003,7 +1003,8 @@ export class WorldScene extends Phaser.Scene {
     const prev = this.lastRegionKey;
     this.lastRegionKey = key;
     if (key === prev || key === null) return; // unchanged / open country
-    const r = REGIONS.find((x) => x.key === key)!;
+    const r = placeByKey(key);
+    if (!r) return;
     // Title-case the name for the sign ("the Silverrun" → "The Silverrun").
     // First sight (spawn) is quiet: the book records it, no banner.
     bus.emit("region", { name: r.name.charAt(0).toUpperCase() + r.name.slice(1), key: r.key, quiet: prev === undefined });

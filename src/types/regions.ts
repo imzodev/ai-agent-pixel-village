@@ -10,6 +10,8 @@ export type Region = {
   tx1: number;
   ty0: number;
   ty1: number;
+  /** Where the map prints its name (tiles); defaults to the box's middle. */
+  label?: { tx: number; ty: number };
 };
 
 /** An inclusive tile rectangle. */

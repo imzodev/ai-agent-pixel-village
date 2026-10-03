@@ -593,9 +593,11 @@ async function enemyHunts(startAt: number): Promise<void> {
   const rows = await db.select().from(enemies).where(inArray(enemies.kind, HUNTER_KINDS));
   const writes = [];
   for (const e of rows) {
-    const zone = enemyZoneAt(e.x, e.y);
-    if (!zone) continue;
-    const w = await planHunt(e, players, zone.rect, startAt, isWalkableServer);
+    // Zone hunters keep to their zone; wild ones to ~10 tiles of home.
+    const box = enemyZoneAt(e.x, e.y)?.rect
+      ?? (e.wild && e.targetX != null && e.targetY != null ? { x: e.targetX - 160, y: e.targetY - 160, w: 320, h: 320 } : null);
+    if (!box) continue;
+    const w = await planHunt(e, players, box, startAt, isWalkableServer);
     if (w) writes.push(w);
   }
   await writeMoves("enemy", writes);

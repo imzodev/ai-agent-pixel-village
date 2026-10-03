@@ -15,6 +15,11 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
   thornling: { name: "Thornling", tier: 2, hp: 12, xp: 15, damage: 2, drops: [{ itemKey: "thorn", chance: 0.8, qty: 2 }] },
   boar: { name: "Bramble Boar", tier: 2, hp: 22, xp: 25, damage: 3, drops: [{ itemKey: "boar_hide", chance: 0.7, qty: 1 }] },
   wolf: { name: "Grey Wolf", tier: 2, hp: 18, xp: 22, damage: 2, hunts: true, drops: [{ itemKey: "wolf_pelt", chance: 0.7, qty: 1 }] },
+  // The continent's wilds (spawned around players by biome, src/lib/sim.ts).
+  scorpion: { name: "Sand Scorpion", tier: 2, hp: 20, xp: 24, damage: 3, drops: [{ itemKey: "chitin", chance: 0.7, qty: 1 }] },
+  lurker: { name: "Bog Lurker", tier: 3, hp: 34, xp: 38, damage: 4, drops: [{ itemKey: "lurker_hide", chance: 0.65, qty: 1 }] },
+  frostwolf: { name: "Frost Wolf", tier: 3, hp: 30, xp: 34, damage: 4, hunts: true, drops: [{ itemKey: "frost_pelt", chance: 0.7, qty: 1 }] },
+  shade: { name: "Darkwood Shade", tier: 3, hp: 28, xp: 32, damage: 4, drops: [{ itemKey: "shade_essence", chance: 0.6, qty: 1 }] },
   wisp: { name: "Shade Wisp", tier: 3, hp: 30, xp: 40, damage: 4, nightOnly: true, drops: [{ itemKey: "wisp_essence", chance: 0.75, qty: 1 }] },
   // World boss: rewards are shared by everyone who fought it (BOSS_REWARD).
   rootking: { name: "Old Rootking", tier: "boss", hp: 600, xp: 300, damage: 5, drops: [] },

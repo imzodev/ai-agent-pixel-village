@@ -19,7 +19,7 @@ import type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 import { FOREST_TILES } from "./forest";
 import { hash, noise } from "./terrain/noise";
 import { isFelled, setFelledTrees } from "./terrain/felled";
-import { continentAt, continentTreeAt, inHeartland, riverCenter } from "./continent";
+import { PROVINCES, continentAt, continentTreeAt, inHeartland, provinceAt, riverCenter } from "./continent";
 
 export type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 
@@ -44,10 +44,18 @@ const regionByKey = (k: string) => REGIONS.find((r) => r.key === k)!;
 /** Inside this strip, open ground uses the detailed Wilds grass. */
 const STRIP: TileBox = { tx0: -800, tx1: -25, ty0: BARRIER_TY0, ty1: BARRIER_TY1 };
 
-/** Region containing world tile (tx, ty), if any. */
+/** Region containing world tile (tx, ty), if any: the caverns, a region of
+ *  the heartland, or a province of the continent (src/lib/continent.ts). */
 export function regionAtTile(tx: number, ty: number): Region | null {
-  return REGIONS.find((r) => tx >= r.tx0 && tx <= r.tx1 && ty >= r.ty0 && ty <= r.ty1) ?? null;
+  const r = REGIONS.find((r) => tx >= r.tx0 && tx <= r.tx1 && ty >= r.ty0 && ty <= r.ty1) ?? null;
+  if (r?.key === "caverns") return r;
+  if (!inHeartland(tx, ty)) return provinceAt(tx, ty);
+  return r;
 }
+
+/** Every named place: the heartland's regions and the provinces. */
+export const PLACES: readonly Region[] = [...REGIONS, ...PROVINCES];
+export const placeByKey = (key: string): Region | undefined => PLACES.find((p) => p.key === key);
 
 /** Region containing world pixel (x, y), if any. */
 export function regionAt(x: number, y: number): Region | null {

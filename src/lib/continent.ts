@@ -9,8 +9,8 @@
 
 import { fbm, hash, noise } from "./terrain/noise";
 import { isFelled } from "./terrain/felled";
-import type { Biome, GroundKind } from "@/types/continent";
-import type { TerrainCell, TileBox } from "@/types/regions";
+import type { Biome, GroundKind, ProvinceSeed } from "@/types/continent";
+import type { Region, TerrainCell, TileBox } from "@/types/regions";
 
 export type { Biome, GroundKind } from "@/types/continent";
 
@@ -299,4 +299,88 @@ export function continentAt(tx: number, ty: number): TerrainCell {
       break;
   }
   return cell;
+}
+
+// ── Danger ───────────────────────────────────────────────────────────────
+/** The village plaza: danger grows with distance from here. */
+const HOME = { tx: 32, ty: 21 };
+/** Danger tier 1 (safe) … 4 (deadly) at world tile (x, y): distance from
+ *  the village, plus one for peaks, darkwood and swamp. */
+export function tierAt(x: number, y: number): number {
+  const d = Math.hypot(x - HOME.tx, (y - HOME.ty) * 1.6);
+  let t = 1 + Math.floor(d / 260);
+  if (!inHeartland(x, y)) {
+    const b = biomeAt(x, y);
+    if (b === "peak" || b === "snowpeak" || b === "mesa" || b === "darkwood" || b === "swamp") t += 1;
+  } else t = Math.min(t, 2);
+  return Math.max(1, Math.min(4, t));
+}
+
+// ── Provinces ────────────────────────────────────────────────────────────
+// The land outside the heartland is split into named provinces: seed
+// points on a jittered 4 × 4 grid (skipping sea), each tile belonging to
+// its nearest seed. The name comes from the biome around the seed.
+const PROVINCE_NAMES: Readonly<Record<string, readonly string[]>> = {
+  snow: ["the Frostfang Reach", "Whitecap Fells", "the Rimewood", "Hoarfrost Hollow", "the Pale Tundra"],
+  peak: ["the High Crags", "Stormcrown Heights", "the Greyspine Crest", "Eagle's Roost"],
+  desert: ["the Ember Sands", "the Sunscald Dunes", "the Glass Waste", "the Scorched Expanse"],
+  badlands: ["the Red Mesas", "the Rustcliff Badlands", "Coyote Gulch"],
+  swamp: ["Mirewood", "the Sunken Fen", "Blackwater Bog"],
+  darkwood: ["the Gloamwood", "Nightbriar Forest", "the Hushwood"],
+  forest: ["Oakhollow Woods", "the Greenmantle", "Fernvale", "the Elderwood", "Mossbrook Forest", "Wren's Wood"],
+  meadow: ["the Golden Downs", "Thistle Plains", "Brookfield Vale", "the Clover Heath", "Larkspur Fields", "Windmere Meadows"],
+  beach: ["the Shell Coast", "Gull's Rest Shore", "the Saltwind Strand"],
+};
+/** Distinctive lands win a province's name over the common ones. */
+const NAME_WEIGHT: Readonly<Record<string, number>> = { meadow: 1, forest: 1, beach: 1, snow: 1.6, peak: 1.4, desert: 1.8, badlands: 2, swamp: 2.4, darkwood: 2.2 };
+const NAME_GROUP: Readonly<Record<Biome, string>> = {
+  ocean: "beach", beach: "beach", meadow: "meadow", forest: "forest", darkwood: "darkwood", swamp: "swamp",
+  desert: "desert", badlands: "badlands", mesa: "badlands", snow: "snow", snowpeak: "snow", peak: "peak",
+};
+const SEEDS: readonly ProvinceSeed[] = (() => {
+  const out: ProvinceSeed[] = [];
+  const used = new Map<string, number>();
+  const cw = (CONTINENT.tx1 - CONTINENT.tx0 + 1) / 4, ch = (CONTINENT.ty1 - CONTINENT.ty0 + 1) / 4;
+  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+    // try a few jittered spots in the cell; the first on open land wins
+    for (let k = 0; k < 8; k++) {
+      const tx = Math.round(CONTINENT.tx0 + cw * (i + 0.2 + hash(i, j, 541 + k) * 0.6));
+      const ty = Math.round(CONTINENT.ty0 + ch * (j + 0.2 + hash(j, i, 542 + k) * 0.6));
+      if (inHeartland(tx, ty) || elevation(tx, ty) < SEA + 0.03) continue;
+      // name it after the most common biome around the spot
+      const count = new Map<string, number>();
+      for (let dy = -40; dy <= 40; dy += 10) for (let dx = -60; dx <= 60; dx += 10) {
+        const g = NAME_GROUP[biomeAt(tx + dx, ty + dy)];
+        if (g !== "beach" || elevation(tx + dx, ty + dy) >= SEA) count.set(g, (count.get(g) ?? 0) + NAME_WEIGHT[g]);
+      }
+      const group = [...count].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "meadow";
+      const names = PROVINCE_NAMES[group];
+      const n = used.get(group) ?? 0;
+      used.set(group, n + 1);
+      const name = names[n % names.length] + (n >= names.length ? ` ${["East", "West", "North", "South"][n % 4]}` : "");
+      out.push({ key: `prov_${name.toLowerCase().replace(/^the /, "").replace(/[^a-z]+/g, "_")}_${i}${j}`, name, tx, ty });
+      break;
+    }
+  }
+  return out;
+})();
+
+/** The provinces as named regions (bounding boxes are approximate; the
+ *  true shape comes from provinceAt). */
+export const PROVINCES: Region[] = SEEDS.map((s) => ({
+  key: s.key, name: s.name,
+  tx0: CONTINENT.tx0, tx1: CONTINENT.tx1, ty0: CONTINENT.ty0, ty1: CONTINENT.ty1,
+  label: { tx: s.tx, ty: s.ty },
+}));
+
+/** The province at world tile (x, y): land outside the heartland only. */
+export function provinceAt(x: number, y: number): Region | null {
+  if (inHeartland(x, y) || x < CONTINENT.tx0 || x > CONTINENT.tx1 || y < CONTINENT.ty0 || y > CONTINENT.ty1) return null;
+  if (elevation(x, y) < SEA) return null;
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < SEEDS.length; i++) {
+    const d = (SEEDS[i].tx - x) ** 2 + ((SEEDS[i].ty - y) * 1.3) ** 2;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best >= 0 ? PROVINCES[best] : null;
 }

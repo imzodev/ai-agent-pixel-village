@@ -6,6 +6,8 @@
 // shadow. One block: the float/flicker cycle (it never touches the ground).
 //
 //   node scripts/draw-wisp.mjs            → public/assets/animals/wisp.png
+//   node scripts/draw-wisp.mjs shade      → public/assets/animals/shade.png
+//                                           (the darkwood's violet-black shade)
 
 import { blank, block, ellipse, outline as trace, poly, put, writeSheet } from "./pixel-art.mjs";
 
@@ -17,6 +19,10 @@ const C = {
   glow: [176, 214, 255],
   eye: [28, 18, 52],
 };
+const VARIANT = process.argv[2] ?? "wisp";
+if (VARIANT === "shade") Object.assign(C, {
+  outline: [12, 6, 20], body: [70, 40, 110], bodyLo: [44, 24, 76], core: [170, 255, 170], glow: [120, 220, 140], eye: [200, 255, 120],
+});
 const outline = (fr) => trace(fr, C.outline);
 
 const FLOAT = [0, 1, 2, 3].map((i) => ({ bob: [0, -1, -2, -1][i], flick: i }));
@@ -64,4 +70,4 @@ const views = {
   front: (f) => draw(f, "front"),
   back: (f) => draw(f, "back"),
 };
-await writeSheet("wisp", [block(views, FLOAT)]);
+await writeSheet(VARIANT, [block(views, FLOAT)]);

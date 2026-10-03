@@ -15,7 +15,7 @@ import sharp from "sharp";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characterMapSeen, characterWaystones, lots } from "@/db/schema";
-import { REGIONS } from "./regions";
+import { PLACES } from "./regions";
 import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
 import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
@@ -234,11 +234,12 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     const e = manifest.find((b) => b.key === l.buildingKey);
     if (d) myLots.push({ kind: l.kind, name: e?.name ?? l.buildingKey, x: d.x, y: d.y });
   }
-  // Region names sit just above the King's Road; the caverns at their middle.
-  const regions = REGIONS.map((r) => ({
+  // Heartland names sit just above the King's Road, the caverns at their
+  // middle, provinces at their seed points.
+  const regions = PLACES.map((r) => ({
     name: r.name.charAt(0).toUpperCase() + r.name.slice(1),
-    x: ((r.tx0 + r.tx1 + 1) / 2) * 16,
-    y: r.key === "caverns" ? ((r.ty0 + r.ty1) / 2) * 16 : -2 * 16,
+    x: (r.label ? r.label.tx : (r.tx0 + r.tx1 + 1) / 2) * 16,
+    y: (r.label ? r.label.ty : r.key === "caverns" ? (r.ty0 + r.ty1) / 2 : -2) * 16,
   }));
   regions.push({ name: "The Village", x: 32 * 16, y: 12 * 16 });
   return { version: await mapVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions };

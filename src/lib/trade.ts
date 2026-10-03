@@ -27,6 +27,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns — two coppers. Good for pins and blades." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "A boar hide! Five coppers. Makes a fine grip." },
     { itemKey: "wolf_pelt", qty: 1, price: 6, line: "A wolf pelt? Six coppers — it'll line a good many gloves." },
+    { itemKey: "chitin", qty: 1, price: 4, line: "Scorpion chitin! Four coppers — makes the toughest buttons." },
   ],
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
@@ -40,6 +41,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "mushroom", qty: 1, price: 3, line: "Speckled mushrooms? Three coppers. Best in the grove." },
     { itemKey: "bat_wing", qty: 1, price: 2, line: "Bat wings, two coppers. Don't ask what for." },
     { itemKey: "wisp_essence", qty: 1, price: 10, line: "Wisp essence... ten coppers, and handle it gently." },
+    { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
   shopkeeper: [
     { itemKey: "mushroom", qty: 1, price: 2, line: "Mushrooms, two coppers. I'll pickle 'em." },
@@ -54,6 +56,8 @@ export const TRADES: TradeConfig = {
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns! Two coppers. They take an edge like nothing else." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "Boar hide, five coppers. Best grip wrapping there is." },
     { itemKey: "wolf_pelt", qty: 1, price: 6, line: "Wolf pelt — six coppers. You've been in Whisperwood, I see." },
+    { itemKey: "lurker_hide", qty: 1, price: 7, line: "Lurker hide, seven coppers. Wraps a hilt like nothing else." },
+    { itemKey: "frost_pelt", qty: 1, price: 9, line: "A frost pelt! Nine coppers — you've been up in the cold." },
   ],
   hm_innkeeper: [
     { itemKey: "milk", qty: 1, price: 4, line: "Fresh milk! Four coppers — the woodcutters drink it by the bucket." },

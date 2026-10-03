@@ -6,14 +6,14 @@ import type { AchievementDef, CollectionCounts, CollectionEntry, CollectionPageD
 import { FISH_DEFS } from "./fishing";
 import { GARDEN_CROPS } from "./crops";
 import { ENEMY_KINDS } from "./progression";
-import { REGIONS } from "./regions";
+import { PLACES, REGIONS } from "./regions";
 
 export type { AchievementDef, CollectionBookView, CollectionCounts, CollectionEntry, CollectionKind, CollectionPageDef } from "@/types/collection";
 
 const CROP_LOOK: Record<string, { name: string; icon: string }> = {
   radish: { name: "Radish", icon: "🔴" }, carrot: { name: "Carrot", icon: "🥕" }, tomato: { name: "Tomato", icon: "🍅" }, pumpkin: { name: "Pumpkin", icon: "🎃" },
 };
-const ENEMY_ICON: Record<string, string> = { slime: "🟢", bat: "🦇", thornling: "🌵", boar: "🐗", wolf: "🐺", wisp: "👻", rootking: "🌳" };
+const ENEMY_ICON: Record<string, string> = { slime: "🟢", bat: "🦇", thornling: "🌵", boar: "🐗", wolf: "🐺", scorpion: "🦂", lurker: "🐸", frostwolf: "🐺", shade: "🟣", wisp: "👻", rootking: "🌳" };
 const REGION_ICON: Record<string, string> = { meadow: "🌼", whisperwood: "🌲", hollowmere: "🏘️", greyspine: "⛰️", silverrun: "🌊", brightwater: "⚓", caverns: "💎" };
 
 /** All pages; the folk page lists the given NPCs. */
@@ -22,7 +22,7 @@ export function collectionPages(folk: CollectionEntry[]): CollectionPageDef[] {
     { key: "fish", name: "Fish", icon: "🎣", kind: "fish", entries: FISH_DEFS.map((f) => ({ key: f.key, name: f.name, icon: f.icon })), reward: { coins: 150, title: "Master Angler" } },
     { key: "crops", name: "Crops", icon: "🌱", kind: "crop", entries: Object.values(GARDEN_CROPS).map((c) => ({ key: c.produceKey, ...(CROP_LOOK[c.produceKey] ?? { name: c.produceKey, icon: "🌱" }) })), reward: { coins: 60, title: "Green Thumb" } },
     { key: "creatures", name: "Creatures", icon: "⚔️", kind: "enemy", entries: Object.entries(ENEMY_KINDS).map(([k, d]) => ({ key: k, name: d.name, icon: ENEMY_ICON[k] ?? "👾" })), reward: { coins: 120, title: "Monster Scholar" } },
-    { key: "places", name: "Places", icon: "🧭", kind: "region", entries: REGIONS.map((r) => ({ key: r.key, name: r.name.replace(/^the /, ""), icon: REGION_ICON[r.key] ?? "📍" })), reward: { coins: 100, title: "Wayfarer" } },
+    { key: "places", name: "Places", icon: "🧭", kind: "region", entries: PLACES.map((r) => ({ key: r.key, name: r.name.replace(/^the /, ""), icon: REGION_ICON[r.key] ?? "🗺️" })), reward: { coins: 400, title: "Wayfarer" } },
     { key: "folk", name: "Folk", icon: "👥", kind: "npc", entries: folk, reward: { coins: 80, title: "Friend of All" } },
   ];
 }

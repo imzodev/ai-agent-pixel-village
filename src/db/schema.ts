@@ -443,6 +443,10 @@ export const enemies = pgTable("enemies", {
   moveAfter: text("move_after"),
   /** World boss only: damage dealt per character id, for shared rewards. */
   damage: jsonb("damage").$type<Record<string, number>>(),
+  /** Spawned around players in the continent's wilds (home = targetX/Y);
+   *  `nearAt` is the last time a player was close — they despawn after. */
+  wild: boolean("wild").notNull().default(false),
+  nearAt: timestamp("near_at"),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
