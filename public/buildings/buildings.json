@@ -647,6 +647,90 @@
       "price": 40,
       "tx": 120,
       "ty": 75
+    },
+    {
+      "key": "waystone_village",
+      "file": "/buildings/waystone.json",
+      "name": "Village Waystone",
+      "kind": "waystone",
+      "description": "The village plaza: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": 14,
+      "ty": 13
+    },
+    {
+      "key": "waystone_meadow",
+      "file": "/buildings/waystone.json",
+      "name": "Meadow Waystone",
+      "kind": "waystone",
+      "description": "The Western Meadow road: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -84,
+      "ty": -8
+    },
+    {
+      "key": "waystone_whisperwood",
+      "file": "/buildings/waystone.json",
+      "name": "Whisperwood Waystone",
+      "kind": "waystone",
+      "description": "Deep in Whisperwood: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -212,
+      "ty": -8
+    },
+    {
+      "key": "waystone_hollowmere",
+      "file": "/buildings/waystone.json",
+      "name": "Hollowmere Waystone",
+      "kind": "waystone",
+      "description": "Hollowmere square: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -334,
+      "ty": -4
+    },
+    {
+      "key": "waystone_greyspine",
+      "file": "/buildings/waystone.json",
+      "name": "Greyspine Waystone",
+      "kind": "waystone",
+      "description": "The Greyspine cave mouth: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -486,
+      "ty": -7
+    },
+    {
+      "key": "waystone_silverrun",
+      "file": "/buildings/waystone.json",
+      "name": "Silverrun Waystone",
+      "kind": "waystone",
+      "description": "The Silverrun bridge: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -584,
+      "ty": -8
+    },
+    {
+      "key": "waystone_brightwater",
+      "file": "/buildings/waystone.json",
+      "name": "Brightwater Waystone",
+      "kind": "waystone",
+      "description": "Brightwater square: an old standing stone humming with blue light. Attune to it, then travel between waystones from your map.",
+      "color": "#5ab0f0",
+      "menu": [],
+      "reservable": false,
+      "tx": -706,
+      "ty": -4
     }
   ]
 }

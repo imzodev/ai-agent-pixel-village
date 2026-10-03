@@ -17,6 +17,8 @@ import CollectionBook from "./CollectionBook";
 import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
+import MapPanel from "./MapPanel";
+import { WAYSTONE_ATTUNE_PX, chunksAround } from "@/lib/worldAtlas";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
@@ -59,6 +61,15 @@ export default function Hud() {
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
   const [canFish, setCanFish] = useState(false);
+  // The world map (M): open / opened at a waystone, the quest star, and
+  // chunks seen this session that haven't been saved yet.
+  const [mapOpen, setMapOpen] = useState<null | "browse" | "travel">(null);
+  const [guideTarget, setGuideTarget] = useState<{ x: number; y: number } | null>(null);
+  const [freshSeen, setFreshSeen] = useState<ReadonlySet<string>>(new Set());
+  const pendingSeen = useRef(new Set<string>());
+  const lastSeenChunk = useRef("");
+  const attuned = useRef<Set<string> | null>(null);
+  const attuning = useRef(new Set<string>());
   const talkInput = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
 
@@ -79,6 +90,7 @@ export default function Hud() {
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
       bus.on("canFish", setCanFish),
+      bus.on("guide", setGuideTarget),
       // Entering a region fills the book's Places page (server checks you're there).
       bus.on("region", ({ key }) => {
         void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => { if (r.new && r.message) toast(r.message, "good"); });
@@ -90,9 +102,9 @@ export default function Hud() {
         }
         // The mobile action buttons emit "map" / "quests" / "friends" too —
         // map those to existing panels when possible.
+        if (which === "map") { setMapOpen((m) => (m ? null : "browse")); return; }
         const target: "bag" | "missions" | "log" | "home" | "quests" | "friends" | null =
           which === "bag" ? "bag" :
-          which === "map" ? "log" :
           which === "quests" ? "quests" :
           which === "friends" ? "friends" :
           null;
@@ -322,12 +334,67 @@ export default function Hud() {
     if (r.error) toast(r.error, "bad"); else { if (r.message) toast(r.message, "good"); void refreshMe(); bus.emit("poke", undefined); }
   };
   const isPortalKey = (key: string) => snap?.buildings.some((b) => b.key === key && b.kind === "portal") ?? false;
+  const isWaystoneKey = (key: string) => snap?.buildings.some((b) => b.key === key && b.kind === "waystone") ?? false;
+  /** Attune a waystone you're beside (once; the server checks you're there). */
+  const attune = useCallback(async (key: string) => {
+    if (attuned.current?.has(key) || attuning.current.has(key)) return;
+    attuning.current.add(key);
+    const r = await api<{ new?: boolean; message?: string }>("/api/waystones", { action: "attune", key });
+    attuning.current.delete(key);
+    if (r.error) return;
+    (attuned.current ??= new Set()).add(key);
+    if (r.new && r.message) toast(r.message, "good");
+  }, [toast]);
+  // Waystones you've attuned (loaded once), so walking past only asks once.
+  const loggedInNow = !!snap?.me;
+  useEffect(() => {
+    if (!loggedInNow || attuned.current) return;
+    void api<{ waystones?: { key: string; attuned: boolean }[] }>("/api/map/markers").then((m) => {
+      if (m.waystones) attuned.current = new Set(m.waystones.filter((w) => w.attuned).map((w) => w.key));
+    });
+  }, [loggedInNow]);
+  // As you walk: mark the chunks around you seen (fog of war) and attune
+  // any waystone you pass. Runs off the move event, reading the latest
+  // snapshot through a ref.
+  const buildingsRef = useRef(snap?.buildings ?? []);
+  useEffect(() => { buildingsRef.current = snap?.buildings ?? []; }, [snap?.buildings]);
+  const seenKeys = useRef(new Set<string>());
+  useEffect(() => {
+    if (!loggedInNow) return;
+    return bus.on("playerMoved", (pos) => {
+      const here = chunksAround(pos.x, pos.y);
+      const key = `${here[4].cx},${here[4].cy}`;
+      if (key !== lastSeenChunk.current) {
+        lastSeenChunk.current = key;
+        const add = here.map((c) => `${c.cx},${c.cy}`).filter((k) => !seenKeys.current.has(k));
+        if (add.length) {
+          for (const k of add) { seenKeys.current.add(k); pendingSeen.current.add(k); }
+          setFreshSeen(new Set(seenKeys.current));
+        }
+      }
+      for (const b of buildingsRef.current) {
+        if (b.kind === "waystone" && Math.hypot(b.doorX + 8 - pos.x, b.doorY - pos.y) <= WAYSTONE_ATTUNE_PX) void attune(b.key);
+      }
+    });
+  }, [loggedInNow, attune]);
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const flush = () => {
+      if (pendingSeen.current.size === 0) return;
+      const chunks = [...pendingSeen.current].map((k) => k.split(",").map(Number));
+      pendingSeen.current.clear();
+      void api("/api/map/seen", { chunks });
+    };
+    const t = setInterval(flush, 10_000);
+    return () => { clearInterval(t); flush(); };
+  }, [loggedInNow]);
   const enterBuilding = async (key: string, name: string) => {
     const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number } };
     // Portals (the cave) move you instead of opening a panel.
     if (r.teleport) bus.emit("teleport", r.teleport);
     else if (isPortalKey(key)) { /* refused (too far, …): act() already toasted */ }
     else if (key === "homes") setPanel("home");
+    else if (isWaystoneKey(key)) { void attune(key); setMapOpen("travel"); }
     else setBuilding({ key, name });
     setSel(null);
   };
@@ -427,6 +494,7 @@ export default function Hud() {
   // inspect → panel → building → selection. The router dispatches ui.* even
   // when a text field is focused, so Escape always works.
   const close = useCallback((): void => {
+    if (mapOpen) { setMapOpen(null); return; }
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
     if (craft) { setCraft(null); return; }
@@ -434,7 +502,7 @@ export default function Hud() {
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [talk, trade, craft, inspect, panel, building, sel]);
+  }, [mapOpen, talk, trade, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -450,7 +518,7 @@ export default function Hud() {
       inputRouter.register({
         id: "ui.map",
         scope: "ui",
-        run: () => setPanel((p) => (p === "log" ? null : "log")),
+        run: () => setMapOpen((m) => (m ? null : "browse")),
       }),
       inputRouter.register({
         id: "ui.shop",
@@ -508,6 +576,9 @@ export default function Hud() {
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
       <LocationBanner />
+      {loggedIn && mapOpen && (
+        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
+      )}
       {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
       )}
@@ -563,7 +634,8 @@ export default function Hud() {
             <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
           </>
         ) : null}
-        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>🗺️ World</TopBtn>
+        {loggedIn && <TopBtn on={() => setMapOpen(mapOpen ? null : "browse")} active={!!mapOpen}>🗺️ Map</TopBtn>}
+        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📰 World</TopBtn>
         <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
         <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60">🤖 Agent API</Link>
         {loggedIn ? (

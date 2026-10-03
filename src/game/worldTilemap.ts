@@ -187,6 +187,7 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "Forge", file: "Forge.png" },
   { name: "Inn", file: "Inn.png" },
   { name: "RanchLot", file: "RanchLot.png" },
+  { name: "Waystone", file: "Waystone.png" },
 ];
 
 // 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,

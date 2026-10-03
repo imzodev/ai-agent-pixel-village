@@ -505,6 +505,30 @@ export const characterCollection = pgTable(
   (t) => [uniqueIndex("character_collection_pk").on(t.characterId, t.kind, t.key)],
 );
 
+/** Fog of war (src/lib/worldAtlas.ts): chunks a character has seen, as a
+ *  64-bit mask per 8×8-chunk block — sparse, so it scales with exploring. */
+export const characterMapSeen = pgTable(
+  "character_map_seen",
+  {
+    characterId: integer("character_id").notNull(),
+    bx: integer("bx").notNull(),
+    by: integer("by").notNull(),
+    mask: bigint("mask", { mode: "bigint" }).notNull(),
+  },
+  (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
+);
+
+/** Waystones a character has attuned (fast-travel destinations). */
+export const characterWaystones = pgTable(
+  "character_waystones",
+  {
+    characterId: integer("character_id").notNull(),
+    key: text("key").notNull(),
+    attunedAt: timestamp("attuned_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_waystones_pk").on(t.characterId, t.key)],
+);
+
 /** Generated trees players are chopping or have felled (src/lib/trees.ts),
  *  by lattice corner. Felled while `regrow_at` is in the future. */
 export const felledTrees = pgTable(
