@@ -505,6 +505,21 @@ export const characterCollection = pgTable(
   (t) => [uniqueIndex("character_collection_pk").on(t.characterId, t.kind, t.key)],
 );
 
+/** Generated trees players are chopping or have felled (src/lib/trees.ts),
+ *  by lattice corner. Felled while `regrow_at` is in the future. */
+export const felledTrees = pgTable(
+  "felled_trees",
+  {
+    vx: integer("vx").notNull(),
+    vy: integer("vy").notNull(),
+    hits: integer("hits").notNull().default(0),
+    felledAt: timestamp("felled_at"),
+    regrowAt: timestamp("regrow_at"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("felled_trees_pk").on(t.vx, t.vy), index("felled_trees_regrow_idx").on(t.regrowAt)],
+);
+
 /** Perks a character picked (one every 5 levels, see src/lib/progression.ts). */
 export const characterPerks = pgTable(
   "character_perks",

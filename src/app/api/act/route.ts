@@ -5,7 +5,9 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
-import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { chopTree } from "@/lib/treesServer";
+import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
@@ -146,6 +148,34 @@ export async function POST(req: Request) {
         notices: step ? [step] : [],
         message: `${chop ? "Chopped" : "Gathered"} ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
         gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
+      });
+    }
+
+    // A generated tree (woods, tree walls): every chop gives wood; the last
+    // one fells it, opening the way until it grows back.
+    if (action === "chop_tree") {
+      const vx = Number(body.vx), vy = Number(body.vy);
+      const t = trunkPoint(vx, vy);
+      const p = livePos(me);
+      if (!Number.isFinite(t.x) || Math.hypot(t.x - p.x, t.y - p.y) > TREE_REACH_PX) return Response.json({ error: "Get closer to the trunk." }, { status: 400 });
+      const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      if (!gear.bag.some((k) => AXE_ITEMS.includes(k))) return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
+      const r = await chopTree(vx, vy);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      const yieldAmt = 1 + chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
+      await addItem(me.id, "wood", yieldAmt);
+      await progressMissions(me.id, (q) => q.type === "collect" && q.itemKey === "wood", yieldAmt);
+      await db.update(characters).set({ xp: sql`${characters.xp} + ${r.felled ? 5 : 3}` }).where(eq(characters.id, me.id));
+      await recalcLevel(me.id);
+      daily(me.id, "collect", { itemKey: "wood" }, yieldAmt);
+      if (r.felled) broadcastChunkReload(r.chunks);
+      const step = await tutorialEvent(me.id, "collect", { itemKey: "wood" }, yieldAmt);
+      return Response.json({
+        ok: true,
+        felled: r.felled,
+        notices: step ? [step] : [],
+        message: r.felled ? `🌲 Timber! The tree comes down (+${yieldAmt} wood). It'll grow back in time.` : `Chopped ${yieldAmt} wood. ${r.hitsLeft} more to fell it.`,
+        gained: [{ itemKey: "wood", qty: yieldAmt }],
       });
     }
 

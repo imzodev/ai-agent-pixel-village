@@ -15,8 +15,10 @@ import {
 } from "./chunkCollision";
 import { defaultChunk } from "./chunkGen";
 import { stampBuildingCollisions } from "./buildingStampsServer";
+import { ensureFelledLoaded } from "./treesServer";
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
+  await ensureFelledLoaded(); // generated trees players have felled
   try {
     const buf = await fs.readFile(path.join(process.cwd(), "public", "assets", "maps", `map_${cx}_${cy}.json`));
     return JSON.parse(buf.toString("utf8"));

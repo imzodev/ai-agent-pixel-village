@@ -61,4 +61,6 @@ export type Selection =
       distance: number;
     }
   // An empty garden plot (a crop in it is selected as its `node` instead).
-  | { type: "plot"; lotKey: string; plot: number; x: number; y: number; distance: number };
+  | { type: "plot"; lotKey: string; plot: number; x: number; y: number; distance: number }
+  // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
+  | { type: "tree"; vx: number; vy: number; kind: "oak" | "pine"; x: number; y: number; distance: number };

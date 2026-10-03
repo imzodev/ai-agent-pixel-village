@@ -8,7 +8,7 @@ import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/l
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
-import { PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
+import { AXE_ITEMS, PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import LocationBanner from "./LocationBanner";
@@ -229,7 +229,7 @@ export default function Hud() {
   };
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
-  const hasAxe = (me?.inventory ?? []).some((i) => i.itemKey === "axe" && i.qty > 0);
+  const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
 
   const doInspect = async (q: string) => {
@@ -386,6 +386,13 @@ export default function Hud() {
         void act({ action: "gather", id: s.id });
         break;
       }
+      case "tree":
+        // A terrain tree: a few chops fell it and open the way.
+        if (d > 44) { walk(); break; }
+        if (!hasAxe) { toast("You need an axe. Pip sells them.", "info"); break; }
+        bus.emit("attack", { x: pos.x, y: pos.y, tool: "axe" });
+        void act({ action: "chop_tree", vx: s.vx, vy: s.vy }).then((r) => { if ((r as { felled?: boolean }).felled) setSel(null); });
+        break;
       case "plot":
         if (d > 90) { walk(); break; }
         if (seedsInBag[0]) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: seedsInBag[0].itemKey });
@@ -669,6 +676,9 @@ export default function Hud() {
               </Btn>
             );
           })()}
+          {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
+            : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
+            : <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>)}
           {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? (
             <Btn on={() => commitSelection(sel)}>{sel.key === "cave_mouth" ? "🕳️ Enter the cave" : sel.key === "cave_exit" ? "☀️ Climb out" : "🚪 Enter"} {interactHint}</Btn>
@@ -694,7 +704,7 @@ export default function Hud() {
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
-          {sel.type !== "plot" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -877,6 +887,7 @@ function selTitle(sel: Selection) {
       return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
     }
     case "plot": return "🌱 Garden plot";
+    case "tree": return sel.kind === "pine" ? "🌲 Pine tree" : "🌳 Oak tree";
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
@@ -963,6 +974,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

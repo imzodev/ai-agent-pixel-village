@@ -52,6 +52,8 @@ export type StreamHandlers = {
   onPlayerAct: (data: { id: number; kind: PlayerActKind; facing: Facing }) => void;
   /** An enemy hit you (amount, new HP, and what hit you). */
   onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string }) => void;
+  /** Chunks whose terrain changed (felled / regrown trees): re-read them. */
+  onChunkReload?: (data: { chunks: { cx: number; cy: number }[] }) => void;
   /** An enemy struck at the player at (x, y) (plays its attack animation). */
   onEnemyAct?: (data: { id: number; x: number; y: number }) => void;
   /** You were knocked out and woke at (x, y). */

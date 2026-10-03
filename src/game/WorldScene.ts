@@ -25,8 +25,13 @@ import {
   loadTilemapAssets,
   recenterCamera,
   releaseOutside,
+  reloadChunk,
   resetChunkState,
+  tileGidAt,
 } from "./worldTilemap";
+import { wildsNameOf } from "@/lib/terrain/wilds";
+import { treeFromTile, trunkPoint } from "@/lib/trees";
+import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt } from "@/types/game";
@@ -446,6 +451,11 @@ export class WorldScene extends Phaser.Scene {
         onHurt: ({ amount, hp, maxHp }) => {
           if (!this.alive()) return;
           bus.emit("hurt", { amount, hp, maxHp });
+        },
+        onChunkReload: ({ chunks }) => {
+          if (!this.alive()) return;
+          const around = this.player ? chunkAtPixel(this.player.sprite.x, this.player.sprite.y) : this.lastPlayerChunk ?? { cx: 0, cy: 0 };
+          for (const c of chunks) void reloadChunk(this, c.cx, c.cy, around);
         },
         onEnemyAct: ({ id, x, y }) => {
           if (!this.alive()) return;
@@ -874,6 +884,7 @@ export class WorldScene extends Phaser.Scene {
       case "node": return this.snapshot.nodes.some((x) => x.id === sel.id);
       case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
       case "player": return this.snapshot.players.some((x) => x.id === sel.id);
+      case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
       // An empty plot stays valid until something is planted in it.
       case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
@@ -901,6 +912,23 @@ export class WorldScene extends Phaser.Scene {
     const n = this.snapshot?.nodes.find((x) => x.id === sel.id);
     return !n || n.stage < 1;
   }
+  /** Generated trees whose trunks are within `r` px of (x, y), read off the
+   *  loaded tile layers (src/lib/trees.ts). */
+  private treesNear(x: number, y: number, r: number): TreeSpot[] {
+    const out = new Map<string, TreeSpot>();
+    const tx0 = Math.floor((x - r) / 16), tx1 = Math.floor((x + r) / 16);
+    const ty0 = Math.floor((y - r) / 16) - 1, ty1 = Math.floor((y + r) / 16) + 1;
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      for (const layer of ["DecorationLower", "DecorationMiddle", "DecorationUpper"]) {
+        const t = treeFromTile(wildsNameOf(tileGidAt(layer, tx * 16 + 8, ty * 16 + 8)), tx, ty);
+        if (!t) continue;
+        const at = trunkPoint(t.vx, t.vy);
+        if (Math.hypot(at.x - x, at.y - y) <= r) out.set(`${t.vx},${t.vy}`, t);
+      }
+    }
+    return [...out.values()];
+  }
+
   /** Selection types that have a primary action the player can perform. */
   private isActionable(sel: Selection): boolean {
     return sel.type !== "player";
@@ -927,6 +955,8 @@ export class WorldScene extends Phaser.Scene {
     for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
     for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
+    // Terrain trees (choppable): judged by their trunk.
+    for (const t of this.treesNear(p.x, p.y, 64)) { const at = trunkPoint(t.vx, t.vy); add(at.x, at.y, (d) => ({ type: "tree", vx: t.vx, vy: t.vy, kind: t.kind, x: at.x, y: at.y, distance: d })); }
     cands.sort((a, b) => a.score - b.score);
     return cands[0]?.sel ?? null;
   }

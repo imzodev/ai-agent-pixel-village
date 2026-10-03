@@ -43,6 +43,9 @@ import { damagePlayer, perksOfMany } from "@/lib/combat";
 import { planMoveFanout } from "@/lib/moveFanout";
 import { fetchMovesStartingAt, writeMoves } from "@/lib/moveStore";
 import { planHunt } from "@/lib/hunt";
+import { postponeRegrowth, syncFelledTrees } from "@/lib/treesServer";
+import { trunkPoint } from "@/lib/trees";
+import type { ChunkRef } from "@/types/trees";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import type { Connection, WsSharedState } from "@/types/websocket";
@@ -527,6 +530,11 @@ async function onBeat(boundary: number): Promise<void> {
   const startAt = boundary + WORLD_TICK_MS;
   // Drop cached snapshots so anything built from now on includes them.
   invalidateSnapshots();
+  try {
+    await treeBeat();
+  } catch (err) {
+    log.error({ err }, "tree sync failed");
+  }
   if (connections.size === 0) return;
   try {
     // Hunters (wolves) replace their wander with a chase before the
@@ -547,6 +555,30 @@ async function onBeat(boundary: number): Promise<void> {
     log.error({ err }, "enemy aggression failed");
   }
   if (beatIndex(boundary) % RESYNC_EVERY_BEATS === 0) await resyncAll();
+}
+
+/**
+ * Felled trees: keep any due to grow back where a player stands felled a
+ * little longer, then pick up fells / regrowths (from any process) and tell
+ * clients which chunks to re-read.
+ */
+async function treeBeat(): Promise<void> {
+  const players = [...connections.values()];
+  await postponeRegrowth((vx, vy) => {
+    const t = trunkPoint(vx, vy);
+    return players.some((c) => Math.abs(c.homePx - t.x) < 28 && c.homePy > t.y - 40 && c.homePy < t.y + 24);
+  }, WORLD_TICK_MS * 2);
+  const chunks = await syncFelledTrees();
+  if (chunks.length > 0) broadcastChunkReload(chunks);
+}
+
+/** Tell every client to re-read these chunks (trees felled / regrown). */
+export function broadcastChunkReload(chunks: ChunkRef[]): void {
+  const msg = JSON.stringify({ type: "chunkReload", chunks });
+  for (const c of connections.values()) {
+    if (c.ws.readyState !== c.ws.OPEN) continue;
+    try { c.ws.send(msg); } catch { /* socket closed */ }
+  }
 }
 
 const HUNTER_KINDS = Object.entries(ENEMY_KINDS).filter(([, k]) => k.hunts).map(([key]) => key);

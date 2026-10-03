@@ -339,10 +339,20 @@ const nearWater = (vx: number, vy: number, r: number) => nearField(waterV, vx, v
 const scatterTree = (vx: number, vy: number) => hash(vx, vy, 45) < 0.05;
 const even = (n: number) => ((n % 2) + 2) % 2 === 0;
 
+// Trees players have chopped down (src/lib/treesServer.ts keeps this in
+// sync with the felled_trees table): "vx,vy" lattice keys. A felled tree
+// is simply absent from the terrain — its tiles become open ground with a
+// stump — until it regrows.
+let felled: ReadonlySet<string> = new Set();
+export function setFelledTrees(keys: ReadonlySet<string>): void {
+  felled = keys;
+}
+
 /** Forest: tree walls framing the road, Whisperwood's woods, lone trees.
  *  Trees stand on corners of a 2-tile lattice, one big 2×2 tree each. */
 function forestV(vx: number, vy: number): boolean {
   if (!even(vx) || !even(vy)) return false;
+  if (felled.size > 0 && felled.has(`${vx},${vy}`)) return false;
   if (townTree(vx, vy)) return true;
   if (vx < STRIP.tx0 || vx > -50 || vy < BARRIER_TY0 || vy > BARRIER_TY1) return false;
   if (vx >= -578 && vx <= -383) return false; // Greyspine
@@ -355,6 +365,11 @@ function forestV(vx: number, vy: number): boolean {
     return !GLADES.some((g) => Math.hypot(vx - g.x, vy - g.y) < g.r + noise(vx, vy, 2, 47) * 2);
   }
   return !nearPath(vx, vy, 2) && scatterTree(vx, vy);
+}
+
+/** The generated tree standing at lattice corner (vx, vy), or null. */
+export function treeAt(vx: number, vy: number): "oak" | "pine" | null {
+  return forestV(vx, vy) ? treeKind(vx, vy) : null;
 }
 
 /** Which tree grows at a forest corner: pines thicken toward the mountains. */
@@ -544,6 +559,8 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     else cell.canopy = name;
     return cell;
   }
+  // A felled tree leaves its stump (walkable) where the trunk stood.
+  if (felled.size > 0 && !cell.upper && felled.has(`${tx},${ty}`)) return { ...cell, upper: "stump" };
   if (cell.upper) return cell;
 
   const tm = mask(tallV, tx, ty);

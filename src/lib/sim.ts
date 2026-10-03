@@ -30,6 +30,7 @@ import { leashAround, leashOfRect, pickWanderMove, planGoalMove } from "./wander
 import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
+import { syncFelledTrees } from "./treesServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
 /** Enemies kept alive per wild zone (zones refill so they can be farmed). */
@@ -116,6 +117,9 @@ export async function tickWorld(): Promise<number | null> {
   const late = nowMs - beatStartAt(nowMs) > BROADCAST_OFFSET_MS / 2;
   const beat: TickBeat = { index: beatIndex(nowMs), nowMs, startAt: nextBeatAt(nowMs) + (late ? WORLD_TICK_MS : 0) };
 
+  // Felled trees (any process may have chopped one): walls and wander
+  // paths must follow the terrain players opened up.
+  await syncFelledTrees(now).catch((err) => console.warn("[tick] tree sync failed:", err instanceof Error ? err.message : err));
   const [animalMoves, npcMoves, , , enemyMoves] = await Promise.all([
     tickAnimals(beat, elapsedSec, night, now),
     tickNpcs(beat),
