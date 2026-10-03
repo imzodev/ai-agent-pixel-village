@@ -522,6 +522,17 @@ export const characterMapSeen = pgTable(
   (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
 );
 
+/** Standing with each continent town (src/lib/reputation.ts). */
+export const characterReputation = pgTable(
+  "character_reputation",
+  {
+    characterId: integer("character_id").notNull(),
+    town: text("town").notNull(),
+    points: integer("points").notNull().default(0),
+  },
+  (t) => [uniqueIndex("character_reputation_pk").on(t.characterId, t.town)],
+);
+
 /** Waystones a character has attuned (fast-travel destinations). */
 export const characterWaystones = pgTable(
   "character_waystones",

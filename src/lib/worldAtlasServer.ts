@@ -140,7 +140,7 @@ export function mapVersion(): Promise<string> {
     const h = crypto.createHash("sha1").update(String(RENDER_VERSION));
     h.update(JSON.stringify((await getBuildingsManifest()).buildings));
     // the terrain generators themselves: a world change re-renders the map
-    for (const f of ["src/lib/regions.ts", "src/lib/continent.ts", "src/lib/terrain/noise.ts", "src/lib/terrain/wildsTiles.json"]) {
+    for (const f of ["src/lib/regions.ts", "src/lib/continent.ts", "src/lib/settlements.ts", "src/lib/settlementsData.json", "src/lib/terrain/noise.ts", "src/lib/terrain/wildsTiles.json"]) {
       try { h.update(fs.readFileSync(path.join(process.cwd(), f))); } catch { /* not shipped: fine */ }
     }
     const dir = path.join(process.cwd(), "public", "assets", "maps");

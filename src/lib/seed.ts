@@ -26,6 +26,7 @@ import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
+import { SETTLEMENT_NPCS } from "./settlements";
 import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
@@ -306,6 +307,10 @@ export const NPC_DEFS: {
     mood: "warm",
   },
 ];
+// The continent's townsfolk (scripts/gen-settlements.ts → settlementsData.json).
+for (const n of SETTLEMENT_NPCS) {
+  NPC_DEFS.push({ key: n.key, name: n.name, role: n.role, persona: n.persona, greeting: n.greeting, tilePos: n.tilePos, wanderRadius: n.wanderRadius, appearance: n.appearance, mood: n.mood });
+}
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
 // Village species stay near the houses (chunks 1..2, south of them);

@@ -8,6 +8,7 @@
 // That's it — the modal, route, NPC-conversation Sell offer, and the
 // in-character "I buy X" line pick it up automatically.
 import type { TradeConfig, TradeItem } from "./types";
+import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { FISH_DEFS } from "./fishing";
 
 export const TRADES: TradeConfig = {
@@ -123,6 +124,43 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },
   ],
 };
+
+// ── The continent's towns: stock and buyers by job and kind of town ─────
+const REGIONAL_BUYS: Record<string, Omit<TradeItem, "qty">[]> = {
+  port: FISH_DEFS.map((f) => ({ itemKey: f.key, price: f.price, line: `${f.name}? ${f.price} coppers — fresh off the boat or not, I'll take it.` })),
+  desert: [{ itemKey: "chitin", price: 5, line: "Chitin! Five coppers — the dunes are full of it, if you're brave." }],
+  snow: [{ itemKey: "frost_pelt", price: 10, line: "A frost pelt — ten coppers. Worth its weight up here." }, { itemKey: "wood", price: 3, line: "Firewood, three coppers. Winter eats it." }],
+  swamp: [{ itemKey: "lurker_hide", price: 8, line: "Lurker hide, eight coppers. We patch the stilts with it." }, { itemKey: "herb", price: 3, line: "Fen herbs, three coppers." }],
+  darkwood: [{ itemKey: "shade_essence", price: 9, line: "Shade essence. Nine coppers, and keep your voice down." }, { itemKey: "mushroom", price: 3, line: "Darkwood mushrooms, three coppers." }],
+  hills: [{ itemKey: "wheat", price: 2, line: "Wheat, two coppers a sheaf." }, { itemKey: "pumpkin", price: 22, line: "A pumpkin! Twenty-two coppers." }, { itemKey: "wool", price: 3, line: "Wool, three coppers." }],
+};
+for (const n of SETTLEMENT_NPCS) {
+  const town = TOWNS.find((t) => t.key === n.town);
+  if (!town) continue;
+  if (n.job === "innkeeper") {
+    SHOP_STOCK[n.key] = [
+      { itemKey: "hot_stew", qty: 1, price: 8, line: `Hot stew, eight coppers. Best in ${town.name}.` },
+      { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers." },
+      { itemKey: "tea", qty: 1, price: 6, line: "Tea, six coppers. Warms the bones." },
+    ];
+    TRADES[n.key] = [
+      { itemKey: "milk", qty: 1, price: 5, line: "Milk for the kitchen — five coppers." },
+      { itemKey: "egg", qty: 1, price: 2, line: "Eggs, two coppers each." },
+    ];
+  } else if (n.job === "shopkeeper") {
+    SHOP_STOCK[n.key] = [
+      { itemKey: "radish_seeds", qty: 1, price: 2, line: "Radish seeds, two coppers." },
+      { itemKey: "carrot_seeds", qty: 1, price: 3, line: "Carrot seeds, three coppers." },
+      { itemKey: "axe", qty: 1, price: 25, line: "An axe, twenty-five coppers. Clears a road, too." },
+      { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers." },
+      { itemKey: "hot_stew", qty: 1, price: 9, line: "Stew for the road, nine coppers." },
+    ];
+    TRADES[n.key] = [
+      { itemKey: "stone", qty: 1, price: 1, line: "Stone, a copper each." },
+      ...REGIONAL_BUYS[town.family].map((b) => ({ ...b, qty: 1 })),
+    ];
+  }
+}
 
 /** What this NPC sells to players. */
 export function stockForNpc(npcKey: string): TradeItem[] {

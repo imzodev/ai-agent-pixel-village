@@ -9,6 +9,7 @@
 
 import { fbm, hash, noise } from "./terrain/noise";
 import { isFelled } from "./terrain/felled";
+import { nearRoad, roadTile, roadV, townAt, townDecorAt, townPathV } from "./settlements";
 import type { Biome, GroundKind, ProvinceSeed } from "@/types/continent";
 import type { Region, TerrainCell, TileBox } from "@/types/regions";
 
@@ -115,7 +116,8 @@ function riverV(vx: number, vy: number): boolean {
   const c = riverCenter(vy);
   return vx >= c - 3 && vx <= c + 3;
 }
-function waterV(vx: number, vy: number): boolean {
+/** Water before towns are cleared (the town generator reads this). */
+function rawWaterV(vx: number, vy: number): boolean {
   if (Math.hypot(vx - BOSS_TILE.tx, vy - BOSS_TILE.ty) < 8) return false;
   const e = elevation(vx, vy);
   if (e < SEA) return true;
@@ -128,8 +130,14 @@ function waterV(vx: number, vy: number): boolean {
   return e < 0.42 && moisture(vx, vy) > 0.55 && noise(vx, vy, 16, 513) > 0.74;
 }
 
+/** Towns are dry and flat. */
+const waterV = (vx: number, vy: number): boolean => !townAt(vx, vy) && rawWaterV(vx, vy);
+const levelAt = (tx: number, ty: number): number => (townAt(tx, ty) ? 0 : rawLevelAt(tx, ty));
+/** The untouched terrain, for scripts/gen-settlements.ts. */
+export const terrainProbe = { water: (vx: number, vy: number) => rawWaterV(vx, vy), level: (tx: number, ty: number) => rawLevelAt(tx, ty) };
+
 /** Mountain terrace level (0 = flat), on 4×3-tile blocks so faces stay crisp. */
-function levelAt(tx: number, ty: number): number {
+function rawLevelAt(tx: number, ty: number): number {
   const bx = Math.floor(tx / 4), by = Math.floor(ty / 3);
   const e = elevation(bx * 4 + 2, by * 3 + 1);
   return e > MOUNTAIN ? Math.min(4, 1 + Math.floor((e - MOUNTAIN) / 0.045)) : 0;
@@ -152,6 +160,7 @@ const TREE_DENSITY: Readonly<Record<Biome, number>> = {
 function forestV(vx: number, vy: number): boolean {
   if (((vx % 2) + 2) % 2 || ((vy % 2) + 2) % 2) return false;
   if (isFelled(vx, vy)) return false;
+  if (townAt(vx, vy) || townAt(vx - 1, vy - 1) || nearRoad(vx, vy, 2)) return false;
   const b = biomeAt(vx, vy);
   const density = TREE_DENSITY[b];
   if (!density) return false;
@@ -181,7 +190,7 @@ export function continentTreeAt(vx: number, vy: number): string | null {
 function tallV(vx: number, vy: number): boolean {
   const b = biomeAt(vx, vy);
   if (b !== "meadow" && b !== "forest") return false;
-  return noise(vx, vy, 5, 531) > 0.8 && !waterV(vx, vy) && !forestV(vx, vy);
+  return noise(vx, vy, 5, 531) > 0.8 && !waterV(vx, vy) && !forestV(vx, vy) && !townAt(vx, vy) && !nearRoad(vx, vy, 1);
 }
 
 // ── Tiles ────────────────────────────────────────────────────────────────
@@ -232,7 +241,8 @@ export function continentAt(tx: number, ty: number): TerrainCell {
   }
 
   // Water: sea shallows, lakes, swamp pools, the Silverrun.
-  const wm = mask(waterV, tx, ty);
+  const wm = townAt(tx, ty) ? 0 : mask(waterV, tx, ty); // a town's edge tiles stay dry
+  if (wm && roadTile(tx, ty)) return { ground: auto("water", wm, tx, ty), upper: "bridge_deck" }; // a road's bridge
   if (wm) {
     const swamp = biomeAt(tx, ty) === "swamp" && !riverV(tx, ty) && e >= SEA;
     const cell: TerrainCell = { ground: auto(swamp ? "swamp" : "water", wm, tx, ty) };
@@ -243,6 +253,12 @@ export function continentAt(tx: number, ty: number): TerrainCell {
   }
 
   const cell: TerrainCell = { ground: groundTile(tx, ty) };
+  // Roads and town streets.
+  const pm = mask((vx, vy) => roadV(vx, vy) || townPathV(vx, vy), tx, ty);
+  if (pm) cell.upper = auto("path", pm, tx, ty);
+  // Towns: their own dressing, nothing wild.
+  if (townAt(tx, ty)) return { ...cell, ...townDecorAt(tx, ty) };
+  if (pm) return cell;
   const fm = mask(forestV, tx, ty);
   if (fm) {
     const treeAbove = (fm & 4 && forestV(tx, ty - 1)) || (fm & 8 && forestV(tx + 1, ty - 1));

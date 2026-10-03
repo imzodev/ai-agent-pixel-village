@@ -235,9 +235,9 @@ export default function Hud() {
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string) => {
-    const r = await api<{ ok?: boolean; spent?: number }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
+    const r = await api<{ ok?: boolean; spent?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
     if (r.error) toast(r.error, "bad");
-    else { showGain([{ itemKey, qty: 1 }]); void refreshMe(); }
+    else { showGain([{ itemKey, qty: 1 }]); notify(r.notices); void refreshMe(); }
   };
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);

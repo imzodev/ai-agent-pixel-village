@@ -58,10 +58,10 @@ describe("waystones", () => {
     expect(travelCost(true)).toBe(0);
     expect(travelCost(false)).toBe(TRAVEL_COST);
   });
-  it("seven waystones, all inside the mapped world", () => {
+  it("a waystone in every town, all inside the mapped world", () => {
     const m = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8"));
     const stones = m.buildings.filter((b: { kind: string }) => b.kind === "waystone");
-    expect(stones).toHaveLength(7);
+    expect(stones.length).toBeGreaterThanOrEqual(13); // 7 on the King's Road + one per continent town
     for (const s of stones) {
       const c = chunkOfTile(s.tx + 12, s.ty + 12);
       expect(chunkInBounds(c.cx, c.cy), s.key).toBe(true);

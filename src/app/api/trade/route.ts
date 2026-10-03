@@ -9,6 +9,8 @@ import { TRADES, findBuyer, stockForNpc } from "@/lib/trade";
 import { addCoins, addItem, logEvent, removeItem } from "@/lib/game";
 import { perksOf } from "@/lib/combat";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { REP_PER_TRADE, discounted, townName, townOfNpc } from "@/lib/reputation";
+import { addReputation, reputationWith } from "@/lib/reputationServer";
 import { HAGGLER_MULT } from "@/lib/progression";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +63,10 @@ export async function POST(req: Request) {
       const offer = npcKey ? stockForNpc(npcKey).find((t) => t.itemKey === itemKey) : undefined;
       if (!npcKey || !offer) return Response.json({ error: "They don't sell that." }, { status: 400 });
       if (offer.minLevel && me.level < offer.minLevel) return Response.json({ error: `Reach level ${offer.minLevel} to buy that.` }, { status: 400 });
-      const cost = offer.price * qty;
+      // A continent town's people give their friends a discount.
+      const town = townOfNpc(npcKey);
+      const unit = town ? discounted(offer.price, await reputationWith(me.id, town)) : offer.price;
+      const cost = unit * qty;
       // Conditional debit: never lets coins go negative, even on double clicks.
       const paid = await db
         .update(characters)
@@ -70,7 +75,8 @@ export async function POST(req: Request) {
         .returning({ coins: characters.coins });
       if (paid.length === 0) return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
       await addItem(me.id, itemKey, offer.qty * qty);
-      return Response.json({ ok: true, itemKey, qty: offer.qty * qty, spent: cost, coins: paid[0].coins });
+      const rep = town ? await addReputation(me.id, town, REP_PER_TRADE) : null;
+      return Response.json({ ok: true, itemKey, qty: offer.qty * qty, spent: cost, coins: paid[0].coins, notices: rep?.reached ? [`🏘️ ${townName(town!)} now sees you as ${rep.reached}!`] : [] });
     }
 
     const r = await performSell({ characterId: me.id, itemKey, qty, npcKey });
@@ -85,7 +91,9 @@ export async function POST(req: Request) {
       me.y,
     );
     const step = await tutorialEvent(me.id, "sell");
-    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins, notices: step ? [step] : [] });
+    const sellTown = r.ok && npcKey ? townOfNpc(npcKey) : null;
+    const rep = sellTown ? await addReputation(me.id, sellTown, REP_PER_TRADE) : null;
+    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins, notices: [...(step ? [step] : []), ...(rep?.reached ? [`🏘️ ${townName(sellTown!)} now sees you as ${rep.reached}!`] : [])] });
   } catch (e) {
     return handleApiError(e);
   }

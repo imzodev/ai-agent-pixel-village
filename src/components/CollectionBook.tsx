@@ -3,11 +3,14 @@
 // folk), page rewards, achievements and the title shown on your nameplate.
 import { useCallback, useEffect, useState } from "react";
 import type { CollectionBookView } from "@/types/collection";
+import type { RepView } from "@/types/reputation";
 
 export default function CollectionBook({ onMessage }: { onMessage: (text: string, kind: "good" | "bad") => void }) {
   const [book, setBook] = useState<CollectionBookView | null>(null);
   const [tab, setTab] = useState<string>("fish");
   const [busy, setBusy] = useState(false);
+  const [towns, setTowns] = useState<RepView[]>([]);
+  useEffect(() => { void fetch("/api/reputation").then((r) => r.json()).then((r) => { if (r?.towns) setTowns(r.towns); }).catch(() => {}); }, []);
 
   const load = useCallback(() => fetch("/api/collection").then((r) => r.json()).then((r) => { if (r && !r.error) setBook(r); }).catch(() => {}), []);
   useEffect(() => { void load(); }, [load]);
@@ -34,6 +37,9 @@ export default function CollectionBook({ onMessage }: { onMessage: (text: string
             {p.icon} {p.name} <span className="opacity-70">{found(p)}/{p.entries.length}</span>
           </button>
         ))}
+        {towns.length > 0 && (
+          <button onClick={() => setTab("towns")} className={`rounded px-2 py-1 text-xs font-bold ${tab === "towns" ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900 hover:bg-amber-200"}`}>🏘️ Towns</button>
+        )}
         <button onClick={() => setTab("achievements")} className={`rounded px-2 py-1 text-xs font-bold ${tab === "achievements" ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900 hover:bg-amber-200"}`}>
           🏆 Feats <span className="opacity-70">{book.achievements.filter((a) => a.done).length}/{book.achievements.length}</span>
         </button>
@@ -60,6 +66,17 @@ export default function CollectionBook({ onMessage }: { onMessage: (text: string
         </>
       )}
 
+      {tab === "towns" && (
+        <div className="space-y-1">
+          <div className="text-[11px] text-stone-600">Trade with a town&apos;s people and take its bounties to raise your standing: shop discounts, and at Revered a title.</div>
+          {towns.map((t) => (
+            <div key={t.town} className="rounded bg-amber-50 p-2 text-xs">
+              <div className="flex items-center"><b className="flex-1">🏘️ {t.name}</b><span>{t.tier}{t.discount ? ` · −${Math.round(t.discount * 100)}% in shops` : ""}</span></div>
+              {t.next && <div className="mt-1 h-1.5 overflow-hidden rounded bg-amber-900/20" title={`${t.points}/${t.next.min} to ${t.next.name}`}><div className="h-full bg-amber-500" style={{ width: `${(100 * t.points) / t.next.min}%` }} /></div>}
+            </div>
+          ))}
+        </div>
+      )}
       {tab === "achievements" && (
         <div className="space-y-1">
           {book.achievements.map((a) => (

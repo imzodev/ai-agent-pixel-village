@@ -4,21 +4,24 @@ import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { terrainAt } from "@/lib/regions";
 import { CONTINENT, HEARTLAND, biomeAt, continentAt, elevation, inHeartland } from "@/lib/continent";
+import { nearRoad } from "@/lib/settlements";
 import type { Biome } from "@/types/continent";
 
 describe("heartland", () => {
   it("is unchanged by the continent (fingerprint of the hand-made terrain)", () => {
-    // Recorded from the terrain before the continent existed; if the road,
-    // its towns, the village or the fields change on purpose, re-record it.
+    // Recorded from the terrain before the continent existed, leaving out
+    // tiles near the roads out to the continent's towns (they cut through
+    // on purpose). If the road, its towns, the village or the fields change
+    // on purpose, re-record it.
     const h = crypto.createHash("sha1");
     const seen = new Set<string>();
     for (const b of HEARTLAND) for (let ty = b.ty0; ty <= b.ty1; ty++) for (let tx = b.tx0; tx <= b.tx1; tx += 3) {
       const k = `${tx},${ty}`;
-      if (seen.has(k)) continue;
+      if (seen.has(k) || nearRoad(tx, ty, 4)) continue;
       seen.add(k);
       h.update(k + JSON.stringify(terrainAt(tx, ty)));
     }
-    expect(h.digest("hex")).toBe("5b61847f8b305841ed197ceb067831f4bdba3d46");
+    expect(h.digest("hex")).toBe("b0ac93fe39223a48f9ea36d7bc7dc76294f3f1dc");
   });
   it("edges follow the tree lattice (odd west/north, even east/south)", () => {
     for (const b of HEARTLAND) {

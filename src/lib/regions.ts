@@ -20,6 +20,7 @@ import { FOREST_TILES } from "./forest";
 import { hash, noise } from "./terrain/noise";
 import { isFelled, setFelledTrees } from "./terrain/felled";
 import { PROVINCES, continentAt, continentTreeAt, inHeartland, provinceAt, riverCenter } from "./continent";
+import { TOWN_REGIONS, nearRoad, roadTile, roadV, townAt } from "./settlements";
 
 export type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 
@@ -49,12 +50,14 @@ const STRIP: TileBox = { tx0: -800, tx1: -25, ty0: BARRIER_TY0, ty1: BARRIER_TY1
 export function regionAtTile(tx: number, ty: number): Region | null {
   const r = REGIONS.find((r) => tx >= r.tx0 && tx <= r.tx1 && ty >= r.ty0 && ty <= r.ty1) ?? null;
   if (r?.key === "caverns") return r;
+  const town = townAt(tx, ty);
+  if (town) return TOWN_REGIONS.find((t) => t.key === `town_${town.key}`) ?? null;
   if (!inHeartland(tx, ty)) return provinceAt(tx, ty);
   return r;
 }
 
 /** Every named place: the heartland's regions and the provinces. */
-export const PLACES: readonly Region[] = [...REGIONS, ...PROVINCES];
+export const PLACES: readonly Region[] = [...REGIONS, ...TOWN_REGIONS, ...PROVINCES];
 export const placeByKey = (key: string): Region | undefined => PLACES.find((p) => p.key === key);
 
 /** Region containing world pixel (x, y), if any. */
@@ -266,6 +269,7 @@ function caveProp(tx: number, ty: number): string | null {
 /** Paths: the road (vertex rows 6..9 → full tile rows 6..8) with worn
  *  edges, short paths to every door, and the back lanes. */
 function pathV(vx: number, vy: number): boolean {
+  if (roadV(vx, vy)) return true; // roads out to the continent's towns
   if (vx >= ROAD.tx0 && vx <= ROAD.tx1 + 1) {
     if (vy >= 6 && vy <= 9) return true;
     // The road widens gently here and there (a row more on either side).
@@ -336,6 +340,7 @@ export { setFelledTrees };
 function forestV(vx: number, vy: number): boolean {
   if (!even(vx) || !even(vy)) return false;
   if (isFelled(vx, vy)) return false;
+  if (nearRoad(vx, vy, 1)) return false;
   if (townTree(vx, vy)) return true;
   if (vx < STRIP.tx0 || vx > -50 || vy < BARRIER_TY0 || vy > BARRIER_TY1) return false;
   if (vx >= -578 && vx <= -383) return false; // Greyspine
@@ -509,7 +514,7 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
 
   if (wm) {
     // The bridge carries the road; rails on the rows either side.
-    if (onRoadRows) return { ...cell, upper: "bridge_deck" };
+    if (onRoadRows || roadTile(tx, ty)) return { ...cell, upper: "bridge_deck" };
     if (ty === ROAD.ty0 - 1 && tx >= ROAD.tx0 && tx <= ROAD.tx1) return { ...cell, lower: "bridge_rail_n" };
     if (ty === ROAD.ty1 + 1 && tx >= ROAD.tx0 && tx <= ROAD.tx1) return { ...cell, lower: "bridge_rail_s" };
     if (inBox(PIER, tx, ty)) return { ...cell, upper: tx === PIER.tx0 ? "pier_end" : "pier_deck" };
