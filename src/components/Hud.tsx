@@ -21,6 +21,7 @@ import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import BountyTracker from "./BountyTracker";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
+import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
 import type { BountyView } from "@/types/bounty";
 import { WAYSTONE_ATTUNE_PX, chunksAround } from "@/lib/worldAtlas";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
@@ -65,6 +66,8 @@ export default function Hud() {
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
   const [canFish, setCanFish] = useState(false);
+  // Wild patches you've picked: node id → when it's yours to pick again.
+  const [forageWait, setForageWait] = useState<ReadonlyMap<number, number>>(new Map());
   // Bounty boards: the one you're reading, and the bounties you carry.
   const [board, setBoard] = useState<{ town: string; name: string } | null>(null);
   const [myBounties, setMyBounties] = useState<BountyView[]>([]);
@@ -479,7 +482,11 @@ export default function Hud() {
         if (d > 90) { walk(); break; }
         if (chop && !hasAxe) { toast("You need an axe. Pip sells them.", "info"); break; }
         if (chop) bus.emit("attack", { x: pos.x, y: pos.y, tool: "axe" }); // swing the axe at the trunk
-        void act({ action: "gather", id: s.id });
+        void act({ action: "gather", id: s.id }).then((r) => {
+          // Wild patches come back for you alone after a cooldown.
+          const wait = (r as { readyInMs?: number }).readyInMs ?? (r.ok && isForage(s.kind) ? FORAGE_COOLDOWN_MS[s.kind] : 0);
+          if (wait > 0) setForageWait((m) => new Map(m).set(s.id, Date.now() + wait));
+        });
         break;
       }
       case "board":
@@ -781,6 +788,8 @@ export default function Hud() {
             const empty = sel.stage === 0;
             const chop = CROP_KINDS[sel.kind]?.needsAxe === true;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            const wait = minutesUntil(forageWait.get(sel.id) ?? 0);
+            if (wait) return <span className="text-[11px] text-stone-600">⏳ Yours again in {wait}m — others can still pick it.</span>;
             if (chop && !empty && !hasAxe) return <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>;
             return (
               <Btn on={() => commitSelection(sel)} disabled={empty}>
@@ -974,6 +983,11 @@ export default function Hud() {
   );
 }
 
+/** Whole minutes until `at` (rounded up), or 0 once it's passed. */
+function minutesUntil(at: number): number {
+  const ms = at - Date.now();
+  return ms > 0 ? Math.ceil(ms / 60_000) : 0;
+}
 function clockFrom(s: Snapshot) {
   const dayMs = s.dayLengthMinutes * 60_000;
   return ((((Date.now() - s.epochStart) % dayMs) / dayMs) * 24 + 7) % 24;

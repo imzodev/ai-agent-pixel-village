@@ -1,6 +1,6 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, buildings, characters, enemies, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
+import { animals, buildings, characters, enemies, forageClaims, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
@@ -9,6 +9,7 @@ import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorld
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
+import { forageKey, isForage, readyIn } from "@/lib/forage";
 import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
@@ -115,7 +116,17 @@ export async function POST(req: Request) {
       // the user can pick 4 times before the node hits 0 and refuses
       // further picks until it regrows.
       const chop = cfg?.needsAxe === true;
-      if (n.stage < 1) {
+      // Wild patches are personal: each player picks every patch on their
+      // own cooldown, and the patch stays for everyone else.
+      const forage = isForage(n.kind);
+      if (forage) {
+        const patch = forageKey(n.kind, n.x, n.y);
+        const [claim] = await db.select({ at: forageClaims.at }).from(forageClaims).where(and(eq(forageClaims.characterId, me.id), eq(forageClaims.patch, patch)));
+        const wait = readyIn(n.kind, claim?.at.getTime() ?? null, Date.now());
+        if (wait > 0) return Response.json({ error: `You've picked this one clean. It'll be ready for you again in ${Math.ceil(wait / 60_000)}m.`, readyInMs: wait }, { status: 400 });
+        await db.insert(forageClaims).values({ characterId: me.id, patch, at: new Date() })
+          .onConflictDoUpdate({ target: [forageClaims.characterId, forageClaims.patch], set: { at: new Date() } });
+      } else if (n.stage < 1) {
         return Response.json({ error: chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back." }, { status: 400 });
       }
       const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
@@ -126,12 +137,15 @@ export async function POST(req: Request) {
       // Pick: decrement toward empty (stage 0). If regrowthMs > 0, the
       // next regrowth tick will advance stage back toward stages-1;
       // picking again interrupts that and starts a fresh cycle.
-      const newStage = n.stage - 1;
-      const newNextAdvanceAt = regrowthMs > 0 ? new Date(Date.now() + regrowthMs) : null;
-      await db.update(resourceNodes).set({
-        stage: newStage,
-        nextAdvanceAt: newNextAdvanceAt,
-      }).where(eq(resourceNodes.id, n.id));
+      // (Wild patches don't deplete — the pick was recorded per player above.)
+      if (!forage) {
+        const newStage = n.stage - 1;
+        const newNextAdvanceAt = regrowthMs > 0 ? new Date(Date.now() + regrowthMs) : null;
+        await db.update(resourceNodes).set({
+          stage: newStage,
+          nextAdvanceAt: newNextAdvanceAt,
+        }).where(eq(resourceNodes.id, n.id));
+      }
 
       // Better axes and the Lumberjack perk add wood per chop.
       if (chop) yieldAmt += chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);

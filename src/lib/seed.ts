@@ -27,6 +27,7 @@ import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
 import { SETTLEMENT_NPCS } from "./settlements";
+import { forageSpots } from "./forage";
 import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
@@ -636,23 +637,18 @@ async function syncWildlifeLayout() {
     // Wild nodes only: garden crops (owner_id set) belong to players.
     await db.delete(resourceNodes).where(isNull(resourceNodes.ownerId));
     const trees = forestTrees().map(([tx, ty]): [string, string, number, number] => ["oak_tree", "wood", tx, ty]);
-    for (const [kind, itemKey, tx, ty] of [...NODE_DEFS, ...trees]) {
+    // The village's hand-placed nodes, the oak grove, and the forage
+    // patches scattered over the continent (src/lib/forage.ts).
+    const rows = [...NODE_DEFS, ...trees, ...forageSpots()].map(([kind, itemKey, tx, ty]) => {
       const p = tilePoint(tx, ty);
       const cfg = getCropKind(kind);
       // Crop kinds start fully grown (stage = stages-1). Non-crop kinds
       // use stages=2 (ready) from the config; missing config means a
       // legacy kind with no regrowth — start at the only stage (0).
       const stages = cfg?.stages ?? 1;
-      const startStage = stages - 1;
-      await db.insert(resourceNodes).values({
-        kind,
-        itemKey,
-        x: p.x,
-        y: p.y,
-        qty: cfg?.yield ?? 1,
-        stage: startStage,
-      });
-    }
+      return { kind, itemKey, x: p.x, y: p.y, qty: cfg?.yield ?? 1, stage: stages - 1 };
+    });
+    for (let i = 0; i < rows.length; i += 200) await db.insert(resourceNodes).values(rows.slice(i, i + 200));
     // Enemies respawn from the current zones; a risen world boss stays.
     await db.delete(enemies).where(ne(enemies.kind, BOSS_KIND));
     for (const def of ANIMAL_DEFS) {

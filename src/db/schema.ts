@@ -527,6 +527,18 @@ export const characterMapSeen = pgTable(
   (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
 );
 
+/** Wild patches a character has picked (src/lib/forage.ts): each player
+ *  forages every patch on their own cooldown. */
+export const forageClaims = pgTable(
+  "forage_claims",
+  {
+    characterId: integer("character_id").notNull(),
+    patch: text("patch").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (t) => [uniqueIndex("forage_claims_pk").on(t.characterId, t.patch)],
+);
+
 /** Bounties posted on a town's notice board (src/lib/bounties.ts). */
 export const bounties = pgTable(
   "bounties",
