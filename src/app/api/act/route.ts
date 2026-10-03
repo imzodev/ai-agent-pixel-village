@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       }).where(eq(resourceNodes.id, n.id));
 
       // Better axes and the Lumberjack perk add wood per chop.
-      if (chop) yieldAmt += chopBonus(gear.bag) + (perks.has("lumberjack") ? 1 : 0);
+      if (chop) yieldAmt += chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
       await addItem(me.id, n.itemKey, yieldAmt);
       // Foraging now and then turns up seeds for a home garden (not chopping).
       const found = chop ? null : rollForageSeed(Math.random, perks.has("forager") ? 2 : 1);
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
       if (Math.hypot(ep.x - p.x, ep.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
       const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
       const def = enemyKind(e.kind);
-      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped), fighter: perks.has("fighter"), roll: Math.random() });
+      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped, gear.plus), fighter: perks.has("fighter"), roll: Math.random() });
       const boss = e.kind === BOSS_KIND;
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).

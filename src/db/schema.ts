@@ -198,6 +198,11 @@ export const animals = pgTable("animals", {
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
   stateUntil: timestamp("state_until"),
+  /** Ranch animals (src/lib/ranch.ts): owner, their ranch lot, and when
+   *  their produce was last collected. Null for the village's own animals. */
+  ownerId: integer("owner_id"),
+  ranchKey: text("ranch_key"),
+  lastProducedAt: timestamp("last_produced_at"),
   // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
   // resting position the move ends on; the live position is
   // `positionAt(move, now)`. Null when the entity has never moved.

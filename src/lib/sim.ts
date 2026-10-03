@@ -261,7 +261,8 @@ async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, n
 
     // Chickens sometimes lay an egg at their feet (separate from pet bonuses).
     // Skip if there's already an egg nearby so they don't pile up.
-    if (a.species === "chicken" && state !== "sleep" && !raiding && Math.random() < 0.04) {
+    // Ranch hens lay into their coop instead (src/lib/ranch.ts).
+    if (a.species === "chicken" && a.ownerId == null && state !== "sleep" && !raiding && Math.random() < 0.04) {
       const { x, y } = rowPositionAt(a, beat.nowMs);
       const [nearby] = await db
         .select({ n: sql<number>`count(*)::int` })

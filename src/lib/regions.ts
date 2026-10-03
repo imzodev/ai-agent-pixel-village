@@ -386,6 +386,9 @@ function underSquare(tx: number, ty: number): boolean {
   return TOWN_SQUARES.some((q) => tx >= q.tx + 1 && tx <= q.tx + 22 && ty >= q.ty && ty <= q.ty + 14);
 }
 const underCaveMouth = (tx: number, ty: number) => inBox(CAVE_MOUTH_AREA, tx, ty);
+/** The ranch row (public/buildings/buildings.json `ranch_*`): pens stay
+ *  free of rocks and bushes so animals and players can move about. */
+const RANCH_ROW = { tx0: -120, tx1: 143, ty0: 75, ty1: 89 };
 
 // ── Terrain ──────────────────────────────────────────────────────────────
 
@@ -555,7 +558,7 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     else if (h < 0.12) cell.upper = "pebbles";
     return cell;
   }
-  if (!town && h < 0.012 && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
+  if (!town && h < 0.012 && !inBox(RANCH_ROW, tx, ty) && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
     cell.lower = ["bush", "bush", "boulder", "stump", "rock_small"][Math.floor(hash(tx, ty, 54) * 5)];
     return cell;
   }

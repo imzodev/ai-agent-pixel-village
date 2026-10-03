@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, worldState } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
-import { addItem, progressMissions, recalcLevel } from "@/lib/game";
+import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { gearOf } from "@/lib/combat";
 import { BITE_MAX_MS, BITE_MIN_MS, CAST_TTL_MS, CATCH_ZONE, FISHING_ROD, fishDef, rollFish, waterInFront } from "@/lib/fishing";
 import type { FishCast } from "@/lib/fishing";
@@ -16,6 +16,7 @@ import { gameHour } from "@/lib/worldmap";
 import { getLivePlayerPosition } from "@/lib/world-stream";
 import { recordCollection } from "@/lib/collectionServer";
 import { getContainer } from "@/lib/container";
+import { ROD_ZONE_PER_PLUS } from "@/lib/forge";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
     for (const [id, c] of casts) if (now - c.createdAt > CAST_TTL_MS) casts.delete(id);
 
     if (body.action === "cast") {
-      const { bag } = await gearOf(me.id);
+      const { bag, plus } = await gearOf(me.id);
       if (!bag.includes(FISHING_ROD)) return Response.json({ error: "You need a fishing rod. Pip and Marina sell them." }, { status: 400 });
       const p = getLivePlayerPosition(me.id) ?? me;
       const facing = String(body.facing ?? "down");
@@ -50,7 +51,7 @@ export async function POST(req: Request) {
       casts.set(me.id, cast);
       return Response.json({
         ok: true, castId: cast.id, biteInMs: Math.round(cast.biteAt - now),
-        zone: CATCH_ZONE[fish.rarity], water: spot.water,
+        zone: Math.min(0.6, CATCH_ZONE[fish.rarity] + (plus[FISHING_ROD] ?? 0) * ROD_ZONE_PER_PLUS), water: spot.water,
         bobber: { x: spot.tx * 16 + 8, y: spot.ty * 16 + 8 },
       });
     }
@@ -69,6 +70,8 @@ export async function POST(req: Request) {
       void getContainer().services.quest.recordEvent(me.id, { kind: "fish", payload: { itemKey: fish.key } }).catch(() => {});
       const isNew = await recordCollection(me.id, "fish", fish.key);
       const rare = fish.rarity === "legendary" ? "🌟 LEGENDARY! " : fish.rarity === "rare" ? "✨ Rare! " : "";
+      // Big catches make the rounds at the inns (rumour board).
+      if (rare) await logEvent("catch", `${me.name} landed a ${fish.name}!`, "character", me.id, me.x, me.y);
       return Response.json({
         ok: true, caught: true,
         message: `${rare}You caught a ${fish.name}! +${fish.xp} XP${isNew ? " · 📖 New in your book!" : ""}`,

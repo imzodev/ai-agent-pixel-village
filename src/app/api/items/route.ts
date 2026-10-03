@@ -4,6 +4,7 @@ import { characters, groundItems, homeDecor, inventory, items } from "@/db/schem
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { addItem, logEvent, progressMissions } from "@/lib/game";
+import { healOf } from "@/lib/inn";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     }
     if (action === "use") {
       if (def?.kind !== "consumable") return Response.json({ error: "Can't use that." }, { status: 400 });
-      const heal = row.itemKey === "honey_bun" ? 8 : 4;
+      const heal = healOf(row.itemKey);
       const hp = Math.min(me.maxHp, me.hp + heal);
       await db.update(characters).set({ hp }).where(eq(characters.id, me.id));
       if (row.qty > 1) await db.update(inventory).set({ qty: row.qty - 1 }).where(eq(inventory.id, row.id));

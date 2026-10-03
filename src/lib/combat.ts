@@ -7,6 +7,8 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characterPerks, characters, inventory } from "@/db/schema";
 import { isPerkKey, maxHpFor, type PerkKey } from "./progression";
+import { plusOf } from "./forge";
+import type { Gear } from "@/types/forge";
 import { SPAWN } from "./worldmap";
 
 /** Share of coins lost when knocked out. */
@@ -33,12 +35,20 @@ export async function perksOfMany(ids: number[]): Promise<Map<number, Set<PerkKe
 }
 
 /** Item keys in the bag (qty > 0), and the equipped ones. */
-export async function gearOf(characterId: number): Promise<{ bag: string[]; equipped: string[] }> {
+export async function gearOf(characterId: number): Promise<Gear> {
   const rows = await db
-    .select({ itemKey: inventory.itemKey, equipped: inventory.equipped })
+    .select({ itemKey: inventory.itemKey, equipped: inventory.equipped, meta: inventory.meta })
     .from(inventory)
     .where(and(eq(inventory.characterId, characterId), sql`${inventory.qty} > 0`));
-  return { bag: rows.map((r) => r.itemKey), equipped: rows.filter((r) => r.equipped).map((r) => r.itemKey) };
+  // Forge levels (meta.plus), per item key: the equipped copy's when one
+  // is equipped (that's the one you swing), else the best in the bag.
+  const plus: Record<string, number> = {};
+  for (const key of new Set(rows.map((r) => r.itemKey))) {
+    const mine = rows.filter((r) => r.itemKey === key);
+    const pool = mine.some((r) => r.equipped) ? mine.filter((r) => r.equipped) : mine;
+    plus[key] = Math.max(...pool.map((r) => plusOf(r.meta)));
+  }
+  return { bag: rows.map((r) => r.itemKey), equipped: rows.filter((r) => r.equipped).map((r) => r.itemKey), plus };
 }
 
 /**

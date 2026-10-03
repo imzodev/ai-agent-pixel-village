@@ -45,6 +45,20 @@ export function bossWindowStart(now: number, schedule = "6@18", force = false): 
   return now >= start && now < start + BOSS_WINDOW_MS ? start : null;
 }
 
+/** When the boss is (or next will be) up: `active` while its window is
+ *  open (then `at` = that window's start), else the next start. */
+export function nextBossWindow(now: number, schedule = "6@18", force = false): { active: boolean; at: number } {
+  const open = bossWindowStart(now, schedule, force);
+  if (open !== null) return { active: true, at: open };
+  const m = /^(\d)@(\d{1,2})$/.exec(schedule.trim());
+  const dow = m ? Number(m[1]) : 6;
+  const hour = m ? Number(m[2]) : 18;
+  const d = new Date(now);
+  let start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour) + ((dow - d.getUTCDay() + 7) % 7) * 86_400_000;
+  if (start <= now) start += 7 * 86_400_000;
+  return { active: false, at: start };
+}
+
 /** Fighters who earn the boss reward: dealt at least BOSS_SHARE_MIN of its HP. */
 export function bossRewardees(damage: Record<string, number>, maxHp: number): number[] {
   return Object.entries(damage).filter(([, d]) => d >= maxHp * BOSS_SHARE_MIN).map(([id]) => Number(id));
@@ -123,14 +137,18 @@ export const WEAPONS: Record<string, WeaponDef> = {
 /** Items that let you chop trees (any of them in the bag). */
 export const AXE_ITEMS: readonly string[] = ["axe", "sharp_axe"];
 
-/** Damage bonus of the best weapon among `equipped` item keys. */
-export function weaponBonus(equipped: readonly string[]): number {
-  return equipped.reduce((best, k) => Math.max(best, WEAPONS[k]?.damage ?? 0), 0);
+/** Damage bonus of the best weapon among `equipped` item keys; a sword's
+ *  forge level (`plus`, src/lib/forge.ts) adds one damage per level. */
+export function weaponBonus(equipped: readonly string[], plus: Readonly<Record<string, number>> = {}): number {
+  return equipped.reduce((best, k) => {
+    const w = WEAPONS[k];
+    return w && w.damage > 0 ? Math.max(best, w.damage + (plus[k] ?? 0)) : best;
+  }, 0);
 }
 
-/** Extra wood per chop from the best axe in the bag. */
-export function chopBonus(bag: readonly string[]): number {
-  return bag.reduce((best, k) => Math.max(best, WEAPONS[k]?.chopBonus ?? 0), 0);
+/** Extra wood per chop from the best axe in the bag, plus its forge level. */
+export function chopBonus(bag: readonly string[], plus: Readonly<Record<string, number>> = {}): number {
+  return bag.reduce((best, k) => (AXE_ITEMS.includes(k) ? Math.max(best, (WEAPONS[k]?.chopBonus ?? 0) + (plus[k] ?? 0)) : best), 0);
 }
 
 /** One hit on an enemy: 2–4 base (`roll` in [0, 1)), weapon, level and perk. */

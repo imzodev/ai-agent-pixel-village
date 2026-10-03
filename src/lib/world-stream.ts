@@ -171,6 +171,13 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
 }
 
 /** Mark the world dirty near (x, y) and schedule a coalesced push. */
+/** Connected players within `r` px of (x, y) (live positions). */
+export function livePlayersNear(x: number, y: number, r: number): number[] {
+  const out: number[] = [];
+  for (const c of connections.values()) if (Math.hypot(c.homePx - x, c.homePy - y) <= r) out.push(c.playerId);
+  return [...new Set(out)];
+}
+
 export function markWorldDirty(x?: number, y?: number): void {
   if (x !== undefined && y !== undefined) shared.dirtyPoints.push({ x, y });
   if (shared.dirtyTimer) return;

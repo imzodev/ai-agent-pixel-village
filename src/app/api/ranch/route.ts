@@ -1,0 +1,143 @@
+// Ranch plots. GET ?key=<ranch key> → the panel; POST { key, action }:
+//   "buy" { species } — a chick / lamb / calf for your pen
+//   "feed"            — feed hungry animals crops from your bag
+//   "collect"         — gather eggs, wool and milk
+// Only the owner tends a ranch, from near its gate.
+
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { animals, characters, inventory, lots } from "@/db/schema";
+import { handleApiError, requireCharacter } from "@/lib/auth";
+import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
+import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { addItem, progressMissions } from "@/lib/game";
+import { getContainer } from "@/lib/container";
+import {
+  FED_BELOW, FEED_ITEMS, RANCH_REACH_PX, RANCH_SPECIES,
+  afterCollect, afterFeed, isRanchSpecies, nextIn, nextName, penRect, readyCount,
+} from "@/lib/ranch";
+import type { RanchView } from "@/types/ranch";
+
+export const dynamic = "force-dynamic";
+
+async function ranchOf(key: string) {
+  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), eq(lots.kind, "ranch")));
+  return lot ?? null;
+}
+
+async function view(key: string, meId: number): Promise<RanchView | null> {
+  const r = await ranchOf(key);
+  if (!r) return null;
+  const now = Date.now();
+  const entry = (await getBuildingsManifest()).buildings.find((b) => b.key === key);
+  const [herd, bag, [me]] = await Promise.all([
+    db.select().from(animals).where(eq(animals.ranchKey, key)).orderBy(animals.id),
+    db.select({ itemKey: inventory.itemKey, qty: inventory.qty }).from(inventory).where(and(eq(inventory.characterId, meId), inArray(inventory.itemKey, [...FEED_ITEMS]))),
+    db.select({ coins: characters.coins }).from(characters).where(eq(characters.id, meId)),
+  ]);
+  const feed = new Map<string, number>();
+  for (const b of bag) feed.set(b.itemKey, (feed.get(b.itemKey) ?? 0) + b.qty);
+  return {
+    key,
+    name: entry?.name ?? key,
+    owner: r.lot.ownerId != null ? { id: r.lot.ownerId, name: r.ownerName ?? "someone" } : null,
+    mine: r.lot.ownerId === meId,
+    animals: herd.map((a) => {
+      const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
+      return { id: a.id, name: a.name, species: a.species, hunger: a.hunger, ready: readyCount(last, a.hunger, now), nextInMs: nextIn(last, a.hunger, now) };
+    }),
+    shop: Object.values(RANCH_SPECIES).map((s) => ({ ...s, owned: herd.filter((a) => a.species === s.species).length })),
+    feed: [...feed].filter(([, q]) => q > 0).map(([itemKey, qty]) => ({ itemKey, qty })),
+    coins: me?.coins ?? 0,
+  };
+}
+
+export async function GET(req: Request) {
+  try {
+    const me = await requireCharacter();
+    const v = await view(new URL(req.url).searchParams.get("key") ?? "", me.id);
+    return v ? Response.json(v) : Response.json({ error: "No such ranch." }, { status: 404 });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const me = await requireCharacter();
+    const body = await req.json().catch(() => ({}));
+    const key = String(body.key ?? "");
+    const r = await ranchOf(key);
+    if (!r) return Response.json({ error: "No such ranch." }, { status: 404 });
+    if (r.lot.ownerId !== me.id) return Response.json({ error: "This isn't your ranch." }, { status: 403 });
+    const door = await getBuildingDoor(key);
+    const p = getLivePlayerPosition(me.id) ?? me;
+    if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: "Head over to your ranch first." }, { status: 400 });
+    const now = Date.now();
+    const herd = await db.select().from(animals).where(eq(animals.ranchKey, key));
+
+    if (body.action === "buy") {
+      const species = String(body.species ?? "");
+      if (!isRanchSpecies(species)) return Response.json({ error: "You can't raise that here." }, { status: 400 });
+      const def = RANCH_SPECIES[species];
+      const mine = herd.filter((a) => a.species === species);
+      if (mine.length >= def.cap) return Response.json({ error: `Your ${def.home} is full (${def.cap} max).` }, { status: 400 });
+      const [paid] = await db.update(characters).set({ coins: sql`${characters.coins} - ${def.price}` })
+        .where(and(eq(characters.id, me.id), sql`${characters.coins} >= ${def.price}`)).returning({ id: characters.id });
+      if (!paid) return Response.json({ error: `A ${def.young.toLowerCase()} costs ${def.price} coins.` }, { status: 400 });
+      const entry = (await getBuildingsManifest()).buildings.find((b) => b.key === key)!;
+      const pen = penRect(entry.tx, entry.ty);
+      const name = nextName(species, herd.map((a) => a.name));
+      await db.insert(animals).values({
+        species, name, x: pen.x + Math.floor(pen.w / 32) * 16 + 8, y: pen.y + Math.floor(pen.h / 32) * 16 + 8,
+        zone: pen, hunger: 0, ownerId: me.id, ranchKey: key, lastProducedAt: new Date(now), lastFedAt: new Date(now),
+      });
+      markWorldDirty(pen.x, pen.y);
+      return Response.json({ ok: true, message: `${def.icon} Welcome, ${name}! Keep them fed and they'll give you ${def.produce}.`, view: await view(key, me.id) });
+    }
+
+    if (body.action === "feed") {
+      const hungry = herd.filter((a) => a.hunger >= FED_BELOW).sort((a, b) => b.hunger - a.hunger);
+      if (hungry.length === 0) return Response.json({ error: "Everyone's full. Come back later." }, { status: 400 });
+      const bag = await db.select().from(inventory).where(and(eq(inventory.characterId, me.id), inArray(inventory.itemKey, [...FEED_ITEMS]), sql`${inventory.qty} > 0`)).orderBy(inventory.id);
+      let fed = 0;
+      for (const a of hungry) {
+        const row = bag.find((b) => b.qty > 0);
+        if (!row) break;
+        row.qty -= 1;
+        if (row.qty > 0) await db.update(inventory).set({ qty: row.qty }).where(eq(inventory.id, row.id));
+        else await db.delete(inventory).where(eq(inventory.id, row.id));
+        const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
+        await db.update(animals).set({ hunger: 0, lastFedAt: new Date(now), lastProducedAt: new Date(afterFeed(last, a.hunger, now)), mood: "content" }).where(eq(animals.id, a.id));
+        fed++;
+      }
+      if (fed === 0) return Response.json({ error: "You've no feed. Bring wheat or crops from your field." }, { status: 400 });
+      return Response.json({ ok: true, message: `🌾 You fed ${fed} animal${fed === 1 ? "" : "s"}.${fed < hungry.length ? " You ran out of feed." : ""}`, view: await view(key, me.id) });
+    }
+
+    if (body.action === "collect") {
+      const gained = new Map<string, number>();
+      for (const a of herd) {
+        if (!isRanchSpecies(a.species)) continue;
+        const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
+        const n = readyCount(last, a.hunger, now);
+        if (n === 0) continue;
+        const item = RANCH_SPECIES[a.species].produce;
+        gained.set(item, (gained.get(item) ?? 0) + n);
+        await db.update(animals).set({ lastProducedAt: new Date(afterCollect(last, n, now)) }).where(eq(animals.id, a.id));
+      }
+      if (gained.size === 0) return Response.json({ error: "Nothing to collect yet." }, { status: 400 });
+      const quest = getContainer().services.quest;
+      for (const [itemKey, qty] of gained) {
+        await addItem(me.id, itemKey, qty);
+        await progressMissions(me.id, (q) => q.type === "collect" && q.itemKey === itemKey, qty);
+        void quest.recordEvent(me.id, { kind: "collect", payload: { itemKey } }, qty).catch(() => {});
+      }
+      const list = [...gained].map(([k, q]) => ({ itemKey: k, qty: q }));
+      return Response.json({ ok: true, message: `🧺 Collected ${list.map((g) => `${g.qty} ${g.itemKey}`).join(", ")}.`, gained: list, view: await view(key, me.id) });
+    }
+    return Response.json({ error: "Unknown action." }, { status: 400 });
+  } catch (e) {
+    return handleApiError(e);
+  }
+}

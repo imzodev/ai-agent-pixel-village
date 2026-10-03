@@ -14,7 +14,11 @@ import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import LocationBanner from "./LocationBanner";
 import QuestTracker from "./QuestTracker";
 import CollectionBook from "./CollectionBook";
+import ForgePanel from "./ForgePanel";
+import InnPanel from "./InnPanel";
+import RanchPanel from "./RanchPanel";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
+import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
@@ -674,17 +678,19 @@ export default function Hud() {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
             if (!lot) return null;
             const land = lot.kind === "land";
+            const ranch = lot.kind === "ranch";
             if (lot.owner?.id === myId) {
               const confirming = confirmRelease === lot.key;
               return <>
-                <span className="text-[11px] font-bold text-emerald-700">{land ? "🌱 Your land" : "🏡 Your home"}</span>
+                <span className="text-[11px] font-bold text-emerald-700">{land ? "🌱 Your land" : ranch ? "🐔 Your ranch" : "🏡 Your home"}</span>
                 <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>
-                  {confirming ? "Sure? Crops are cleared" : land ? "Give up" : "Move out"}
+                  {confirming ? (ranch ? "Sure? Animals leave" : "Sure? Crops are cleared") : land || ranch ? "Give up" : "Move out"}
                 </Btn>
               </>;
             }
-            if (lot.owner) return <span className="text-[11px] text-stone-600">{land ? `🌱 Land of ${lot.owner.name}` : `🏡 Home of ${lot.owner.name}`}</span>;
+            if (lot.owner) return <span className="text-[11px] text-stone-600">{land ? `🌱 Land of ${lot.owner.name}` : ranch ? `🐔 Ranch of ${lot.owner.name}` : `🏡 Home of ${lot.owner.name}`}</span>;
             if (land) return <Btn on={() => void lotAction("acquire", lot.key)}>🌱 {lot.price > 0 ? `Buy land · ${lot.price}🪙` : "Claim land (free)"}</Btn>;
+            if (ranch) return <Btn on={() => void lotAction("acquire", lot.key)}>🐔 {lot.price > 0 ? `Buy ranch · ${lot.price}🪙` : "Claim ranch (free)"}</Btn>;
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
@@ -827,6 +833,9 @@ export default function Hud() {
       {building && (
         <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+          {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
+          {bInfo?.kind === "ranch" && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
+          {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
               {npcsInBuilding.length === 0 && <div className="text-stone-500">Nobody&apos;s inside right now — the resident is probably out on the step.</div>}
@@ -984,7 +993,7 @@ function BagPanel({ me, onAction }: { me: Me | null; onAction: (b: Record<string
     <div className="space-y-1.5">
       {me.inventory.map((i) => (
         <div key={i.id} className={`rounded-lg border-2 bg-white p-2 ${i.equipped ? "border-emerald-500" : "border-transparent"}`} style={i.itemKey === "discount" ? { borderColor: String(i.meta.color ?? "#e76f51") } : undefined}>
-          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : i.def?.name ?? i.itemKey}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
+          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {i.def?.kind === "consumable" && <Sm on={() => onAction({ action: "use", inventoryId: i.id })}>Eat</Sm>}
             {i.def?.equippable && <Sm on={() => onAction({ action: "equip", inventoryId: i.id })}>{i.equipped ? "Unequip" : "Equip"}</Sm>}

@@ -31,6 +31,7 @@ export const TRADES: TradeConfig = {
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
   miller: [
+    { itemKey: "milk", qty: 1, price: 3, line: "Milk for the dairy? Three coppers a jug." },
     { itemKey: "wheat", qty: 1, price: 1, line: "I'll buy your wheat for a copper." },
     { itemKey: "flour", qty: 1, price: 2, line: "Flour for your baking — two coppers." },
   ],
@@ -55,8 +56,18 @@ export const TRADES: TradeConfig = {
     { itemKey: "wolf_pelt", qty: 1, price: 6, line: "Wolf pelt — six coppers. You've been in Whisperwood, I see." },
   ],
   hm_innkeeper: [
+    { itemKey: "milk", qty: 1, price: 4, line: "Fresh milk! Four coppers — the woodcutters drink it by the bucket." },
+    { itemKey: "egg", qty: 1, price: 2, line: "Eggs for breakfast, two coppers each." },
     { itemKey: "berry", qty: 1, price: 2, line: "Berries for the jam pot — two coppers a handful." },
     { itemKey: "herb", qty: 1, price: 2, line: "Herbs for the tea, two coppers. Bless you." },
+  ],
+  innkeeper: [
+    { itemKey: "milk", qty: 1, price: 4, line: "Milk for the stew pot — four coppers a jug." },
+    { itemKey: "egg", qty: 1, price: 2, line: "Fresh eggs, two coppers each. Breakfast is sorted!" },
+  ],
+  bw_innkeeper: [
+    { itemKey: "milk", qty: 1, price: 5, line: "Milk's dear out here on the coast. Five coppers!" },
+    { itemKey: "egg", qty: 1, price: 2, line: "Eggs! Two coppers each." },
   ],
   // Brightwater pays a little more: it's a long road.
   bw_fishmonger: [
@@ -90,9 +101,19 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "Thirty coppers for a good rod. The Silverrun's full of them — fish, I mean." },
   ],
   hm_innkeeper: [
+    { itemKey: "hot_stew", qty: 1, price: 8, line: "Hot stew, eight coppers. Sticks to your ribs." },
     { itemKey: "bread", qty: 1, price: 4, line: "Fresh bread, four coppers. Restores a body after the road." },
     { itemKey: "tea", qty: 1, price: 6, line: "Calming tea, six coppers. Good for what ails you." },
     { itemKey: "honey_bun", qty: 1, price: 9, line: "Honey bun — nine coppers. Worth every one." },
+  ],
+  innkeeper: [
+    { itemKey: "hot_stew", qty: 1, price: 8, line: "A bowl of hot stew, eight coppers. Warms you right through." },
+    { itemKey: "bread", qty: 1, price: 4, line: "Bread's fresh from Marigold's oven, four coppers." },
+    { itemKey: "tea", qty: 1, price: 6, line: "Calming tea, six coppers." },
+  ],
+  bw_innkeeper: [
+    { itemKey: "hot_stew", qty: 1, price: 8, line: "Fish stew, eight coppers. Caught this morning." },
+    { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers. Good for mopping up the stew." },
   ],
   blacksmith: [
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },

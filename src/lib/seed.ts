@@ -62,6 +62,8 @@ export const ITEM_DEFS = [
   { key: "bat_wing", name: "Bat Wing", kind: "material", icon: "🦇", description: "Leathery and light. Wren buys them.", value: 2 },
   { key: "thorn", name: "Thornling Thorn", kind: "material", icon: "🌵", description: "Wickedly sharp. Greta makes blades from them.", value: 2 },
   { key: "boar_hide", name: "Boar Hide", kind: "material", icon: "🐗", description: "Tough and bristly. Good for grips and gear.", value: 5 },
+  { key: "milk", name: "Fresh Milk", kind: "consumable", icon: "🥛", description: "Creamy milk from your ranch. Drink it, or sell it at an inn.", value: 4 },
+  { key: "hot_stew", name: "Hot Stew", kind: "consumable", icon: "🍲", description: "A steaming bowl from the inn. Restores 12 HP.", value: 4 },
   { key: "wolf_pelt", name: "Wolf Pelt", kind: "material", icon: "🐺", description: "Thick grey fur from a Whisperwood wolf. Warm, and worth a fair price.", value: 6 },
   { key: "wisp_essence", name: "Wisp Essence", kind: "material", icon: "✨", description: "A cold glow from the night forest.", value: 10 },
   { key: "rootking_heartwood", name: "Rootking Heartwood", kind: "trophy", icon: "🌳", description: "Still warm. Proof you fought the Old Rootking.", value: 40 },
@@ -206,9 +208,9 @@ export const NPC_DEFS: {
     name: "Bjorn",
     role: "Blacksmith of Hollowmere",
     persona:
-      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, and buys the raw stuff off anyone brave enough to fetch it from Whisperwood. Proud of Hollowmere, wary of the Greyspine caverns.",
-    greeting: "Hah! Another traveller off the King's Road. Need an edge on something? Bring me thorns and hide and I'll make you a blade worth swinging.",
-    tilePos: [-336, 10],
+      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, buys the raw stuff off anyone brave enough to fetch it from Whisperwood, and at his forge on the south side of town he'll upgrade a sword, an axe or a fishing rod (up to +3) for coin and materials. Proud of Hollowmere, wary of the Greyspine caverns.",
+    greeting: "Hah! Another traveller off the King's Road. Need an edge on something? Step into my forge with thorns and hide and I'll make your gear sing.",
+    tilePos: [-363, 24],
     wanderRadius: 70,
     appearance: { body: "male", skin: "#c68e5a", hair: "buzzcut", hairColor: "#2b1d14", shirtColor: "#3a3a4a", pantsColor: "#5a4632" },
     mood: "hearty",
@@ -218,9 +220,9 @@ export const NPC_DEFS: {
     name: "Ivy",
     role: "Innkeeper of Hollowmere",
     persona:
-      "Ivy runs the Hollowmere inn with brisk warmth. She sells bread and calming tea to tired woodcutters, knows every rumour on the road, and worries about whoever went into the Greyspine cave last.",
+      "Ivy runs the Sawdust & Ale, Hollowmere's inn, with brisk warmth. She sells bread and calming tea to tired woodcutters, knows every rumour on the road, and worries about whoever went into the Greyspine cave last.",
     greeting: "Come in out of the pines, traveller. Bread's fresh and the tea will put the colour back in you.",
-    tilePos: [-330, 4],
+    tilePos: [-337, -1],
     wanderRadius: 60,
     appearance: { body: "female", skin: "#f1c9a5", hair: "long", hairColor: "#8c5a2b", shirtColor: "#4a7c59", pantsColor: "#3d3d3d" },
     mood: "warm",
@@ -273,6 +275,31 @@ export const NPC_DEFS: {
     wanderRadius: 60,
     appearance: { body: "male", skin: "#f1c9a5", hair: "bedhead", hairColor: "#c94f2a", shirtColor: "#7b5ea7", pantsColor: "#2e2e3a" },
     mood: "cheerful",
+  },
+  {
+    key: "bw_innkeeper",
+    name: "Coral",
+    role: "Innkeeper of the Salted Gull",
+    persona:
+      "Coral keeps the Salted Gull, Brightwater's harbour inn, full of fishermen's stories and fish stew. Quick-witted, a little salty, and the first to hear when someone lands a legendary catch. Sells stew, bread and tea; lets weary travellers rest by the fire.",
+    greeting: "In you come, out of the spray! Stew's on, and there's a story going round about a giant pike.",
+    tilePos: [-709, -1],
+    wanderRadius: 40,
+    appearance: { body: "female", skin: "#8d5524", hair: "long", hairColor: "#1a1a1a", shirtColor: "#2a6a7a", pantsColor: "#3a3a3a" },
+    mood: "wry",
+  },
+  // ── The village inn
+  {
+    key: "innkeeper",
+    name: "Hettie",
+    role: "Innkeeper of the Wayfarer's Rest",
+    persona:
+      "Hettie runs the Wayfarer's Rest on the village plaza: a round, rosy woman who remembers every face and every rumour. Sells hot stew, bread and tea, lets the weary rest by the hearth, and loves to tell newcomers what's worth doing — the Rootking, the rare fish, the wolves in Whisperwood.",
+    greeting: "Welcome to the Wayfarer's Rest, dear! Sit, eat, and I'll tell you what's going on in the grove.",
+    tilePos: [31, 19],
+    wanderRadius: 40,
+    appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#a04a2a", shirtColor: "#a43a32", pantsColor: "#4a3a2a" },
+    mood: "warm",
   },
 ];
 
@@ -627,10 +654,11 @@ async function syncWildlifeLayout() {
           movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null,
         })
         // By name too: a species can have several herds in different places.
-        .where(and(eq(animals.species, def.species), inArray(animals.name, def.names)));
+        // Ranch animals (owned) keep their pens.
+        .where(and(eq(animals.species, def.species), inArray(animals.name, def.names), isNull(animals.ownerId)));
       // Species / names added to ANIMAL_DEFS after the DB was seeded
       // (e.g. pigs) are created here so existing worlds get them too.
-      const existing = await db.select({ name: animals.name }).from(animals).where(and(eq(animals.species, def.species), inArray(animals.name, def.names)));
+      const existing = await db.select({ name: animals.name }).from(animals).where(and(eq(animals.species, def.species), inArray(animals.name, def.names), isNull(animals.ownerId)));
       const have = new Set(existing.map((r) => r.name));
       for (const name of def.names) {
         if (have.has(name)) continue;
