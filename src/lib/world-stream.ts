@@ -176,6 +176,16 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
 
 /** Mark the world dirty near (x, y) and schedule a coalesced push. */
 /** Connected players within `r` px of (x, y) (live positions). */
+/** Nudge these players (if connected here) that a saloon game changed. */
+export function nudgeSaloon(playerIds: readonly number[], inn: string): void {
+  const msg = JSON.stringify({ type: "saloon", inn });
+  for (const id of playerIds) {
+    const c = connections.get(id);
+    if (!c) continue;
+    try { c.ws.send(msg); } catch { /* socket closed */ }
+  }
+}
+
 export function livePlayersNear(x: number, y: number, r: number): number[] {
   const out: number[] = [];
   for (const c of connections.values()) if (Math.hypot(c.homePx - x, c.homePy - y) <= r) out.push(c.playerId);

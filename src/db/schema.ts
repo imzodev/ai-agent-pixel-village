@@ -1,3 +1,4 @@
+import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloon";
 import {
   bigint,
   pgMaterializedView,
@@ -569,6 +570,50 @@ export const treasureMaps = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("treasure_maps_char_idx").on(t.characterId)],
+);
+
+/** Saloon games (src/lib/saloonServer.ts). A player's blackjack hand in
+ *  progress (the shoe stays here). */
+export const saloonHands = pgTable("saloon_hands", {
+  characterId: integer("character_id").primaryKey(),
+  hand: jsonb("hand").$type<BlackjackHand>().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** One liar's dice table per inn; `version` guards concurrent moves. */
+export const diceTables = pgTable("dice_tables", {
+  innKey: text("inn_key").primaryKey(),
+  state: jsonb("state").$type<DiceTableState>().notNull(),
+  version: integer("version").notNull().default(0),
+});
+
+/** Arm-wrestling matches: a player against the innkeeper (b null) or another player. */
+export const armMatches = pgTable(
+  "arm_matches",
+  {
+    id: serial("id").primaryKey(),
+    innKey: text("inn_key").notNull(),
+    a: integer("a").notNull(),
+    b: integer("b"),
+    status: text("status").notNull(), // invited | playing | done
+    state: jsonb("state").$type<ArmMatchState>().notNull(),
+    version: integer("version").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("arm_matches_a_idx").on(t.a), index("arm_matches_b_idx").on(t.b)],
+);
+
+/** Every game's result for a player: daily limits and the weekly leaderboard. */
+export const saloonResults = pgTable(
+  "saloon_results",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    game: text("game").notNull(),
+    net: integer("net").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("saloon_results_char_at_idx").on(t.characterId, t.at), index("saloon_results_at_idx").on(t.at)],
 );
 
 /** Wild patches a character has picked (src/lib/forage.ts): each player

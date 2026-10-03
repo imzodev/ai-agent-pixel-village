@@ -15,7 +15,7 @@ export type InnWorld = {
 };
 
 /** One player at the inn. */
-export type InnPatron = { id: number; name: string; level: number; title: string | null };
+export type InnPatron = { id: number; name: string; level: number; title: string | null; /** "🎲 at the dice table", … */ doing?: string };
 
 /** The inn panel's data. */
 export type InnView = {

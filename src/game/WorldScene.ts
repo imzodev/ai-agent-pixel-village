@@ -473,6 +473,7 @@ export class WorldScene extends Phaser.Scene {
           if (!this.alive()) return;
           this.playEnemyAttack(id, x, y);
         },
+        onSaloon: ({ inn }) => bus.emit("saloon", { inn }),
         onKnockout: ({ x, y, coinsLost, by }) => {
           if (!this.alive()) return;
           bus.emit("knockout", { x, y, coinsLost });

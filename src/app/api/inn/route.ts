@@ -9,6 +9,7 @@ import { getBuildingDoor } from "@/lib/buildingsServer";
 import { getLivePlayerPosition, livePlayersNear, markWorldDirty } from "@/lib/world-stream";
 import { addItem } from "@/lib/game";
 import { buyRumour } from "@/lib/treasureServer";
+import { patronsBusy } from "@/lib/saloonServer";
 import { RUMOUR_PRICE } from "@/lib/treasure";
 import { gameHour } from "@/lib/worldmap";
 import { nextBossWindow } from "@/lib/progression";
@@ -35,6 +36,7 @@ async function innView(key: string, me: { id: number; hp: number; maxHp: number 
     ? await db.select({ id: characters.id, name: characters.name, level: characters.level, title: characters.title }).from(characters).where(inArray(characters.id, ids))
     : [];
   const count = (k: string) => free.find((f) => f.kind === k)?.n ?? 0;
+  const doing = await patronsBusy(key, ids);
   return {
     key,
     name: b.name,
@@ -52,7 +54,7 @@ async function innView(key: string, me: { id: number; hp: number; maxHp: number 
       freeRanches: count("ranch"),
       lastCatch: catchEv?.text ?? null,
     }),
-    patrons,
+    patrons: patrons.map((p) => ({ ...p, doing: doing.get(p.id) })),
   };
 }
 

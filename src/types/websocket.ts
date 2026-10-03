@@ -58,6 +58,7 @@ export type StreamHandlers = {
   onEnemyAct?: (data: { id: number; x: number; y: number }) => void;
   /** You were knocked out and woke at (x, y). */
   onKnockout?: (data: { x: number; y: number; coinsLost: number; by: string }) => void;
+  onSaloon?: (data: { inn: string }) => void;
   /** Moves scheduled on the last beat (all starting at `startAt`). */
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;
