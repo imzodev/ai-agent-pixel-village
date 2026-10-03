@@ -12,7 +12,8 @@
 
 /* ── Handheld-RPG UI ─────────────────────────────────────────────────── */
 .font-pixel {
-  font-family: var(--font-pixel), ui-monospace, monospace;
+  /* Digits come from VT323 (unicode-range 0–9); everything else is Pixelify. */
+  font-family: var(--font-digits), var(--font-pixel), ui-monospace, monospace;
   letter-spacing: 0.01em;
 }
 /* Framed text-box panel: dark border, light inner rim, warm parchment. */

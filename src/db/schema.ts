@@ -198,6 +198,11 @@ export const animals = pgTable("animals", {
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
   stateUntil: timestamp("state_until"),
+  /** Ranch animals (src/lib/ranch.ts): owner, their ranch lot, and when
+   *  their produce was last collected. Null for the village's own animals. */
+  ownerId: integer("owner_id"),
+  ranchKey: text("ranch_key"),
+  lastProducedAt: timestamp("last_produced_at"),
   // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the
   // resting position the move ends on; the live position is
   // `positionAt(move, now)`. Null when the entity has never moved.
@@ -498,6 +503,21 @@ export const characterCollection = pgTable(
     firstAt: timestamp("first_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("character_collection_pk").on(t.characterId, t.kind, t.key)],
+);
+
+/** Generated trees players are chopping or have felled (src/lib/trees.ts),
+ *  by lattice corner. Felled while `regrow_at` is in the future. */
+export const felledTrees = pgTable(
+  "felled_trees",
+  {
+    vx: integer("vx").notNull(),
+    vy: integer("vy").notNull(),
+    hits: integer("hits").notNull().default(0),
+    felledAt: timestamp("felled_at"),
+    regrowAt: timestamp("regrow_at"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("felled_trees_pk").on(t.vx, t.vy), index("felled_trees_regrow_idx").on(t.regrowAt)],
 );
 
 /** Perks a character picked (one every 5 levels, see src/lib/progression.ts). */

@@ -139,3 +139,10 @@ export const ANIMAL_SPEED = 28;
 export const ENEMY_SPEED = 22;
 /** Raiding foxes move faster than walking animals. */
 export const ANIMAL_RAID_SPEED = 60;
+
+/** Hunting enemies (wolves): how fast they run at a player… */
+export const HUNT_SPEED = 56;
+/** …how close a player must be for them to give chase… */
+export const HUNT_RADIUS_PX = 8 * 16;
+/** …and how far past their zone they will follow before giving up. */
+export const HUNT_LEASH_PX = 4 * 16;

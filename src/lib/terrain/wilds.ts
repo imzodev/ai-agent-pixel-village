@@ -16,6 +16,11 @@ export function wildsGid(name: string): number {
   return WILDS_FIRSTGID + i;
 }
 
+/** The Wilds tile name of a global id, or null when it isn't a Wilds tile. */
+export function wildsNameOf(gid: number): string | null {
+  return gid >= WILDS_FIRSTGID ? WILDS.names[gid - WILDS_FIRSTGID] ?? null : null;
+}
+
 /** Frame time of the animated tiles (water), in ms. */
 const FRAME_MS = 240;
 

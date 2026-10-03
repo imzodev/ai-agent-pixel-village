@@ -10,6 +10,7 @@ import {
   CHUNK_TILE_W,
   chunkRegistered,
   registerChunk,
+  unregisterChunk,
 } from "@/lib/chunkCollision";
 
 // Chunk tile geometry. The chunk world is unbounded: cx, cy ∈ ℤ. The
@@ -183,6 +184,9 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "CabinBoard", file: "CabinBoard.png" },
   { name: "HouseTimber", file: "HouseTimber.png" },
   { name: "HouseBrick", file: "HouseBrick.png" },
+  { name: "Forge", file: "Forge.png" },
+  { name: "Inn", file: "Inn.png" },
+  { name: "RanchLot", file: "RanchLot.png" },
 ];
 
 // 5×5 chunk window centered on (cx, cy). Unbounded — no includes() filter,
@@ -838,6 +842,44 @@ export function releaseOutside(
     // Keep state.tilemap + state.tilesets cached — re-entry only needs to
     // re-call createLayer, not re-register tilesets.
   }
+}
+
+/**
+ * Re-read a chunk whose terrain changed on the server (a tree was felled
+ * or grew back). The new map is fetched first and swapped in within the
+ * same frame, so the old tiles stay on screen until the new ones are ready
+ * (no empty flash). Chunks not loaded here just drop their cache.
+ */
+export async function reloadChunk(scene: Phaser.Scene, cx: number, cy: number, around: { cx: number; cy: number }): Promise<void> {
+  const key = chunkKey(cx, cy);
+  if (!chunkStates.has(key)) {
+    if (scene.sys.cache.tilemap.exists(key)) scene.sys.cache.tilemap.remove(key);
+    unregisterChunk(cx, cy);
+    return;
+  }
+  let json: unknown;
+  try {
+    const res = await fetch(`/api/chunks/${cx}/${cy}`, { cache: "no-store" });
+    if (!res.ok) return;
+    json = await res.json();
+  } catch {
+    return; // keep the old tiles; the next full load will catch up
+  }
+  if (!sceneAlive(scene)) return;
+  const state = chunkStates.get(key);
+  if (state) {
+    destroyChunkLayers(state);
+    destroySortedSprites(state);
+    state.tilemap.destroy();
+    chunkStates.delete(key);
+  }
+  // Same shape Phaser's tilemapTiledJSON loader caches: { format, data }
+  // (format 1 = Phaser.Tilemaps.Formats.TILED_JSON).
+  if (scene.sys.cache.tilemap.exists(key)) scene.sys.cache.tilemap.remove(key);
+  scene.sys.cache.tilemap.add(key, { format: 1, data: json });
+  unregisterChunk(cx, cy);
+  // The map is cached now, so this rebuilds it before the next frame.
+  await ensureChunks(scene, around);
 }
 
 function destroyChunkLayers(state: ChunkState): void {

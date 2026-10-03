@@ -21,6 +21,14 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
     weight: 10,
   },
   {
+    key: "ranch_eggs_4",
+    title: "Fresh from the coop",
+    description: "Collect 4 eggs — from your ranch's hens, or the village yard.",
+    requirement: { type: "collect", itemKey: "egg", qty: 4 },
+    reward: { coins: 20, xp: 8 },
+    weight: 8,
+  },
+  {
     key: "collect_berry_5",
     title: "Berry picker",
     description: "Pick 5 berries from the bushes south of the pond.",

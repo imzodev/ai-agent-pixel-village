@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { defaultChunk } from "@/lib/chunkGen";
 import { readAuthored, restyleAuthored } from "@/lib/villageRestyle";
+import { ensureFelledLoaded } from "@/lib/treesServer";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export async function GET(
       });
     }
 
+    await ensureFelledLoaded(); // felled trees are left out of the terrain
     return NextResponse.json(defaultChunk(cx, cy), {
       headers: { "Cache-Control": "no-store" },
     });

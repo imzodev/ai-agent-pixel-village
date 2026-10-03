@@ -13,7 +13,7 @@ export type { AchievementDef, CollectionBookView, CollectionCounts, CollectionEn
 const CROP_LOOK: Record<string, { name: string; icon: string }> = {
   radish: { name: "Radish", icon: "🔴" }, carrot: { name: "Carrot", icon: "🥕" }, tomato: { name: "Tomato", icon: "🍅" }, pumpkin: { name: "Pumpkin", icon: "🎃" },
 };
-const ENEMY_ICON: Record<string, string> = { slime: "🟢", bat: "🦇", thornling: "🌵", boar: "🐗", wisp: "👻", rootking: "🌳" };
+const ENEMY_ICON: Record<string, string> = { slime: "🟢", bat: "🦇", thornling: "🌵", boar: "🐗", wolf: "🐺", wisp: "👻", rootking: "🌳" };
 const REGION_ICON: Record<string, string> = { meadow: "🌼", whisperwood: "🌲", hollowmere: "🏘️", greyspine: "⛰️", silverrun: "🌊", brightwater: "⚓", caverns: "💎" };
 
 /** All pages; the folk page lists the given NPCs. */

@@ -179,7 +179,13 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       for (const [c, r] of SQUARE_LAMPS) out.push({ x: (entry.tx + c) * CHUNK_TILE_PX + 8, y: (entry.ty + r) * CHUNK_TILE_PX + 8, radius: 76, color: 0xffd27a });
       continue;
     }
-    if (!door || entry.kind === "land") continue;
+    if (!door || entry.kind === "land" || entry.kind === "ranch") continue;
+    if (entry.kind === "forge") {
+      // the open hearth in the lean-to bay glows day and night
+      out.push({ x: s.origin.x + 283, y: s.origin.y + 188, radius: 72, color: 0xff8a3c, flicker: true });
+      out.push({ x: door.x, y: door.y - 22, radius: 44, color: 0xffc870 });
+      continue;
+    }
     if (entry.key === "cave_mouth") out.push({ x: door.x, y: door.y - 34, radius: 56, color: 0xffb860, flicker: true });
     else if (entry.key === "cave_exit") out.push({ x: door.x, y: door.y - 20, radius: 96, color: 0xe8f4ff });
     else out.push({ x: door.x, y: door.y - 22, radius: 50, color: 0xffc870 });
@@ -187,19 +193,21 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
   return out;
 }
 
-/** Chimney tops of the house templates (scripts/draw-houses.mjs), in
- *  template pixels, where smoke rises from. */
-const CHIMNEYS: Readonly<Record<string, { x: number; y: number }>> = {
-  "/buildings/cabin_1.json": { x: 271, y: 44 },
-  "/buildings/cabin_2.json": { x: 189, y: 44 },
-  "/buildings/house_1.json": { x: 277, y: 0 },
-  "/buildings/house_2.json": { x: 191, y: 0 },
+/** Chimney tops of the house templates (scripts/draw-houses.mjs,
+ *  scripts/draw-trade-buildings.mjs), in template pixels, where smoke
+ *  rises from. */
+const CHIMNEYS: Readonly<Record<string, ReadonlyArray<{ x: number; y: number }>>> = {
+  "/buildings/cabin_1.json": [{ x: 271, y: 44 }],
+  "/buildings/cabin_2.json": [{ x: 189, y: 44 }],
+  "/buildings/house_1.json": [{ x: 277, y: 0 }],
+  "/buildings/house_2.json": [{ x: 191, y: 0 }],
+  "/buildings/forge.json": [{ x: 131, y: 28 }],
+  "/buildings/inn.json": [{ x: 107, y: 4 }, { x: 276, y: 4 }],
 };
 
 /** World positions of every stamped house's chimney (for smoke). */
 export function chimneySources(stamped: StampedBuilding[]): { x: number; y: number }[] {
   return stamped.flatMap((s) => {
-    const c = CHIMNEYS[s.entry.file];
-    return c ? [{ x: s.origin.x + c.x, y: s.origin.y + c.y }] : [];
+    return (CHIMNEYS[s.entry.file] ?? []).map((c) => ({ x: s.origin.x + c.x, y: s.origin.y + c.y }));
   });
 }

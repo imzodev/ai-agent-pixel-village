@@ -5,7 +5,9 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
-import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { chopTree } from "@/lib/treesServer";
+import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
       }).where(eq(resourceNodes.id, n.id));
 
       // Better axes and the Lumberjack perk add wood per chop.
-      if (chop) yieldAmt += chopBonus(gear.bag) + (perks.has("lumberjack") ? 1 : 0);
+      if (chop) yieldAmt += chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
       await addItem(me.id, n.itemKey, yieldAmt);
       // Foraging now and then turns up seeds for a home garden (not chopping).
       const found = chop ? null : rollForageSeed(Math.random, perks.has("forager") ? 2 : 1);
@@ -149,6 +151,34 @@ export async function POST(req: Request) {
       });
     }
 
+    // A generated tree (woods, tree walls): every chop gives wood; the last
+    // one fells it, opening the way until it grows back.
+    if (action === "chop_tree") {
+      const vx = Number(body.vx), vy = Number(body.vy);
+      const t = trunkPoint(vx, vy);
+      const p = livePos(me);
+      if (!Number.isFinite(t.x) || Math.hypot(t.x - p.x, t.y - p.y) > TREE_REACH_PX) return Response.json({ error: "Get closer to the trunk." }, { status: 400 });
+      const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      if (!gear.bag.some((k) => AXE_ITEMS.includes(k))) return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
+      const r = await chopTree(vx, vy);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      const yieldAmt = 1 + chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
+      await addItem(me.id, "wood", yieldAmt);
+      await progressMissions(me.id, (q) => q.type === "collect" && q.itemKey === "wood", yieldAmt);
+      await db.update(characters).set({ xp: sql`${characters.xp} + ${r.felled ? 5 : 3}` }).where(eq(characters.id, me.id));
+      await recalcLevel(me.id);
+      daily(me.id, "collect", { itemKey: "wood" }, yieldAmt);
+      if (r.felled) broadcastChunkReload(r.chunks);
+      const step = await tutorialEvent(me.id, "collect", { itemKey: "wood" }, yieldAmt);
+      return Response.json({
+        ok: true,
+        felled: r.felled,
+        notices: step ? [step] : [],
+        message: r.felled ? `🌲 Timber! The tree comes down (+${yieldAmt} wood). It'll grow back in time.` : `Chopped ${yieldAmt} wood. ${r.hitsLeft} more to fell it.`,
+        gained: [{ itemKey: "wood", qty: yieldAmt }],
+      });
+    }
+
     if (action === "attack") {
       const [e] = await db.select().from(enemies).where(eq(enemies.id, Number(body.id)));
       if (!e) return Response.json({ error: "It's gone." }, { status: 404 });
@@ -157,7 +187,7 @@ export async function POST(req: Request) {
       if (Math.hypot(ep.x - p.x, ep.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
       const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
       const def = enemyKind(e.kind);
-      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped), fighter: perks.has("fighter"), roll: Math.random() });
+      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped, gear.plus), fighter: perks.has("fighter"), roll: Math.random() });
       const boss = e.kind === BOSS_KIND;
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).

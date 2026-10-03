@@ -84,6 +84,10 @@ class LRURegistry<V> {
     return this.map.has(key);
   }
 
+  delete(key: string): void {
+    this.map.delete(key);
+  }
+
   get size(): number {
     return this.map.size;
   }
@@ -117,6 +121,12 @@ export function blockStampTiles(originX: number, originY: number, tileW: number,
     }
     set.add(t.ly * CHUNK_TILE_W + t.lx);
   }
+}
+
+/** Forget a chunk's blocked tiles so the next lookup re-reads it (its
+ *  terrain changed: a tree was felled or grew back). Stamps are kept. */
+export function unregisterChunk(cx: number, cy: number): void {
+  registry.delete(chunkId(cx, cy));
 }
 
 export function chunkRegistered(cx: number, cy: number): boolean {

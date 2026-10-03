@@ -6,7 +6,7 @@
 // resource_nodes rows carrying owner_id / lot_id / plot.
 
 /** What kind of parcel a lot is. */
-export type LotKind = "home" | "land";
+export type LotKind = "home" | "land" | "ranch";
 
 /** A lot as sent to clients. */
 export type LotSnapshot = {

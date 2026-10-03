@@ -14,6 +14,7 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
   bat: { name: "Bat", tier: 1, hp: 5, xp: 8, damage: 1, drops: [{ itemKey: "bat_wing", chance: 0.6, qty: 1 }] },
   thornling: { name: "Thornling", tier: 2, hp: 12, xp: 15, damage: 2, drops: [{ itemKey: "thorn", chance: 0.8, qty: 2 }] },
   boar: { name: "Bramble Boar", tier: 2, hp: 22, xp: 25, damage: 3, drops: [{ itemKey: "boar_hide", chance: 0.7, qty: 1 }] },
+  wolf: { name: "Grey Wolf", tier: 2, hp: 18, xp: 22, damage: 2, hunts: true, drops: [{ itemKey: "wolf_pelt", chance: 0.7, qty: 1 }] },
   wisp: { name: "Shade Wisp", tier: 3, hp: 30, xp: 40, damage: 4, nightOnly: true, drops: [{ itemKey: "wisp_essence", chance: 0.75, qty: 1 }] },
   // World boss: rewards are shared by everyone who fought it (BOSS_REWARD).
   rootking: { name: "Old Rootking", tier: "boss", hp: 600, xp: 300, damage: 5, drops: [] },
@@ -44,6 +45,20 @@ export function bossWindowStart(now: number, schedule = "6@18", force = false): 
   return now >= start && now < start + BOSS_WINDOW_MS ? start : null;
 }
 
+/** When the boss is (or next will be) up: `active` while its window is
+ *  open (then `at` = that window's start), else the next start. */
+export function nextBossWindow(now: number, schedule = "6@18", force = false): { active: boolean; at: number } {
+  const open = bossWindowStart(now, schedule, force);
+  if (open !== null) return { active: true, at: open };
+  const m = /^(\d)@(\d{1,2})$/.exec(schedule.trim());
+  const dow = m ? Number(m[1]) : 6;
+  const hour = m ? Number(m[2]) : 18;
+  const d = new Date(now);
+  let start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour) + ((dow - d.getUTCDay() + 7) % 7) * 86_400_000;
+  if (start <= now) start += 7 * 86_400_000;
+  return { active: false, at: start };
+}
+
 /** Fighters who earn the boss reward: dealt at least BOSS_SHARE_MIN of its HP. */
 export function bossRewardees(damage: Record<string, number>, maxHp: number): number[] {
   return Object.entries(damage).filter(([, d]) => d >= maxHp * BOSS_SHARE_MIN).map(([id]) => Number(id));
@@ -70,11 +85,16 @@ export const ENEMY_ZONES: EnemyZone[] = [
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
   { name: "oak forest", rect: chunkRect(-8, 1, 3, 3), kinds: { wisp: 1 } },
   // The westward journey (src/lib/regions.ts), tougher the further you go.
-  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2 }, target: 5 },
+  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2, wolf: 3 }, target: 6 },
   { name: "greyspine pass", rect: tileRect(-576, 2, 192, 11), kinds: { boar: 2, bat: 2, thornling: 1 }, target: 6 },
   { name: "silverrun banks", rect: tileRect(-648, -45, 72, 105), kinds: { slime: 3 }, target: 4 },
   { name: "greyspine caverns", rect: tileRect(-528, -480, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
 ];
+
+/** The wild zone (x, y) roams in, with a small margin at the borders. */
+export function enemyZoneAt(x: number, y: number): EnemyZone | null {
+  return ENEMY_ZONES.find((z) => x >= z.rect.x - 40 && x <= z.rect.x + z.rect.w + 40 && y >= z.rect.y - 40 && y <= z.rect.y + z.rect.h + 40) ?? null;
+}
 
 /** True when (x, y) is in an underground zone (night-only kinds stay). */
 export function inDarkZone(x: number, y: number): boolean {
@@ -117,14 +137,18 @@ export const WEAPONS: Record<string, WeaponDef> = {
 /** Items that let you chop trees (any of them in the bag). */
 export const AXE_ITEMS: readonly string[] = ["axe", "sharp_axe"];
 
-/** Damage bonus of the best weapon among `equipped` item keys. */
-export function weaponBonus(equipped: readonly string[]): number {
-  return equipped.reduce((best, k) => Math.max(best, WEAPONS[k]?.damage ?? 0), 0);
+/** Damage bonus of the best weapon among `equipped` item keys; a sword's
+ *  forge level (`plus`, src/lib/forge.ts) adds one damage per level. */
+export function weaponBonus(equipped: readonly string[], plus: Readonly<Record<string, number>> = {}): number {
+  return equipped.reduce((best, k) => {
+    const w = WEAPONS[k];
+    return w && w.damage > 0 ? Math.max(best, w.damage + (plus[k] ?? 0)) : best;
+  }, 0);
 }
 
-/** Extra wood per chop from the best axe in the bag. */
-export function chopBonus(bag: readonly string[]): number {
-  return bag.reduce((best, k) => Math.max(best, WEAPONS[k]?.chopBonus ?? 0), 0);
+/** Extra wood per chop from the best axe in the bag, plus its forge level. */
+export function chopBonus(bag: readonly string[], plus: Readonly<Record<string, number>> = {}): number {
+  return bag.reduce((best, k) => (AXE_ITEMS.includes(k) ? Math.max(best, (WEAPONS[k]?.chopBonus ?? 0) + (plus[k] ?? 0)) : best), 0);
 }
 
 /** One hit on an enemy: 2–4 base (`roll` in [0, 1)), weapon, level and perk. */

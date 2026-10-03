@@ -30,6 +30,7 @@ import { leashAround, leashOfRect, pickWanderMove, planGoalMove } from "./wander
 import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
+import { syncFelledTrees } from "./treesServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
 /** Enemies kept alive per wild zone (zones refill so they can be farmed). */
@@ -116,6 +117,9 @@ export async function tickWorld(): Promise<number | null> {
   const late = nowMs - beatStartAt(nowMs) > BROADCAST_OFFSET_MS / 2;
   const beat: TickBeat = { index: beatIndex(nowMs), nowMs, startAt: nextBeatAt(nowMs) + (late ? WORLD_TICK_MS : 0) };
 
+  // Felled trees (any process may have chopped one): walls and wander
+  // paths must follow the terrain players opened up.
+  await syncFelledTrees(now).catch((err) => console.warn("[tick] tree sync failed:", err instanceof Error ? err.message : err));
   const [animalMoves, npcMoves, , , enemyMoves] = await Promise.all([
     tickAnimals(beat, elapsedSec, night, now),
     tickNpcs(beat),
@@ -261,7 +265,8 @@ async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, n
 
     // Chickens sometimes lay an egg at their feet (separate from pet bonuses).
     // Skip if there's already an egg nearby so they don't pile up.
-    if (a.species === "chicken" && state !== "sleep" && !raiding && Math.random() < 0.04) {
+    // Ranch hens lay into their coop instead (src/lib/ranch.ts).
+    if (a.species === "chicken" && a.ownerId == null && state !== "sleep" && !raiding && Math.random() < 0.04) {
       const { x, y } = rowPositionAt(a, beat.nowMs);
       const [nearby] = await db
         .select({ n: sql<number>`count(*)::int` })

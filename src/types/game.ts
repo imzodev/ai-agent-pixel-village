@@ -53,6 +53,8 @@ export type CritterEnt = {
   top: number;
   /** Last one-shot animation played, keyed `${anim}@${move.startAt}`. */
   oneShot?: string;
+  /** Scene time until which a struck attack animation owns the sprite. */
+  actingUntil?: number;
   tx: number;
   ty: number;
   /** Server-scheduled move. When set, position = positionAt(move, serverNow). */
