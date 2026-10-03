@@ -31,6 +31,7 @@ import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
+import type { BountyData, BountyReward } from "@/types/bounty";
 import type { Activity, ActivityParticipant } from "@/types/activity";
 
 // Re-export domain types so existing imports of `import type { Appearance }
@@ -447,6 +448,10 @@ export const enemies = pgTable("enemies", {
    *  `nearAt` is the last time a player was close — they despawn after. */
   wild: boolean("wild").notNull().default(false),
   nearAt: timestamp("near_at"),
+  /** Wanted beasts (src/lib/bounties.ts): a name, tougher stats, their bounty. */
+  title: text("title"),
+  elite: boolean("elite").notNull().default(false),
+  bountyId: integer("bounty_id"),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
@@ -520,6 +525,35 @@ export const characterMapSeen = pgTable(
     mask: bigint("mask", { mode: "bigint" }).notNull(),
   },
   (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
+);
+
+/** Bounties posted on a town's notice board (src/lib/bounties.ts). */
+export const bounties = pgTable(
+  "bounties",
+  {
+    id: serial("id").primaryKey(),
+    town: text("town").notNull(),
+    kind: text("kind").notNull(),
+    data: jsonb("data").$type<BountyData>().notNull(),
+    reward: jsonb("reward").$type<BountyReward>().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("bounties_town_idx").on(t.town, t.expiresAt)],
+);
+
+/** Bounties a character has taken. */
+export const characterBounties = pgTable(
+  "character_bounties",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    bountyId: integer("bounty_id").notNull(),
+    progress: integer("progress").notNull().default(0),
+    status: text("status").notNull().default("active"), // active | done (turned in)
+    acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_bounties_pk").on(t.characterId, t.bountyId)],
 );
 
 /** Standing with each continent town (src/lib/reputation.ts). */

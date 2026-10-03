@@ -8,15 +8,19 @@ import { bus } from "@/game/bus";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "@/lib/chunkCollision";
 import { MAP_MAX_ZOOM, MAP_TILE_H, MAP_TILE_W, WAYSTONE_NEAR_PX, chunkOfTile, seenChunks, travelCost } from "@/lib/worldAtlas";
 import type { MapCamera, MapMarkers, MapWaystone } from "@/types/map";
+import type { BountyView } from "@/types/bounty";
+import { boardPoint } from "@/lib/bounties";
 
 const images = new Map<string, HTMLImageElement>(); // map tiles, shared across opens
 const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️" } as const;
 const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔" } as const;
 const MIN_SCALE = 1 / 16, MAX_SCALE = 4;
 
-export default function MapPanel({ me, guide, extraSeen, travelMode, onClose, onMessage }: {
+export default function MapPanel({ me, guide, bounties = [], extraSeen, travelMode, onClose, onMessage }: {
   me: { x: number; y: number } | null;
   guide: { x: number; y: number } | null;
+  /** Your bounties: their spots, parcels' boards, and boards to report to. */
+  bounties?: readonly BountyView[];
   /** Chunks seen this session but not yet saved ("cx,cy"). */
   extraSeen: ReadonlySet<string>;
   /** Opened at a waystone: say so in the header. */
@@ -118,6 +122,18 @@ export default function MapPanel({ me, guide, extraSeen, travelMode, onClose, on
       g.fillStyle = w.attuned ? "#7cc8ff" : "#9aa0a8"; g.fill();
       g.lineWidth = 1.5; g.strokeStyle = "#0b1a2e"; g.stroke();
     }
+    // your bounties: where to go next
+    g.font = `${scale >= 1 ? 16 : 13}px serif`;
+    for (const b of bounties) {
+      const m = b.mine;
+      if (!m) continue;
+      const at = m.progress >= m.target ? boardPoint(b.town)
+        : b.data.kind === "explore" || b.data.kind === "wanted" ? b.data
+        : b.data.kind === "delivery" ? boardPoint(b.data.toTown) : null;
+      if (!at) continue;
+      const icon = m.progress >= m.target ? "💰" : b.data.kind === "delivery" ? "📦" : "📜";
+      g.fillText(icon, sx(at.x), sy(at.y) - 8);
+    }
     // the quest star (pulsing) and you
     const t = performance.now() / 1000;
     if (guide) { g.font = `${16 + Math.sin(t * 4) * 3}px serif`; g.fillText("⭐", sx(guide.x), sy(guide.y) - 10); }
@@ -128,7 +144,7 @@ export default function MapPanel({ me, guide, extraSeen, travelMode, onClose, on
       g.fillStyle = "#e8483c"; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "#3a0e0a"; g.stroke();
       g.fillStyle = "#fff"; g.beginPath(); g.arc(x, y - 12, 2.2, 0, Math.PI * 2); g.fill();
     }
-  }, [markers, isSeen, seenAt, hover, guide, me]);
+  }, [markers, isSeen, seenAt, hover, guide, me, bounties]);
 
   // Redraw every frame while open (the star and your pin pulse).
   useEffect(() => {

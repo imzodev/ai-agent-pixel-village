@@ -33,6 +33,7 @@ import type { Point } from "@/types/world";
 import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
 import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildTarget } from "./wildlife";
+import { refreshBounties } from "./bountiesServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
 /** Enemies kept alive per wild zone (zones refill so they can be farmed). */
@@ -380,7 +381,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
     if (!isDue("enemy", e.id, beat.index, ENEMY_MOVE_INTERVAL_MS)) continue;
     if (busyAt(e, beat.startAt)) continue;
     // Wild enemies roam around where they appeared (home = targetX/Y).
-    const leash = e.wild && e.targetX != null && e.targetY != null
+    const leash = (e.wild || e.elite) && e.targetX != null && e.targetY != null
       ? leashAround({ x: e.targetX, y: e.targetY }, WILD_LEASH_TILES)
       : leashOfRect(zoneForEnemy(e.x, e.y));
     const w = await wanderWrite(e, leash, ENEMY_SPEED, beat);
@@ -400,6 +401,8 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
     await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
   }
   await tickWild(rows, now, night);
+  // Bounty boards: lapsed bounties down, new ones up (every ~30 s).
+  if (beat.index % 6 === 0) await refreshBounties(now).catch((err) => console.warn("[tick] bounty refresh failed:", err instanceof Error ? err.message : err));
   await tickBoss(rows, now);
   return writes.length;
 }

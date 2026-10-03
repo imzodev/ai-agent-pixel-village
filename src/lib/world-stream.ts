@@ -48,6 +48,7 @@ import { trunkPoint } from "@/lib/trees";
 import type { ChunkRef } from "@/types/trees";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
+import { WANTED_DMG_MULT } from "@/lib/bounties";
 import type { Connection, WsSharedState } from "@/types/websocket";
 
 const WS_PATH = "/ws";
@@ -621,12 +622,12 @@ async function enemyAggression(): Promise<void> {
   if (rows.length === 0) return;
   const now = Date.now();
   const live = rows.map((e) => ({ e, p: rowPositionAt(e, now), reach: enemyKind(e.kind).tier === "boss" ? BOSS_REACH_PX : ENEMY_REACH_PX }));
-  const hits: { conn: Connection; kind: string; name: string }[] = [];
+  const hits: { conn: Connection; kind: string; name: string; elite: boolean }[] = [];
   const struck = new Map<number, { x: number; y: number; ex: number; ey: number }>(); // enemy id → its victim
   for (const conn of players) {
     for (const { e, p, reach } of live) {
       if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) > reach) continue;
-      hits.push({ conn, kind: e.kind, name: enemyKind(e.kind).name });
+      hits.push({ conn, kind: e.kind, name: e.title ?? enemyKind(e.kind).name, elite: e.elite });
       if (!struck.has(e.id)) struck.set(e.id, { x: conn.homePx, y: conn.homePy, ex: p.x, ey: p.y });
     }
   }
@@ -641,9 +642,9 @@ async function enemyAggression(): Promise<void> {
   }
   const perks = await perksOfMany([...new Set(hits.map((h) => h.conn.playerId))]);
   const knockedOut = new Set<number>();
-  for (const { conn, kind, name } of hits) {
+  for (const { conn, kind, name, elite } of hits) {
     if (knockedOut.has(conn.playerId)) continue; // already out of the fight this beat
-    const amount = enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false);
+    const amount = Math.round(enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false) * (elite ? WANTED_DMG_MULT : 1));
     const r = await damagePlayer(conn.playerId, amount);
     if (!r) continue;
     try {

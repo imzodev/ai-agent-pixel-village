@@ -18,6 +18,10 @@ import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import MapPanel from "./MapPanel";
+import BountyPanel from "./BountyPanel";
+import BountyTracker from "./BountyTracker";
+import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
+import type { BountyView } from "@/types/bounty";
 import { WAYSTONE_ATTUNE_PX, chunksAround } from "@/lib/worldAtlas";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import { plusOf, withPlus } from "@/lib/forge";
@@ -61,6 +65,11 @@ export default function Hud() {
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
   const [canFish, setCanFish] = useState(false);
+  // Bounty boards: the one you're reading, and the bounties you carry.
+  const [board, setBoard] = useState<{ town: string; name: string } | null>(null);
+  const [myBounties, setMyBounties] = useState<BountyView[]>([]);
+  const bountiesRef = useRef<BountyView[]>([]);
+  const arriving = useRef(new Map<number, number>());
   // The world map (M): open / opened at a waystone, the quest star, and
   // chunks seen this session that haven't been saved yet.
   const [mapOpen, setMapOpen] = useState<null | "browse" | "travel">(null);
@@ -79,6 +88,10 @@ export default function Hud() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
   const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
+  const loadBounties = useCallback(async () => {
+    const r = await api<{ bounties?: BountyView[] }>("/api/bounties?mine=1");
+    if (r.bounties) { setMyBounties(r.bounties); bountiesRef.current = r.bounties; }
+  }, []);
   /** Tutorial steps, book discoveries and the like ride along on responses. */
   const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
 
@@ -220,7 +233,7 @@ export default function Hud() {
     if (r.taken) bus.emit("hurt", { amount: r.taken });
     if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); if (r.notices?.length) void loadBounties(); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
@@ -353,6 +366,12 @@ export default function Hud() {
       if (m.waystones) attuned.current = new Set(m.waystones.filter((w) => w.attuned).map((w) => w.key));
     });
   }, [loggedInNow]);
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const first = setTimeout(() => void loadBounties(), 0);
+    const t = setInterval(() => void loadBounties(), 20_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [loggedInNow, loadBounties]);
   // As you walk: mark the chunks around you seen (fog of war) and attune
   // any waystone you pass. Runs off the move event, reading the latest
   // snapshot through a ref.
@@ -375,8 +394,18 @@ export default function Hud() {
       for (const b of buildingsRef.current) {
         if (b.kind === "waystone" && Math.hypot(b.doorX + 8 - pos.x, b.doorY - pos.y) <= WAYSTONE_ATTUNE_PX) void attune(b.key);
       }
+      // Bounties: reaching a scouting spot, or a parcel's board, counts.
+      for (const b of bountiesRef.current) {
+        if (!b.mine || b.mine.progress >= b.mine.target) continue;
+        const spot = b.data.kind === "explore" ? b.data : b.data.kind === "delivery" ? boardPoint(b.data.toTown) : null;
+        const reach = b.data.kind === "explore" ? SPOT_REACH_PX : BOARD_REACH_PX;
+        if (!spot || Math.hypot(spot.x - pos.x, spot.y - pos.y) > reach) continue;
+        if (Date.now() - (arriving.current.get(b.id) ?? 0) < 10_000) continue;
+        arriving.current.set(b.id, Date.now());
+        void api<{ message?: string }>("/api/bounties", { action: "arrive", id: b.id }).then((r) => { if (r.message) { toast(r.message, "good"); void loadBounties(); } });
+      }
     });
-  }, [loggedInNow, attune]);
+  }, [loggedInNow, attune, toast, loadBounties]);
   useEffect(() => {
     if (!loggedInNow) return;
     const flush = () => {
@@ -453,6 +482,11 @@ export default function Hud() {
         void act({ action: "gather", id: s.id });
         break;
       }
+      case "board":
+        if (d > BOARD_REACH_PX) { walk(); break; }
+        setBoard({ town: s.town, name: s.name });
+        setSel(null);
+        break;
       case "tree":
         // A terrain tree: a few chops fell it and open the way.
         if (d > 44) { walk(); break; }
@@ -495,6 +529,7 @@ export default function Hud() {
   // when a text field is focused, so Escape always works.
   const close = useCallback((): void => {
     if (mapOpen) { setMapOpen(null); return; }
+    if (board) { setBoard(null); return; }
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
     if (craft) { setCraft(null); return; }
@@ -502,7 +537,7 @@ export default function Hud() {
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [mapOpen, talk, trade, craft, inspect, panel, building, sel]);
+  }, [mapOpen, board, talk, trade, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -576,8 +611,13 @@ export default function Hud() {
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
       <LocationBanner />
+      {loggedIn && <BountyTracker list={myBounties} />}
+      {loggedIn && board && (
+        <BountyPanel town={board.town} name={board.name} activeCount={myBounties.length} onClose={() => setBoard(null)}
+          onMessage={(text, kind, notices) => { toast(text, kind); notify(notices); void refreshMe(); }} onChanged={() => void loadBounties()} />
+      )}
       {loggedIn && mapOpen && (
-        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
+        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} bounties={myBounties} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
       )}
       {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
@@ -748,6 +788,7 @@ export default function Hud() {
               </Btn>
             );
           })()}
+          {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
             : <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>)}
@@ -776,7 +817,7 @@ export default function Hud() {
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
-          {sel.type !== "plot" && sel.type !== "tree" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -957,10 +998,11 @@ function selTitle(sel: Selection) {
     case "enemy": {
       const def = enemyKind(sel.kind);
       const tier = def.tier === "boss" ? "Boss" : `Tier ${def.tier}`;
-      return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
+      return sel.title ? `${sel.title} · Wanted ${def.name} · ${sel.hp}/${sel.maxHp} HP` : `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
     }
     case "plot": return "🌱 Garden plot";
     case "tree": return TREE_NAMES[sel.kind] ?? "🌳 Tree";
+    case "board": return `📜 ${sel.name} bounty board`;
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
@@ -1047,7 +1089,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

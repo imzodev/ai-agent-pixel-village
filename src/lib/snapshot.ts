@@ -448,6 +448,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       move: moveOfRow(e),
       hp: e.hp,
       maxHp: e.maxHp,
+      title: e.title ?? null,
     })),
     chat: raw.chat.map((c) => ({
       id: c.id,

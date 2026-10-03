@@ -31,6 +31,8 @@ import {
 } from "./worldTilemap";
 import { wildsNameOf } from "@/lib/terrain/wilds";
 import { treeFromTile, trunkPoint } from "@/lib/trees";
+import { TOWNS } from "@/lib/settlements";
+import { boardPoint } from "@/lib/bounties";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
@@ -611,7 +613,7 @@ export class WorldScene extends Phaser.Scene {
     // animals
     this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name, move: a.move })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
     // enemies
-    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) }));
+    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move, name: e.title ? `★ ${e.title}` : undefined, big: !!e.title })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, title: e.name, distance: this.distTo(e.x, e.y) }));
     // ground items
     const seenItems = new Set<number>();
     for (const it of s.groundItems) {
@@ -785,7 +787,7 @@ export class WorldScene extends Phaser.Scene {
     for (const [id, ent] of map) if (!seen.has(id)) { this.destroyChar(ent); map.delete(id); }
   }
 
-  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string; move: Move | null }>(
+  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string; big?: boolean; move: Move | null }>(
     map: Map<number, CritterEnt>, list: T[], speed: number, sel: (t: T) => Selection,
   ) {
     const seen = new Set<number>();
@@ -800,17 +802,18 @@ export class WorldScene extends Phaser.Scene {
           ? this.add.sprite(a.x, a.y, sheetKey(a.kind), frameIndex(def, "walk", def.dirRows[0], 0)).setOrigin(def.originX, def.originY).setScale(def.scale)
           : this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1);
         sprite.setDepth(DEPTH_CHAR_BASE + a.y);
+        if (a.big) sprite.setScale((def?.scale ?? 1) * 1.4); // wanted beasts loom
         sprite.setInteractive({ useHandCursor: true });
         sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
         // Height of the art above the anchor (frames are padded, so not sprite.height).
-        const top = def ? def.labelHeight * def.scale : sprite.height;
+        const top = (def ? def.labelHeight * def.scale : sprite.height) * (a.big ? 1.4 : 1);
         ent = { sprite, kind: a.kind, def, top, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
         // Flyers (and the boss) draw their own shadow into their art.
         if (!FLYERS.has(a.kind)) {
           const w = def ? def.frameWidth * def.scale * 0.55 : sprite.width * 0.7;
           ent.shadow = this.add.image(a.x, a.y, "fx_shadow").setScale(w / 24, Math.max(0.7, w / 30)).setDepth(DEPTH_CHAR_BASE + a.y - 1);
         }
-        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
+        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: a.big ? "10px" : "9px", color: a.big ? "#ffcf5a" : "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(a.big ? 1 : 0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
       }
@@ -885,6 +888,7 @@ export class WorldScene extends Phaser.Scene {
       case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
       case "player": return this.snapshot.players.some((x) => x.id === sel.id);
       case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
+      case "board": return true;
       // An empty plot stays valid until something is planted in it.
       case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
@@ -955,6 +959,8 @@ export class WorldScene extends Phaser.Scene {
     for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
     for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
+    // Town bounty boards.
+    for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
     for (const t of this.treesNear(p.x, p.y, 64)) { const at = trunkPoint(t.vx, t.vy); add(at.x, at.y, (d) => ({ type: "tree", vx: t.vx, vy: t.vy, kind: t.kind, x: at.x, y: at.y, distance: d })); }
     cands.sort((a, b) => a.score - b.score);

@@ -39,7 +39,7 @@ export type Selection =
   | { type: "player"; id: number; name: string; distance: number }
   | { type: "npc"; id: number; name: string; role: string; sponsored: boolean; distance: number }
   | { type: "animal"; id: number; name: string; species: string; distance: number }
-  | { type: "enemy"; id: number; kind: string; hp: number; maxHp: number; distance: number }
+  | { type: "enemy"; id: number; kind: string; hp: number; maxHp: number; title?: string; distance: number }
   | { type: "item"; id: number; itemKey: string; distance: number }
   | {
       type: "node";
@@ -62,5 +62,7 @@ export type Selection =
     }
   // An empty garden plot (a crop in it is selected as its `node` instead).
   | { type: "plot"; lotKey: string; plot: number; x: number; y: number; distance: number }
+  // A town's bounty board (src/lib/bounties.ts); x/y = in front of it.
+  | { type: "board"; town: string; name: string; x: number; y: number; distance: number }
   // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
   | { type: "tree"; vx: number; vy: number; kind: string; x: number; y: number; distance: number };

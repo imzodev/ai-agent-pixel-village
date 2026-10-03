@@ -180,6 +180,8 @@ export type EnemySnapshot = {
   move: Move | null;
   hp: number;
   maxHp: number;
+  /** A wanted beast's name (bounty boards); null for ordinary enemies. */
+  title?: string | null;
 };
 
 export type ChatSnapshot = {

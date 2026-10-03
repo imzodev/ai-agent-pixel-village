@@ -5,7 +5,9 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
-import { broadcastChunkReload, getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty } from "@/lib/world-stream";
+import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
+import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
 import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
@@ -231,12 +233,20 @@ export async function POST(req: Request) {
           await addItem(me.id, d.itemKey, d.qty);
           gained.push(d);
         }
-        message = `You defeated the ${def.name}! +${def.xp} XP`;
+        // Wanted beasts are worth far more, and pay out their bounty to
+        // everyone close by who carries it.
+        const xp = def.xp * (e.elite ? WANTED_XP_MULT : 1);
+        message = e.title ? `⭐ You brought down ${e.title}! +${xp} XP` : `You defeated the ${def.name}! +${xp} XP`;
+        if (e.bountyId) {
+          await wantedSlain(e.bountyId, [me.id, ...livePlayersNear(e.x, e.y, 240)]);
+          notices.push(`📜 ${e.title} is down — claim the bounty at its town's board.`);
+        }
+        notices.push(...(await progressHunts(me.id, e.kind)));
         if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);
         const step = await tutorialEvent(me.id, "defeat", { enemyKind: e.kind });
         if (step) notices.push(step);
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
-        await db.update(characters).set({ xp: sql`${characters.xp} + ${def.xp}` }).where(eq(characters.id, me.id));
+        await db.update(characters).set({ xp: sql`${characters.xp} + ${xp}` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
         daily(me.id, "defeat", { enemyKind: e.kind });
         await logEvent("combat", `${me.name} drove off a ${def.name}.`, "character", me.id, e.x, e.y);
