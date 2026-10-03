@@ -9,6 +9,7 @@
 // in-character "I buy X" line pick it up automatically.
 import type { TradeConfig, TradeItem } from "./types";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
+import { MERCHANT_STOCK, isMerchantKey } from "./encounters";
 import { FISH_DEFS } from "./fishing";
 
 export const TRADES: TradeConfig = {
@@ -164,6 +165,7 @@ for (const n of SETTLEMENT_NPCS) {
 
 /** What this NPC sells to players. */
 export function stockForNpc(npcKey: string): TradeItem[] {
+  if (isMerchantKey(npcKey)) return [...MERCHANT_STOCK]; // a stranded merchant you helped (src/lib/encounters.ts)
   return SHOP_STOCK[npcKey] ?? [];
 }
 

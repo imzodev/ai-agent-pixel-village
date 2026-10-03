@@ -34,6 +34,7 @@ import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
 import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildTarget } from "./wildlife";
 import { refreshBounties } from "./bountiesServer";
+import { tickEncounters } from "./encountersServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
 /** Enemies kept alive per wild zone (zones refill so they can be farmed). */
@@ -148,6 +149,7 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
   const writes: MoveWrite[] = [];
   for (const n of rows) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
+    if (n.kind === "encounter") continue; // encounter strangers stay where they're needed
     if (!isDue("npc", n.id, beat.index, NPC_MOVE_INTERVAL_MS)) continue;
     if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it
     if (busyAt(n, beat.startAt)) continue;
@@ -415,13 +417,16 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
  */
 async function tickWild(rows: (typeof enemies.$inferSelect)[], now: Date, night: boolean): Promise<void> {
   const nowMs = now.getTime();
-  const online = await db.select({ x: characters.x, y: characters.y }).from(characters)
+  const online = await db.select({ id: characters.id, x: characters.x, y: characters.y }).from(characters)
     .where(gt(characters.lastSeenAt, new Date(nowMs - ONLINE_WINDOW_MS)));
   const wild = rows.filter((e) => e.wild).map((e) => ({ e, p: rowPositionAt(e, nowMs) }));
   const near = wild.filter(({ p }) => online.some((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WILD_RADIUS_PX * 1.5)).map(({ e }) => e.id);
   if (near.length) await db.update(enemies).set({ nearAt: now }).where(inArray(enemies.id, near));
   const stale = wild.filter(({ e }) => !near.includes(e.id) && (e.nearAt ?? e.spawnedAt).getTime() < nowMs - WILD_DESPAWN_MS).map(({ e }) => e.id);
   if (stale.length) await db.delete(enemies).where(inArray(enemies.id, stale));
+
+  // Random encounters around travelling players (src/lib/encounters.ts).
+  await tickEncounters(online, now, night).catch((err) => console.warn("[tick] encounters failed:", err instanceof Error ? err.message : err));
 
   const live = wild.filter(({ e }) => !stale.includes(e.id)).map(({ p }) => p);
   for (const o of online) {

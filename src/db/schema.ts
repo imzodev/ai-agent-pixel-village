@@ -452,6 +452,8 @@ export const enemies = pgTable("enemies", {
   title: text("title"),
   elite: boolean("elite").notNull().default(false),
   bountyId: integer("bounty_id"),
+  /** Attackers of a random encounter (src/lib/encounters.ts). */
+  encounterId: integer("encounter_id"),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
@@ -526,6 +528,23 @@ export const characterMapSeen = pgTable(
   },
   (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
 );
+
+/** Random encounters in the wilds (src/lib/encounters.ts). */
+export const encounters = pgTable("encounters", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull(),
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  state: text("state").notNull().default("active"), // active | resolved
+  npcId: integer("npc_id"),
+  /** Players who struck one of its attackers (only they share a fight's reward). */
+  fighters: jsonb("fighters").$type<number[]>().notNull().default([]),
+  /** Players paid when it resolved. */
+  rewarded: jsonb("rewarded").$type<number[]>().notNull().default([]),
+  expiresAt: timestamp("expires_at").notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 /** Wild patches a character has picked (src/lib/forage.ts): each player
  *  forages every patch on their own cooldown. */

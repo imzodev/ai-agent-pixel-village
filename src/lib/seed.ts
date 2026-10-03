@@ -64,6 +64,7 @@ export const ITEM_DEFS = [
   { key: "bat_wing", name: "Bat Wing", kind: "material", icon: "🦇", description: "Leathery and light. Wren buys them.", value: 2 },
   { key: "thorn", name: "Thornling Thorn", kind: "material", icon: "🌵", description: "Wickedly sharp. Greta makes blades from them.", value: 2 },
   { key: "boar_hide", name: "Boar Hide", kind: "material", icon: "🐗", description: "Tough and bristly. Good for grips and gear.", value: 5 },
+  { key: "lost_doll", name: "Lost Doll", kind: "material", icon: "🧸", description: "A well-loved rag doll. Somebody small is missing this.", value: 0 },
   { key: "parcel", name: "Sealed Parcel", kind: "material", icon: "📦", description: "A bounty delivery. Take it to the bounty board of the town it's addressed to.", value: 0 },
   { key: "chitin", name: "Scorpion Chitin", kind: "material", icon: "🦂", description: "A plate of hard, sun-bleached shell from a sand scorpion.", value: 4 },
   { key: "lurker_hide", name: "Lurker Hide", kind: "material", icon: "🐸", description: "Slick, warty hide from a bog lurker. Waterproof, and smelly.", value: 7 },

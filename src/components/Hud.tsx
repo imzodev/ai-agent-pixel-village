@@ -22,6 +22,8 @@ import BountyPanel from "./BountyPanel";
 import BountyTracker from "./BountyTracker";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
+import { ENCOUNTERS } from "@/lib/encounters";
+import type { EncounterView } from "@/types/encounter";
 import type { BountyView } from "@/types/bounty";
 import { WAYSTONE_ATTUNE_PX, chunksAround } from "@/lib/worldAtlas";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
@@ -68,6 +70,10 @@ export default function Hud() {
   const [canFish, setCanFish] = useState(false);
   // Wild patches you've picked: node id → when it's yours to pick again.
   const [forageWait, setForageWait] = useState<ReadonlyMap<number, number>>(new Map());
+  // Random encounters near you; which you've been told about / paid for.
+  const [nearEncounters, setNearEncounters] = useState<EncounterView[]>([]);
+  const announced = useRef(new Set<number>());
+  const paid = useRef(new Set<number>());
   // Bounty boards: the one you're reading, and the bounties you carry.
   const [board, setBoard] = useState<{ town: string; name: string } | null>(null);
   const [myBounties, setMyBounties] = useState<BountyView[]>([]);
@@ -232,11 +238,11 @@ export default function Hud() {
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; encounterResolved?: number | null; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
     if (r.taken) bus.emit("hurt", { amount: r.taken });
     if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); if (r.notices?.length) void loadBounties(); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); if (r.notices?.length) void loadBounties(); if (r.encounterResolved) paid.current.add(r.encounterResolved); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
@@ -375,6 +381,29 @@ export default function Hud() {
     const t = setInterval(() => void loadBounties(), 20_000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [loggedInNow, loadBounties]);
+  // Encounters: announce new ones nearby, and pay-outs you shared in.
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const poll = () => void api<{ encounters?: EncounterView[] }>("/api/encounters").then((r) => {
+      if (!r.encounters) return;
+      setNearEncounters(r.encounters);
+      for (const e of r.encounters) {
+        if (e.state === "active" && !announced.current.has(e.id)) { announced.current.add(e.id); toast(ENCOUNTERS[e.kind].call, "info"); }
+        if (e.rewardedMe && !paid.current.has(e.id)) { paid.current.add(e.id); toast(`🤝 You helped: ${e.title}. +${ENCOUNTERS[e.kind].reward.coins} 🪙`, "good"); void refreshMe(); }
+      }
+    });
+    const first = setTimeout(poll, 0);
+    const t = setInterval(poll, 8_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [loggedInNow, toast, refreshMe]);
+  const helpStranger = async (id: number) => {
+    const r = await api<{ message?: string }>("/api/encounters", { action: "help", id });
+    if (r.error) { toast(r.error, "bad"); return; }
+    paid.current.add(id);
+    if (r.message) toast(r.message, "good");
+    void refreshMe();
+    setNearEncounters((list) => list.map((e) => (e.id === id ? { ...e, state: "resolved" as const, rewardedMe: true } : e)));
+  };
   // As you walk: mark the chunks around you seen (fog of war) and attune
   // any waystone you pass. Runs off the move event, reading the latest
   // snapshot through a ref.
@@ -624,7 +653,7 @@ export default function Hud() {
           onMessage={(text, kind, notices) => { toast(text, kind); notify(notices); void refreshMe(); }} onChanged={() => void loadBounties()} />
       )}
       {loggedIn && mapOpen && (
-        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} bounties={myBounties} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
+        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} bounties={myBounties} encounters={nearEncounters} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
       )}
       {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
@@ -872,6 +901,13 @@ export default function Hud() {
             <span className="font-bold">{talk.name}</span><span className="text-[12px] opacity-75">{talk.role}</span>
             {talk.sponsor && <span className="rounded px-1.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ {talk.sponsor.businessName}</span>}
           </div>
+          {(() => {
+            // A stranger out in the wilds who needs something handed over.
+            const enc = nearEncounters.find((e) => e.npcId === talk.npcId && e.state === "active" && e.need);
+            return enc ? (
+              <div className="absolute -top-5 right-4"><button onClick={() => void helpStranger(enc.id)} className="pixel-btn bg-emerald-400 px-3 py-0.5 text-sm font-bold">🤝 Give {enc.need}</button></div>
+            ) : null;
+          })()}
           <button className="absolute right-2 top-1 text-stone-500 hover:text-stone-800" onClick={() => { setTalk(null); }}>✕</button>
           {/* Earlier lines, small; the latest NPC line types out large below. */}
           <div className="max-h-28 space-y-1 overflow-y-auto px-4 pt-5 text-[13px]">

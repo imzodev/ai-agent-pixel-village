@@ -17,6 +17,8 @@ import { rollForageSeed } from "@/lib/gardenRules";
 import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
+import { ENCOUNTERS } from "@/lib/encounters";
 import { recordCollection } from "@/lib/collectionServer";
 
 export const dynamic = "force-dynamic";
@@ -217,11 +219,14 @@ export async function POST(req: Request) {
         .where(eq(enemies.id, e.id))
         .returning({ hp: enemies.hp, maxHp: enemies.maxHp, damage: enemies.damage });
       if (!after) return Response.json({ error: "It's gone." }, { status: 404 });
+      // Striking an encounter's attacker earns a share when the fight is won.
+      if (e.encounterId) await noteFighter(e.encounterId, me.id);
       let message = `You hit the ${def.name} for ${dmg}.`;
       let taken = 0;
       let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
       const notices: string[] = [];
+      let encounterResolved: number | null = null;
       // Only the request that removes the row gets the kill.
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
       const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
@@ -256,6 +261,12 @@ export async function POST(req: Request) {
           notices.push(`📜 ${e.title} is down — claim the bounty at its town's board.`);
         }
         notices.push(...(await progressHunts(me.id, e.kind)));
+        // The last attacker of an encounter: everyone who fought is paid.
+        if (e.encounterId && (await attackerFell(e.encounterId, me.id))) {
+          const def = ENCOUNTERS[(await encounterKindOf(e.encounterId)) ?? "beset"];
+          notices.push(`🤝 ${def.thanks} +${def.reward.coins} 🪙, +${def.reward.xp} XP`);
+          encounterResolved = e.encounterId;
+        }
         if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);
         const step = await tutorialEvent(me.id, "defeat", { enemyKind: e.kind });
         if (step) notices.push(step);
@@ -277,7 +288,7 @@ export async function POST(req: Request) {
         }
       }
       markWorldDirty(e.x, e.y);
-      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout, notices });
+      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout, notices, encounterResolved });
     }
 
     if (action === "enter") {
