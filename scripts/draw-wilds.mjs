@@ -902,6 +902,108 @@ for (let i = 0; i < 3; i++) tile(`redhigh_${i}`, (c) => {
   if (i === 1) for (const [x, y] of [[4, 5], [10, 10]]) { c.rect(x, y, 3, 2, B.red[5]); c.hline(x, x + 2, y + 2, B.red[0]); }
 });
 
+// ── Shores that match the land (src/lib/continent.ts) ───────────────────
+// The first water family has grass and a sand bank on its land side; these
+// give the same water the continent's other grounds, so a swamp bank is mud
+// to the water's edge and a beach has no grass halo. Appended, so every
+// earlier GID stays put.
+const SHORE_LANDS = {
+  sand: { land: sandPx, rim: (x, y) => ramp(B.sand, 0.22, x, y), edge: (x, y) => ramp(B.sand, 0.08, x, y) },
+  mud: { land: mudPx, rim: (x, y) => ramp(B.mud, 0.18, x, y), edge: (x, y) => ramp(B.mud, 0.05, x, y) },
+  darkgrass: { land: darkPx, rim: (x, y) => ramp(B.mud, 0.3, x, y), edge: (x, y) => ramp(B.mud, 0.12, x, y) },
+  snow: { land: snowPx, rim: (x, y) => ramp(B.snow, 0.3, x, y), edge: (x, y) => ramp(B.snow, 0.12, x, y) },
+  redrock: { land: redPx, rim: (x, y) => ramp(B.red, 0.22, x, y), edge: (x, y) => ramp(B.red, 0.08, x, y) },
+};
+/** Open water at (x, y) for a field value past the shore (depth, crests, foam), as in waterTile. */
+function waterPx(f, x, y, v, frame) {
+  const depth = Math.min(1, (f - 0.56) / 0.4);
+  let col = ramp(P.w, 0.62 - depth * 0.45, x, y);
+  const fx = (x + frame * 4 + v * 5) % 16, fy = (y + v * 3) % 8;
+  if (fy === 2 && fx >= 3 && fx <= 7) col = P.w[5];
+  if (fy === 3 && (fx === 2 || fx === 8)) col = P.w[4];
+  const gx = (x + 16 - frame * 2 + 9 + v * 7) % 16, gy = (y + 5) % 8;
+  if (gy === 6 && gx >= 1 && gx <= 3) col = P.w[4];
+  if (f < 0.62 + (frame % 2) * 0.03) col = (x + y + frame) % 3 === 0 ? P.w[5] : P.w[6];
+  return col;
+}
+function shoreTile(kind, m, frame) {
+  const L = SHORE_LANDS[kind];
+  return (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const f = field(m, x, y), d = BAYER[((y & 3) << 2) | (x & 3)];
+      let col;
+      if (f < 0.4) col = L.land(x, y, 0);
+      else if (f < 0.47) col = f - 0.4 > d * 0.07 ? L.rim(x, y) : L.land(x, y, 0); // wet, dithered into the land
+      else if (f < 0.56) col = L.edge(x, y);
+      else col = waterPx(f, x, y, 0, frame);
+      c.put(x, y, col);
+    }
+  };
+}
+for (const kind of Object.keys(SHORE_LANDS)) for (const m of MASKS) {
+  if (m === 15) continue;
+  const base = `water_${kind}_${m}`;
+  const frames = [base, `${base}_f1`, `${base}_f2`, `${base}_f3`];
+  frames.forEach((name, k) => tile(name, shoreTile(kind, m, k)));
+  anims[base] = frames;
+}
+// Murky swamp water fading into the clear river: every corner is water; the
+// mask marks the clear corners.
+function swampMixTile(m, frame) {
+  return (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const f = field(m, x, y), d = BAYER[((y & 3) << 2) | (x & 3)];
+      const clear = f > 0.42 + d * 0.16; // a dithered band between the two
+      let col;
+      if (clear) col = waterPx(0.56 + Math.min(0.4, f * 0.4), x, y, 1, frame);
+      else {
+        col = ramp(B.swampW, 0.5 + f * 0.25, x, y);
+        const fx = (x + frame * 2 + 5) % 16, fy = (y + 3) % 10;
+        if (fy === 3 && fx >= 4 && fx <= 6) col = B.swampW[4];
+        if (rand(x + frame * 3, y, 460) < 0.03) col = B.swampW[5];
+      }
+      c.put(x, y, col);
+    }
+  };
+}
+for (const m of MASKS) {
+  if (m === 15) continue;
+  const base = `swamp_mix_${m}`;
+  const frames = [base, `${base}_f1`, `${base}_f2`, `${base}_f3`];
+  frames.forEach((name, k) => tile(name, swampMixTile(m, k)));
+  anims[base] = frames;
+}
+
+// ── Ground meeting ground (src/lib/continent.ts) ────────────────────────
+// The ground families above are drawn over grass, so where two other
+// grounds meet (snow and a beach's sand, mud and sand, …) the gap showed
+// grass. `<top>_on_<base>_<mask>`: the higher-priority ground over the
+// other, same ragged dithered rim. Appended, so earlier GIDs stay put.
+const GROUNDS = {
+  snow: { px: snowPx, rim: (x, y) => ramp(B.snow, 0.45, x, y) },
+  sand: { px: sandPx, rim: (x, y) => ramp(B.sand, 0.3, x, y) },
+  redrock: { px: redPx, rim: (x, y) => ramp(B.red, 0.35, x, y) },
+  mud: { px: mudPx, rim: (x, y) => ramp(B.mud, 0.4, x, y) },
+  darkgrass: { px: darkPx, rim: (x, y) => ramp(B.dark, 0.6, x, y) },
+};
+const GROUND_PRIORITY = ["snow", "sand", "redrock", "mud", "darkgrass"]; // as GROUND_ORDER in continent.ts
+function groundOnTile(top, base, m) {
+  const A = GROUNDS[top], Bk = GROUNDS[base];
+  return (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const f = field(m, x, y), d = BAYER[((y & 3) << 2) | (x & 3)];
+      if (f < 0.4) c.put(x, y, Bk.px(x, y, 1));
+      else if (f < 0.5) c.put(x, y, f - 0.4 > d * 0.1 ? A.rim(x, y) : Bk.px(x, y, 1));
+      else c.put(x, y, A.px(x, y, 0));
+    }
+  };
+}
+GROUND_PRIORITY.forEach((top, i) => {
+  for (const base of GROUND_PRIORITY.slice(i + 1)) for (const m of MASKS) {
+    if (m !== 15) tile(`${top}_on_${base}_${m}`, groundOnTile(top, base, m));
+  }
+});
+
 // ── Sheet + names ───────────────────────────────────────────────────────
 const rows = Math.ceil(tiles.length / COLS);
 const W = COLS * T, H = rows * T;

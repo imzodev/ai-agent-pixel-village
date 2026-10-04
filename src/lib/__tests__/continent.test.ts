@@ -52,3 +52,32 @@ describe("continent", () => {
     expect(river.ground.startsWith("water_")).toBe(true);
   });
 });
+
+describe("shores and ground edges", () => {
+  // A coarse sweep over the whole continent's tiles.
+  const cells: { tx: number; ty: number; ground: string }[] = [];
+  for (let ty = CONTINENT.ty0; ty <= CONTINENT.ty1; ty += 2) for (let tx = CONTINENT.tx0; tx <= CONTINENT.tx1; tx += 2) {
+    if (!inHeartland(tx, ty)) cells.push({ tx, ty, ground: continentAt(tx, ty).ground });
+  }
+  it("every ground tile the continent asks for exists in the tileset", async () => {
+    const { names } = (await import("@/lib/terrain/wildsTiles.json")).default as { names: string[] };
+    const have = new Set(names);
+    const missing = [...new Set(cells.map((c) => c.ground))].filter((g) => !have.has(g));
+    expect(missing).toEqual([]);
+  });
+  it("shores show the land they meet: no grass-and-sand bank beside swamp, beach or snow", () => {
+    const grassy = cells.filter((c) => /^water_\d+$/.test(c.ground));
+    for (const c of grassy) {
+      // A plain (grass) shore only where every dry corner is grass ground.
+      const wm = Number(c.ground.slice("water_".length));
+      const dry = ([[c.tx, c.ty, 1], [c.tx + 1, c.ty, 2], [c.tx, c.ty + 1, 4], [c.tx + 1, c.ty + 1, 8]] as const).filter(([, , bit]) => !(wm & bit)).map(([x, y]) => biomeAt(x, y));
+      for (const b of dry) expect(["meadow", "forest", "peak"], `${c.tx},${c.ty} ${c.ground}`).toContain(b);
+    }
+    expect(cells.some((c) => c.ground.startsWith("water_mud_"))).toBe(true);
+    expect(cells.some((c) => c.ground.startsWith("water_sand_"))).toBe(true);
+  });
+  it("swamp pools fade into the river; grounds meet each other, not a strip of grass", () => {
+    expect(cells.some((c) => c.ground.startsWith("swamp_mix_"))).toBe(true);
+    expect(cells.some((c) => /^\w+_on_\w+_\d+$/.test(c.ground))).toBe(true);
+  });
+});

@@ -202,14 +202,43 @@ const auto = (family: string, m: number, tx: number, ty: number) =>
   m === 15 ? `${family}_15_${Math.floor(hash(tx, ty, 49) * 3)}` : `${family}_${m}`;
 const grassFor = (tx: number, ty: number) => `grass_${Math.floor(hash(tx, ty, 50) * 4)}`;
 
-/** The ground tile from the four corners' ground kinds. */
+/**
+ * The ground tile from the four corners' ground kinds: the first kind in
+ * GROUND_ORDER wins its corners, drawn over the next kind present
+ * (`<top>_on_<base>_<mask>`), or over grass when the rest is grass — so
+ * snow meeting a beach's sand shows sand, not a strip of grass.
+ */
 function groundTile(tx: number, ty: number): string {
   const corners = [groundV(tx, ty), groundV(tx + 1, ty), groundV(tx, ty + 1), groundV(tx + 1, ty + 1)];
-  for (const k of GROUND_ORDER) {
-    const m = (corners[0] === k ? 1 : 0) | (corners[1] === k ? 2 : 0) | (corners[2] === k ? 4 : 0) | (corners[3] === k ? 8 : 0);
-    if (m) return auto(k, m, tx, ty);
-  }
-  return grassFor(tx, ty);
+  const present = GROUND_ORDER.filter((k) => corners.includes(k));
+  if (!present.length) return grassFor(tx, ty);
+  const top = present[0];
+  const m = (corners[0] === top ? 1 : 0) | (corners[1] === top ? 2 : 0) | (corners[2] === top ? 4 : 0) | (corners[3] === top ? 8 : 0);
+  if (m !== 15 && present[1]) return `${top}_on_${present[1]}_${m}`;
+  return auto(top, m, tx, ty);
+}
+
+/** A swamp pool's corner (murky water), as opposed to the river, lakes and sea. */
+const murkyV = (vx: number, vy: number): boolean => waterV(vx, vy) && biomeAt(vx, vy) === "swamp" && !riverV(vx, vy) && elevation(vx, vy) >= SEA;
+
+/** Shore families by the land they meet (grass keeps the original `water_*`). */
+const SHORE: Readonly<Partial<Record<GroundKind, string>>> = { sand: "water_sand", mud: "water_mud", darkgrass: "water_darkgrass", snow: "water_snow", redrock: "water_redrock" };
+
+/**
+ * The water tile for a cell with water corners `wm`, of which `murky` are
+ * swamp pools: a pool's own mud shores, a pool fading into the river, or
+ * clear water whose shore matches the ground beside it.
+ */
+function waterTile(wm: number, murky: number, tx: number, ty: number): string {
+  if (murky === wm) return auto("swamp", wm, tx, ty);
+  if (wm === 15 && murky) return `swamp_mix_${wm & ~murky}`;
+  if (wm === 15) return auto("water", 15, tx, ty);
+  // The land's kind, as groundTile would pick it from the dry corners.
+  const corners: [number, number, number][] = [[tx, ty, 1], [tx + 1, ty, 2], [tx, ty + 1, 4], [tx + 1, ty + 1, 8]];
+  const dry = corners.filter(([, , b]) => !(wm & b)).map(([x, y]) => groundV(x, y));
+  const kind = GROUND_ORDER.find((k) => dry.includes(k));
+  const family = (kind && SHORE[kind]) ?? "water";
+  return `${family}_${wm}`;
 }
 
 /** What the continent holds at world tile (tx, ty) (outside the heartland). */
@@ -242,10 +271,11 @@ export function continentAt(tx: number, ty: number): TerrainCell {
 
   // Water: sea shallows, lakes, swamp pools, the Silverrun.
   const wm = townAt(tx, ty) ? 0 : mask(waterV, tx, ty); // a town's edge tiles stay dry
-  if (wm && roadTile(tx, ty)) return { ground: auto("water", wm, tx, ty), upper: "bridge_deck" }; // a road's bridge
+  const murky = wm ? mask(murkyV, tx, ty) & wm : 0;
+  if (wm && roadTile(tx, ty)) return { ground: waterTile(wm, murky, tx, ty), upper: "bridge_deck" }; // a road's bridge
   if (wm) {
-    const swamp = biomeAt(tx, ty) === "swamp" && !riverV(tx, ty) && e >= SEA;
-    const cell: TerrainCell = { ground: auto(swamp ? "swamp" : "water", wm, tx, ty) };
+    const swamp = murky === wm; // every wet corner is a swamp pool
+    const cell: TerrainCell = { ground: waterTile(wm, murky, tx, ty) };
     if (bits(wm) >= 2) cell.collide = true;
     if (bits(wm) === 1 && hash(tx, ty, 51) < 0.35) cell.upper = "reeds";
     else if (wm === 15 && hash(tx, ty, 52) < (swamp ? 0.08 : 0.02)) cell.upper = "lilypad";
