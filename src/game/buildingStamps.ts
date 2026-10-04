@@ -185,6 +185,12 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       out.push({ x: s.origin.x + 192, y: s.origin.y + 168, radius: 54, color: 0x6cc4ff, flicker: true });
       continue;
     }
+    if (entry.kind === "bakery") {
+      // both display windows glow warm, and the lamps by the door
+      for (const wx of [186, 294]) out.push({ x: s.origin.x + wx, y: s.origin.y + 176, radius: 58, color: 0xffc070 });
+      out.push({ x: door.x, y: door.y - 22, radius: 44, color: 0xffc870 });
+      continue;
+    }
     if (entry.kind === "forge") {
       // the open hearth in the lean-to bay glows day and night
       out.push({ x: s.origin.x + 283, y: s.origin.y + 188, radius: 72, color: 0xff8a3c, flicker: true });
@@ -208,6 +214,7 @@ const CHIMNEYS: Readonly<Record<string, ReadonlyArray<{ x: number; y: number }>>
   "/buildings/house_2.json": [{ x: 191, y: 0 }],
   "/buildings/forge.json": [{ x: 131, y: 28 }],
   "/buildings/inn.json": [{ x: 107, y: 4 }, { x: 276, y: 4 }],
+  "/buildings/bakery.json": [{ x: 291, y: 22 }],
 };
 
 /** World positions of every stamped house's chimney (for smoke). */

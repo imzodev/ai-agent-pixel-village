@@ -17,11 +17,11 @@ export const NPC_DEFS: NpcDef[] = [
     key: "village_marigold",
     name: "Marigold",
     trades: ["baker"],
-    role: "Cabin Dweller",
+    role: "Village Baker",
     persona:
-      "Marigold is a warm, flour-dusted cabin dweller who calls everyone 'love'. She keeps a tidy cabin, bakes out of habit more than trade, and is happier talking than selling. Loves sharing a warm bun.",
+      "Marigold is a warm, flour-dusted baker who calls everyone 'love'. She runs the little bakery by the cabins, with its windows full of loaves and pies, bakes far more than she sells, and is happier talking than selling. Loves sharing a warm bun.",
     greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
-    tilePos: [44, 14],
+    tilePos: [46, 20], // in front of her bakery (bakery_village)
     wanderRadius: 90,
     appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#c94f2a", shirtColor: "#f7e7d3", pantsColor: "#7a4a2a" },
     mood: "cheerful",

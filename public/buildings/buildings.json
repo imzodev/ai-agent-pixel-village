@@ -73,15 +73,15 @@
       "ty": 32
     },
     {
-      "key": "cabin_7",
-      "file": "/buildings/cabin_1.json",
-      "name": "Cabin Seven",
-      "kind": "home",
-      "description": "The scabin close to Marigold",
-      "color": "#d9b0f4",
+      "key": "bakery_village",
+      "file": "/buildings/bakery.json",
+      "name": "Marigold’s Bakery",
+      "kind": "bakery",
+      "description": "Marigold’s bakery: warm loaves, buns and pies in the windows, and the smell of the oven all down the lane.",
+      "color": "#d08a40",
       "menu": [],
-      "reservable": true,
-      "tx": 34,
+      "reservable": false,
+      "tx": 38,
       "ty": 6
     },
     {

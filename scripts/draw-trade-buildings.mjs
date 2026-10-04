@@ -10,11 +10,15 @@
 //   waystone — a carved standing stone with a glowing blue rune on a
 //           flagstone base: attune to it, fast-travel between them
 //           (public/buildings/waystone.json)
+//   bakery — Marigold's bakery: a cream shopfront under a teal roof with a
+//           brick oven chimney, two big display windows full of bread under
+//           striped awnings, a painted BAKERY board and a hanging pretzel
+//           sign, flour sacks and a bread cart out front (bakery.json)
 //   ranch — a fenced pen for a player's animals: a hen coop on the left, a
 //           red gambrel barn on the right, trough and hay bales between,
 //           and the same road + gate as the field lots (ranch_lot.json)
 //
-//   node scripts/draw-trade-buildings.mjs
+//   node scripts/draw-trade-buildings.mjs [forge|inn|bakery|ranch|waystone]
 //
 // Both are 24×15-tile templates. Routing (as in draw-houses): the wall's
 // bottom row → DecorationLower (blocks, anchors the Y-sort); everything
@@ -316,6 +320,210 @@ async function inn() {
   });
 }
 
+// ── The bakery ──────────────────────────────────────────────────────────
+// A one-storey shopfront, cols 9–20: big display windows either side of a
+// glazed door (col 15), so you can see the bread from the street.
+const BREAD = [hex(0x4a240e), hex(0x7a3e18), hex(0xa85e26), hex(0xd08a40), hex(0xecb468), hex(0xfadaa0)];
+const CRUST_DK = hex(0x5a2c10);
+const AWNING = [hex(0xa82c2c), hex(0xd04040)];
+const CREAM = [hex(0xe8d8b8), hex(0xfbf3e0)];
+const SHOP_DARK = [hex(0x2a160c), hex(0x3e2414), hex(0x5a361c), hex(0x7a4c26), hex(0x9a6634)];
+// 5×7 capitals for painted signs.
+const FONT = {
+  B: ["1111.", "1...1", "1...1", "1111.", "1...1", "1...1", "1111."],
+  A: [".111.", "1...1", "1...1", "11111", "1...1", "1...1", "1...1"],
+  K: ["1...1", "1..1.", "1.1..", "11...", "1.1..", "1..1.", "1...1"],
+  E: ["11111", "1....", "1....", "1111.", "1....", "1....", "11111"],
+  R: ["1111.", "1...1", "1...1", "1111.", "1.1..", "1..1.", "1...1"],
+  Y: ["1...1", "1...1", ".1.1.", "..1..", "..1..", "..1..", "..1.."],
+};
+function lettering(c, text, x, y, col, shadow) {
+  for (const ch of text) {
+    const g = FONT[ch];
+    if (g) for (let r = 0; r < 7; r++) for (let k = 0; k < 5; k++) if (g[r][k] === "1") { c.put(x + k + 1, y + r + 1, shadow); c.put(x + k, y + r, col); }
+    x += 7;
+  }
+}
+/** An oval loaf: crust ramp lit from the upper left, a few slashes. */
+function loaf(c, cx, cy, rx, ry, slashes = 2) {
+  for (let y = -ry; y <= ry; y++) for (let x = -rx; x <= rx; x++) {
+    const d = (x / rx) ** 2 + (y / ry) ** 2;
+    if (d > 1) continue;
+    c.put(cx + x, cy + y, ramp(BREAD, 0.78 - d * 0.3 - (x + y) * 0.035, cx + x, cy + y));
+  }
+  for (let k = 0; k < slashes; k++) { const sx = cx - rx + 3 + Math.round(((k + 0.5) * (2 * rx - 4)) / slashes); c.put(sx, cy - 1, CRUST_DK); c.put(sx + 1, cy - 2, BREAD[5]); }
+  for (let x = -rx + 1; x <= rx - 1; x++) c.put(cx + x, cy + ry, BREAD[0]); // shadowed base
+}
+/** A baguette lying on a shelf. */
+function baguette(c, x0, y, len) {
+  for (let x = 0; x < len; x++) {
+    const taper = x < 2 || x > len - 3 ? 1 : 0;
+    for (let k = taper; k < 4 - taper; k++) c.put(x0 + x, y + k, ramp(BREAD, 0.85 - k * 0.18, x0 + x, y + k));
+    if (x % 4 === 2 && x > 2 && x < len - 3) c.put(x0 + x, y + 1, CRUST_DK);
+  }
+}
+/** A round bun with a glazed top. */
+function bun(c, cx, cy) {
+  for (let y = -3; y <= 2; y++) for (let x = -3; x <= 3; x++) if (x * x + y * y * 1.4 <= 11) c.put(cx + x, cy + y, ramp(BREAD, 0.75 - (x + y) * 0.06, cx + x, cy + y));
+  c.put(cx - 1, cy - 2, BREAD[5]); c.put(cx, cy - 2, PAL.white);
+}
+/** A croissant: a fat crescent of three lumps. */
+function croissant(c, cx, cy) {
+  for (const [dx, dy, r] of [[-4, 1, 2], [0, 0, 3], [4, 1, 2]]) for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) c.put(cx + dx + x, cy + dy + y, ramp(BREAD, 0.8 - (y + r) * 0.09 - (x === r ? 0.2 : 0), cx + dx + x, cy + dy + y));
+}
+/** A pie with a lattice top, on a stand. */
+function pie(c, cx, cy) {
+  for (let y = -3; y <= 2; y++) for (let x = -8; x <= 8; x++) if ((x / 8) ** 2 + (y / 3.3) ** 2 <= 1) c.put(cx + x, cy + y, (x + y + 20) % 3 === 0 ? BREAD[4] : hex(0x8a1e3a));
+  line(c, cx - 8, cx + 8, cy + 3, BREAD[2]); line(c, cx - 6, cx + 6, cy + 4, BREAD[1]);
+  vline(c, cx, cy + 5, cy + 7, PAL.stone[3]); line(c, cx - 4, cx + 4, cy + 8, PAL.stone[2]);
+}
+/** A big shop window: a warm interior with shelves of bread, mullions,
+ *  glass glints and an awning shadow across the top. */
+function shopWindow(c, x, y, w, h, variant) {
+  shade(c, x - 3, y - 3, w + 6, h + 6, PAL.wood, (px, py) => (py === y - 3 || px === x - 3 ? 0.9 : 0.5)); // frame
+  // the warm shop inside, lit from above
+  shade(c, x, y, w, h, SHOP_DARK, (px, py) => 0.85 - ((py - y) / h) * 0.55 + (rand(px >> 2, py >> 2, 31) - 0.5) * 0.08);
+  for (let k = 0; k < 6; k++) line(c, x, x + w - 1, y + k, ramp(PAL.glassLit, 0.75 - k * 0.1, x, y + k)); // lamp glow under the ceiling
+  // shelves: two on the back wall, the display counter at the bottom
+  const shelves = [y + 13, y + 24];
+  for (const sy of shelves) { line(c, x + 1, x + w - 2, sy, PAL.wood[4]); line(c, x + 1, x + w - 2, sy + 1, PAL.wood[1]); }
+  shade(c, x, y + h - 6, w, 6, PAL.wood, (px, py) => (py === y + h - 6 ? 0.85 : 0.45 - ((px - x) % 12 === 0 ? 0.15 : 0)));
+  if (variant === 0) {
+    for (let k = 0; k < 4; k++) loaf(c, x + 8 + k * 14, shelves[0] - 3, 6, 3);
+    baguette(c, x + 3, shelves[1] - 4, 22); baguette(c, x + 27, shelves[1] - 4, 22); bun(c, x + w - 8, shelves[1] - 3);
+    for (let k = 0; k < 6; k++) bun(c, x + 6 + k * 9, y + h - 9);
+  } else {
+    for (let k = 0; k < 5; k++) croissant(c, x + 8 + k * 11, shelves[0] - 3);
+    loaf(c, x + 10, shelves[1] - 3, 7, 3, 3); loaf(c, x + 27, shelves[1] - 3, 7, 3, 3); bun(c, x + 42, shelves[1] - 3); bun(c, x + 51, shelves[1] - 3);
+    pie(c, x + 16, y + h - 15); pie(c, x + w - 18, y + h - 15);
+    for (let k = 0; k < 3; k++) bun(c, x + 28 + k * 6, y + h - 9);
+  }
+  // mullions: three tall panes
+  for (const mx of [x + Math.round(w / 3), x + Math.round((2 * w) / 3)]) { vline(c, mx, y, y + h - 1, PAL.wood[1]); vline(c, mx + 1, y, y + h - 1, PAL.wood[3]); }
+  // glass glints
+  for (const gx of [x + 4, x + Math.round(w / 3) + 6, x + Math.round((2 * w) / 3) + 5]) for (let k = 0; k < 9; k++) { c.put(gx + k, y + 10 + 9 - k, PAL.white, 70); c.put(gx + k + 2, y + 10 + 9 - k, PAL.white, 45); }
+  // sill
+  line(c, x - 4, x + w + 3, y + h + 3, PAL.wood[4]); line(c, x - 4, x + w + 3, y + h + 4, PAL.wood[1]);
+}
+/** A striped canvas awning with a scalloped edge. */
+function awning(c, x, y, w) {
+  for (let py = 0; py < 10; py++) for (let px = -3 - Math.floor(py / 3); px < w + 3 + Math.floor(py / 3); px++) {
+    const stripe = Math.floor((px + 40) / 6) % 2;
+    const col = stripe ? CREAM[py < 2 ? 1 : 0] : AWNING[py < 2 ? 1 : 0];
+    c.put(x + px, y + py, col);
+  }
+  const x0 = x - 6, x1 = x + w + 5;
+  for (let px = x0; px <= x1; px++) {
+    const stripe = Math.floor((px - x + 40) / 6) % 2;
+    const lip = (px - x0) % 6 < 4 ? 3 : 1; // scallops
+    for (let k = 0; k < lip; k++) c.put(px, y + 10 + k, stripe ? CREAM[0] : AWNING[0]);
+    c.put(px, y + 10 + lip, PAL.ink);
+    for (let k = 0; k < 4; k++) c.put(px, y + 11 + lip + k, PAL.shadow, 70 - k * 16); // shade on the glass
+  }
+  line(c, x - 4, x + w + 3, y - 1, PAL.ink);
+  for (let py = 0; py < 10; py++) { c.put(x - 4 - Math.floor(py / 3), y + py, PAL.ink); c.put(x + w + 3 + Math.floor(py / 3), y + py, PAL.ink); }
+}
+function flourSack(c, x, y) {
+  // a burlap sack slumped on its base, tied at the neck, a wheat mark on it
+  const SACK = [hex(0x8a7650), hex(0xa8946a), hex(0xc4b088), hex(0xdccaa4), hex(0xece0c0)];
+  for (let py = -12; py <= 0; py++) {
+    const half = py < -9 ? 2 + (py + 12) * 0.7 : 6 - Math.max(0, py + 2) * 0.6;
+    for (let px = -Math.round(half); px <= Math.round(half); px++) c.put(x + px, y + py, ramp(SACK, 0.72 - px * 0.06 - (py + 12) * 0.018 + (rand(x + px, py, 13) - 0.5) * 0.1, x + px, y + py));
+  }
+  line(c, x - 2, x + 2, y - 9, PAL.wood[1]); // tie
+  for (const [dx, dy] of [[0, -6], [0, -5], [0, -4], [-1, -5], [1, -5], [-1, -3], [1, -3]]) c.put(x + dx, y + dy, PAL.wood[2]); // wheat mark
+}
+async function bakery() {
+  G = { X0: 9 * T, X1: 21 * T - 1, BOTTOM: 207, DOOR_X: 232 };
+  const art = new Canvas(W, H), groundC = new Canvas(W, H), shadowC = new Canvas(W, H);
+  const wallTop = 118, ridgeY = 44, eaveY = 124;
+  // the bread oven's brick chimney, broad, on the right
+  shade(art, G.X1 - 54, ridgeY - 16, 20, eaveY - ridgeY + 4, PAL.brick, (px, py) => 0.62 - (px - G.X1 + 54) * 0.02 + ((py - ridgeY) % 5 === 4 ? -0.35 : 0) + (((px + Math.floor((py - ridgeY) / 5) * 3) % 7) === 0 ? -0.3 : 0));
+  shade(art, G.X1 - 57, ridgeY - 20, 26, 4, PAL.brick, (px) => 0.85 - (px - G.X1 + 57) * 0.02);
+  for (let y = ridgeY - 20; y < eaveY; y++) { art.put(G.X1 - 58 + (y < ridgeY - 16 ? 0 : 3), y, PAL.ink); art.put(G.X1 - 31 - (y < ridgeY - 16 ? 0 : 3), y, PAL.ink); }
+  line(art, G.X1 - 58, G.X1 - 31, ridgeY - 21, PAL.ink);
+  // cream plaster walls with timber corner posts
+  shade(art, G.X0, wallTop, G.X1 - G.X0 + 1, G.BOTTOM - wallTop + 1, PAL.plaster, (x, y) => 0.68 + (rand(x, y, 5) - 0.5) * 0.1 - (y - wallTop) * 0.0012);
+  for (const px of [G.X0, G.X1 - 4]) shade(art, px, wallTop, 5, G.BOTTOM - wallTop, PAL.wood, (x) => 0.65 - (x - px) * 0.08);
+  roof(art, ridgeY, eaveY, PAL.roofTeal);
+  // a round attic window in the gable
+  const ax = 240, ay = ridgeY + 40;
+  for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++) {
+    const d = x * x + y * y;
+    if (d <= 49) art.put(ax + x, ay + y, d > 30 ? PAL.wood[d > 42 ? 0 : 3] : ramp(PAL.glassLit, 0.65 - y * 0.03, ax + x, ay + y));
+  }
+  line(art, ax - 5, ax + 5, ay, PAL.wood[1]); vline(art, ax, ay - 5, ay + 5, PAL.wood[1]);
+  // the painted fascia board: BAKERY with a loaf either side
+  const bx0 = G.X0 + 40, bx1 = G.X1 - 40, by0 = wallTop + 6, by1 = wallTop + 20;
+  shade(art, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1, [hex(0x1e3a2a), hex(0x2a5038), hex(0x386848)], (px, py) => (py === by0 ? 0.95 : 0.5));
+  line(art, bx0 - 1, bx1 + 1, by0 - 1, PAL.ink); line(art, bx0 - 1, bx1 + 1, by1 + 1, PAL.ink); vline(art, bx0 - 1, by0, by1, PAL.ink); vline(art, bx1 + 1, by0, by1, PAL.ink);
+  line(art, bx0 + 1, bx1 - 1, by0 + 1, PAL.yellow); line(art, bx0 + 1, bx1 - 1, by1 - 1, PAL.yellow); // gilt border
+  const tw = 6 * 7 - 2, tx = Math.round((bx0 + bx1) / 2 - tw / 2);
+  lettering(art, "BAKERY", tx, by0 + 4, CREAM[1], hex(0x10241a));
+  loaf(art, tx - 12, by0 + 7, 5, 3); loaf(art, tx + tw + 11, by0 + 7, 5, 3);
+  // display windows under striped awnings, the glazed door between them
+  const wy = 160, wh = 32;
+  shopWindow(art, G.X0 + 12, wy, 60, wh, 0);
+  shopWindow(art, G.X1 - 71, wy, 60, wh, 1);
+  awning(art, G.X0 + 12, wy - 13, 60);
+  awning(art, G.X1 - 71, wy - 13, 60);
+  // brick stall riser under the windows
+  for (const wx of [G.X0 + 9, G.X1 - 74]) shade(art, wx, wy + wh + 5, 66, 7, PAL.brick, (px, py) => 0.6 + ((py - wy) % 4 === 3 ? -0.35 : 0) + (((px + (py >> 2) * 3) % 8) === 0 ? -0.3 : 0));
+  foundation(art);
+  const d = door(art, PAL.roofTeal, 18, true);
+  // a bigger pane in the door, showing the warm shop behind
+  shade(art, d.x + 3, d.top + 4, d.w - 6, 13, PAL.glassLit, (px, py) => 0.72 - (py - d.top) * 0.03);
+  bun(art, d.x + 9, d.top + 14);
+  wallLamp(art, d.x - 10, d.top - 2);
+  wallLamp(art, d.x + d.w + 5, d.top - 2);
+  // the hanging pretzel sign on an iron bracket off the left corner
+  const sx = G.X0 - 30, sy = wallTop + 34;
+  line(art, sx + 4, G.X0 + 2, sy - 6, PAL.iron); art.put(G.X0 - 1, sy - 5, PAL.iron); art.put(G.X0 - 2, sy - 4, PAL.iron);
+  for (let y = sy - 5; y <= sy - 1; y++) { art.put(sx + 6, y, PAL.iron); art.put(sx + 22, y, PAL.iron); }
+  shade(art, sx + 2, sy, 25, 20, PAL.wood, (px, py) => 0.72 - (py - sy) * 0.025);
+  line(art, sx + 1, sx + 27, sy - 1, PAL.ink); line(art, sx + 1, sx + 27, sy + 20, PAL.ink); vline(art, sx + 1, sy, sy + 19, PAL.ink); vline(art, sx + 27, sy, sy + 19, PAL.ink);
+  // pretzel: a knot of three loops
+  const pcx = sx + 14, pcy = sy + 10;
+  for (let a = 0; a < 360; a += 4) {
+    const r = (a * Math.PI) / 180;
+    for (const [ox, oy, rx, ry] of [[-4, -1, 5, 5], [4, -1, 5, 5], [0, 3, 8, 5]]) {
+      const px = Math.round(pcx + ox + Math.cos(r) * rx), py = Math.round(pcy + oy + Math.sin(r) * ry);
+      art.put(px, py, BREAD[3]); art.put(px, py + 1, BREAD[1]);
+    }
+  }
+  for (const [kx, ky] of [[pcx - 3, pcy - 3], [pcx + 3, pcy - 2], [pcx - 6, pcy + 3], [pcx + 5, pcy + 4]]) art.put(kx, ky, PAL.white); // salt
+  // out front: flour sacks by the left window, a bread cart by the right
+  const sacks = new Canvas(W, H);
+  flourSack(sacks, G.X0 - 5, G.BOTTOM + 3); flourSack(sacks, G.X0 - 16, G.BOTTOM + 5); flourSack(sacks, G.X0 - 10, G.BOTTOM - 5);
+  sacks.outline(PAL.ink); art.over(sacks);
+  const cx0 = G.X1 + 6, cy = G.BOTTOM + 4;
+  shade(art, cx0, cy - 12, 34, 9, PAL.wood, (px, py) => (py === cy - 12 ? 0.9 : 0.55 - ((px - cx0) % 6 === 0 ? 0.2 : 0)));
+  line(art, cx0 - 1, cx0 + 34, cy - 13, PAL.ink); line(art, cx0 - 1, cx0 + 34, cy - 3, PAL.ink);
+  for (let k = 0; k < 3; k++) loaf(art, cx0 + 7 + k * 10, cy - 15, 5, 3, 1);
+  baguette(art, cx0 + 2, cy - 21, 16); baguette(art, cx0 + 16, cy - 20, 16);
+  for (const wx of [cx0 + 6, cx0 + 28]) { // wheels
+    for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) { const dd = x * x + y * y; if (dd <= 16) art.put(wx + x, cy + y, dd >= 9 ? PAL.wood[0] : dd <= 1 ? PAL.wood[3] : PAL.wood[2]); }
+  }
+  line(art, cx0 + 34, cx0 + 44, cy - 6, PAL.wood[1]); // handle
+
+  softShadow(shadowC, G.X0 - 4, G.BOTTOM + 1, G.X1 - G.X0 + 9, 7, 110);
+  softShadow(shadowC, cx0 - 2, cy + 3, 40, 5, 90);
+  step(groundC, d.x - 2, d.w);
+  bush(groundC, G.X0 + 76, G.BOTTOM + 1); bush(groundC, G.X1 - 88, G.BOTTOM + 1);
+
+  const upper = art.rows(0, 12 * T);
+  const lower = art.rows(12 * T, H);
+  const collision = [];
+  for (let r = 8; r <= 12; r++) for (let c = 9; c <= 20; c++) collision.push([r, c]);
+  collision.push([12, 7], [12, 8], [13, 8]); // flour sacks
+  collision.push([12, 21], [12, 22], [12, 23]); // bread cart
+  await bakeCanvases({
+    name: "Bakery", jsonName: "bakery",
+    layers: { GroundUpper: groundC, DecorationLowerShadow: shadowC, DecorationLower: lower, DecorationUpper1: upper },
+    collision, door: [12, 15],
+  });
+}
+
 // ── The ranch lot ───────────────────────────────────────────────────────
 // Same skeleton as the field lots (scripts/draw-land-lot.mjs): road on
 // rows 0–1, a fence with a 2-tile gate at cols 11–12 on row 3, sides on
@@ -500,7 +708,5 @@ async function waystone() {
   });
 }
 
-await forge();
-await inn();
-await ranch();
-await waystone();
+const only = process.argv[2];
+for (const [name, draw] of Object.entries({ forge, inn, bakery, ranch, waystone })) if (!only || only === name) await draw();
