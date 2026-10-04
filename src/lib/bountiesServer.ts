@@ -17,6 +17,9 @@ import { addReputation } from "./reputationServer";
 import { townName } from "./reputation";
 import { maybeTreasureMap } from "./treasureServer";
 import { MAP_CHANCE } from "./treasure";
+
+/** How often a wanted beast's bounty includes a Great Bow. */
+const GREAT_BOW_CHANCE = 0.15;
 import {
   BOARD_REACH_PX, BOUNTY_TTL_MS, GATHER, MAX_ACTIVE, OPEN_PER_TOWN, SPOT_REACH_PX, WANTED_HP_MULT,
   boardPoint, describe, pickKind, rewardFor, targetOf, titleOf, wantedName,
@@ -223,5 +226,10 @@ export async function turnIn(characterId: number, id: number, pos: { x: number; 
   // Now and then the bounty master throws in an old map (wanted beasts more often).
   const map = await maybeTreasureMap(characterId, d.kind === "wanted" ? MAP_CHANCE.wanted : MAP_CHANCE.bounty);
   if (map) notices.push(map);
+  // A wanted beast's bounty sometimes comes with the hunter's own bow.
+  if (d.kind === "wanted" && Math.random() < GREAT_BOW_CHANCE) {
+    await addItem(characterId, "great_bow", 1);
+    notices.push("🏹 The bounty master hands over a Great Bow — \"the last hunter won't be needing it.\"");
+  }
   return { ok: true, message: `💰 Bounty paid: +${r.coins} 🪙, +${r.xp} XP, +${r.rep} standing in ${townName(row.b.town)}.`, notices };
 }

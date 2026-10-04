@@ -4,7 +4,7 @@ import { animals, buildings, characters, enemies, forageClaims, groundItems, inv
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
-import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
+import { addItem, logEvent, progressMissions, recalcLevel, removeItem } from "@/lib/game";
 import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
@@ -14,12 +14,15 @@ import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
-import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
+import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, bowOf, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { tutorialEvent } from "@/lib/tutorialServer";
 import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
 import { ENCOUNTERS } from "@/lib/encounters";
 import { recordCollection } from "@/lib/collectionServer";
+
+/** When each player last loosed an arrow (the draw takes SHOT_COOLDOWN_MS). */
+const lastShot = new Map<number, number>();
 
 export const dynamic = "force-dynamic";
 
@@ -197,15 +200,27 @@ export async function POST(req: Request) {
       });
     }
 
-    if (action === "attack") {
+    // Melee ("attack") or a bow shot ("shoot": an equipped bow, an arrow,
+    // its range, no faster than the draw; the target can't hit back).
+    if (action === "attack" || action === "shoot") {
+      const ranged = action === "shoot";
       const [e] = await db.select().from(enemies).where(eq(enemies.id, Number(body.id)));
       if (!e) return Response.json({ error: "It's gone." }, { status: 404 });
       const p = livePos(me);
       const ep = rowPositionAt(e, Date.now());
-      if (Math.hypot(ep.x - p.x, ep.y - p.y) > 80) return Response.json({ error: "Out of reach." }, { status: 400 });
       const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      const bow = ranged ? bowOf(gear.equipped) : null;
+      if (ranged && !bow) return Response.json({ error: "Equip a bow to shoot." }, { status: 400 });
+      if (Math.hypot(ep.x - p.x, ep.y - p.y) > (bow ? bow.rangePx : 80)) return Response.json({ error: "Out of reach." }, { status: 400 });
+      if (ranged) {
+        const now = Date.now();
+        if (now - (lastShot.get(me.id) ?? 0) < SHOT_COOLDOWN_MS) return Response.json({ error: "Still drawing…" }, { status: 429 });
+        if (!(await removeItem(me.id, ARROW_ITEM, 1))) return Response.json({ error: "You're out of arrows. Shops sell them; smiths make them." }, { status: 400 });
+        lastShot.set(me.id, now);
+      }
       const def = enemyKind(e.kind);
-      const dmg = playerDamage({ level: me.level, weapon: weaponBonus(gear.equipped, gear.plus), fighter: perks.has("fighter"), roll: Math.random() });
+      const weapon = bow ? bow.damage + (gear.plus[bow.key] ?? 0) : weaponBonus(gear.equipped, gear.plus);
+      const dmg = playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() });
       const boss = e.kind === BOSS_KIND;
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).
@@ -278,7 +293,7 @@ export async function POST(req: Request) {
         await logEvent("combat", `${me.name} drove off a ${def.name}.`, "character", me.id, e.x, e.y);
       } else if (!boss && after.hp > 0) {
         // (The boss strikes on its own, every beat, see world-stream.)
-        if (Math.random() < 0.5) {
+        if (!ranged && Math.random() < 0.5) {
           taken = enemyHit(e.kind, perks.has("tough"));
           const r = await damagePlayer(me.id, taken);
           message += ` It hits back for ${taken}.`;

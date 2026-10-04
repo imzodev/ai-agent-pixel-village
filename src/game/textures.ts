@@ -119,6 +119,8 @@ export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "relic_glint", ["...w...", "...w...", "..wyw..", "wwyyyww", "..wyw..", "...w...", "...w..."], { w: "#fffbe0", y: "#ffd54a" }, 2);
   // The relics themselves, one look per set (src/lib/relicArt.ts).
   for (const [set, art] of Object.entries(RELIC_ART)) pixelTexture(scene, `relic_${set}`, [...art.rows], art.palette, 2);
+  // An arrow in flight (pointing right; rotated toward its target).
+  pixelTexture(scene, "fx_arrow", ["w.......g.", "wbbbbbbbGg", "w.......g."], { w: "#f4f0e4", b: "#8a5a32", g: "#a8acb4", G: "#5c6068" }, 1);
   // Over whatever E would act on (src/game/interactTarget.ts): a small chevron.
   pixelTexture(scene, "fx_target", ["kkkkkkk", "kwwwwwk", ".kwwwk.", "..kwk..", "...k..."], { k: "#2a1a0e", w: "#ffe27a" }, 2);
   pixelTexture(scene, "marker", ["...y...", "..yyy..", ".yyyyy.", "...y...", "...y..."], { y: "#fff176" }, 2);

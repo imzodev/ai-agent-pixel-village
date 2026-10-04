@@ -40,8 +40,8 @@ const TIER_ITEMS: readonly (readonly string[])[] = [
   [],
   ["honey_bun", "bread", "hot_stew", "lantern"],
   ["stone_sword", "sharp_axe", "golden_carp", "lantern"],
-  ["thorn_blade", "frost_pelt", "shade_essence", "golden_carp"],
-  ["wisp_blade", "thorn_blade", "frost_pelt", "shade_essence"],
+  ["thorn_blade", "frost_pelt", "shade_essence", "golden_carp", "recurve_bow"],
+  ["wisp_blade", "thorn_blade", "frost_pelt", "shade_essence", "great_bow"],
 ];
 
 /** A chest's loot for a map of `tier` (1–4); a bought map's holds fewer coins. */

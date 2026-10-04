@@ -8,7 +8,7 @@ import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/l
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
-import { AXE_ITEMS, PERKS, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
+import { ARROW_ITEM, AXE_ITEMS, PERKS, bowOf, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import LocationBanner from "./LocationBanner";
@@ -271,6 +271,9 @@ export default function Hud() {
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
+  // An equipped bow turns attacks into shots (one arrow each).
+  const bow = bowOf((me?.inventory ?? []).filter((i) => i.equipped).map((i) => i.itemKey));
+  const arrows = (me?.inventory ?? []).filter((i) => i.itemKey === ARROW_ITEM).reduce((n, i) => n + i.qty, 0);
   // The scene lets you ride (V) only with a bicycle in your bag.
   const hasBike = (me?.inventory ?? []).some((i) => i.itemKey === BIKE_ITEM && i.qty > 0);
   useEffect(() => {
@@ -592,7 +595,13 @@ export default function Hud() {
         else walk();
         break;
       case "enemy":
-        if (d <= 80) {
+        if (bow) {
+          // A bow shoots anything in range, one arrow a shot.
+          if (d > bow.rangePx) { walk(); break; }
+          if (!arrows) { toast("You're out of arrows. Shops sell them; smiths make them.", "bad"); break; }
+          bus.emit("attack", { x: pos.x, y: pos.y, tool: "bow" }); // draw and loose; the server resolves the hit
+          void act({ action: "shoot", id: s.id });
+        } else if (d <= 80) {
           bus.emit("attack", { x: pos.x, y: pos.y }); // swing right away; the server resolves the hit
           void act({ action: "attack", id: s.id });
         } else walk();
@@ -892,7 +901,9 @@ export default function Hud() {
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
             : <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>)}
-          {loggedIn && sel.type === "enemy" && (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
+          {loggedIn && sel.type === "enemy" && (bow
+            ? (sel.distance <= bow.rangePx ? <Btn on={() => commitSelection(sel)}>🏹 Shoot {keyHint("player.attack")} <span className="text-[10px] opacity-70">➶ {arrows}</span></Btn> : <WalkBtn snap={snap} sel={sel} />)
+            : (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />))}
           {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? (
             <Btn on={() => commitSelection(sel)}>{sel.key === "cave_mouth" ? "🕳️ Enter the cave" : sel.key === "cave_exit" ? "☀️ Climb out" : "🚪 Enter"} {interactHint}</Btn>
           ) : <WalkBtn snap={snap} sel={sel} />)}

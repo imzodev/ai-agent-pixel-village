@@ -1,7 +1,8 @@
-// Universal LPC spritesheet compositing. Layer sheets are 576x512
+// Universal LPC spritesheet compositing. Layer sheets are 832x768
 // (scripts/fetch-lpc.mjs), 64x64 frames, rows up/left/down/right:
-//   rows 0-3: walk  — 9 frames (frame 0 = standing)
-//   rows 4-7: slash — 6 frames (the attack swing)
+//   rows 0-3:  walk  — 9 frames (frame 0 = standing)
+//   rows 4-7:  slash — 6 frames (the attack swing)
+//   rows 8-11: shoot — 13 frames (drawing and loosing a bow)
 import type { Appearance } from "@/db/schema";
 import { COSMETIC_CATALOG, cosmoByKey } from "@/lib/cosmetics";
 import type { CosmeticSlot, EquippedCosmetics } from "@/types/cosmetic";
@@ -12,10 +13,14 @@ export type { EquippedCosmetics };
 export const FRAME = 64;
 export const ROWS = { up: 0, left: 1, down: 2, right: 3 } as const;
 /** Composed sheet size and the slash block (see the header comment). */
-export const SHEET_W = 576;
-export const SHEET_H = 512;
+export const SHEET_W = 832;
+export const SHEET_H = 768;
 export const SLASH_ROW = 4;
 export const SLASH_FRAMES = 6;
+export const SHOOT_ROW = 8;
+export const SHOOT_FRAMES = 13;
+/** The frame where the arrow leaves the string. */
+export const SHOOT_RELEASE_FRAME = 9;
 /** Held items with LPC art. The Wooden Sword uses the dagger, tinted wood;
  *  the axe (scripts/draw-axe.mjs) is shown only while chopping. */
 export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint?: string }> = {
@@ -24,6 +29,10 @@ export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint
   thorn_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#7aa548" },
   wisp_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#a98cf0" },
   axe: { front: "/lpc/weapon_axe.png", behind: "/lpc/weapon_axe_behind.png" },
+  // Bows (src/lib/progression.ts BOWS): carried while walking, drawn when shooting.
+  short_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png" },
+  recurve_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png", tint: "#8a4a2c" },
+  great_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png", tint: "#d8a838" },
 };
 export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs", "afro", "buzzcut", "bedhead", "cowlick"];
 export const SKIN_TONES = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#a86a3d", "#7a4a2a", "#5a3a22"];

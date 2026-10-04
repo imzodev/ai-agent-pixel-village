@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
-import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
+import { appearanceKey, composeCharacter, FRAME, ROWS, SHOOT_FRAMES, SHOOT_RELEASE_FRAME, SHOOT_ROW, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
+import { BOWS, SHOT_COOLDOWN_MS } from "@/lib/progression";
 import { RIDE_FRAMES, riderSheet } from "./riding";
 import { REACH_PX, pickTarget } from "./interactTarget";
 import { pickedByMe } from "./forageClaims";
@@ -72,6 +73,11 @@ const SLASH_FPS = 14;
 const SLASH_MS = Math.round((SLASH_FRAMES / SLASH_FPS) * 1000);
 // How close an enemy must be for the attack key to hit it (server allows 80).
 const ATTACK_REACH_PX = 76;
+// Drawing a bow takes as long as the server's shot cooldown; the arrow
+// leaves the string at the release frame and flies at ARROW_PX_S.
+const SHOOT_FPS = Math.round(SHOOT_FRAMES / (SHOT_COOLDOWN_MS / 1000));
+const SHOOT_RELEASE_MS = Math.round((SHOOT_RELEASE_FRAME / SHOOT_FPS) * 1000);
+const ARROW_PX_S = 420;
 // Clickable height (px) at the base of a garden crop — less than the 32 px
 // between plot rows, so neighbouring plots never steal each other's clicks.
 const GARDEN_HIT_H = 22;
@@ -409,6 +415,11 @@ export class WorldScene extends Phaser.Scene {
       const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
       const tool = e.tool;
       this.setMounted(false); // hop off to swing
+      if (tool === "bow") {
+        this.playShoot(p, facing, { x, y });
+        this.stream?.sendAct("shoot", facing);
+        return;
+      }
       this.playSlash(p, facing, tool);
       this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
@@ -488,7 +499,9 @@ export class WorldScene extends Phaser.Scene {
         onPlayerAct: ({ id, kind, facing }) => {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
-          if (ent) this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
+          if (!ent) return;
+          if (kind === "shoot") this.playShoot(ent, facing);
+          else this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
         },
         onHurt: ({ amount, hp, maxHp }) => {
           if (!this.alive()) return;
@@ -791,10 +804,13 @@ export class WorldScene extends Phaser.Scene {
         for (let r = 0; r < 4; r++) for (let c = 0; c < 9; c++) tex.add(`${r}_${c}`, 0, c * FRAME, r * FRAME, FRAME, FRAME);
         // Slash (attack) frames sit below the walk block.
         for (let r = 0; r < 4; r++) for (let c = 0; c < SLASH_FRAMES; c++) tex.add(`s${r}_${c}`, 0, c * FRAME, (SLASH_ROW + r) * FRAME, FRAME, FRAME);
+        // Shoot (bow) frames below those.
+        for (let r = 0; r < 4; r++) for (let c = 0; c < SHOOT_FRAMES; c++) tex.add(`h${r}_${c}`, 0, c * FRAME, (SHOOT_ROW + r) * FRAME, FRAME, FRAME);
         for (const dir of Object.keys(ROWS) as Facing[]) {
           const r = ROWS[dir];
           this.anims.create({ key: `${key}_walk_${dir}`, frames: Array.from({ length: 8 }, (_, i) => ({ key, frame: `${r}_${i + 1}` })), frameRate: 11, repeat: -1 });
           this.anims.create({ key: `${key}_slash_${dir}`, frames: Array.from({ length: SLASH_FRAMES }, (_, i) => ({ key, frame: `s${r}_${i}` })), frameRate: SLASH_FPS, repeat: 0 });
+          this.anims.create({ key: `${key}_shoot_${dir}`, frames: Array.from({ length: SHOOT_FRAMES }, (_, i) => ({ key, frame: `h${r}_${i}` })), frameRate: SHOOT_FPS, repeat: 0 });
         }
       }
     }
@@ -1365,8 +1381,10 @@ export class WorldScene extends Phaser.Scene {
     if (!p || this.modalOpen || !this.snapshot) return;
     if (p.mounted) { bus.emit("toast", { text: "Get off your bike to fight (V).", kind: "info" }); return; }
     if (p.actingUntil !== undefined && this.time.now < p.actingUntil) return;
+    // With a bow, anything in its range is a target (the HUD shoots it).
+    const bow = p.weapon ? BOWS[p.weapon] : undefined;
     let target: EnemySnapshot | null = null;
-    let best = ATTACK_REACH_PX;
+    let best = bow ? bow.rangePx : ATTACK_REACH_PX;
     for (const e of this.snapshot.enemies) {
       const ent = this.enemies.get(e.id);
       if (!ent) continue;
@@ -1379,8 +1397,30 @@ export class WorldScene extends Phaser.Scene {
       bus.emit("primaryAction", sel); // HUD attacks: swing + server hit
       return;
     }
+    if (bow) { this.playShoot(p, p.facing); this.stream?.sendAct("shoot", p.facing); return; } // a shot at nothing
     this.playSlash(p, p.facing);
     this.stream?.sendAct("slash", p.facing);
+  }
+
+  /**
+   * Draw and loose a bow: the shoot animation, then an arrow flying from
+   * the bow — to `at` when shooting something, else straight ahead.
+   */
+  private playShoot(e: CharEnt, facing: Facing, at?: { x: number; y: number }) {
+    if (!e.texKey || !e.sprite.active) return;
+    if (at) facing = Math.abs(at.x - e.sprite.x) > Math.abs(at.y - e.sprite.y) ? (at.x > e.sprite.x ? "right" : "left") : at.y > e.sprite.y ? "down" : "up";
+    e.facing = facing;
+    e.actingUntil = this.time.now + SHOT_COOLDOWN_MS;
+    e.sprite.play(`${e.texKey}_shoot_${facing}`, true);
+    this.time.delayedCall(SHOOT_RELEASE_MS, () => {
+      if (!e.sprite.active) return;
+      const from = { x: e.sprite.x, y: e.sprite.y - 26 };
+      const [dx, dy] = facing === "left" ? [-1, 0] : facing === "right" ? [1, 0] : facing === "up" ? [0, -1] : [0, 1];
+      const to = at ? { x: at.x, y: at.y - 14 } : { x: from.x + dx * 120, y: from.y + dy * 120 };
+      const arrow = this.add.image(from.x, from.y, "fx_arrow").setDepth(DEPTH_CANOPY + 3).setRotation(Math.atan2(to.y - from.y, to.x - from.x));
+      const ms = Math.max(60, (Math.hypot(to.x - from.x, to.y - from.y) / ARROW_PX_S) * 1000);
+      this.tweens.add({ targets: arrow, x: to.x, y: to.y, duration: ms, ease: "Linear", onComplete: () => arrow.destroy() });
+    });
   }
 
   /** Tutorial guide: a bouncing arrow over the target when it's on

@@ -4,7 +4,7 @@
 // The loop: fight → XP + drops → craft better gear (src/lib/recipes.ts)
 // → deeper zones → levels unlock seeds, recipes, land and perks.
 
-import type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
+import type { BowDef, EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
 import { chunkRect, tileRect } from "./worldmap";
 
 export type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
@@ -139,6 +139,23 @@ export const WEAPONS: Record<string, WeaponDef> = {
   axe: { damage: 0, chopBonus: 0 },
   sharp_axe: { damage: 0, chopBonus: 1 },
 };
+
+/** Bows (equipped like a sword; then attacking shoots). Each shot uses an arrow. */
+export const BOWS: Readonly<Record<string, BowDef>> = {
+  short_bow: { damage: 2, rangePx: 7 * 16 },
+  recurve_bow: { damage: 5, rangePx: 8 * 16 },
+  great_bow: { damage: 9, rangePx: 10 * 16 },
+};
+export const ARROW_ITEM = "arrow";
+/** The least time between two shots (the draw takes this long). */
+export const SHOT_COOLDOWN_MS = 650;
+
+/** The best equipped bow, if any. */
+export function bowOf(equipped: readonly string[]): BowDef & { key: string } | null {
+  let best: (BowDef & { key: string }) | null = null;
+  for (const k of equipped) { const b = BOWS[k]; if (b && (!best || b.damage > best.damage)) best = { ...b, key: k }; }
+  return best;
+}
 
 /** Items that let you chop trees (any of them in the bag). */
 export const AXE_ITEMS: readonly string[] = ["axe", "sharp_axe"];

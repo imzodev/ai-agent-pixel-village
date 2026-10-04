@@ -1,3 +1,10 @@
 Character sprites from the Universal LPC Spritesheet Character Generator
 https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator
 Licensed CC-BY-SA 3.0 / GPL 3.0 / OGA-BY 3.0. Credits to the LPC artists (Stephen Challener (Redshrike), Johannes Sjölund (wulax), bluecarrot16, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), Matthew Krohn (makrohn), Joe White, Nila122, David Conway Jr. (JaidynReiman), Carlo Enrico Victoria (Nemisys), Thane Brimhall (pennomi), Manuel Riecke (MrBeast), Lanea Zimmerman (Sharm), and others).
+
+Bow and arrow layers (weapon_bow.png, weapon_bow_behind.png; shoot animations):
+original by Johannes Sjölund (wulax), bow walk animations by Pierre Vigier (pvigier),
+split into layers and tweaked for v3 bases by bluecarrot16.
+OGA-BY 3.0+ / CC-BY-SA 3.0 / GPL 3.0 / CC-BY 4.0.
+https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+https://opengameart.org/content/lpc-walk-animations-for-bows

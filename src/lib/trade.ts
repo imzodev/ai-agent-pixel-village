@@ -103,6 +103,8 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "axe", qty: 1, price: 25, line: "A woodcutter's axe, twenty-five coppers. The oaks are out west, past the woods." },
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers. Ponds, rivers — face the water and cast." },
     { itemKey: "bicycle", qty: 1, price: 150, line: "A bicycle! A hundred and fifty coppers — the roads to the new towns go by in no time. Press V to ride." },
+    { itemKey: "short_bow", qty: 1, price: 60, line: "A short bow, sixty coppers. Equip it and you can hit things from a safe distance." },
+    { itemKey: "arrow", qty: 10, price: 8, line: "Ten arrows for eight coppers. Every shot uses one." },
   ],
   bw_fishmonger: [
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "Thirty coppers for a good rod. The Silverrun's full of them — fish, I mean." },
@@ -157,6 +159,8 @@ for (const n of SETTLEMENT_NPCS) {
       { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers." },
       { itemKey: "hot_stew", qty: 1, price: 9, line: "Stew for the road, nine coppers." },
       { itemKey: "bicycle", qty: 1, price: 150, line: "A bicycle, a hundred and fifty coppers. Press V to ride." },
+      { itemKey: "short_bow", qty: 1, price: 60, line: "A short bow, sixty coppers." },
+      { itemKey: "arrow", qty: 10, price: 8, line: "Ten arrows, eight coppers." },
     ];
     TRADES[n.key] = [
       { itemKey: "stone", qty: 1, price: 1, line: "Stone, a copper each." },

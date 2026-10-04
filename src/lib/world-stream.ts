@@ -427,7 +427,7 @@ function onMessage(conn: Connection, raw: string): void {
   } catch {
     return;
   }
-  if (msg.type === "act" && (msg.kind === "slash" || msg.kind === "chop")) {
+  if (msg.type === "act" && (msg.kind === "slash" || msg.kind === "chop" || msg.kind === "shoot")) {
     // Attack swing: relay to nearby players like movement. Throttled so a
     // client can't flood its neighbours.
     const now = Date.now();

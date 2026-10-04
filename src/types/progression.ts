@@ -46,3 +46,6 @@ export type LevelUnlock = { level: number; text: string };
 export type PerkKey = "green_thumb" | "lumberjack" | "fighter" | "tough" | "forager" | "haggler";
 
 export type PerkDef = { key: PerkKey; name: string; icon: string; description: string };
+
+/** A bow: damage bonus per arrow and how far it shoots (px). */
+export type BowDef = { damage: number; rangePx: number };

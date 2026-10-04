@@ -127,6 +127,26 @@ export const RECIPES: Recipe[] = [
     line: "Bring me wisp light and your thorn blade. +9 attack.",
     requires: { level: 8 },
   },
+  // Archery: a better bow, and arrows from wood and stone.
+  {
+    key: "recurve_bow",
+    name: "Recurve Bow",
+    icon: "🏹",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wood", qty: 6 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "wolf_pelt", qty: 1 }],
+    output: { itemKey: "recurve_bow", qty: 1 },
+    line: "Six good logs, boar hide for the grip and a wolf pelt for the string. It'll outshoot any short bow.",
+    requires: { level: 5 },
+  },
+  {
+    key: "arrows",
+    name: "Arrows ×10",
+    icon: "➶",
+    crafterKey: "tinker",
+    inputs: [{ itemKey: "wood", qty: 2 }, { itemKey: "stone", qty: 1 }],
+    output: { itemKey: "arrow", qty: 10 },
+    line: "Two logs and a stone: ten arrows, fletched and pointed.",
+  },
   // Woodwork: oak logs from the west forest (needs an axe).
   {
     key: "chair",
@@ -158,7 +178,7 @@ export const RECIPES: Recipe[] = [
 ];
 
 // Bjorn, Hollowmere's smith, forges the same gear as Greta.
-const SMITH_GEAR = ["stone_sword", "thorn_blade", "sharp_axe", "wisp_blade"];
+const SMITH_GEAR = ["stone_sword", "thorn_blade", "sharp_axe", "wisp_blade", "recurve_bow", "arrows"];
 for (const key of SMITH_GEAR) {
   const r = RECIPES.find((x) => x.key === key)!;
   RECIPES.push({ ...r, key: `smith_${key}`, crafterKey: "blacksmith" });
