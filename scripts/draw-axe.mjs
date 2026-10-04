@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Held woodcutter's axe as LPC weapon layers (576×512, 64×64 frames, rows
-// walk up/left/down/right then slash up/left/down/right), derived frame by
+// Held woodcutter's axe as LPC weapon layers (the same size as the dagger
+// sheet, 64×64 frames: walk rows, then slash rows, then the shoot rows the
+// dagger leaves empty — src/game/lpc.ts SHEET_W × SHEET_H), derived frame by
 // frame from the LPC dagger so the axe sits in the hand on every pose:
 //   - the dagger's grip (its brown handle pixels) anchors the axe,
 //   - the blade pixels near the grip give the direction it points,
@@ -18,7 +19,9 @@ import { Canvas } from "./canvas-art.mjs";
 // Also run by scripts/fetch-lpc.mjs, so paths don't depend on the cwd.
 const LPC = fileURLToPath(new URL("../public/lpc/", import.meta.url));
 
-const W = 576, H = 512, FR = 64;
+const FR = 64;
+/** The sheet's width in px (read from the dagger sheet: it grew when bows added the shoot rows). */
+let W = 0;
 const HANDLE = new Set(["114,62,42", "65,30,5"]);
 const BLADE = new Set(["114,107,126", "196,181,159", "177,153,152", "77,74,93"]);
 const NEAR = 9; // px from the grip that still counts as the dagger itself
@@ -29,8 +32,8 @@ const C = {
 };
 
 async function readRaw(file) {
-  const { data } = await sharp(file).raw().toBuffer({ resolveWithObject: true });
-  return data;
+  const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height };
 }
 
 /** Axe for one frame, or null when the dagger isn't drawn in it. */
@@ -82,7 +85,8 @@ function axeFrame(src, fx, fy) {
 }
 
 async function build(srcFile, outFile) {
-  const src = await readRaw(srcFile);
+  const { data: src, width, height: H } = await readRaw(srcFile);
+  W = width;
   const out = Buffer.alloc(W * H * 4);
   let n = 0;
   for (let fy = 0; fy < H; fy += FR) for (let fx = 0; fx < W; fx += FR) {
