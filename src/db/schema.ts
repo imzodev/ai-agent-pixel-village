@@ -666,6 +666,30 @@ export const forageClaims = pgTable(
   (t) => [uniqueIndex("forage_claims_pk").on(t.characterId, t.patch)],
 );
 
+/** Fresh batches of free bread set out on a bakery's table (src/lib/bakery.ts). */
+export const breadBatches = pgTable(
+  "bread_batches",
+  {
+    id: serial("id").primaryKey(),
+    tableKey: text("table_key").notNull(),
+    bakedAt: timestamp("baked_at").notNull(),
+    qty: integer("qty").notNull(),
+    taken: integer("taken").notNull().default(0),
+  },
+  (t) => [index("bread_batches_table_idx").on(t.tableKey, t.bakedAt)],
+);
+
+/** Who took a loaf from which batch: one per character per batch. */
+export const breadClaims = pgTable(
+  "bread_claims",
+  {
+    batchId: integer("batch_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("bread_claims_pk").on(t.batchId, t.characterId)],
+);
+
 /** Bounties posted on a town's notice board (src/lib/bounties.ts). */
 export const bounties = pgTable(
   "bounties",

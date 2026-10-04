@@ -506,6 +506,22 @@ async function bakery() {
   }
   line(art, cx0 + 34, cx0 + 44, cy - 6, PAL.wood[1]); // handle
 
+  // the free-bread table (template cols 10–11, row 13): a checked cloth
+  // over a little trestle. The loaves on it are drawn by the game from the
+  // current batch (src/lib/bakery.ts, WorldScene), so they run out.
+  const tx0 = 10 * T + 1, tx1 = 12 * T - 2, ty = 13 * T + 1;
+  for (const lx of [tx0 + 2, tx1 - 3]) { shade(art, lx, ty + 9, 2, 6, PAL.wood, () => 0.35); }
+  for (let y = ty; y <= ty + 9; y++) for (let x = tx0; x <= tx1; x++) {
+    const top = y < ty + 5;
+    const check = (Math.floor((x - tx0) / 3) + Math.floor((y - ty) / (top ? 2 : 3))) % 2 === 0;
+    const base = check ? (top ? AWNING[1] : AWNING[0]) : (top ? CREAM[1] : CREAM[0]);
+    if (!top && y === ty + 9 && (x - tx0) % 4 === 3) continue; // ragged hem
+    art.put(x, y, base);
+  }
+  line(art, tx0, tx1, ty + 5, PAL.ink); // the table edge under the cloth
+  line(art, tx0 - 1, tx1 + 1, ty - 1, PAL.ink); vline(art, tx0 - 1, ty, ty + 9, PAL.ink); vline(art, tx1 + 1, ty, ty + 9, PAL.ink);
+  softShadow(shadowC, tx0 - 1, ty + 14, tx1 - tx0 + 3, 4, 90);
+
   softShadow(shadowC, G.X0 - 4, G.BOTTOM + 1, G.X1 - G.X0 + 9, 7, 110);
   softShadow(shadowC, cx0 - 2, cy + 3, 40, 5, 90);
   step(groundC, d.x - 2, d.w);
@@ -516,6 +532,7 @@ async function bakery() {
   const collision = [];
   for (let r = 8; r <= 12; r++) for (let c = 9; c <= 20; c++) collision.push([r, c]);
   collision.push([12, 7], [12, 8], [13, 8]); // flour sacks
+  collision.push([13, 10], [13, 11]); // the bread table
   collision.push([12, 21], [12, 22], [12, 23]); // bread cart
   await bakeCanvases({
     name: "Bakery", jsonName: "bakery",

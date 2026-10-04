@@ -23,6 +23,8 @@ import TreasureMapView from "./TreasureMapView";
 import Notifications from "./Notifications";
 import { eDecision, npcOptions, optionCount, selectionKey } from "@/game/selectionOptions";
 import { claimForage, setForageClaims } from "@/game/forageClaims";
+import { setBreadTaken, tookBread } from "@/game/breadTable";
+import { BREAD_REACH_PX } from "@/lib/bakery";
 import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
@@ -403,6 +405,7 @@ export default function Hud() {
   useEffect(() => {
     if (!loggedInNow) return;
     void api<{ claims?: { patch: string; readyAt: number }[] }>("/api/forage").then((r) => { if (r.claims) setForageClaims(r.claims); });
+    void api<{ taken?: number[] }>("/api/bakery").then((r) => { if (r.taken) setBreadTaken(r.taken); });
   }, [loggedInNow]);
   // Hidden relics you've found: the scene only draws the rest. Loaded once
   // (only your own pickups change it); sent again whenever the scene asks,
@@ -580,6 +583,10 @@ export default function Hud() {
       case "relic":
         if (d > RELIC_REACH_PX) { walk(); break; }
         void pickUpRelic(s.key);
+        break;
+      case "bread":
+        if (d > BREAD_REACH_PX) { walk(); break; }
+        void post("/api/bakery", { table: s.table }).then((r) => { const id = (r as { batchId?: number }).batchId; if (id != null) tookBread(id); setSel(null); });
         break;
       case "tree":
         // A terrain tree: a few chops fell it and open the way.
@@ -903,6 +910,7 @@ export default function Hud() {
             );
           })()}
           {loggedIn && sel.type === "relic" && (sel.distance > RELIC_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>✨ Pick it up {interactHint}</Btn>)}
+          {loggedIn && sel.type === "bread" && (sel.distance > BREAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🍞 Take a free loaf {interactHint}</Btn>)}
           {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
@@ -934,7 +942,7 @@ export default function Hud() {
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
-          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -1130,6 +1138,7 @@ function selTitle(sel: Selection) {
     case "tree": return TREE_NAMES[sel.kind] ?? "🌳 Tree";
     case "board": return `📜 ${sel.name} bounty board`;
     case "relic": return "✨ Something glinting on the ground";
+    case "bread": return `🍞 ${sel.name} · fresh, one free loaf each`;
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
@@ -1216,7 +1225,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

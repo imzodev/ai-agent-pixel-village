@@ -6,6 +6,7 @@ import { BOWS, SHOT_COOLDOWN_MS } from "@/lib/progression";
 import { RIDE_FRAMES, riderSheet } from "./riding";
 import { REACH_PX, pickTarget } from "./interactTarget";
 import { pickedByMe } from "./forageClaims";
+import { breadTakenByMe, loafSlots } from "./breadTable";
 import { ROLL_MS, ROLL_PX, canRoll, dirVec } from "@/lib/combat/strikes";
 import type { Strike, StrikeShape } from "@/types/combat";
 import { CROP_KINDS } from "@/lib/crops";
@@ -40,6 +41,7 @@ import { treeFromTile, trunkPoint } from "@/lib/trees";
 import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
 import { RELICS, relicPoint } from "@/lib/relics";
+import { tableByKey } from "@/lib/bakery";
 import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
@@ -47,6 +49,7 @@ import type { Facing } from "@/types/world";
 import type { CharEnt, CritterEnt, InteractCandidate } from "@/types/game";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { EnemySnapshot } from "@/lib/protocol";
+import type { BreadTableSnapshot } from "@/types/bakery";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -137,6 +140,8 @@ export class WorldScene extends Phaser.Scene {
   /** Hidden relics still to find glint where they lie (null until loaded). */
   private relicsFound: Set<string> | null = null;
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
+  /** The loaf images on each bakery bread table. */
+  private breadLoaves = new Map<string, Phaser.GameObjects.Image[]>();
   /** Relics we've already pointed out ("something glints nearby"). */
   private relicsNoticed = new Set<string>();
   private relicCheckAt = 0;
@@ -618,6 +623,7 @@ export class WorldScene extends Phaser.Scene {
     const first = !this.snapshot;
     this.snapshot = s;
     this.meId = s.me?.id ?? null;
+    this.syncBreadTables(s.breadTables ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
@@ -979,6 +985,7 @@ export class WorldScene extends Phaser.Scene {
       case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
       case "board": return true;
       case "relic": return !!this.relicsFound && !this.relicsFound.has(sel.key);
+      case "bread": return this.breadOnOffer(sel.table);
       // An empty plot stays valid until something is planted in it.
       case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
@@ -1002,6 +1009,35 @@ export class WorldScene extends Phaser.Scene {
     this.lastSelection = null;
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
   }
+  /** Is there a loaf on this table you may still take? */
+  private breadOnOffer(key: string): boolean {
+    const t = this.snapshot?.breadTables?.find((x) => x.key === key);
+    return !!t && t.left > 0 && !breadTakenByMe(t.batchId);
+  }
+  /** The loaves left on each bakery table (src/game/breadTable.ts): one
+   *  image per loaf, shown or hidden as the batch runs down. */
+  private syncBreadTables(tables: readonly BreadTableSnapshot[]): void {
+    for (const t of tables) {
+      const def = tableByKey(t.key);
+      if (!def) continue;
+      let imgs = this.breadLoaves.get(t.key);
+      if (!imgs) {
+        const depth = DEPTH_CHAR_BASE + (def.ty + 1) * 16 + 1; // just over the table's own art
+        imgs = loafSlots(def).map((p, i) => {
+          const img = this.add.image(p.x, p.y, "bread_loaf").setOrigin(0, 0).setDepth(depth - i * 0.01).setVisible(false);
+          img.setInteractive({ useHandCursor: true });
+          img.on("pointerdown", () => {
+            if (this.modalOpen) return;
+            this.select({ type: "bread", table: t.key, name: def.name, x: t.x, y: t.y, distance: this.distTo(t.x, t.y) });
+          });
+          return img;
+        });
+        this.breadLoaves.set(t.key, imgs);
+      }
+      imgs.forEach((img, i) => img.setVisible(i < t.left));
+    }
+  }
+
   /** The relics still to find, each with its own look and a twinkle; a
    *  found one pops up into the air and fades. */
   private syncRelics(): void {
@@ -1187,6 +1223,8 @@ export class WorldScene extends Phaser.Scene {
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
     // Hidden relics you haven't found yet.
     if (this.relicsFound) for (const r of RELICS) if (!this.relicsFound.has(r.key)) { const at = relicPoint(r); add(at.x, at.y, (d) => ({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: d })); }
+    // Bakery tables with a loaf left for you.
+    for (const t of s.breadTables ?? []) if (this.breadOnOffer(t.key)) add(t.x, t.y, (d) => ({ type: "bread", table: t.key, name: tableByKey(t.key)?.name ?? "Bread table", x: t.x, y: t.y, distance: d }));
     // Town bounty boards.
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
@@ -1231,6 +1269,7 @@ export class WorldScene extends Phaser.Scene {
       case "tree": return { x: sel.x, y: sel.y - 40 };
       case "board": return { x: sel.x, y: sel.y - 34 };
       case "relic": return { x: sel.x, y: sel.y - 18 };
+      case "bread": return { x: sel.x, y: sel.y - 26 };
       case "plot": return { x: sel.x, y: sel.y - 14 };
     }
   }

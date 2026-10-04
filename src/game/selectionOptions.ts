@@ -57,6 +57,7 @@ export function selectionKey(sel: Selection): string {
     case "tree": return `tree:${sel.vx},${sel.vy}`;
     case "board": return `board:${sel.town}`;
     case "relic": return `relic:${sel.key}`;
+    case "bread": return `bread:${sel.table}`;
     case "plot": return `plot:${sel.lotKey}:${sel.plot}`;
     default: return `${sel.type}:${sel.id}`;
   }

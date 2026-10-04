@@ -21,7 +21,7 @@ export const NPC_DEFS: NpcDef[] = [
     persona:
       "Marigold is a warm, flour-dusted baker who calls everyone 'love'. She runs the little bakery by the cabins, with its windows full of loaves and pies, bakes far more than she sells, and is happier talking than selling. Loves sharing a warm bun.",
     greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
-    tilePos: [46, 20], // in front of her bakery (bakery_village)
+    tilePos: [51, 20], // between her bread table and her door (bakery_village)
     wanderRadius: 90,
     appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#c94f2a", shirtColor: "#f7e7d3", pantsColor: "#7a4a2a" },
     mood: "cheerful",

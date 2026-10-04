@@ -3,6 +3,7 @@
 // `Snapshot` is the aliased `WorldSnapshot` wire shape (defined in
 // lib/protocol.ts) that the client and DB assembler both speak.
 
+import type { BreadTableSnapshot } from "./bakery";
 import type {
   animals,
   buildings,
@@ -61,6 +62,8 @@ export type RawSnapshot = {
   resourceNodes: Array<typeof resourceNodes.$inferSelect>;
   /** Lots overlapping the proximity box, with owner names. */
   lots: LotSnapshot[];
+  /** Bakery bread tables in the proximity box (src/lib/bakery.ts). */
+  breadTables: BreadTableSnapshot[];
   enemies: Array<typeof enemies.$inferSelect>;
   chat: Array<typeof worldChat.$inferSelect>;
   events: Array<typeof worldEvents.$inferSelect>;

@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import { RELIC_ART } from "@/lib/relicArt";
+import { LOAF_PALETTE, LOAF_ROWS } from "./breadTable";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
 import { ANIMAL_SPRITES } from "./animalSprites";
@@ -125,6 +126,8 @@ export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "fx_arrow", ["w.......g.", "wbbbbbbbGg", "w.......g."], { w: "#f4f0e4", b: "#8a5a32", g: "#a8acb4", G: "#5c6068" }, 1);
   // Over whatever E would act on (src/game/interactTarget.ts): a small chevron.
   pixelTexture(scene, "fx_target", ["kkkkkkk", "kwwwwwk", ".kwwwk.", "..kwk..", "...k..."], { k: "#2a1a0e", w: "#ffe27a" }, 2);
+  // A loaf on a bakery's bread table (src/game/breadTable.ts), at world scale.
+  pixelTexture(scene, "bread_loaf", LOAF_ROWS, LOAF_PALETTE, 1);
   pixelTexture(scene, "marker", ["...y...", "..yyy..", ".yyyyy.", "...y...", "...y..."], { y: "#fff176" }, 2);
 }
 

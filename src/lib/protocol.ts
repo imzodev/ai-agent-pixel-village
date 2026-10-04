@@ -8,6 +8,7 @@ import type { Appearance } from "@/types/domain";
 import type { Facing, PlayerActKind } from "@/types/world";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { LotSnapshot } from "@/types/garden";
+import type { BreadTableSnapshot } from "@/types/bakery";
 
 // Re-exported for callers that already import protocol types together.
 export type { Facing, Move, ScheduledMove };
@@ -82,6 +83,8 @@ export type WorldSnapshot = {
   nodes: ResourceNodeSnapshot[];
   /** Owned-parcel info for lots near the player (homes and, later, land). */
   lots: LotSnapshot[];
+  /** Bakery bread tables nearby: loaves left in the current batch. */
+  breadTables: BreadTableSnapshot[];
   enemies: EnemySnapshot[];
   chat: ChatSnapshot[];
   events: EventSnapshot[];

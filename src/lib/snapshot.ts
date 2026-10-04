@@ -43,6 +43,7 @@ import { metrics } from "@/lib/metrics";
 import { CROP_KINDS } from "@/lib/crops";
 import { moveOfRow } from "@/lib/motion";
 import { lotsInBox } from "@/lib/lots";
+import { breadTables } from "@/lib/bakeryServer";
 import type { WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
@@ -284,6 +285,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
 
   const spById = new Map<number, SponsorLite>(sponsorRows.map((s) => [s.id, s]));
   const lotRows = await lotsInBox({ xMin, xMax, yMin, yMax });
+  const tables = (await breadTables()).filter((t) => t.x >= xMin && t.x < xMax && t.y >= yMin && t.y < yMax);
   const doors = await getBuildingDoors();
 
   // Equipment for the (proximity-filtered) players we are actually
@@ -343,6 +345,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     groundItems: ground,
     resourceNodes: nodes,
     lots: lotRows,
+    breadTables: tables,
     enemies: enemyRows,
     chat,
     events,
@@ -440,6 +443,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       watered: n.wateredStage != null && n.wateredStage === n.stage,
     })),
     lots: raw.lots,
+    breadTables: raw.breadTables,
     enemies: raw.enemies.map((e) => ({
       id: e.id,
       kind: e.kind,
