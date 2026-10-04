@@ -3,6 +3,7 @@ import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
 import { RIDE_FRAMES, riderSheet } from "./riding";
+import { REACH_PX, pickTarget } from "./interactTarget";
 import { CROP_KINDS } from "@/lib/crops";
 import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
@@ -39,7 +40,7 @@ import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard"
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
-import type { CharEnt, CritterEnt } from "@/types/game";
+import type { CharEnt, CritterEnt, InteractCandidate } from "@/types/game";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { EnemySnapshot } from "@/lib/protocol";
 import { positionAt } from "@/lib/motion";
@@ -130,6 +131,12 @@ export class WorldScene extends Phaser.Scene {
   /** Relics we've already pointed out ("something glints nearby"). */
   private relicsNoticed = new Set<string>();
   private relicCheckAt = 0;
+  /** The "E acts on this" marker: its target, when to next look for one,
+   *  and where we stood (and faced) when we last looked. */
+  private targetMarker?: Phaser.GameObjects.Image;
+  private markerTarget: Selection | null = null;
+  private targetCheckAt = 0;
+  private targetFrom: { x: number; y: number; facing: Facing } | null = null;
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -946,6 +953,8 @@ export class WorldScene extends Phaser.Scene {
   private interact() {
     // While fishing, E strikes / reels like R.
     if (this.fishing?.active) { this.fishing.press(this.time.now); return; }
+    // What you act on may change (a felled tree, a picked-up item): look again.
+    this.targetFrom = null;
     // 1. E acts on what's right here: the closest usable thing, preferring
     //    what you face. If you moved, you want what's next to you now.
     const near = this.nearestCandidate();
@@ -1105,20 +1114,16 @@ export class WorldScene extends Phaser.Scene {
   private isActionable(sel: Selection): boolean {
     return sel.type !== "player";
   }
-  /** The closest usable thing within 110 px, or null. Things in front of
-   *  the player count as nearer, so facing a target picks it. */
+  /** What E acts on: the nearest usable thing in front of you, or right
+   *  underfoot (src/game/interactTarget.ts) — never what's behind you. */
   private nearestCandidate(): Selection | null {
     if (!this.player || !this.snapshot) return null;
     const s = this.snapshot;
     const p = this.player.sprite;
-    const f = this.player.facing;
-    const [fx, fy] = f === "left" ? [-1, 0] : f === "right" ? [1, 0] : f === "up" ? [0, -1] : [0, 1];
-    const cands: { score: number; sel: Selection }[] = [];
+    const cands: InteractCandidate<Selection>[] = [];
     const add = (x: number, y: number, mk: (d: number) => Selection) => {
-      const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
-      if (d >= 110) return;
-      const facing = d > 1 ? (dx * fx + dy * fy) / d : 1; // cos of the angle off your facing
-      cands.push({ score: d * (facing > 0.5 ? 0.6 : 1), sel: mk(Math.round(d)) });
+      const d = Math.hypot(x - p.x, y - p.y);
+      if (d < REACH_PX) cands.push({ x, y, sel: mk(Math.round(d)) });
     };
     const live = (m: Map<number, { sprite: { x: number; y: number } }>, id: number, x: number, y: number) => { const e = m.get(id); return e ? e.sprite : { x, y }; };
     for (const n of s.npcs) { const q = live(this.npcs, n.id, n.x, n.y); add(q.x, q.y, (d) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: d })); }
@@ -1133,8 +1138,48 @@ export class WorldScene extends Phaser.Scene {
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
     for (const t of this.treesNear(p.x, p.y, 64)) { const at = trunkPoint(t.vx, t.vy); add(at.x, at.y, (d) => ({ type: "tree", vx: t.vx, vy: t.vy, kind: t.kind, x: at.x, y: at.y, distance: d })); }
-    cands.sort((a, b) => a.score - b.score);
-    return cands[0]?.sel ?? null;
+    return pickTarget(cands, p, this.player.facing);
+  }
+
+  /**
+   * A little marker over whatever E would act on. Looking for the target is
+   * a scan, so it's done at most every 300 ms and only after you've moved or
+   * turned; between scans the marker just follows its target (cheap).
+   */
+  private updateTargetMarker(time: number): void {
+    const p = this.player;
+    if (!p) return;
+    const hidden = this.modalOpen || !!this.fishing?.active;
+    if (time >= this.targetCheckAt) {
+      this.targetCheckAt = time + 300;
+      const from = this.targetFrom;
+      const moved = !from || from.facing !== p.facing || Math.abs(from.x - p.sprite.x) > 1 || Math.abs(from.y - p.sprite.y) > 1;
+      if (moved) {
+        this.targetFrom = { x: p.sprite.x, y: p.sprite.y, facing: p.facing };
+        this.markerTarget = this.nearestCandidate();
+      }
+    }
+    const at = !hidden && this.markerTarget ? this.markerPoint(this.markerTarget) : null;
+    if (!at) { this.targetMarker?.setVisible(false); return; }
+    this.targetMarker ??= this.add.image(0, 0, "fx_target").setOrigin(0.5, 1).setDepth(DEPTH_CANOPY + 4);
+    this.targetMarker.setVisible(true).setPosition(at.x, at.y + Math.sin(time / 180) * 1.5);
+  }
+  /** Where the marker sits for a target: above heads, over trunks and things on the ground. */
+  private markerPoint(sel: Selection): { x: number; y: number } | null {
+    const spriteOf = (m: Map<number, { sprite: { x: number; y: number } }>, id: number) => m.get(id)?.sprite ?? null;
+    switch (sel.type) {
+      case "npc": { const q = spriteOf(this.npcs, sel.id); return q && { x: q.x, y: q.y - 66 }; }
+      case "player": { const q = spriteOf(this.players, sel.id); return q && { x: q.x, y: q.y - 66 }; }
+      case "animal": { const q = spriteOf(this.animals, sel.id); return q && { x: q.x, y: q.y - 34 }; }
+      case "enemy": { const q = spriteOf(this.enemies, sel.id); return q && { x: q.x, y: q.y - 38 }; }
+      case "item": { const g = this.snapshot?.groundItems.find((x) => x.id === sel.id); return g ? { x: g.x, y: g.y - 20 } : null; }
+      case "node": { const n = this.snapshot?.nodes.find((x) => x.id === sel.id); return n ? { x: n.x, y: n.y - 26 } : null; }
+      case "building": { const b = this.snapshot?.buildings.find((x) => x.id === sel.id); if (!b) return null; const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; return { x: door.x, y: door.y - 24 }; }
+      case "tree": return { x: sel.x, y: sel.y - 40 };
+      case "board": return { x: sel.x, y: sel.y - 34 };
+      case "relic": return { x: sel.x, y: sel.y - 18 };
+      case "plot": return { x: sel.x, y: sel.y - 14 };
+    }
   }
 
   // ---------- update loop ----------
@@ -1144,6 +1189,7 @@ export class WorldScene extends Phaser.Scene {
       this.updatePlayer(dt);
       this.syncStreamingChunks();
       this.noticeRelics(time);
+      this.updateTargetMarker(time);
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);

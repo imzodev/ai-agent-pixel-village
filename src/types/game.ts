@@ -81,3 +81,6 @@ export type PixelBuf = { w: number; h: number; d: Uint8ClampedArray };
 export type Rgb = readonly [number, number, number];
 /** Colours sampled from a composed character for its riding pose. */
 export type RiderColors = { shirt: Rgb; pants: Rgb; shoes: Rgb; skin: Rgb };
+
+/** Something E could act on, where it stands (world px). */
+export type InteractCandidate<S> = { x: number; y: number; sel: S };
