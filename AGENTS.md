@@ -108,7 +108,9 @@ so they come out as long straight legs.
 - **Trips** (`trips.ts`, `npc_trips`): a stored route walked as chained moves
   written by tickd, each starting on a beat boundary (so the beat broadcast
   carries it) and never before the previous one ends; `SEG_BEATS` = 4 beats
-  per segment. NPCs on a trip are skipped by the random wander.
+  per segment. NPCs on a trip are skipped by the random wander; once a trip
+  has arrived the NPC lingers there (its wander is leashed to the
+  destination, not its home) until it's sent somewhere else.
 - **Admin endpoints** (see "Admin endpoints" below):
   `GET /api/nav/route?from=tx,ty&to=tx,ty`, `POST /api/nav/trip { npcKey, place, learn? }`,
   `GET /api/nav/places?npcKey=…`. `scripts/route-preview.ts` draws a route on the map.

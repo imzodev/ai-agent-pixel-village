@@ -34,7 +34,7 @@ import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
 import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_MAX_TOTAL, WILD_PACKS_PER_BEAT, WILD_RADIUS_PX, WILD_SPAWN_CHANCE, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildPackSize, wildTarget } from "./wildlife";
 import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
-import { advanceTrips, npcsOnTrips } from "./nav/trips";
+import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
@@ -151,6 +151,7 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
     .where(eq(npcs.active, true));
   const writes: MoveWrite[] = [];
   const travelling = await npcsOnTrips();
+  const lingering = await lingerSpots();
   for (const n of rows) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
     if (travelling.has(n.id)) continue; // walking a planned route (src/lib/nav/trips.ts)
@@ -159,7 +160,8 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
     if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it
     if (busyAt(n, beat.startAt)) continue;
     const radius = Math.max(Math.floor(n.wanderRadius / CHUNK_TILE_PX), NPC_LEASH_TILES);
-    const leash = leashAround({ x: n.homeX, y: n.homeY }, radius);
+    // Around home — or around where its last trip ended (src/lib/nav/trips.ts).
+    const leash = leashAround(lingering.get(n.id) ?? { x: n.homeX, y: n.homeY }, radius);
     const w = await wanderWrite(n, leash, NPC_SPEED, beat, NPC_MOVE_MIN_TILES, NPC_MOVE_MAX_TILES);
     if (w) writes.push(w);
   }

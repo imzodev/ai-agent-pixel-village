@@ -562,12 +562,13 @@ let buildingsSynced = false;
 let wildlifeSynced = false;
 let npcSynced = false;
 
-// Move seeded NPCs to their chunk-world cabin-village positions and update
-// role/persona/greeting for any existing rows. Runs once per process — edit
+// Keep seeded NPCs in step with NPC_DEFS: their home spot (cabin-village
+// positions) and role/persona/greeting. Runs once per process — edit
 // NPC_DEFS and restart the dev server to re-apply. If the configured tile
 // sits on a Collision tile, snap to the nearest walkable neighbour so NPCs
-// stay reachable (the player can't walk to them otherwise, and the world
-// heartbeat would reject any teleport to their feet).
+// stay reachable. An NPC stays where it is across restarts (it may be
+// mid-trip or lingering somewhere it travelled to, src/lib/nav/trips.ts);
+// only one standing somewhere no longer walkable is sent back home.
 async function syncNpcLayout() {
   if (npcSynced) return;
   npcSynced = true;
@@ -581,9 +582,13 @@ async function syncNpcLayout() {
         x = snap.x;
         y = snap.y;
       }
+      const [cur] = await db.select({ x: npcs.x, y: npcs.y }).from(npcs).where(eq(npcs.key, n.key));
+      const stranded = cur ? !(await isWalkableServer(cur.x, cur.y)) : false;
       await db.update(npcs)
         .set({
-          x, y, homeX: x, homeY: y,
+          homeX: x, homeY: y,
+          // Back home only when where it stands is no longer walkable.
+          ...(stranded ? { x, y, movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null } : {}),
           role: n.role, persona: n.persona, greeting: n.greeting,
           mood: n.mood, wanderRadius: n.wanderRadius,
           buildingId: null, sponsorId: null,

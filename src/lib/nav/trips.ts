@@ -44,6 +44,16 @@ export async function npcsOnTrips(): Promise<Set<number>> {
   return new Set(rows.map((r) => r.id));
 }
 
+/**
+ * NPCs whose last trip has arrived linger there: the random wander keeps
+ * them around the destination instead of walking them back home (until
+ * they're sent somewhere else).
+ */
+export async function lingerSpots(): Promise<Map<number, { x: number; y: number }>> {
+  const rows = await db.select({ id: npcTrips.npcId, x: npcTrips.destX, y: npcTrips.destY }).from(npcTrips).where(eq(npcTrips.status, "arrived"));
+  return new Map(rows.map((r) => [r.id, { x: r.x, y: r.y }]));
+}
+
 /** Are all these tiles still walkable? */
 async function clear(tiles: readonly GridPoint[]): Promise<boolean> {
   for (const t of tiles) {
