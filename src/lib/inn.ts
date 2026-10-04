@@ -4,16 +4,19 @@
 // Pure data + rules; the route is src/app/api/inn/route.ts.
 
 import { fishFor } from "./fishing";
+import { TOWNS } from "./settlements";
 import type { InnWorld } from "@/types/inn";
 
 export type { InnPatron, InnView, InnWorld } from "@/types/inn";
 
 /** Inn building key → its innkeeper's NPC key. */
-export const INNS: Readonly<Record<string, string>> = {
+export const INNS: Record<string, string> = {
   inn_village: "innkeeper",
   inn_hollowmere: "hm_innkeeper",
   inn_brightwater: "bw_innkeeper",
 };
+// The continent's towns: st_<town>_inn → <town>_innkeeper.
+for (const t of TOWNS) INNS[`st_${t.key}_inn`] = `${t.key}_innkeeper`;
 export const INN_REACH_PX = 160;
 /** Patrons: players within this distance of the inn door. */
 export const INN_PATRON_PX = 200;

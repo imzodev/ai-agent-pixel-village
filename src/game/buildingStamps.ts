@@ -180,6 +180,11 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       continue;
     }
     if (!door || entry.kind === "land" || entry.kind === "ranch") continue;
+    if (entry.kind === "waystone") {
+      // the carved rune glows blue (scripts/draw-trade-buildings.mjs)
+      out.push({ x: s.origin.x + 192, y: s.origin.y + 168, radius: 54, color: 0x6cc4ff, flicker: true });
+      continue;
+    }
     if (entry.kind === "forge") {
       // the open hearth in the lean-to bay glows day and night
       out.push({ x: s.origin.x + 283, y: s.origin.y + 188, radius: 72, color: 0xff8a3c, flicker: true });

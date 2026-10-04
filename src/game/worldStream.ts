@@ -11,7 +11,7 @@
 
 import type { WsClientMessage, WsServerMessage } from "@/lib/protocol";
 import type { Facing, PlayerActKind } from "@/types/world";
-import type { ClockSample, StreamHandlers, WorldStreamOptions } from "@/types/websocket";
+import type { ClockSample, StreamHandlers, StreamPosition, WorldStreamOptions } from "@/types/websocket";
 
 export type { StreamHandlers, WorldStreamOptions };
 
@@ -36,7 +36,7 @@ export class WorldStream {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private posTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
-  private lastPosition: { x: number; y: number; facing: Facing } | null = null;
+  private lastPosition: StreamPosition | null = null;
   private clockTimers: ReturnType<typeof setTimeout>[] = [];
   private clock: ClockSample | null = null;
   /** Rough offset from message stamps, used until the first pong lands. */
@@ -90,8 +90,8 @@ export class WorldStream {
   }
 
   /** Update the player's position; sent on the next pos/heartbeat tick. */
-  setPosition(x: number, y: number, facing: Facing): void {
-    this.lastPosition = { x, y, facing };
+  setPosition(x: number, y: number, facing: Facing, mounted = false): void {
+    this.lastPosition = { x, y, facing, mounted };
   }
 
   private connect(): void {
@@ -147,8 +147,12 @@ export class WorldStream {
         this.opts.handlers.onEnemyAct?.({ id: msg.id, x: msg.x, y: msg.y });
       } else if (msg.type === "knockout") {
         this.opts.handlers.onKnockout?.({ x: msg.x, y: msg.y, coinsLost: msg.coinsLost, by: msg.by });
+      } else if (msg.type === "correct") {
+        this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
+      } else if (msg.type === "saloon") {
+        this.opts.handlers.onSaloon?.({ inn: msg.inn });
       } else if (msg.type === "playerPos") {
-        this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing });
+        this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing, mounted: msg.mounted });
       }
       // "error" is observable via close events; nothing to do.
     };
@@ -203,13 +207,13 @@ export class WorldStream {
   // the position actually changed since the last frame, so an idle client
   // costs nothing.
   private startPositionStream(): void {
-    let sent: { x: number; y: number; facing: Facing } | null = null;
+    let sent: StreamPosition | null = null;
     const tick = () => {
       const p = this.lastPosition;
       if (!p) return;
-      if (sent && p.x === sent.x && p.y === sent.y && p.facing === sent.facing) return;
+      if (sent && p.x === sent.x && p.y === sent.y && p.facing === sent.facing && p.mounted === sent.mounted) return;
       sent = { ...p };
-      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing });
+      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing, mounted: p.mounted });
     };
     this.posTimer = setInterval(tick, POS_INTERVAL_MS);
   }

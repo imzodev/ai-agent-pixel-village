@@ -7,6 +7,9 @@
 //           anvil, quench barrel and weapon rack (public/buildings/forge.json)
 //   inn   — a two-storey timber inn with a hanging tankard sign, lanterns
 //           by the door, a bench and barrels (public/buildings/inn.json)
+//   waystone — a carved standing stone with a glowing blue rune on a
+//           flagstone base: attune to it, fast-travel between them
+//           (public/buildings/waystone.json)
 //   ranch — a fenced pen for a player's animals: a hen coop on the left, a
 //           red gambrel barn on the right, trough and hay bales between,
 //           and the same road + gate as the field lots (ranch_lot.json)
@@ -447,6 +450,57 @@ async function ranch() {
   });
 }
 
+// ── The waystone ────────────────────────────────────────────────────────
+// A tall rough-cut stone (cols 11–12, rows 9–12) on a round flagstone
+// base, a carved rune glowing blue down its face. Blocks its two base
+// tiles; the door (where you attune / travel) is the base's left tile.
+const RUNE = [hex(0x1e4a8a), hex(0x2f78c8), hex(0x5ab0f0), hex(0x9adcff), hex(0xe4f8ff)];
+async function waystone() {
+  const groundC = new Canvas(W, H), shadowC = new Canvas(W, H), upperC = new Canvas(W, H);
+  const cx = 12 * T, base = 13 * T - 2; // stone centre x, ground line
+  // flagstone circle around it
+  for (let y = base - 12; y <= base + 12; y++) for (let x = cx - 26; x <= cx + 26; x++) {
+    const d = ((x - cx) / 26) ** 2 + ((y - base) / 12) ** 2;
+    if (d > 1) continue;
+    const seam = (Math.floor((x - cx + 40) / 9) + Math.floor((y - base + 20) / 6)) % 2 === 0 && ((x + y) % 9 === 0);
+    groundC.put(x, y, d > 0.86 ? PAL.stone[1] : ramp(PAL.stone, 0.62 + (rand(x >> 2, y >> 2, 17) - 0.5) * 0.25 - (seam ? 0.3 : 0), x, y));
+  }
+  softShadow(shadowC, cx - 12, base - 2, 26, 6, 120);
+  // the stone: tapering slab with a chipped top
+  const top = 9 * T - 6;
+  const art = new Canvas(W, H);
+  for (let y = top; y <= base; y++) {
+    const t = (y - top) / (base - top);
+    const half = 7 + t * 4 + (y < top + 4 ? -2 + (y - top) * 0.5 : 0);
+    for (let x = Math.round(cx - half); x <= Math.round(cx + half); x++) {
+      const side = (x - cx) / half;
+      let tone = 0.62 - side * 0.28 + (rand(x >> 1, y >> 2, 23) - 0.5) * 0.12;
+      if ((y * 3 + x) % 17 === 0) tone -= 0.18; // pits and cracks
+      art.put(x, y, ramp(PAL.stone, tone, x, y));
+    }
+  }
+  // moss creeping up the base
+  for (let x = cx - 11; x <= cx + 11; x++) for (let y = base - 5 - Math.round(rand(x, 3, 5) * 6); y <= base; y++) if (rand(x, y, 9) < 0.55) art.put(x, y, ramp(PAL.leaf, 0.45 + rand(x, y, 2) * 0.3, x, y));
+  // carved, glowing rune: a vertical stroke with chevrons and a ring
+  const glyph = [[0, -14], [0, -13], [0, -12], [0, -11], [0, -10], [0, -9], [0, -8], [0, -7], [0, -6], [0, -5], [0, -4], [0, -3], [0, -2], [0, -1], [0, 0], [-1, -11], [-2, -10], [-3, -9], [1, -11], [2, -10], [3, -9], [-1, -5], [-2, -4], [1, -5], [2, -4], [-2, 2], [-1, 3], [0, 3], [1, 3], [2, 2], [-3, 1], [3, 1], [-2, 0], [2, 0]];
+  const ry = top + 24;
+  for (const [gx, gy] of glyph) {
+    for (const [hx, hy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (art.alpha(cx + gx + hx, ry + gy + hy) > 0) art.put(cx + gx + hx, ry + gy + hy, RUNE[1], 200); // glow halo
+  }
+  for (const [gx, gy] of glyph) art.put(cx + gx, ry + gy, gy % 3 === 0 ? RUNE[4] : RUNE[3]);
+  art.outline(PAL.ink);
+  // little floating motes of light
+  for (const [mx, my] of [[cx - 14, top + 10], [cx + 13, top + 20], [cx - 9, top - 4], [cx + 8, top - 8]]) { upperC.put(mx, my, RUNE[3]); upperC.put(mx, my + 1, RUNE[2], 160); }
+  // route: the base row blocks (lower), the stone's body above it Y-sorts
+  const lower = art.rows(12 * T, H), upper = art.rows(0, 12 * T).over(upperC);
+  await bakeCanvases({
+    name: "Waystone", jsonName: "waystone",
+    layers: { GroundUpper: groundC, DecorationLowerShadow: shadowC, DecorationLower: lower, DecorationUpper1: upper },
+    collision: [[12, 11], [12, 12]], door: [12, 11],
+  });
+}
+
 await forge();
 await inn();
 await ranch();
+await waystone();

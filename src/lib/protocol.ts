@@ -17,10 +17,10 @@ export type WsClientMessage =
   // echoes it back in `pong` together with its own clock.
   | { type: "ping"; t?: number }
   // Presence heartbeat: slow (1.5 s) and drives the DB lastSeenAt write.
-  | { type: "heartbeat"; x: number; y: number; facing: Facing }
+  | { type: "heartbeat"; x: number; y: number; facing: Facing; mounted?: boolean }
   // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
   // players. Never triggers a DB write.
-  | { type: "pos"; x: number; y: number; facing: Facing }
+  | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean }
   // One-shot action (attack swing), relayed to nearby players. In-memory only.
   | { type: "act"; kind: PlayerActKind; facing: Facing };
 
@@ -30,7 +30,7 @@ export type WsServerMessage =
   // Another player's live position, relayed on their `pos`. Applied to the
   // existing sprite if present; ignored otherwise (the next snapshot
   // creates it).
-  | { type: "playerPos"; id: number; x: number; y: number; facing: Facing }
+  | { type: "playerPos"; id: number; x: number; y: number; facing: Facing; mounted?: boolean }
   // Another player's one-shot action (plays the matching animation).
   | { type: "playerAct"; id: number; kind: PlayerActKind; facing: Facing }
   // Moves scheduled on the last beat, all starting at `startAt`. Sent
@@ -45,6 +45,10 @@ export type WsServerMessage =
   | { type: "enemyAct"; id: number; x: number; y: number }
   // You were knocked out and woke at (x, y).
   | { type: "knockout"; x: number; y: number; coinsLost: number; hp: number; by: string }
+  // You moved faster than you can (src/lib/speedGuard.ts): you're really here.
+  | { type: "correct"; x: number; y: number }
+  // A saloon game you're in changed (src/lib/saloonServer.ts): re-read it.
+  | { type: "saloon"; inn: string }
   | { type: "pong"; t?: number; serverTime?: number }
   | { type: "error"; message: string };
 
@@ -94,6 +98,8 @@ export type PlayerSnapshot = {
   cosmetics: { slot: string; itemKey: string }[];
   /** Nameplate title (achievements / collection book). */
   title?: string | null;
+  /** Riding a bike (live, from the WS connection). */
+  mounted?: boolean;
 };
 
 export type NpcSnapshot = {
@@ -180,6 +186,8 @@ export type EnemySnapshot = {
   move: Move | null;
   hp: number;
   maxHp: number;
+  /** A wanted beast's name (bounty boards); null for ordinary enemies. */
+  title?: string | null;
 };
 
 export type ChatSnapshot = {

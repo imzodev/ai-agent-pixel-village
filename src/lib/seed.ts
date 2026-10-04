@@ -26,6 +26,8 @@ import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
+import { SETTLEMENT_NPCS } from "./settlements";
+import { forageSpots } from "./forage";
 import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
@@ -62,6 +64,15 @@ export const ITEM_DEFS = [
   { key: "bat_wing", name: "Bat Wing", kind: "material", icon: "🦇", description: "Leathery and light. Wren buys them.", value: 2 },
   { key: "thorn", name: "Thornling Thorn", kind: "material", icon: "🌵", description: "Wickedly sharp. Greta makes blades from them.", value: 2 },
   { key: "boar_hide", name: "Boar Hide", kind: "material", icon: "🐗", description: "Tough and bristly. Good for grips and gear.", value: 5 },
+  { key: "lost_doll", name: "Lost Doll", kind: "material", icon: "🧸", description: "A well-loved rag doll. Somebody small is missing this.", value: 0 },
+  { key: "bicycle", name: "Bicycle", kind: "tool", icon: "🚲", description: "Press V to ride: more than twice as fast as walking. You'll get off to fight, fish or go indoors.", value: 75 },
+  { key: "treasure_map", name: "Treasure Map", kind: "material", icon: "🗺️", description: "A hand-drawn scrap with a red X. Read it, find the spot, and dig.", value: 0 },
+  { key: "sunken_cutlass", name: "Sunken Cutlass", kind: "tool", icon: "🗡️", description: "+12 attack. Pulled from a legendary cache; there's salt in its grain still.", value: 200, equippable: true },
+  { key: "parcel", name: "Sealed Parcel", kind: "material", icon: "📦", description: "A bounty delivery. Take it to the bounty board of the town it's addressed to.", value: 0 },
+  { key: "chitin", name: "Scorpion Chitin", kind: "material", icon: "🦂", description: "A plate of hard, sun-bleached shell from a sand scorpion.", value: 4 },
+  { key: "lurker_hide", name: "Lurker Hide", kind: "material", icon: "🐸", description: "Slick, warty hide from a bog lurker. Waterproof, and smelly.", value: 7 },
+  { key: "frost_pelt", name: "Frost Pelt", kind: "material", icon: "🐺", description: "Thick white fur from a frost wolf. The warmest thing you'll ever wear.", value: 9 },
+  { key: "shade_essence", name: "Shade Essence", kind: "material", icon: "🟢", description: "A cold green glow, caught from a darkwood shade.", value: 8 },
   { key: "milk", name: "Fresh Milk", kind: "consumable", icon: "🥛", description: "Creamy milk from your ranch. Drink it, or sell it at an inn.", value: 4 },
   { key: "hot_stew", name: "Hot Stew", kind: "consumable", icon: "🍲", description: "A steaming bowl from the inn. Restores 12 HP.", value: 4 },
   { key: "wolf_pelt", name: "Wolf Pelt", kind: "material", icon: "🐺", description: "Thick grey fur from a Whisperwood wolf. Warm, and worth a fair price.", value: 6 },
@@ -302,6 +313,10 @@ export const NPC_DEFS: {
     mood: "warm",
   },
 ];
+// The continent's townsfolk (scripts/gen-settlements.ts → settlementsData.json).
+for (const n of SETTLEMENT_NPCS) {
+  NPC_DEFS.push({ key: n.key, name: n.name, role: n.role, persona: n.persona, greeting: n.greeting, tilePos: n.tilePos, wanderRadius: n.wanderRadius, appearance: n.appearance, mood: n.mood });
+}
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
 // Village species stay near the houses (chunks 1..2, south of them);
@@ -626,23 +641,18 @@ async function syncWildlifeLayout() {
     // Wild nodes only: garden crops (owner_id set) belong to players.
     await db.delete(resourceNodes).where(isNull(resourceNodes.ownerId));
     const trees = forestTrees().map(([tx, ty]): [string, string, number, number] => ["oak_tree", "wood", tx, ty]);
-    for (const [kind, itemKey, tx, ty] of [...NODE_DEFS, ...trees]) {
+    // The village's hand-placed nodes, the oak grove, and the forage
+    // patches scattered over the continent (src/lib/forage.ts).
+    const rows = [...NODE_DEFS, ...trees, ...forageSpots()].map(([kind, itemKey, tx, ty]) => {
       const p = tilePoint(tx, ty);
       const cfg = getCropKind(kind);
       // Crop kinds start fully grown (stage = stages-1). Non-crop kinds
       // use stages=2 (ready) from the config; missing config means a
       // legacy kind with no regrowth — start at the only stage (0).
       const stages = cfg?.stages ?? 1;
-      const startStage = stages - 1;
-      await db.insert(resourceNodes).values({
-        kind,
-        itemKey,
-        x: p.x,
-        y: p.y,
-        qty: cfg?.yield ?? 1,
-        stage: startStage,
-      });
-    }
+      return { kind, itemKey, x: p.x, y: p.y, qty: cfg?.yield ?? 1, stage: stages - 1 };
+    });
+    for (let i = 0; i < rows.length; i += 200) await db.insert(resourceNodes).values(rows.slice(i, i + 200));
     // Enemies respawn from the current zones; a risen world boss stays.
     await db.delete(enemies).where(ne(enemies.kind, BOSS_KIND));
     for (const def of ANIMAL_DEFS) {

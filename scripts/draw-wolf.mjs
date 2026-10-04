@@ -10,11 +10,14 @@
 //   block 2 (rows 8–11) = attack (6 frames: crouch, lunge with a snarl, recover)
 //
 //   node scripts/draw-wolf.mjs            → public/assets/animals/wolf.png
+//   node scripts/draw-wolf.mjs frostwolf  → public/assets/animals/frostwolf.png
+//                                           (the snowfields' pale, icy-eyed wolf)
 
 import { blank, block, ellipse, line, outline as trace, poly, put, rect, setFrameSize, writeSheet } from "./pixel-art.mjs";
 
 setFrameSize(48);
 
+const VARIANT = process.argv[2] ?? "wolf";
 const C = {
   outline: [20, 22, 28],
   ridge: [52, 54, 62], // shaggy dark back / scruff
@@ -31,6 +34,10 @@ const C = {
   claw: [36, 36, 42],
   shadow: [0, 0, 0, 70],
 };
+if (VARIANT === "frostwolf") Object.assign(C, {
+  ridge: [120, 138, 160], furLo: [168, 184, 204], fur: [206, 218, 232], furHi: [236, 242, 250],
+  pale: [250, 252, 255], paleLo: [214, 224, 236], eye: [110, 220, 255],
+});
 const outline = (fr) => trace(fr, C.outline);
 const GROUND = 44;
 
@@ -239,4 +246,4 @@ function withShadow(fr, cx, rx) {
 }
 
 const views = { side, front, back };
-await writeSheet("wolf", [block(views, WALK), block(views, IDLE), block(views, ATTACK)]);
+await writeSheet(VARIANT, [block(views, WALK), block(views, IDLE), block(views, ATTACK)]);

@@ -1,0 +1,204 @@
+{
+ "relics": [
+  {
+   "key": "coins_0",
+   "tx": -768,
+   "ty": -138
+  },
+  {
+   "key": "coins_1",
+   "tx": -87,
+   "ty": 315
+  },
+  {
+   "key": "coins_2",
+   "tx": -183,
+   "ty": -297
+  },
+  {
+   "key": "coins_3",
+   "tx": -357,
+   "ty": 59
+  },
+  {
+   "key": "coins_4",
+   "tx": -366,
+   "ty": 302
+  },
+  {
+   "key": "coins_5",
+   "tx": -567,
+   "ty": -30
+  },
+  {
+   "key": "coins_6",
+   "tx": -189,
+   "ty": -80
+  },
+  {
+   "key": "coins_7",
+   "tx": -561,
+   "ty": -227
+  },
+  {
+   "key": "coins_8",
+   "tx": -223,
+   "ty": 297
+  },
+  {
+   "key": "coins_9",
+   "tx": -723,
+   "ty": -25
+  },
+  {
+   "key": "fossils_0",
+   "tx": -643,
+   "ty": 345
+  },
+  {
+   "key": "fossils_1",
+   "tx": 174,
+   "ty": -158
+  },
+  {
+   "key": "fossils_2",
+   "tx": -839,
+   "ty": -300
+  },
+  {
+   "key": "fossils_3",
+   "tx": 86,
+   "ty": 327
+  },
+  {
+   "key": "fossils_4",
+   "tx": -300,
+   "ty": 96
+  },
+  {
+   "key": "fossils_5",
+   "tx": -554,
+   "ty": 58
+  },
+  {
+   "key": "fossils_6",
+   "tx": -872,
+   "ty": 240
+  },
+  {
+   "key": "fossils_7",
+   "tx": -224,
+   "ty": 336
+  },
+  {
+   "key": "fossils_8",
+   "tx": -81,
+   "ty": 157
+  },
+  {
+   "key": "fossils_9",
+   "tx": -894,
+   "ty": -123
+  },
+  {
+   "key": "cards_0",
+   "tx": -20,
+   "ty": 338
+  },
+  {
+   "key": "cards_1",
+   "tx": -277,
+   "ty": 316
+  },
+  {
+   "key": "cards_2",
+   "tx": -153,
+   "ty": -300
+  },
+  {
+   "key": "cards_3",
+   "tx": -863,
+   "ty": -191
+  },
+  {
+   "key": "cards_4",
+   "tx": -756,
+   "ty": -61
+  },
+  {
+   "key": "cards_5",
+   "tx": -664,
+   "ty": -286
+  },
+  {
+   "key": "cards_6",
+   "tx": 217,
+   "ty": -111
+  },
+  {
+   "key": "cards_7",
+   "tx": -820,
+   "ty": 328
+  },
+  {
+   "key": "cards_8",
+   "tx": -555,
+   "ty": 175
+  },
+  {
+   "key": "cards_9",
+   "tx": -411,
+   "ty": -115
+  },
+  {
+   "key": "carvings_0",
+   "tx": -774,
+   "ty": -313
+  },
+  {
+   "key": "carvings_1",
+   "tx": 160,
+   "ty": 157
+  },
+  {
+   "key": "carvings_2",
+   "tx": -182,
+   "ty": -327
+  },
+  {
+   "key": "carvings_3",
+   "tx": -389,
+   "ty": 326
+  },
+  {
+   "key": "carvings_4",
+   "tx": -740,
+   "ty": 212
+  },
+  {
+   "key": "carvings_5",
+   "tx": 162,
+   "ty": -268
+  },
+  {
+   "key": "carvings_6",
+   "tx": -412,
+   "ty": -105
+  },
+  {
+   "key": "carvings_7",
+   "tx": -123,
+   "ty": 309
+  },
+  {
+   "key": "carvings_8",
+   "tx": -519,
+   "ty": -336
+  },
+  {
+   "key": "carvings_9",
+   "tx": -852,
+   "ty": -97
+  }
+ ]
+}

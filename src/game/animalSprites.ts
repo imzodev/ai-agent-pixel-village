@@ -262,6 +262,56 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { walk: "idle", hunt: "idle" },
   },
+  frostwolf: {
+    // Enemy (tier 3, the snowfields). scripts/draw-wolf.mjs frostwolf: the
+    // wolf's sheet in pale, icy colours (same frames and actions).
+    url: "/assets/animals/frostwolf.png",
+    frameWidth: 48, frameHeight: 48, columns: 6, dirRows: ["up", "left", "down", "right"],
+    scale: 0.85, originX: 0.5, originY: 0.93, labelHeight: 36,
+    actions: {
+      walk: { block: 0, frames: 6, frameRate: 12, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 6, frameRate: 14, loop: false },
+    },
+    stateActions: { walk: "idle", hunt: "idle" },
+  },
+  scorpion: {
+    // Enemy (tier 2, deserts and badlands). scripts/draw-scorpion.mjs:
+    // block 0 = scuttle, 1 = idle (stinger sways), 2 = strike.
+    url: "/assets/animals/scorpion.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 0.9, originX: 0.5, originY: 0.85, labelHeight: 20,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 12, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 12, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  lurker: {
+    // Enemy (tier 3, swamps). scripts/draw-lurker.mjs: block 0 = hop,
+    // 1 = idle (throat pulses), 2 = lunge.
+    url: "/assets/animals/lurker.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1, originX: 0.5, originY: 0.88, labelHeight: 20,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 8, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 10, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  shade: {
+    // Enemy (tier 3, darkwood; day and night). scripts/draw-wisp.mjs shade.
+    url: "/assets/animals/shade.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 0.9, originX: 0.5, originY: 0.92, labelHeight: 26,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 10, loop: true },
+      hover: { block: 0, frames: 4, frameRate: 6, loop: true },
+    },
+    stateActions: { walk: "hover" },
+  },
   wisp: {
     // Enemy (tier 3, night only). Original art drawn by scripts/draw-wisp.mjs:
     // one float/flicker block, faster while moving.

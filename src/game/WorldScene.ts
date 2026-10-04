@@ -2,8 +2,9 @@ import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
+import { RIDE_FRAMES, riderSheet } from "./riding";
 import { CROP_KINDS } from "@/lib/crops";
-import { REGIONS, regionAt } from "@/lib/regions";
+import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
 import { FishingController } from "./fishing";
@@ -31,6 +32,10 @@ import {
 } from "./worldTilemap";
 import { wildsNameOf } from "@/lib/terrain/wilds";
 import { treeFromTile, trunkPoint } from "@/lib/trees";
+import { TOWNS } from "@/lib/settlements";
+import { boardPoint } from "@/lib/bounties";
+import { RELICS, relicPoint } from "@/lib/relics";
+import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
@@ -53,10 +58,9 @@ const DEPTH_FOG = DEPTH_CANOPY + 31;
 const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
-const PLAYER_SPEED = 120;
-// Running (hold Shift / push the joystick all the way): speed multiplier
-// and how much faster the legs cycle.
-const RUN_SPEED_MULT = 1.75;
+// Walking speed and the running multiplier (hold Shift / push the joystick
+// all the way) are shared with the server's speed limit
+// (src/lib/speedGuard.ts). Running also cycles the legs faster.
 const RUN_ANIM_SCALE = 1.6;
 // Remote characters covering ground faster than this (px/s) are shown
 // running (their positions arrive via the relay, not as a run flag).
@@ -116,6 +120,16 @@ export class WorldScene extends Phaser.Scene {
   private nodes = new Map<number, Phaser.GameObjects.Image>();
   /** Dark wet-soil patch under crops watered in their current stage. */
   private wetSoil = new Map<number, Phaser.GameObjects.Ellipse>();
+  /** Whether the local player owns a bicycle (told by the HUD). */
+  private hasBike = false;
+  /** Riding sheets being built (texture keys). */
+  private rideBuilding = new Set<string>();
+  /** Hidden relics still to find glint where they lie (null until loaded). */
+  private relicsFound: Set<string> | null = null;
+  private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
+  /** Relics we've already pointed out ("something glints nearby"). */
+  private relicsNoticed = new Set<string>();
+  private relicCheckAt = 0;
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -315,7 +329,15 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(inputRouter.register({
       id: "player.fish",
       scope: "gameplay",
-      run: () => this.fishing?.press(this.time.now),
+      run: () => {
+        if (this.player?.mounted) { bus.emit("toast", { text: "Get off your bike to fish (V).", kind: "info" }); return; }
+        this.fishing?.press(this.time.now);
+      },
+    }));
+    this.unsub.push(inputRouter.register({
+      id: "player.bike",
+      scope: "gameplay",
+      run: () => this.toggleBike(),
     }));
     this.unsub.push(inputRouter.register({
       id: "player.attack",
@@ -377,13 +399,20 @@ export class WorldScene extends Phaser.Scene {
       const dx = x - p.sprite.x, dy = y - p.sprite.y;
       const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
       const tool = e.tool;
+      this.setMounted(false); // hop off to swing
       this.playSlash(p, facing, tool);
       this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
-    this.unsub.push(bus.on("hurt", ({ amount }) => this.showHurt(amount)));
+    this.unsub.push(bus.on("hurt", ({ amount }) => {
+      this.showHurt(amount);
+      if (this.player?.mounted) { this.setMounted(false); bus.emit("toast", { text: "💥 You're knocked off your bike!", kind: "bad" }); }
+    }));
+    this.unsub.push(bus.on("hasBike", (has) => { this.hasBike = has; if (!has) this.setMounted(false); }));
+    this.unsub.push(bus.on("dismount", () => this.setMounted(false)));
     this.unsub.push(bus.on("knockout", ({ x, y }) => {
       const p = this.player;
       if (!p) return;
+      this.setMounted(false);
       p.sprite.setPosition(x, y);
       p.tx = x; p.ty = y;
       this.moveTarget = null;
@@ -393,6 +422,7 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("teleport", ({ x, y }) => {
       const p = this.player;
       if (!p) return;
+      this.setMounted(false);
       const cam = this.cameras.main;
       cam.fadeOut(220, 0, 0, 0);
       cam.once("camerafadeoutcomplete", () => {
@@ -406,6 +436,9 @@ export class WorldScene extends Phaser.Scene {
       });
     }));
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
+    this.unsub.push(bus.on("relicsFound", (keys) => { this.relicsFound = new Set(keys); this.syncRelics(); }));
+    this.unsub.push(bus.on("relicPicked", (p) => this.showRelicPicked(p.key, p.have, p.total)));
+    bus.emit("sceneReady", undefined);
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
     // Phase 2: replace 1 Hz polling with WebSocket push.
@@ -461,18 +494,31 @@ export class WorldScene extends Phaser.Scene {
           if (!this.alive()) return;
           this.playEnemyAttack(id, x, y);
         },
+        onSaloon: ({ inn }) => bus.emit("saloon", { inn }),
+        // The server's speed limit says we're really here: snap back.
+        onCorrect: ({ x, y }) => {
+          const p = this.player;
+          if (!this.alive() || !p) return;
+          p.sprite.setPosition(x, y);
+          p.tx = x; p.ty = y;
+          this.moveTarget = null;
+          this.marker.setVisible(false);
+          this.placeChar(p);
+          this.stream?.setPosition(x, y, p.facing, !!p.mounted);
+        },
         onKnockout: ({ x, y, coinsLost, by }) => {
           if (!this.alive()) return;
           bus.emit("knockout", { x, y, coinsLost });
           bus.emit("toast", { text: `The ${by} knocked you out! You wake in the village square${coinsLost ? `, ${coinsLost} coins lighter` : ""}.`, kind: "bad" });
           bus.emit("refreshMe", undefined);
         },
-        onPlayerPos: ({ id, x, y, facing }) => {
+        onPlayerPos: ({ id, x, y, facing, mounted }) => {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
           if (!ent) return; // not in our proximity window yet
           ent.tx = x;
           ent.ty = y;
+          ent.mounted = mounted === true;
           if (facing === "up" || facing === "down" || facing === "left" || facing === "right") {
             ent.facing = facing;
           }
@@ -611,7 +657,7 @@ export class WorldScene extends Phaser.Scene {
     // animals
     this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name, move: a.move })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
     // enemies
-    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: this.distTo(e.x, e.y) }));
+    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move, name: e.title ? `★ ${e.title}` : undefined, big: !!e.title })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, title: e.name, distance: this.distTo(e.x, e.y) }));
     // ground items
     const seenItems = new Set<number>();
     for (const it of s.groundItems) {
@@ -749,7 +795,7 @@ export class WorldScene extends Phaser.Scene {
     e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null; mounted?: boolean }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
@@ -776,6 +822,7 @@ export class WorldScene extends Phaser.Scene {
         void this.ensureCharTexture(ent, p.appearance, eq, weapon);
       }
       ent.tx = p.x; ent.ty = p.y;
+      if (ent !== this.player) ent.mounted = p.mounted === true;
       this.applyTitle(ent, p.title ?? null);
       if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
@@ -785,7 +832,7 @@ export class WorldScene extends Phaser.Scene {
     for (const [id, ent] of map) if (!seen.has(id)) { this.destroyChar(ent); map.delete(id); }
   }
 
-  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string; move: Move | null }>(
+  private syncCritters<T extends { id: number; kind: string; x: number; y: number; facing: string; state: string; hp: number; maxHp: number; name?: string; big?: boolean; move: Move | null }>(
     map: Map<number, CritterEnt>, list: T[], speed: number, sel: (t: T) => Selection,
   ) {
     const seen = new Set<number>();
@@ -800,17 +847,18 @@ export class WorldScene extends Phaser.Scene {
           ? this.add.sprite(a.x, a.y, sheetKey(a.kind), frameIndex(def, "walk", def.dirRows[0], 0)).setOrigin(def.originX, def.originY).setScale(def.scale)
           : this.add.image(a.x, a.y, `cr_${a.kind}`).setOrigin(0.5, 1);
         sprite.setDepth(DEPTH_CHAR_BASE + a.y);
+        if (a.big) sprite.setScale((def?.scale ?? 1) * 1.4); // wanted beasts loom
         sprite.setInteractive({ useHandCursor: true });
         sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(a); s.distance = this.distTo(sprite.x, sprite.y); this.select(s); });
         // Height of the art above the anchor (frames are padded, so not sprite.height).
-        const top = def ? def.labelHeight * def.scale : sprite.height;
+        const top = (def ? def.labelHeight * def.scale : sprite.height) * (a.big ? 1.4 : 1);
         ent = { sprite, kind: a.kind, def, top, tx: a.x, ty: a.y, facing: a.facing, state: a.state, speed, hp: a.hp, maxHp: a.maxHp, phase: Math.random() * 10 };
         // Flyers (and the boss) draw their own shadow into their art.
         if (!FLYERS.has(a.kind)) {
           const w = def ? def.frameWidth * def.scale * 0.55 : sprite.width * 0.7;
           ent.shadow = this.add.image(a.x, a.y, "fx_shadow").setScale(w / 24, Math.max(0.7, w / 30)).setDepth(DEPTH_CHAR_BASE + a.y - 1);
         }
-        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: "9px", color: "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(0.85);
+        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: a.big ? "10px" : "9px", color: a.big ? "#ffcf5a" : "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(a.big ? 1 : 0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         map.set(a.id, ent);
       }
@@ -885,6 +933,8 @@ export class WorldScene extends Phaser.Scene {
       case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
       case "player": return this.snapshot.players.some((x) => x.id === sel.id);
       case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
+      case "board": return true;
+      case "relic": return !!this.relicsFound && !this.relicsFound.has(sel.key);
       // An empty plot stays valid until something is planted in it.
       case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
     }
@@ -905,6 +955,128 @@ export class WorldScene extends Phaser.Scene {
     if (sel && this.isActionable(sel) && this.selectionExists(sel) && !this.isSpent(sel)) { bus.emit("primaryAction", sel); return; }
     this.lastSelection = null;
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
+  }
+  /** The relics still to find, each with its own look and a twinkle; a
+   *  found one pops up into the air and fades. */
+  private syncRelics(): void {
+    const found = this.relicsFound;
+    if (!found) return;
+    for (const r of RELICS) {
+      const shown = this.relicGlints.get(r.key);
+      if (found.has(r.key)) {
+        if (shown) {
+          this.relicGlints.delete(r.key);
+          this.tweens.killTweensOf([shown.img, shown.glint]);
+          shown.glint.destroy();
+          shown.img.destroy();
+        }
+        continue;
+      }
+      if (shown) continue;
+      const at = relicPoint(r);
+      const img = this.add.image(at.x, at.y + 4, `relic_${r.set}`).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + at.y);
+      img.setInteractive({ useHandCursor: true });
+      img.on("pointerdown", () => { if (this.modalOpen) return; this.select({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: this.distTo(at.x, at.y) }); });
+      const glint = this.add.image(at.x + 5, at.y - 10, "relic_glint").setDepth(DEPTH_CHAR_BASE + at.y + 1).setAlpha(0).setScale(0.5);
+      this.tweens.add({ targets: glint, alpha: 1, scale: 1.1, angle: 45, duration: 380, yoyo: true, repeat: -1, repeatDelay: 700 + Math.floor(Math.random() * 600), ease: "Sine.inOut" });
+      this.relicGlints.set(r.key, { img, glint });
+    }
+  }
+  /** A relic you just picked up: held up over your head with a burst of
+   *  sparkles and your tally for the set, Zelda-style. */
+  private showRelicPicked(key: string, have: number, total: number): void {
+    const r = RELICS.find((x) => x.key === key);
+    if (!r || !this.player) return;
+    // Everything rides in a container that follows the player.
+    const box = this.add.container(this.player.sprite.x, this.player.sprite.y - 34).setDepth(DEPTH_CANOPY + 5);
+    const img = this.add.image(0, 6, `relic_${r.set}`).setScale(0.6).setAlpha(0);
+    const burst = this.add.particles(0, -8, "relic_glint", {
+      speed: { min: 40, max: 110 }, angle: { min: 0, max: 360 }, scale: { start: 0.9, end: 0 }, alpha: { start: 1, end: 0 },
+      lifespan: 650, quantity: 14, emitting: false,
+    });
+    const badge = this.add.text(0, -26, total ? `${r.name}  ${have}/${total}` : r.name, {
+      fontSize: "10px", color: "#fff7d6", backgroundColor: "rgba(40,24,8,0.75)", padding: { x: 4, y: 2 },
+    }).setOrigin(0.5, 1).setResolution(2).setAlpha(0);
+    box.add([burst, img, badge]);
+    const follow = () => { const q = this.player?.sprite; if (q) box.setPosition(q.x, q.y - 34); };
+    this.events.on("update", follow);
+    this.tweens.add({ targets: img, y: -8, scale: 1.6, alpha: 1, duration: 380, ease: "Back.out", onComplete: () => burst.explode() });
+    this.tweens.add({ targets: badge, alpha: 1, duration: 300, delay: 250 });
+    this.tweens.add({
+      targets: [img, badge], alpha: 0, duration: 450, delay: 1700,
+      onComplete: () => { this.events.off("update", follow); box.destroy(); },
+    });
+  }
+  /** Point out a relic the first time you come near it. */
+  private noticeRelics(time: number): void {
+    if (!this.player || !this.relicsFound || time < this.relicCheckAt) return;
+    this.relicCheckAt = time + 1000;
+    const p = this.player.sprite;
+    for (const r of RELICS) {
+      if (this.relicsFound.has(r.key) || this.relicsNoticed.has(r.key)) continue;
+      const at = relicPoint(r);
+      if (Math.hypot(at.x - p.x, at.y - p.y) > 12 * 16) continue;
+      this.relicsNoticed.add(r.key);
+      bus.emit("toast", { text: "✨ Something's glinting on the ground nearby — look around!", kind: "info" });
+    }
+  }
+  /** Get on or off your bike. */
+  private toggleBike(): void {
+    const p = this.player;
+    if (!p || this.modalOpen) return;
+    if (p.mounted) { this.setMounted(false); return; }
+    if (!this.hasBike) { bus.emit("toast", { text: "You need a bicycle — Pip and the town shops sell them.", kind: "info" }); return; }
+    if (this.fishing?.active) return;
+    this.setMounted(true);
+  }
+  private setMounted(on: boolean): void {
+    const p = this.player;
+    if (!p || !!p.mounted === on) return;
+    p.mounted = on;
+    if (on) this.ensureRideSheet(p);
+    this.playWalk(p, this.playerMoving);
+    this.placeChar(p);
+    this.stream?.setPosition(p.sprite.x, p.sprite.y, p.facing, on);
+  }
+  /** A rider casts a longer shadow side-on. */
+  private placeBike(e: CharEnt): void {
+    e.shadow?.setScale(e.mounted && (e.facing === "left" || e.facing === "right") ? 1.5 : 0.9, 0.9);
+  }
+  /**
+   * Build (once per look) the character's riding sheet — their own head and
+   * torso on a bike, legs pedalling (src/game/riding.ts) — with a pedalling
+   * animation per direction. Sets `e.rideKey` when ready.
+   */
+  private ensureRideSheet(e: CharEnt): void {
+    const base = e.texKey;
+    if (!base || !e.app) return;
+    const key = `${base}_ride`;
+    if (e.rideKey === key) return;
+    if (this.textures.exists(key)) { e.rideKey = key; return; }
+    if (this.rideBuilding.has(key)) return;
+    this.rideBuilding.add(key);
+    const app = e.app;
+    void composeCharacter(app, e.equipped, e.weapon).then((sheet) => {
+      this.rideBuilding.delete(key);
+      if (!this.alive() || this.textures.exists(key)) { if (this.alive()) e.rideKey = key; return; }
+      const ctx = sheet.getContext("2d");
+      if (!ctx) return;
+      const img = ctx.getImageData(0, 0, sheet.width, sheet.height);
+      const ride = riderSheet({ w: img.width, h: img.height, d: img.data }, app.skin, app.body === "female" ? "female" : "male");
+      const c = document.createElement("canvas");
+      c.width = ride.w; c.height = ride.h;
+      const cctx = c.getContext("2d")!;
+      const out = cctx.createImageData(ride.w, ride.h);
+      out.data.set(ride.d);
+      cctx.putImageData(out, 0, 0);
+      const tex = this.textures.addCanvas(key, c);
+      if (!tex) return;
+      for (let r = 0; r < 4; r++) for (let f = 0; f < RIDE_FRAMES; f++) tex.add(`${r}_${f}`, 0, f * FRAME, r * FRAME, FRAME, FRAME);
+      for (const dir of Object.keys(ROWS) as Facing[]) {
+        this.anims.create({ key: `${key}_ride_${dir}`, frames: Array.from({ length: RIDE_FRAMES }, (_, i) => ({ key, frame: `${ROWS[dir]}_${i}` })), frameRate: 9, repeat: -1 });
+      }
+      e.rideKey = key;
+    }).catch(() => this.rideBuilding.delete(key));
   }
   /** A felled tree / picked-clean bush: nothing to do until it regrows. */
   private isSpent(sel: Selection): boolean {
@@ -955,6 +1127,10 @@ export class WorldScene extends Phaser.Scene {
     for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
     for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
+    // Hidden relics you haven't found yet.
+    if (this.relicsFound) for (const r of RELICS) if (!this.relicsFound.has(r.key)) { const at = relicPoint(r); add(at.x, at.y, (d) => ({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: d })); }
+    // Town bounty boards.
+    for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
     for (const t of this.treesNear(p.x, p.y, 64)) { const at = trunkPoint(t.vx, t.vy); add(at.x, at.y, (d) => ({ type: "tree", vx: t.vx, vy: t.vy, kind: t.kind, x: at.x, y: at.y, distance: d })); }
     cands.sort((a, b) => a.score - b.score);
@@ -967,6 +1143,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.player) {
       this.updatePlayer(dt);
       this.syncStreamingChunks();
+      this.noticeRelics(time);
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);
@@ -1003,7 +1180,8 @@ export class WorldScene extends Phaser.Scene {
     const prev = this.lastRegionKey;
     this.lastRegionKey = key;
     if (key === prev || key === null) return; // unchanged / open country
-    const r = REGIONS.find((x) => x.key === key)!;
+    const r = placeByKey(key);
+    if (!r) return;
     // Title-case the name for the sign ("the Silverrun" → "The Silverrun").
     // First sight (spawn) is quiet: the book records it, no banner.
     bus.emit("region", { name: r.name.charAt(0).toUpperCase() + r.name.slice(1), key: r.key, quiet: prev === undefined });
@@ -1042,8 +1220,8 @@ export class WorldScene extends Phaser.Scene {
     if (moving) {
       const len = Math.hypot(vx, vy);
       const running = inputRouter.isHeld("move.run"); // also Shift+click to run somewhere
-      const step = PLAYER_SPEED * (running ? RUN_SPEED_MULT : 1) * dt;
-      p.sprite.anims.timeScale = running ? RUN_ANIM_SCALE : 1;
+      const step = PLAYER_SPEED * (p.mounted ? BIKE_SPEED_MULT : running ? RUN_SPEED_MULT : 1) * dt;
+      p.sprite.anims.timeScale = p.mounted ? 1.4 : running ? RUN_ANIM_SCALE : 1;
       const nx = p.sprite.x + (vx / len) * step, ny = p.sprite.y + (vy / len) * step;
       let movedAny = false;
       if (isWalkable(nx, p.sprite.y)) { p.sprite.x = nx; movedAny = true; }
@@ -1058,7 +1236,7 @@ export class WorldScene extends Phaser.Scene {
     // heartbeats to refreshLastSeen (10s throttled) and uses the position
     // to update proximity tracking. Sending every frame is cheap because
     // the WS layer only carries the latest snapshot forward.
-    if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing);
+    if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing, !!p.mounted);
     // Tell the HUD where we are so its proximity UI (Pick up / Gather / …)
     // reflects the live position, not the up-to-10s-stale server row.
     // Throttled to ~10 Hz and only on a meaningful move.
@@ -1122,6 +1300,7 @@ export class WorldScene extends Phaser.Scene {
   private attack() {
     const p = this.player;
     if (!p || this.modalOpen || !this.snapshot) return;
+    if (p.mounted) { bus.emit("toast", { text: "Get off your bike to fight (V).", kind: "info" }); return; }
     if (p.actingUntil !== undefined && this.time.now < p.actingUntil) return;
     let target: EnemySnapshot | null = null;
     let best = ATTACK_REACH_PX;
@@ -1236,6 +1415,17 @@ export class WorldScene extends Phaser.Scene {
   private playWalk(e: CharEnt, moving: boolean) {
     if (!e.texKey) return;
     if (e.actingUntil !== undefined && this.time.now < e.actingUntil) return; // mid-swing
+    // On a bike: pedal (or coast with one foot down) on the riding sheet.
+    if (e.mounted) {
+      this.ensureRideSheet(e);
+      const rk = e.rideKey;
+      if (rk && rk === `${e.texKey}_ride`) {
+        const ride = `${rk}_ride_${e.facing}`;
+        if (moving) { if (e.sprite.anims.currentAnim?.key !== ride || !e.sprite.anims.isPlaying) e.sprite.play(ride, true); }
+        else if (e.sprite.anims.isPlaying || e.sprite.texture.key !== rk || e.sprite.frame.name !== `${ROWS[e.facing]}_0`) { e.sprite.stop(); e.sprite.setTexture(rk, `${ROWS[e.facing]}_0`); }
+        return;
+      }
+    }
     const anim = `${e.texKey}_walk_${e.facing}`;
     if (moving) { if (e.sprite.anims.currentAnim?.key !== anim || !e.sprite.anims.isPlaying) e.sprite.play(anim, true); }
     else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0` || e.sprite.texture.key !== e.texKey) {
@@ -1248,6 +1438,7 @@ export class WorldScene extends Phaser.Scene {
   private placeChar(e: CharEnt) {
     const { x, y } = e.sprite;
     e.sprite.setDepth(DEPTH_CHAR_BASE + y);
+    this.placeBike(e);
     e.shadow?.setPosition(x, y - 4).setDepth(DEPTH_CHAR_BASE + y - 1);
     e.titleText?.setPosition(x, y - 59).setDepth(DEPTH_CHAR_BASE + y + 2);
     if (e.emote) {

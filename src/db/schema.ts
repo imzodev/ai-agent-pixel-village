@@ -1,3 +1,4 @@
+import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloon";
 import {
   bigint,
   pgMaterializedView,
@@ -31,6 +32,7 @@ import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
+import type { BountyData, BountyReward } from "@/types/bounty";
 import type { Activity, ActivityParticipant } from "@/types/activity";
 
 // Re-export domain types so existing imports of `import type { Appearance }
@@ -443,6 +445,16 @@ export const enemies = pgTable("enemies", {
   moveAfter: text("move_after"),
   /** World boss only: damage dealt per character id, for shared rewards. */
   damage: jsonb("damage").$type<Record<string, number>>(),
+  /** Spawned around players in the continent's wilds (home = targetX/Y);
+   *  `nearAt` is the last time a player was close — they despawn after. */
+  wild: boolean("wild").notNull().default(false),
+  nearAt: timestamp("near_at"),
+  /** Wanted beasts (src/lib/bounties.ts): a name, tougher stats, their bounty. */
+  title: text("title"),
+  elite: boolean("elite").notNull().default(false),
+  bountyId: integer("bounty_id"),
+  /** Attackers of a random encounter (src/lib/encounters.ts). */
+  encounterId: integer("encounter_id"),
 }, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
@@ -503,6 +515,168 @@ export const characterCollection = pgTable(
     firstAt: timestamp("first_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("character_collection_pk").on(t.characterId, t.kind, t.key)],
+);
+
+/** Fog of war (src/lib/worldAtlas.ts): chunks a character has seen, as a
+ *  64-bit mask per 8×8-chunk block — sparse, so it scales with exploring. */
+export const characterMapSeen = pgTable(
+  "character_map_seen",
+  {
+    characterId: integer("character_id").notNull(),
+    bx: integer("bx").notNull(),
+    by: integer("by").notNull(),
+    mask: bigint("mask", { mode: "bigint" }).notNull(),
+  },
+  (t) => [uniqueIndex("character_map_seen_pk").on(t.characterId, t.bx, t.by)],
+);
+
+/** Random encounters in the wilds (src/lib/encounters.ts). */
+export const encounters = pgTable("encounters", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull(),
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  state: text("state").notNull().default("active"), // active | resolved
+  npcId: integer("npc_id"),
+  /** Players who struck one of its attackers (only they share a fight's reward). */
+  fighters: jsonb("fighters").$type<number[]>().notNull().default([]),
+  /** Players paid when it resolved. */
+  rewarded: jsonb("rewarded").$type<number[]>().notNull().default([]),
+  expiresAt: timestamp("expires_at").notNull(),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/** Treasure maps (src/lib/treasure.ts): where each one leads. The bag item
+ *  `treasure_map` carries only `{ mapId }`, so the spot never reaches the
+ *  client; the sketch is drawn on the server. */
+export const treasureMaps = pgTable(
+  "treasure_maps",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    tx: integer("tx").notNull(),
+    ty: integer("ty").notNull(),
+    tier: integer("tier").notNull(),
+    /** 1–3 on a trail to a legendary cache, else null. */
+    part: integer("part"),
+    /** Where the X sits in the sketch (tiles off its centre). */
+    ox: integer("ox").notNull().default(0),
+    oy: integer("oy").notNull().default(0),
+    /** Who bought it from an innkeeper (null: earned). Counts toward the
+     *  buyer's daily limit even if the map changes hands. */
+    boughtBy: integer("bought_by"),
+    dugAt: timestamp("dug_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("treasure_maps_char_idx").on(t.characterId)],
+);
+
+/** Saloon games (src/lib/saloonServer.ts). A player's blackjack hand in
+ *  progress (the shoe stays here). */
+export const saloonHands = pgTable("saloon_hands", {
+  characterId: integer("character_id").primaryKey(),
+  hand: jsonb("hand").$type<BlackjackHand>().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** One liar's dice table per inn; `version` guards concurrent moves. */
+export const diceTables = pgTable("dice_tables", {
+  innKey: text("inn_key").primaryKey(),
+  state: jsonb("state").$type<DiceTableState>().notNull(),
+  version: integer("version").notNull().default(0),
+});
+
+/** Arm-wrestling matches: a player against the innkeeper (b null) or another player. */
+export const armMatches = pgTable(
+  "arm_matches",
+  {
+    id: serial("id").primaryKey(),
+    innKey: text("inn_key").notNull(),
+    a: integer("a").notNull(),
+    b: integer("b"),
+    status: text("status").notNull(), // invited | playing | done
+    state: jsonb("state").$type<ArmMatchState>().notNull(),
+    version: integer("version").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("arm_matches_a_idx").on(t.a), index("arm_matches_b_idx").on(t.b)],
+);
+
+/** Every game's result for a player: daily limits and the weekly leaderboard. */
+export const saloonResults = pgTable(
+  "saloon_results",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    game: text("game").notNull(),
+    net: integer("net").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("saloon_results_char_at_idx").on(t.characterId, t.at), index("saloon_results_at_idx").on(t.at)],
+);
+
+/** Wild patches a character has picked (src/lib/forage.ts): each player
+ *  forages every patch on their own cooldown. */
+export const forageClaims = pgTable(
+  "forage_claims",
+  {
+    characterId: integer("character_id").notNull(),
+    patch: text("patch").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (t) => [uniqueIndex("forage_claims_pk").on(t.characterId, t.patch)],
+);
+
+/** Bounties posted on a town's notice board (src/lib/bounties.ts). */
+export const bounties = pgTable(
+  "bounties",
+  {
+    id: serial("id").primaryKey(),
+    town: text("town").notNull(),
+    kind: text("kind").notNull(),
+    data: jsonb("data").$type<BountyData>().notNull(),
+    reward: jsonb("reward").$type<BountyReward>().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("bounties_town_idx").on(t.town, t.expiresAt)],
+);
+
+/** Bounties a character has taken. */
+export const characterBounties = pgTable(
+  "character_bounties",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    bountyId: integer("bounty_id").notNull(),
+    progress: integer("progress").notNull().default(0),
+    status: text("status").notNull().default("active"), // active | done (turned in)
+    acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_bounties_pk").on(t.characterId, t.bountyId)],
+);
+
+/** Standing with each continent town (src/lib/reputation.ts). */
+export const characterReputation = pgTable(
+  "character_reputation",
+  {
+    characterId: integer("character_id").notNull(),
+    town: text("town").notNull(),
+    points: integer("points").notNull().default(0),
+  },
+  (t) => [uniqueIndex("character_reputation_pk").on(t.characterId, t.town)],
+);
+
+/** Waystones a character has attuned (fast-travel destinations). */
+export const characterWaystones = pgTable(
+  "character_waystones",
+  {
+    characterId: integer("character_id").notNull(),
+    key: text("key").notNull(),
+    attunedAt: timestamp("attuned_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_waystones_pk").on(t.characterId, t.key)],
 );
 
 /** Generated trees players are chopping or have felled (src/lib/trees.ts),

@@ -1,4 +1,5 @@
 import type Phaser from "phaser";
+import { RELIC_ART } from "@/lib/relicArt";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
 import { ANIMAL_SPRITES } from "./animalSprites";
@@ -114,6 +115,10 @@ export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "rain", ["b", "b", "b", "b", "b", "b"], { b: "#bcdcf5" }, 1);
   pixelTexture(scene, "snow", [".ww.", "wwww", "wwww", ".ww."], { w: "#ffffff" }, 1);
   pixelTexture(scene, "shadow", ["..oooo..", ".oooooo.", "oooooooo", ".oooooo.", "..oooo.."], { o: "rgba(0,0,0,0.25)" }, 3);
+  // A hidden relic's glint: a small four-pointed star.
+  pixelTexture(scene, "relic_glint", ["...w...", "...w...", "..wyw..", "wwyyyww", "..wyw..", "...w...", "...w..."], { w: "#fffbe0", y: "#ffd54a" }, 2);
+  // The relics themselves, one look per set (src/lib/relicArt.ts).
+  for (const [set, art] of Object.entries(RELIC_ART)) pixelTexture(scene, `relic_${set}`, [...art.rows], art.palette, 2);
   pixelTexture(scene, "marker", ["...y...", "..yyy..", ".yyyyy.", "...y...", "...y..."], { y: "#fff176" }, 2);
 }
 

@@ -26,7 +26,7 @@ import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, enemies, sessions, users } from "@/db/schema";
+import { characters, enemies, inventory, sessions, users } from "@/db/schema";
 import { chunkAtWorldPx } from "@/lib/chunkCollision";
 import { getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
@@ -48,7 +48,10 @@ import { trunkPoint } from "@/lib/trees";
 import type { ChunkRef } from "@/types/trees";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
-import type { Connection, WsSharedState } from "@/types/websocket";
+import { WANTED_DMG_MULT } from "@/lib/bounties";
+import { guardStep, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
+import { BIKE_ITEM } from "@/lib/bike";
+import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
 
 const WS_PATH = "/ws";
 
@@ -95,14 +98,76 @@ function getSharedState(): WsSharedState {
   const g = globalThis as unknown as Record<string, WsSharedState | undefined>;
   let s = g[SHARED_STATE_KEY];
   if (!s) {
-    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null };
+    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null, guards: new Map(), bikes: new Map() };
     g[SHARED_STATE_KEY] = s;
   }
+  // Added later: a hot-reloaded process may hold an older state object.
+  s.guards ??= new Map();
+  s.bikes ??= new Map();
   return s;
 }
 
 const shared = getSharedState();
 const connections = shared.connections;
+const guards = shared.guards;
+const bikes = shared.bikes;
+
+// ── Speed limit (src/lib/speedGuard.ts) ────────────────────────────────
+/** How long a "does this player own a bike" answer is trusted. */
+const BIKE_CHECK_MS = 20_000;
+const CORRECT_MIN_INTERVAL_MS = 250;
+
+/** Look up (again) whether a player owns a bicycle. */
+export async function refreshBikeOwnership(playerId: number): Promise<void> {
+  const [r] = await db.select({ id: inventory.id }).from(inventory).where(and(eq(inventory.characterId, playerId), eq(inventory.itemKey, BIKE_ITEM))).limit(1);
+  bikes.set(playerId, { has: !!r, at: Date.now() });
+}
+
+/** Whether a player owns a bike, from the cache (refreshed in the background). */
+function ownsBike(playerId: number): boolean {
+  const b = bikes.get(playerId);
+  if (!b || Date.now() - b.at > BIKE_CHECK_MS) {
+    bikes.set(playerId, { has: b?.has ?? false, at: Date.now() }); // one lookup at a time
+    void refreshBikeOwnership(playerId).catch(() => {});
+  }
+  return b?.has ?? false;
+}
+
+/**
+ * Check a client's reported position against its speed budget. Returns the
+ * position to believe; a client that moved too far is told where it is.
+ */
+function acceptPosition(conn: Connection, x: number, y: number, mounted: boolean): { x: number; y: number } {
+  const now = Date.now();
+  let g = guards.get(conn.playerId);
+  if (!g) { g = newGuard(conn.homePx, conn.homePy, now); guards.set(conn.playerId, g); }
+  conn.mounted = mounted && ownsBike(conn.playerId);
+  const r = guardStep(g, x, y, now, conn.mounted);
+  if (!r.ok && now - (conn.lastCorrectAt ?? 0) >= CORRECT_MIN_INTERVAL_MS) {
+    conn.lastCorrectAt = now;
+    try { conn.ws.send(JSON.stringify({ type: "correct", x: r.x, y: r.y })); } catch { /* socket closed */ }
+  }
+  return r;
+}
+
+/**
+ * The server moved a player itself (waystone travel, a portal, a
+ * knockout): reset their speed guard and live position to there.
+ */
+export function placePlayer(playerId: number, x: number, y: number): void {
+  const now = Date.now();
+  const g = guards.get(playerId);
+  if (g) placeGuard(g, x, y, now); else guards.set(playerId, { ...newGuard(x, y, now), budget: 0 });
+  const c = connections.get(playerId);
+  if (c) {
+    c.homePx = x;
+    c.homePy = y;
+    const { cx, cy } = chunkAtWorldPx(x, y);
+    c.homeCx = cx;
+    c.homeCy = cy;
+    c.mounted = false;
+  }
+}
 const SHARD_ID = localShardId();
 
 // Movement relay: how far a player's `pos` reaches, and the per-connection
@@ -136,6 +201,7 @@ function applyLivePositions(snap: WorldSnapshot): void {
       p.x = c.homePx;
       p.y = c.homePy;
       p.facing = c.homeFacing;
+      p.mounted = !!c.mounted;
     }
   }
   if (snap.me) {
@@ -175,6 +241,16 @@ async function sendSnapshot(conn: Connection, opts?: { bypassRedis?: boolean }):
 
 /** Mark the world dirty near (x, y) and schedule a coalesced push. */
 /** Connected players within `r` px of (x, y) (live positions). */
+/** Nudge these players (if connected here) that a saloon game changed. */
+export function nudgeSaloon(playerIds: readonly number[], inn: string): void {
+  const msg = JSON.stringify({ type: "saloon", inn });
+  for (const id of playerIds) {
+    const c = connections.get(id);
+    if (!c) continue;
+    try { c.ws.send(msg); } catch { /* socket closed */ }
+  }
+}
+
 export function livePlayersNear(x: number, y: number, r: number): number[] {
   const out: number[] = [];
   for (const c of connections.values()) if (Math.hypot(c.homePx - x, c.homePy - y) <= r) out.push(c.playerId);
@@ -207,7 +283,7 @@ async function flushDirty(): Promise<void> {
 
 /** Relay a player's live position to nearby connections. */
 function relayPosition(from: Connection, x: number, y: number, facing: Facing): void {
-  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing });
+  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing, mounted: !!from.mounted });
   for (const conn of connections.values()) {
     if (conn === from) continue;
     if (conn.ws.readyState !== conn.ws.OPEN) continue;
@@ -267,14 +343,22 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     return;
   }
 
-  const { cx, cy } = chunkAtWorldPx(auth.x, auth.y);
+  // Pick up the speed guard where it left off (a reconnect may catch up on
+  // the time it was away, no more); a first connection starts it at the
+  // saved position.
+  const now = Date.now();
+  let guard = guards.get(auth.playerId);
+  if (guard) resumeGuard(guard, now);
+  else { guard = newGuard(auth.x, auth.y, now); guards.set(auth.playerId, guard); }
+  void refreshBikeOwnership(auth.playerId).catch(() => {});
+  const { cx, cy } = chunkAtWorldPx(guard.x, guard.y);
   const conn: Connection = {
     ws,
     playerId: auth.playerId,
     homeCx: cx,
     homeCy: cy,
-    homePx: auth.x,
-    homePy: auth.y,
+    homePx: guard.x,
+    homePy: guard.y,
     homeFacing: "down",
     lastPresenceAt: 0,
     lastVersion: 0,
@@ -337,7 +421,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
 }
 
 function onMessage(conn: Connection, raw: string): void {
-  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string };
+  let msg: WsInbound;
   try {
     msg = JSON.parse(raw);
   } catch {
@@ -371,15 +455,17 @@ function onMessage(conn: Connection, raw: string): void {
     }
     return;
   }
-if (msg.type === "pos" && typeof msg.x === "number" && typeof msg.y === "number") {
+if (msg.type === "pos" && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
     // Fast in-memory movement update. Never writes the DB for position —
     // presence (below) stays on its own slow cadence. Relay to nearby
-    // players so they see movement within a frame or two.
+    // players so they see movement within a frame or two. Only as far as
+    // the speed limit allows.
     const facing = normalizeFacing(msg.facing);
-    const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
+    const at = acceptPosition(conn, msg.x!, msg.y!, msg.mounted === true);
+    const { cx, cy } = chunkAtWorldPx(at.x, at.y);
     const changedChunk = cx !== conn.homeCx || cy !== conn.homeCy;
-    conn.homePx = msg.x;
-    conn.homePy = msg.y;
+    conn.homePx = at.x;
+    conn.homePy = at.y;
     conn.homeFacing = facing;
     if (changedChunk) {
       conn.homeCx = cx;
@@ -387,18 +473,19 @@ if (msg.type === "pos" && typeof msg.x === "number" && typeof msg.y === "number"
       // Crossing a chunk edge may move us into (or out of) another
       // player's proximity window; push a fresh snapshot so sprites are
       // created/removed promptly rather than waiting for the 5 s refresh.
-      markWorldDirty(msg.x, msg.y);
+      markWorldDirty(at.x, at.y);
     }
-    relayPosition(conn, msg.x, msg.y, facing);
+    relayPosition(conn, at.x, at.y, facing);
     return;
   }
-if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "number") {
+if (msg.type === "heartbeat" && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
     const facing = normalizeFacing(msg.facing);
     // Update home chunk so subsequent refreshes use the right bbox. Cheap;
-    // happens every client heartbeat.
-    const { cx, cy } = chunkAtWorldPx(msg.x, msg.y);
-    conn.homePx = msg.x;
-    conn.homePy = msg.y;
+    // happens every client heartbeat. Speed-checked like `pos`.
+    const at = acceptPosition(conn, msg.x!, msg.y!, conn.mounted === true);
+    const { cx, cy } = chunkAtWorldPx(at.x, at.y);
+    conn.homePx = at.x;
+    conn.homePy = at.y;
     conn.homeFacing = facing;
     if (cx !== conn.homeCx || cy !== conn.homeCy) {
       conn.homeCx = cx;
@@ -413,7 +500,7 @@ if (msg.type === "heartbeat" && typeof msg.x === "number" && typeof msg.y === "n
     const now = Date.now();
     if (now - conn.lastPresenceAt >= PRESENCE_WRITE_INTERVAL_MS) {
       conn.lastPresenceAt = now;
-      refreshLastSeen(conn.playerId, { x: msg.x, y: msg.y, facing }, { force: true }).catch((err) => {
+      refreshLastSeen(conn.playerId, { x: at.x, y: at.y, facing }, { force: true }).catch((err) => {
         console.error(`[ws] refreshLastSeen failed for player ${conn.playerId}:`, err);
       });
     }
@@ -593,9 +680,11 @@ async function enemyHunts(startAt: number): Promise<void> {
   const rows = await db.select().from(enemies).where(inArray(enemies.kind, HUNTER_KINDS));
   const writes = [];
   for (const e of rows) {
-    const zone = enemyZoneAt(e.x, e.y);
-    if (!zone) continue;
-    const w = await planHunt(e, players, zone.rect, startAt, isWalkableServer);
+    // Zone hunters keep to their zone; wild ones to ~10 tiles of home.
+    const box = enemyZoneAt(e.x, e.y)?.rect
+      ?? (e.wild && e.targetX != null && e.targetY != null ? { x: e.targetX - 160, y: e.targetY - 160, w: 320, h: 320 } : null);
+    if (!box) continue;
+    const w = await planHunt(e, players, box, startAt, isWalkableServer);
     if (w) writes.push(w);
   }
   await writeMoves("enemy", writes);
@@ -619,12 +708,12 @@ async function enemyAggression(): Promise<void> {
   if (rows.length === 0) return;
   const now = Date.now();
   const live = rows.map((e) => ({ e, p: rowPositionAt(e, now), reach: enemyKind(e.kind).tier === "boss" ? BOSS_REACH_PX : ENEMY_REACH_PX }));
-  const hits: { conn: Connection; kind: string; name: string }[] = [];
+  const hits: { conn: Connection; kind: string; name: string; elite: boolean }[] = [];
   const struck = new Map<number, { x: number; y: number; ex: number; ey: number }>(); // enemy id → its victim
   for (const conn of players) {
     for (const { e, p, reach } of live) {
       if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) > reach) continue;
-      hits.push({ conn, kind: e.kind, name: enemyKind(e.kind).name });
+      hits.push({ conn, kind: e.kind, name: e.title ?? enemyKind(e.kind).name, elite: e.elite });
       if (!struck.has(e.id)) struck.set(e.id, { x: conn.homePx, y: conn.homePy, ex: p.x, ey: p.y });
     }
   }
@@ -639,15 +728,14 @@ async function enemyAggression(): Promise<void> {
   }
   const perks = await perksOfMany([...new Set(hits.map((h) => h.conn.playerId))]);
   const knockedOut = new Set<number>();
-  for (const { conn, kind, name } of hits) {
+  for (const { conn, kind, name, elite } of hits) {
     if (knockedOut.has(conn.playerId)) continue; // already out of the fight this beat
-    const amount = enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false);
+    const amount = Math.round(enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false) * (elite ? WANTED_DMG_MULT : 1));
     const r = await damagePlayer(conn.playerId, amount);
     if (!r) continue;
     try {
       if (r.knockedOut) {
-        conn.homePx = r.x!;
-        conn.homePy = r.y!;
+        placePlayer(conn.playerId, r.x!, r.y!);
         knockedOut.add(conn.playerId);
         conn.ws.send(JSON.stringify({ type: "knockout", x: r.x, y: r.y, coinsLost: r.coinsLost, hp: r.hp, by: name }));
         continue;

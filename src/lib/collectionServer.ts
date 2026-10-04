@@ -1,30 +1,18 @@
 // Server side of the collection book: record discoveries, build the book
 // view, claim page rewards, and pick a nameplate title.
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { characterCollection, characters } from "@/db/schema";
 import { addCoins } from "./game";
 import { ACHIEVEMENTS, achievementsDone, collectionPages, pageComplete } from "./collection";
 import type { CollectionBookView, CollectionCounts, CollectionKind } from "./collection";
 import { NPC_DEFS } from "./seed";
+import { reputationTitles } from "./reputationServer";
 import { TUTORIAL_DONE } from "./tutorial";
+import { grantTreasureMap } from "./treasureServer";
 
-/**
- * Count `qty` of an entry. Returns true the first time this character
- * finds it (for "📖 New: …" toasts).
- */
-export async function recordCollection(characterId: number, kind: CollectionKind, key: string, qty = 1): Promise<boolean> {
-  const [row] = await db
-    .insert(characterCollection)
-    .values({ characterId, kind, key, count: qty })
-    .onConflictDoUpdate({
-      target: [characterCollection.characterId, characterCollection.kind, characterCollection.key],
-      set: { count: sql`${characterCollection.count} + ${qty}` },
-    })
-    .returning({ count: characterCollection.count });
-  return (row?.count ?? 0) === qty;
-}
+export { recordCollection } from "./collectionStore";
 
 /** Everything a character has collected, by kind. */
 export async function collectionCounts(characterId: number): Promise<CollectionCounts & { page?: Record<string, number> }> {
@@ -40,7 +28,7 @@ const folk = () => NPC_DEFS.map((n) => ({ key: n.key, name: n.name, icon: "🧑"
 async function unlockedTitles(characterId: number, counts: Awaited<ReturnType<typeof collectionCounts>>, level: number, tutorialStep: number): Promise<string[]> {
   const pages = collectionPages(folk()).filter((p) => (counts.page?.[p.key] ?? 0) > 0).map((p) => p.reward.title);
   const done = achievementsDone(counts, level, tutorialStep === TUTORIAL_DONE);
-  return [...ACHIEVEMENTS.filter((a) => done.has(a.key)).map((a) => a.title), ...pages];
+  return [...ACHIEVEMENTS.filter((a) => done.has(a.key)).map((a) => a.title), ...pages, ...(await reputationTitles(characterId))];
 }
 
 export async function bookView(characterId: number): Promise<CollectionBookView> {
@@ -72,7 +60,9 @@ export async function claimPage(characterId: number, pageKey: string): Promise<{
     .returning({ key: characterCollection.key });
   if (first.length === 0) return { ok: false, error: "Already claimed." };
   await addCoins(characterId, page.reward.coins);
-  return { ok: true, message: `📖 ${page.name} page complete! +${page.reward.coins} coins and the title “${page.reward.title}”.` };
+  // A finished relic set comes with the first map of a treasure trail.
+  const map = page.reward.treasureMap ? await grantTreasureMap(characterId, { chain: true }) : null;
+  return { ok: true, message: `📖 ${page.name} page complete! +${page.reward.coins} coins and the title “${page.reward.title}”.${map ? ` ${map}` : ""}` };
 }
 
 /** Wear an unlocked title (or none). */

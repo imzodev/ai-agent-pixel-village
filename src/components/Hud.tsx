@@ -17,6 +17,18 @@ import CollectionBook from "./CollectionBook";
 import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
+import MapPanel from "./MapPanel";
+import BountyPanel from "./BountyPanel";
+import TreasureMapView from "./TreasureMapView";
+import { RELIC_REACH_PX } from "@/lib/relics";
+import { BIKE_ITEM } from "@/lib/bike";
+import BountyTracker from "./BountyTracker";
+import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
+import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
+import { ENCOUNTERS } from "@/lib/encounters";
+import type { EncounterView } from "@/types/encounter";
+import type { BountyView } from "@/types/bounty";
+import { WAYSTONE_ATTUNE_PX, chunksAround } from "@/lib/worldAtlas";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
@@ -59,6 +71,30 @@ export default function Hud() {
   const [ask, setAsk] = useState("");
   const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
   const [canFish, setCanFish] = useState(false);
+  // Wild patches you've picked: node id → when it's yours to pick again.
+  const [forageWait, setForageWait] = useState<ReadonlyMap<number, number>>(new Map());
+  // Random encounters near you; which you've been told about / paid for.
+  const [nearEncounters, setNearEncounters] = useState<EncounterView[]>([]);
+  const announced = useRef(new Set<number>());
+  const paid = useRef(new Set<number>());
+  // Bounty boards: the one you're reading, and the bounties you carry.
+  const [board, setBoard] = useState<{ town: string; name: string } | null>(null);
+  /** The treasure map being read (its map id). */
+  const [reading, setReading] = useState<number | null>(null);
+  /** Hidden relics already found (the scene stops drawing their glints). */
+  const relicsFound = useRef<Set<string>>(new Set());
+  const [myBounties, setMyBounties] = useState<BountyView[]>([]);
+  const bountiesRef = useRef<BountyView[]>([]);
+  const arriving = useRef(new Map<number, number>());
+  // The world map (M): open / opened at a waystone, the quest star, and
+  // chunks seen this session that haven't been saved yet.
+  const [mapOpen, setMapOpen] = useState<null | "browse" | "travel">(null);
+  const [guideTarget, setGuideTarget] = useState<{ x: number; y: number } | null>(null);
+  const [freshSeen, setFreshSeen] = useState<ReadonlySet<string>>(new Set());
+  const pendingSeen = useRef(new Set<string>());
+  const lastSeenChunk = useRef("");
+  const attuned = useRef<Set<string> | null>(null);
+  const attuning = useRef(new Set<string>());
   const talkInput = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
 
@@ -68,6 +104,10 @@ export default function Hud() {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
   const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
+  const loadBounties = useCallback(async () => {
+    const r = await api<{ bounties?: BountyView[] }>("/api/bounties?mine=1");
+    if (r.bounties) { setMyBounties(r.bounties); bountiesRef.current = r.bounties; }
+  }, []);
   /** Tutorial steps, book discoveries and the like ride along on responses. */
   const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
 
@@ -79,6 +119,7 @@ export default function Hud() {
       bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
       bus.on("canFish", setCanFish),
+      bus.on("guide", setGuideTarget),
       // Entering a region fills the book's Places page (server checks you're there).
       bus.on("region", ({ key }) => {
         void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => { if (r.new && r.message) toast(r.message, "good"); });
@@ -90,9 +131,9 @@ export default function Hud() {
         }
         // The mobile action buttons emit "map" / "quests" / "friends" too —
         // map those to existing panels when possible.
+        if (which === "map") { setMapOpen((m) => (m ? null : "browse")); return; }
         const target: "bag" | "missions" | "log" | "home" | "quests" | "friends" | null =
           which === "bag" ? "bag" :
-          which === "map" ? "log" :
           which === "quests" ? "quests" :
           which === "friends" ? "friends" :
           null;
@@ -174,8 +215,8 @@ export default function Hud() {
   }, [talkNpcId]);
   // Tell the canvas when a modal is open so Phaser can ignore clicks behind it.
   useEffect(() => {
-    bus.emit("modalOpen", !!talk);
-  }, [talk]);
+    bus.emit("modalOpen", !!talk || reading != null);
+  }, [talk, reading]);
   // Keep the selection's distance live as the player walks. Use the
   // client's live sprite position (selfPos) — `snap.me` is the server row
   // and can be ~10s stale, which delayed the Pick up / Gather buttons.
@@ -204,11 +245,11 @@ export default function Hud() {
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
-    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
+    const r = await api<{ ok?: boolean; message?: string; gained?: { itemKey: string; qty: number }[]; missions?: string[]; notices?: string[]; encounterResolved?: number | null; taken?: number; knockout?: { x: number; y: number; coinsLost: number } | null }>("/api/act", body);
     if (r.taken) bus.emit("hurt", { amount: r.taken });
     if (r.knockout) bus.emit("knockout", r.knockout);
     if (r.error) toast(r.error, "bad");
-    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); void refreshMe(); bus.emit("poke", undefined); }
+    else { if (r.message) toast(r.message, "good"); if (r.gained?.length) showGain(r.gained); if (r.missions?.length) toast(`Mission progress: ${r.missions.join(", ")}`, "good"); notify(r.notices); if (r.notices?.length) void loadBounties(); if (r.encounterResolved) paid.current.add(r.encounterResolved); void refreshMe(); bus.emit("poke", undefined); }
     return r;
   };
   // Garden, lot and seed-shop actions share act()'s toast/refresh handling.
@@ -223,14 +264,20 @@ export default function Hud() {
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string) => {
-    const r = await api<{ ok?: boolean; spent?: number }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
+    const r = await api<{ ok?: boolean; spent?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
     if (r.error) toast(r.error, "bad");
-    else { showGain([{ itemKey, qty: 1 }]); void refreshMe(); }
+    else { showGain([{ itemKey, qty: 1 }]); notify(r.notices); void refreshMe(); }
   };
   const myId = me?.me?.id ?? null;
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
+  // The scene lets you ride (V) only with a bicycle in your bag.
+  const hasBike = (me?.inventory ?? []).some((i) => i.itemKey === BIKE_ITEM && i.qty > 0);
+  useEffect(() => {
+    if (me) bus.emit("hasBike", hasBike);
+    return bus.on("sceneReady", () => { if (me) bus.emit("hasBike", hasBike); });
+  }, [me, hasBike]);
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -322,12 +369,133 @@ export default function Hud() {
     if (r.error) toast(r.error, "bad"); else { if (r.message) toast(r.message, "good"); void refreshMe(); bus.emit("poke", undefined); }
   };
   const isPortalKey = (key: string) => snap?.buildings.some((b) => b.key === key && b.kind === "portal") ?? false;
+  const isWaystoneKey = (key: string) => snap?.buildings.some((b) => b.key === key && b.kind === "waystone") ?? false;
+  /** Attune a waystone you're beside (once; the server checks you're there). */
+  const attune = useCallback(async (key: string) => {
+    if (attuned.current?.has(key) || attuning.current.has(key)) return;
+    attuning.current.add(key);
+    const r = await api<{ new?: boolean; message?: string }>("/api/waystones", { action: "attune", key });
+    attuning.current.delete(key);
+    if (r.error) return;
+    (attuned.current ??= new Set()).add(key);
+    if (r.new && r.message) toast(r.message, "good");
+  }, [toast]);
+  // Waystones you've attuned (loaded once), so walking past only asks once.
+  const loggedInNow = !!snap?.me;
+  useEffect(() => {
+    if (!loggedInNow || attuned.current) return;
+    void api<{ waystones?: { key: string; attuned: boolean }[] }>("/api/map/markers").then((m) => {
+      if (m.waystones) attuned.current = new Set(m.waystones.filter((w) => w.attuned).map((w) => w.key));
+    });
+  }, [loggedInNow]);
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const first = setTimeout(() => void loadBounties(), 0);
+    const t = setInterval(() => void loadBounties(), 20_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [loggedInNow, loadBounties]);
+  // Hidden relics you've found: the scene only draws the rest. Loaded once
+  // (only your own pickups change it); sent again whenever the scene asks,
+  // so it doesn't matter which of the two comes up first.
+  const relicsLoaded = useRef(false);
+  useEffect(() => {
+    if (!loggedInNow) return;
+    let off = false;
+    const load = (retry: number) => void api<{ found?: string[] }>("/api/relics").then((r) => {
+      if (off) return;
+      if (!r.found) { if (retry < 5) setTimeout(() => load(retry + 1), 3000 * (retry + 1)); return; }
+      relicsFound.current = new Set(r.found);
+      relicsLoaded.current = true;
+      bus.emit("relicsFound", r.found);
+    });
+    load(0);
+    const unsub = bus.on("sceneReady", () => { if (relicsLoaded.current) bus.emit("relicsFound", [...relicsFound.current]); });
+    return () => { off = true; unsub(); };
+  }, [loggedInNow]);
+  const pickUpRelic = async (key: string) => {
+    const r = await post("/api/relics", { key }) as { error?: string; have?: number; total?: number };
+    if (r.error) return;
+    relicsFound.current.add(key);
+    bus.emit("relicsFound", [...relicsFound.current]);
+    bus.emit("relicPicked", { key, have: r.have ?? 0, total: r.total ?? 0 });
+    setSel(null);
+  };
+  // Encounters: announce new ones nearby, and pay-outs you shared in.
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const poll = () => void api<{ encounters?: EncounterView[] }>("/api/encounters").then((r) => {
+      if (!r.encounters) return;
+      setNearEncounters(r.encounters);
+      for (const e of r.encounters) {
+        if (e.state === "active" && !announced.current.has(e.id)) { announced.current.add(e.id); toast(ENCOUNTERS[e.kind].call, "info"); }
+        if (e.rewardedMe && !paid.current.has(e.id)) { paid.current.add(e.id); toast(`🤝 You helped: ${e.title}. +${ENCOUNTERS[e.kind].reward.coins} 🪙`, "good"); void refreshMe(); }
+      }
+    });
+    const first = setTimeout(poll, 0);
+    const t = setInterval(poll, 8_000);
+    return () => { clearTimeout(first); clearInterval(t); };
+  }, [loggedInNow, toast, refreshMe]);
+  const helpStranger = async (id: number) => {
+    const r = await api<{ message?: string }>("/api/encounters", { action: "help", id });
+    if (r.error) { toast(r.error, "bad"); return; }
+    paid.current.add(id);
+    if (r.message) toast(r.message, "good");
+    void refreshMe();
+    setNearEncounters((list) => list.map((e) => (e.id === id ? { ...e, state: "resolved" as const, rewardedMe: true } : e)));
+  };
+  // As you walk: mark the chunks around you seen (fog of war) and attune
+  // any waystone you pass. Runs off the move event, reading the latest
+  // snapshot through a ref.
+  const buildingsRef = useRef(snap?.buildings ?? []);
+  useEffect(() => { buildingsRef.current = snap?.buildings ?? []; }, [snap?.buildings]);
+  const seenKeys = useRef(new Set<string>());
+  useEffect(() => {
+    if (!loggedInNow) return;
+    return bus.on("playerMoved", (pos) => {
+      const here = chunksAround(pos.x, pos.y);
+      const key = `${here[4].cx},${here[4].cy}`;
+      if (key !== lastSeenChunk.current) {
+        lastSeenChunk.current = key;
+        const add = here.map((c) => `${c.cx},${c.cy}`).filter((k) => !seenKeys.current.has(k));
+        if (add.length) {
+          for (const k of add) { seenKeys.current.add(k); pendingSeen.current.add(k); }
+          setFreshSeen(new Set(seenKeys.current));
+        }
+      }
+      for (const b of buildingsRef.current) {
+        if (b.kind === "waystone" && Math.hypot(b.doorX + 8 - pos.x, b.doorY - pos.y) <= WAYSTONE_ATTUNE_PX) void attune(b.key);
+      }
+      // Bounties: reaching a scouting spot, or a parcel's board, counts.
+      for (const b of bountiesRef.current) {
+        if (!b.mine || b.mine.progress >= b.mine.target) continue;
+        const spot = b.data.kind === "explore" ? b.data : b.data.kind === "delivery" ? boardPoint(b.data.toTown) : null;
+        const reach = b.data.kind === "explore" ? SPOT_REACH_PX : BOARD_REACH_PX;
+        if (!spot || Math.hypot(spot.x - pos.x, spot.y - pos.y) > reach) continue;
+        if (Date.now() - (arriving.current.get(b.id) ?? 0) < 10_000) continue;
+        arriving.current.set(b.id, Date.now());
+        void api<{ message?: string }>("/api/bounties", { action: "arrive", id: b.id }).then((r) => { if (r.message) { toast(r.message, "good"); void loadBounties(); } });
+      }
+    });
+  }, [loggedInNow, attune, toast, loadBounties]);
+  useEffect(() => {
+    if (!loggedInNow) return;
+    const flush = () => {
+      if (pendingSeen.current.size === 0) return;
+      const chunks = [...pendingSeen.current].map((k) => k.split(",").map(Number));
+      pendingSeen.current.clear();
+      void api("/api/map/seen", { chunks });
+    };
+    const t = setInterval(flush, 10_000);
+    return () => { clearInterval(t); flush(); };
+  }, [loggedInNow]);
   const enterBuilding = async (key: string, name: string) => {
-    const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number } };
+    const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number }; error?: string };
+    if (!r.error) bus.emit("dismount", undefined); // bikes stay outside
     // Portals (the cave) move you instead of opening a panel.
     if (r.teleport) bus.emit("teleport", r.teleport);
     else if (isPortalKey(key)) { /* refused (too far, …): act() already toasted */ }
     else if (key === "homes") setPanel("home");
+    else if (isWaystoneKey(key)) { void attune(key); setMapOpen("travel"); }
     else setBuilding({ key, name });
     setSel(null);
   };
@@ -383,9 +551,22 @@ export default function Hud() {
         if (d > 90) { walk(); break; }
         if (chop && !hasAxe) { toast("You need an axe. Pip sells them.", "info"); break; }
         if (chop) bus.emit("attack", { x: pos.x, y: pos.y, tool: "axe" }); // swing the axe at the trunk
-        void act({ action: "gather", id: s.id });
+        void act({ action: "gather", id: s.id }).then((r) => {
+          // Wild patches come back for you alone after a cooldown.
+          const wait = (r as { readyInMs?: number }).readyInMs ?? (r.ok && isForage(s.kind) ? FORAGE_COOLDOWN_MS[s.kind] : 0);
+          if (wait > 0) setForageWait((m) => new Map(m).set(s.id, Date.now() + wait));
+        });
         break;
       }
+      case "board":
+        if (d > BOARD_REACH_PX) { walk(); break; }
+        setBoard({ town: s.town, name: s.name });
+        setSel(null);
+        break;
+      case "relic":
+        if (d > RELIC_REACH_PX) { walk(); break; }
+        void pickUpRelic(s.key);
+        break;
       case "tree":
         // A terrain tree: a few chops fell it and open the way.
         if (d > 44) { walk(); break; }
@@ -427,6 +608,8 @@ export default function Hud() {
   // inspect → panel → building → selection. The router dispatches ui.* even
   // when a text field is focused, so Escape always works.
   const close = useCallback((): void => {
+    if (mapOpen) { setMapOpen(null); return; }
+    if (board) { setBoard(null); return; }
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
     if (craft) { setCraft(null); return; }
@@ -434,7 +617,7 @@ export default function Hud() {
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [talk, trade, craft, inspect, panel, building, sel]);
+  }, [mapOpen, board, talk, trade, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -450,7 +633,7 @@ export default function Hud() {
       inputRouter.register({
         id: "ui.map",
         scope: "ui",
-        run: () => setPanel((p) => (p === "log" ? null : "log")),
+        run: () => setMapOpen((m) => (m ? null : "browse")),
       }),
       inputRouter.register({
         id: "ui.shop",
@@ -508,6 +691,23 @@ export default function Hud() {
   return (
     <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
       <LocationBanner />
+      {loggedIn && (selfPos ?? snap?.me) && (
+        // Where you stand, in world tiles (x grows east, y grows south).
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-black/55 px-2 py-0.5 text-[11px] text-white" title="Your position in tiles (x east, y south)">
+          📍 {Math.floor((selfPos ?? snap!.me!).x / 16)}, {Math.floor((selfPos ?? snap!.me!).y / 16)}
+        </div>
+      )}
+      {loggedIn && <BountyTracker list={myBounties} />}
+      {loggedIn && board && (
+        <BountyPanel town={board.town} name={board.name} activeCount={myBounties.length} onClose={() => setBoard(null)}
+          onMessage={(text, kind, notices) => { toast(text, kind); notify(notices); void refreshMe(); }} onChanged={() => void loadBounties()} />
+      )}
+      {loggedIn && reading != null && (
+        <TreasureMapView mapId={reading} onClose={() => setReading(null)} onMessage={(text, kind) => toast(text, kind)} onDug={() => void refreshMe()} />
+      )}
+      {loggedIn && mapOpen && (
+        <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} bounties={myBounties} encounters={nearEncounters} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
+      )}
       {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
       )}
@@ -563,7 +763,8 @@ export default function Hud() {
             <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
           </>
         ) : null}
-        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>🗺️ World</TopBtn>
+        {loggedIn && <TopBtn on={() => setMapOpen(mapOpen ? null : "browse")} active={!!mapOpen}>🗺️ Map</TopBtn>}
+        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📰 World</TopBtn>
         <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
         <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60">🤖 Agent API</Link>
         {loggedIn ? (
@@ -669,6 +870,8 @@ export default function Hud() {
             const empty = sel.stage === 0;
             const chop = CROP_KINDS[sel.kind]?.needsAxe === true;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            const wait = minutesUntil(forageWait.get(sel.id) ?? 0);
+            if (wait) return <span className="text-[11px] text-stone-600">⏳ Yours again in {wait}m — others can still pick it.</span>;
             if (chop && !empty && !hasAxe) return <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>;
             return (
               <Btn on={() => commitSelection(sel)} disabled={empty}>
@@ -676,6 +879,8 @@ export default function Hud() {
               </Btn>
             );
           })()}
+          {loggedIn && sel.type === "relic" && (sel.distance > RELIC_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>✨ Pick it up {interactHint}</Btn>)}
+          {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
             : <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>)}
@@ -704,7 +909,7 @@ export default function Hud() {
             return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
-          {sel.type !== "plot" && sel.type !== "tree" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -750,6 +955,13 @@ export default function Hud() {
             <span className="font-bold">{talk.name}</span><span className="text-[12px] opacity-75">{talk.role}</span>
             {talk.sponsor && <span className="rounded px-1.5 text-[11px] font-bold text-white" style={{ background: talk.sponsor.brandColor }}>★ {talk.sponsor.businessName}</span>}
           </div>
+          {(() => {
+            // A stranger out in the wilds who needs something handed over.
+            const enc = nearEncounters.find((e) => e.npcId === talk.npcId && e.state === "active" && e.need);
+            return enc ? (
+              <div className="absolute -top-5 right-4"><button onClick={() => void helpStranger(enc.id)} className="pixel-btn bg-emerald-400 px-3 py-0.5 text-sm font-bold">🤝 Give {enc.need}</button></div>
+            ) : null;
+          })()}
           <button className="absolute right-2 top-1 text-stone-500 hover:text-stone-800" onClick={() => { setTalk(null); }}>✕</button>
           {/* Earlier lines, small; the latest NPC line types out large below. */}
           <div className="max-h-28 space-y-1 overflow-y-auto px-4 pt-5 text-[13px]">
@@ -799,7 +1011,7 @@ export default function Hud() {
       {panel && (
         <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto pixel-panel p-3 shadow-2xl">
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
-          {panel === "bag" && <BagPanel me={me} onAction={invAction} />}
+          {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
           {panel === "friends" && <FriendsPanel />}
@@ -845,7 +1057,7 @@ export default function Hud() {
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
           {bInfo?.kind === "ranch" && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
-          {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} />}
+          {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
               {npcsInBuilding.length === 0 && <div className="text-stone-500">Nobody&apos;s inside right now — the resident is probably out on the step.</div>}
@@ -861,6 +1073,11 @@ export default function Hud() {
   );
 }
 
+/** Whole minutes until `at` (rounded up), or 0 once it's passed. */
+function minutesUntil(at: number): number {
+  const ms = at - Date.now();
+  return ms > 0 ? Math.ceil(ms / 60_000) : 0;
+}
 function clockFrom(s: Snapshot) {
   const dayMs = s.dayLengthMinutes * 60_000;
   return ((((Date.now() - s.epochStart) % dayMs) / dayMs) * 24 + 7) % 24;
@@ -869,6 +1086,7 @@ function timeAgo(at: number) {
   const m = Math.floor((Date.now() - at) / 60000);
   return m < 1 ? "now" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h`;
 }
+const TREE_NAMES: Readonly<Record<string, string>> = { oak: "🌳 Oak tree", pine: "🌲 Pine tree", palm: "🌴 Palm tree", snowpine: "🌲 Snowy pine", dead: "🪵 Dead tree", dark: "🌳 Darkwood tree" };
 function selTitle(sel: Selection) {
   switch (sel.type) {
     case "npc": return `${sel.name} · ${sel.role}${sel.sponsored ? " ★" : ""}`;
@@ -884,10 +1102,12 @@ function selTitle(sel: Selection) {
     case "enemy": {
       const def = enemyKind(sel.kind);
       const tier = def.tier === "boss" ? "Boss" : `Tier ${def.tier}`;
-      return `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
+      return sel.title ? `${sel.title} · Wanted ${def.name} · ${sel.hp}/${sel.maxHp} HP` : `${def.name} · ${tier} · ${sel.hp}/${sel.maxHp} HP · ${def.xp} XP`;
     }
     case "plot": return "🌱 Garden plot";
-    case "tree": return sel.kind === "pine" ? "🌲 Pine tree" : "🌳 Oak tree";
+    case "tree": return TREE_NAMES[sel.kind] ?? "🌳 Tree";
+    case "board": return `📜 ${sel.name} bounty board`;
+    case "relic": return "✨ Something glinting on the ground";
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
@@ -974,7 +1194,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {
@@ -998,7 +1218,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-function BagPanel({ me, onAction }: { me: Me | null; onAction: (b: Record<string, unknown>, m?: string) => Promise<void> }) {
+function BagPanel({ me, onAction, onRead }: { me: Me | null; onAction: (b: Record<string, unknown>, m?: string) => Promise<void>; onRead: (mapId: number) => void }) {
   if (!me) return <div>Loading…</div>;
   if (me.inventory.length === 0) return <div className="text-stone-500">Empty. Pet a chicken, pick a berry, talk to a baker.</div>;
   return (
@@ -1008,6 +1228,7 @@ function BagPanel({ me, onAction }: { me: Me | null; onAction: (b: Record<string
           <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {i.def?.kind === "consumable" && <Sm on={() => onAction({ action: "use", inventoryId: i.id })}>Eat</Sm>}
+            {i.itemKey === "treasure_map" && typeof i.meta.mapId === "number" && <Sm on={() => onRead(i.meta.mapId as number)}>🔍 Read</Sm>}
             {i.def?.equippable && <Sm on={() => onAction({ action: "equip", inventoryId: i.id })}>{i.equipped ? "Unequip" : "Equip"}</Sm>}
             {i.def?.placeable && <span className="text-[11px] text-stone-500 self-center">place it from 🏡 Home</span>}
             {i.itemKey !== "discount" && <Sm on={() => onAction({ action: "drop", inventoryId: i.id, qty: 1 })}>Drop</Sm>}

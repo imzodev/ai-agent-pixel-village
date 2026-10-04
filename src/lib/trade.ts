@@ -8,6 +8,8 @@
 // That's it — the modal, route, NPC-conversation Sell offer, and the
 // in-character "I buy X" line pick it up automatically.
 import type { TradeConfig, TradeItem } from "./types";
+import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
+import { MERCHANT_STOCK, isMerchantKey } from "./encounters";
 import { FISH_DEFS } from "./fishing";
 
 export const TRADES: TradeConfig = {
@@ -27,6 +29,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns — two coppers. Good for pins and blades." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "A boar hide! Five coppers. Makes a fine grip." },
     { itemKey: "wolf_pelt", qty: 1, price: 6, line: "A wolf pelt? Six coppers — it'll line a good many gloves." },
+    { itemKey: "chitin", qty: 1, price: 4, line: "Scorpion chitin! Four coppers — makes the toughest buttons." },
   ],
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
@@ -40,6 +43,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "mushroom", qty: 1, price: 3, line: "Speckled mushrooms? Three coppers. Best in the grove." },
     { itemKey: "bat_wing", qty: 1, price: 2, line: "Bat wings, two coppers. Don't ask what for." },
     { itemKey: "wisp_essence", qty: 1, price: 10, line: "Wisp essence... ten coppers, and handle it gently." },
+    { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
   shopkeeper: [
     { itemKey: "mushroom", qty: 1, price: 2, line: "Mushrooms, two coppers. I'll pickle 'em." },
@@ -54,6 +58,8 @@ export const TRADES: TradeConfig = {
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns! Two coppers. They take an edge like nothing else." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "Boar hide, five coppers. Best grip wrapping there is." },
     { itemKey: "wolf_pelt", qty: 1, price: 6, line: "Wolf pelt — six coppers. You've been in Whisperwood, I see." },
+    { itemKey: "lurker_hide", qty: 1, price: 7, line: "Lurker hide, seven coppers. Wraps a hilt like nothing else." },
+    { itemKey: "frost_pelt", qty: 1, price: 9, line: "A frost pelt! Nine coppers — you've been up in the cold." },
   ],
   hm_innkeeper: [
     { itemKey: "milk", qty: 1, price: 4, line: "Fresh milk! Four coppers — the woodcutters drink it by the bucket." },
@@ -96,6 +102,7 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "pumpkin_seeds", qty: 1, price: 8, line: "Pumpkin seeds — eight coppers. Slow, but oh, the payoff.", minLevel: 5 },
     { itemKey: "axe", qty: 1, price: 25, line: "A woodcutter's axe, twenty-five coppers. The oaks are out west, past the woods." },
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers. Ponds, rivers — face the water and cast." },
+    { itemKey: "bicycle", qty: 1, price: 150, line: "A bicycle! A hundred and fifty coppers — the roads to the new towns go by in no time. Press V to ride." },
   ],
   bw_fishmonger: [
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "Thirty coppers for a good rod. The Silverrun's full of them — fish, I mean." },
@@ -120,8 +127,47 @@ export const SHOP_STOCK: TradeConfig = {
   ],
 };
 
+// ── The continent's towns: stock and buyers by job and kind of town ─────
+const REGIONAL_BUYS: Record<string, Omit<TradeItem, "qty">[]> = {
+  port: FISH_DEFS.map((f) => ({ itemKey: f.key, price: f.price, line: `${f.name}? ${f.price} coppers — fresh off the boat or not, I'll take it.` })),
+  desert: [{ itemKey: "chitin", price: 5, line: "Chitin! Five coppers — the dunes are full of it, if you're brave." }],
+  snow: [{ itemKey: "frost_pelt", price: 10, line: "A frost pelt — ten coppers. Worth its weight up here." }, { itemKey: "wood", price: 3, line: "Firewood, three coppers. Winter eats it." }],
+  swamp: [{ itemKey: "lurker_hide", price: 8, line: "Lurker hide, eight coppers. We patch the stilts with it." }, { itemKey: "herb", price: 3, line: "Fen herbs, three coppers." }],
+  darkwood: [{ itemKey: "shade_essence", price: 9, line: "Shade essence. Nine coppers, and keep your voice down." }, { itemKey: "mushroom", price: 3, line: "Darkwood mushrooms, three coppers." }],
+  hills: [{ itemKey: "wheat", price: 2, line: "Wheat, two coppers a sheaf." }, { itemKey: "pumpkin", price: 22, line: "A pumpkin! Twenty-two coppers." }, { itemKey: "wool", price: 3, line: "Wool, three coppers." }],
+};
+for (const n of SETTLEMENT_NPCS) {
+  const town = TOWNS.find((t) => t.key === n.town);
+  if (!town) continue;
+  if (n.job === "innkeeper") {
+    SHOP_STOCK[n.key] = [
+      { itemKey: "hot_stew", qty: 1, price: 8, line: `Hot stew, eight coppers. Best in ${town.name}.` },
+      { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers." },
+      { itemKey: "tea", qty: 1, price: 6, line: "Tea, six coppers. Warms the bones." },
+    ];
+    TRADES[n.key] = [
+      { itemKey: "milk", qty: 1, price: 5, line: "Milk for the kitchen — five coppers." },
+      { itemKey: "egg", qty: 1, price: 2, line: "Eggs, two coppers each." },
+    ];
+  } else if (n.job === "shopkeeper") {
+    SHOP_STOCK[n.key] = [
+      { itemKey: "radish_seeds", qty: 1, price: 2, line: "Radish seeds, two coppers." },
+      { itemKey: "carrot_seeds", qty: 1, price: 3, line: "Carrot seeds, three coppers." },
+      { itemKey: "axe", qty: 1, price: 25, line: "An axe, twenty-five coppers. Clears a road, too." },
+      { itemKey: "fishing_rod", qty: 1, price: 30, line: "A fishing rod, thirty coppers." },
+      { itemKey: "hot_stew", qty: 1, price: 9, line: "Stew for the road, nine coppers." },
+      { itemKey: "bicycle", qty: 1, price: 150, line: "A bicycle, a hundred and fifty coppers. Press V to ride." },
+    ];
+    TRADES[n.key] = [
+      { itemKey: "stone", qty: 1, price: 1, line: "Stone, a copper each." },
+      ...REGIONAL_BUYS[town.family].map((b) => ({ ...b, qty: 1 })),
+    ];
+  }
+}
+
 /** What this NPC sells to players. */
 export function stockForNpc(npcKey: string): TradeItem[] {
+  if (isMerchantKey(npcKey)) return [...MERCHANT_STOCK]; // a stranded merchant you helped (src/lib/encounters.ts)
   return SHOP_STOCK[npcKey] ?? [];
 }
 

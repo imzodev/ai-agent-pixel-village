@@ -676,6 +676,232 @@ tile("cave_torch", (c) => {
   c.ellipse(7.5, 3.5, 2.6, 3.2, P.flame); c.ellipse(7.5, 4, 1.2, 1.8, P.flameLt);
 });
 
+// ── The open continent (src/lib/continent.ts): biome grounds, water,
+// trees and props. Appended after everything above, so the GIDs of every
+// earlier tile (authored chunks, the heartland) never change.
+const B = {
+  sand: [hex(0xa8844c), hex(0xc8a464), hex(0xdcbc7c), hex(0xead096), hex(0xf4e2b4), hex(0xfcf2d8)],
+  snow: [hex(0x8094b4), hex(0xa4b4cc), hex(0xc4d0e0), hex(0xdce6f0), hex(0xeef4fa), hex(0xffffff)],
+  mud: [hex(0x2e2a1a), hex(0x423c24), hex(0x58502e), hex(0x6c6438), hex(0x847a48), hex(0x9c9260)],
+  dark: [hex(0x14301e), hex(0x1c4028), hex(0x265232), hex(0x30643a), hex(0x3e7646), hex(0x548a54)],
+  red: [hex(0x5a2418), hex(0x7a3420), hex(0x9a4a2c), hex(0xb8643c), hex(0xd08050), hex(0xe8a070)],
+  swampW: [hex(0x2e4a36), hex(0x3a5c40), hex(0x4a704a), hex(0x5e8656), hex(0x7a9c66), hex(0xa4bc84)],
+  deep: [hex(0x14306c), hex(0x1c4088), hex(0x2454a4), hex(0x3068bc), hex(0x4884d0), hex(0x88b8ec)],
+  palm: [hex(0x1e4a24), hex(0x2c6a2c), hex(0x40883a), hex(0x5aa448), hex(0x80c060), hex(0xb0dc80)],
+  snowPine: [hex(0x123a34), hex(0x1e5444), hex(0x2c7050), hex(0xd4e0ec), hex(0xeef4fa), hex(0xffffff)],
+  darkLeaf: [hex(0x0e2418), hex(0x163422), hex(0x20462c), hex(0x2c5a36), hex(0x3c7044), hex(0x5a8a56)],
+  cactus: [hex(0x1e4a28), hex(0x2c6434), hex(0x3c8042), hex(0x569a50), hex(0x7cb868)],
+  bone: [hex(0x8c8478), hex(0xb8b0a0), hex(0xdcd6c8), hex(0xf6f2e8)],
+};
+/** Opaque ground autotile over grass: `inside(x, y, v)` where the field is set, a ragged dithered rim. */
+function groundTile(m, v, inside, rim) {
+  return (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const f = field(m, x, y), d = BAYER[((y & 3) << 2) | (x & 3)];
+      if (f < 0.4) c.put(x, y, grassPx(x, y, (v + 1) % 4));
+      else if (f < 0.5) c.put(x, y, f - 0.4 > d * 0.1 ? rim(x, y) : grassPx(x, y, (v + 1) % 4));
+      else c.put(x, y, inside(x, y, v));
+    }
+  };
+}
+function groundFamily(name, inside, rim) {
+  for (const m of MASKS) for (const v of m === 15 ? [0, 1, 2] : [0]) tile(m === 15 ? `${name}_15_${v}` : `${name}_${m}`, groundTile(m, v, inside, rim));
+}
+const sandPx = (x, y, v) => {
+  const dune = Math.sin((x + v * 5) * 0.45 + y * 0.9) * 0.08; // wind ripples
+  return ramp(B.sand, 0.6 + dune + (rand(x, y, 400 + v) - 0.5) * 0.1, x, y);
+};
+groundFamily("sand", sandPx, (x, y) => ramp(B.sand, 0.3, x, y));
+const snowPx = (x, y, v) => {
+  let t = 0.72 + Math.sin(x * 0.35 + v) * Math.cos(y * 0.4 + v * 2) * 0.08 + (rand(x, y, 410 + v) - 0.5) * 0.06;
+  if (rand(x, y, 411 + v) < 0.02) t = 1; // glints
+  return ramp(B.snow, t, x, y);
+};
+groundFamily("snow", snowPx, (x, y) => ramp(B.snow, 0.45, x, y));
+const mudPx = (x, y, v) => {
+  const wet = Math.sin(x * 0.6 + v * 2) * Math.cos(y * 0.7 - v) > 0.55;
+  return ramp(B.mud, (wet ? 0.25 : 0.55) + (rand(x, y, 420 + v) - 0.5) * 0.2, x, y);
+};
+groundFamily("mud", mudPx, (x, y) => ramp(B.mud, 0.4, x, y));
+const darkPx = (x, y, v) => {
+  const cell = (Math.floor(x / 5) + Math.floor(y / 5) * 3 + v) % 5;
+  let t = 0.5 + (rand(x, y, 430 + v) - 0.5) * 0.25;
+  if (cell === 0 && (x + y) % 3 === 0) t = 0.85; // moss flecks
+  return ramp(B.dark, t, x, y);
+};
+groundFamily("darkgrass", darkPx, (x, y) => ramp(B.dark, 0.6, x, y));
+const redPx = (x, y, v) => {
+  const crack = ((x * 3 + y * 7 + v * 5) % 13 === 0) || ((x + v) % 9 === 0 && y % 5 === 2);
+  return ramp(B.red, (crack ? 0.2 : 0.6) + (rand(x, y, 440 + v) - 0.5) * 0.2 + Math.sin(y * 0.8) * 0.05, x, y);
+};
+groundFamily("redrock", redPx, (x, y) => ramp(B.red, 0.35, x, y));
+
+// Murky swamp water (4 frames), mud shores.
+function swampTile(m, v, frame) {
+  return (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      const f = field(m, x, y);
+      let col;
+      if (f < 0.4) col = mudPx(x, y, v);
+      else if (f < 0.52) col = ramp(B.mud, 0.2, x, y);
+      else {
+        const depth = Math.min(1, (f - 0.52) / 0.4);
+        col = ramp(B.swampW, 0.62 - depth * 0.3, x, y);
+        const fx = (x + frame * 2 + v * 5) % 16, fy = (y + v * 3) % 10;
+        if (fy === 3 && fx >= 4 && fx <= 6) col = B.swampW[4]; // slow, scummy ripples
+        if (rand(x + frame * 3, y, 450 + v) < 0.03) col = B.swampW[5]; // bubbles / scum
+      }
+      c.put(x, y, col);
+    }
+  };
+}
+for (const m of MASKS) for (const v of m === 15 ? [0, 1, 2] : [0]) {
+  const base = m === 15 ? `swamp_15_${v}` : `swamp_${m}`;
+  const frames = [base, `${base}_f1`, `${base}_f2`, `${base}_f3`];
+  frames.forEach((name, k) => tile(name, swampTile(m, v, k)));
+  anims[base] = frames;
+}
+// Open ocean (full tiles only, 4 frames): deep blue with long swells.
+for (const v of [0, 1, 2]) {
+  const frames = [`deep_${v}`, `deep_${v}_f1`, `deep_${v}_f2`, `deep_${v}_f3`];
+  frames.forEach((name, k) => tile(name, (c) => {
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      let col = ramp(B.deep, 0.42 + Math.sin((x + k * 4 + v * 6) * 0.39 + y * 0.2) * 0.1 + (rand(x, y, 460 + v) - 0.5) * 0.05, x, y);
+      const fx = (x + k * 4 + v * 7) % 16, fy = (y + v * 5) % 8;
+      if (fy === 2 && fx >= 2 && fx <= 6) col = B.deep[5];
+      c.put(x, y, col);
+    }
+  }));
+  anims[`deep_${v}`] = frames;
+}
+
+// Trees of the new biomes (same lattice: one quarter per tile).
+function palm(c, cx, cy) {
+  shadowEllipse(c, cx + 2, cy + 13.5, 8, 2.2, 90);
+  for (let y = cy - 6; y <= cy + 14; y++) { // curved, ringed trunk
+    const k = (y - (cy - 6)) / 20, x0 = Math.round(cx + 3 - k * k * 4);
+    for (let x = x0 - 1; x <= x0 + 1; x++) if (x >= 0 && x < T && y >= 0 && y < T) c.put(x, y, ramp(P.b, (y % 3 === 0 ? 0.3 : 0.75) - (x - x0) * 0.2, x, y));
+  }
+  const top = [cx + 3, cy - 7];
+  for (const [ang, len] of [[-2.6, 11], [-2.1, 12], [-1.4, 9], [-0.6, 12], [-0.1, 11], [0.5, 9], [3.0, 10]]) {
+    for (let i = 0; i <= len; i++) {
+      const x = Math.round(top[0] + Math.cos(ang) * i), y = Math.round(top[1] + Math.sin(ang) * i + (i * i) / 18);
+      if (x < 0 || y < 0 || x >= T || y >= T) continue;
+      c.put(x, y, ramp(B.palm, 0.75 - i / len * 0.5, x, y));
+      if (y + 1 < T && i > 2) c.put(x, y + 1, ramp(B.palm, 0.3, x, y + 1));
+    }
+  }
+  for (const [x, y] of [[top[0] - 1, top[1] + 1], [top[0] + 1, top[1] + 2]]) if (x >= 0 && y >= 0 && x < T && y < T) c.put(x, y, hex(0x6a4020)); // coconuts
+}
+function snowPine(c, cx, cy) {
+  pine(c, cx, cy);
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { // snow on the top of each bough tier
+    if (c.alpha(x, y) < 200) continue;
+    const above = y > 0 ? c.alpha(x, y - 1) : 0;
+    if (above < 200 || rand(x, y, 470) < 0.18) {
+      const px = c.px, i = (y * T + x) * 4;
+      if (px[i + 1] > px[i] + 10) c.put(x, y, ramp(B.snow, 0.8 + rand(x, y, 471) * 0.2, x, y)); // foliage only, not trunk
+    }
+  }
+}
+function deadTree(c, cx, cy) {
+  shadowEllipse(c, cx, cy + 13.5, 7, 2, 80);
+  const branch = (x0, y0, ang, len, w) => {
+    for (let i = 0; i <= len; i++) {
+      const x = Math.round(x0 + Math.cos(ang) * i), y = Math.round(y0 + Math.sin(ang) * i);
+      for (let k = 0; k < w; k++) if (x + k >= 0 && x + k < T && y >= 0 && y < T) c.put(x + k, y, ramp(P.b, 0.65 - k * 0.25 - i / len * 0.2, x, y));
+    }
+  };
+  branch(cx - 1, cy + 14, -Math.PI / 2, 17, 3); // trunk
+  branch(cx, cy + 2, -2.4, 9, 2); branch(cx, cy - 1, -0.7, 8, 2); branch(cx, cy + 6, -0.3, 6, 1); branch(cx - 1, cy - 3, -1.9, 7, 1);
+  branch(cx - 6, cy - 4, -2.0, 3, 1); branch(cx + 5, cy - 6, -1.0, 3, 1);
+}
+function darkTree(c, cx, cy) {
+  broadleaf(c, cx, cy);
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { // re-tone the crown into the darkwood palette
+    const i = (y * T + x) * 4, px = c.px;
+    if (px[i + 3] < 200) continue;
+    const idx = P.l.findIndex((col) => col[0] === px[i] && col[1] === px[i + 1] && col[2] === px[i + 2]);
+    if (idx >= 0) c.put(x, y, B.darkLeaf[idx]);
+  }
+}
+for (const [kind, draw] of [["palm", palm], ["snowpine", snowPine], ["dead", deadTree], ["dark", darkTree]]) {
+  for (const b of [1, 2, 4, 8]) tile(`tree_${kind}_${b}`, (c) => { const [cx, cy] = CORNER_POS[b]; draw(c, cx, cy); outlineIn(c, P.ink, opaque(c)); });
+}
+
+// Biome props. Blocking ones sit in `lower`, walkable decor in `upper`.
+tile("cactus", (c) => {
+  shadowEllipse(c, 8, 14, 5, 1.5, 80);
+  const arm = (x0, y0, x1, y1) => { for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) for (let x = x0; x <= x1; x++) c.put(x, y, ramp(B.cactus, 0.75 - (x - x0) * 0.25, x, y)); };
+  arm(6, 2, 9, 14); arm(2, 6, 4, 9); arm(2, 9, 6, 10); arm(11, 4, 13, 8); arm(9, 8, 13, 9);
+  for (const [x, y] of [[7, 4], [8, 7], [7, 10], [3, 7], [12, 6]]) c.put(x, y, B.cactus[4]);
+  c.put(7, 1, P.pink); c.put(8, 1, P.yellow);
+  outlineIn(c, P.ink, opaque(c));
+});
+tile("desert_rock", (c) => {
+  shadowEllipse(c, 8, 13, 7, 2, 90);
+  for (let y = 4; y <= 13; y++) for (let x = 2; x <= 13; x++) {
+    const d = ((x - 7.5) / 6) ** 2 + ((y - 9) / 5) ** 2;
+    if (d <= 1) c.put(x, y, ramp(B.red, 0.8 - (x - 2) * 0.03 - (y - 4) * 0.05 + ((x + y) % 5 === 0 ? -0.2 : 0), x, y));
+  }
+  outlineIn(c, P.inkStone, opaque(c));
+});
+tile("bones", (c) => {
+  for (const [x, y, len] of [[3, 10, 6], [8, 6, 5]]) { c.hline(x, x + len, y, B.bone[2]); c.put(x - 1, y - 1, B.bone[3]); c.put(x - 1, y + 1, B.bone[3]); c.put(x + len + 1, y - 1, B.bone[3]); c.put(x + len + 1, y + 1, B.bone[3]); c.hline(x, x + len, y + 1, B.bone[0]); }
+  c.ellipse(11.5, 11.5, 2.5, 2, B.bone[2]); c.put(11, 11, P.ink); c.put(12, 11, P.ink); // a little skull
+});
+tile("shells", (c) => {
+  for (const [x, y, col] of [[4, 5, P.pink], [11, 9, B.bone[3]], [6, 12, P.orange]]) { c.ellipse(x, y, 2, 1.5, col); c.put(x, y + 1, B.bone[0]); c.put(x - 1, y, B.bone[3]); }
+});
+tile("driftwood", (c) => {
+  shadowEllipse(c, 8, 12, 7, 1.6, 80);
+  for (let x = 1; x <= 14; x++) { const y = 9 + Math.round(Math.sin(x * 0.5)); c.put(x, y, ramp(B.bone, 0.5, x, y)); c.put(x, y + 1, ramp(B.bone, 0.2, x, y)); }
+  c.put(4, 7, B.bone[1]); c.put(5, 8, B.bone[1]); c.put(11, 7, B.bone[1]);
+  outlineIn(c, P.inkWood, opaque(c));
+});
+tile("snow_rock", (c) => {
+  shadowEllipse(c, 8, 13, 7, 2, 80);
+  for (let y = 4; y <= 13; y++) for (let x = 2; x <= 13; x++) {
+    const d = ((x - 7.5) / 6) ** 2 + ((y - 9.5) / 5) ** 2;
+    if (d > 1) continue;
+    c.put(x, y, y < 8 - Math.abs(x - 8) * 0.3 ? ramp(B.snow, 0.85, x, y) : ramp(P.r, 0.6 - (x - 2) * 0.03, x, y));
+  }
+  outlineIn(c, P.inkStone, opaque(c));
+});
+tile("snowdrift", (c) => { for (const [x, y, r] of [[5, 9, 4], [11, 12, 3]]) c.ellipse(x, y, r, r * 0.45, B.snow[4]); c.put(5, 8, B.snow[5]); c.put(11, 11, B.snow[5]); });
+tile("fern", (c) => {
+  for (const [ox, oy] of [[5, 11], [11, 13]]) for (const ang of [-2.6, -2.0, -1.57, -1.1, -0.5]) {
+    for (let i = 0; i < 6; i++) { const x = Math.round(ox + Math.cos(ang) * i), y = Math.round(oy + Math.sin(ang) * i * 0.8); c.put(x, y, ramp(B.darkLeaf, 0.9 - i * 0.08, x, y)); }
+  }
+});
+tile("dead_bush", (c) => {
+  for (const ang of [-2.5, -2.0, -1.5, -1.0, -0.6]) for (let i = 0; i < 6; i++) { const x = Math.round(8 + Math.cos(ang) * i), y = Math.round(13 + Math.sin(ang) * i); c.put(x, y, hex(0x8a6a40)); }
+});
+tile("giant_mushroom_top", (c) => {
+  for (let y = 3; y < T; y++) for (let x = 0; x < T; x++) {
+    const d = ((x - 7.5) / 8) ** 2 + ((y - 13) / 9) ** 2;
+    if (d <= 1 && y < 15) c.put(x, y, ramp([hex(0x6a1e3a), hex(0x8a2a4a), hex(0xb03a5e), hex(0xd05a7a), hex(0xec8aa0)], 0.75 - y * 0.03 - (x - 7) * 0.02, x, y));
+  }
+  for (const [x, y] of [[4, 7], [10, 6], [7, 10], [12, 11], [3, 12]]) { c.put(x, y, P.white); c.put(x + 1, y, P.white); }
+  outlineIn(c, P.ink, opaque(c));
+});
+tile("giant_mushroom_base", (c) => {
+  shadowEllipse(c, 8, 14, 6, 1.6, 90);
+  for (let y = 0; y < 14; y++) for (let x = 6; x <= 9; x++) c.put(x, y, ramp(B.bone, 0.85 - (x - 6) * 0.2, x, y));
+  for (let x = 1; x < 15; x++) c.put(x, 0, ramp([hex(0x6a1e3a), hex(0x8a2a4a)], 0.5, x, 0)); // cap's rim
+  outlineIn(c, P.ink, opaque(c));
+});
+// Terrace tops for snowy peaks and red mesas (variant 0 plain).
+for (let i = 0; i < 3; i++) tile(`snowhigh_${i}`, (c) => {
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) c.put(x, y, snowPx(x, y, i));
+  if (i === 1) for (let y = 6; y <= 10; y++) for (let x = 4; x <= 10; x++) if (((x - 7) / 3.5) ** 2 + ((y - 8) / 2.5) ** 2 <= 1) c.put(x, y, ramp(P.r, 0.6 - (y - 6) * 0.08, x, y));
+  if (i === 2) for (const [x, y] of [[3, 4], [11, 9], [6, 13]]) { c.put(x, y, P.r[2]); c.put(x + 1, y, P.r[3]); }
+});
+for (let i = 0; i < 3; i++) tile(`redhigh_${i}`, (c) => {
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) c.put(x, y, redPx(x, y, i + 3));
+  if (i === 1) for (const [x, y] of [[4, 5], [10, 10]]) { c.rect(x, y, 3, 2, B.red[5]); c.hline(x, x + 2, y + 2, B.red[0]); }
+});
+
 // ── Sheet + names ───────────────────────────────────────────────────────
 const rows = Math.ceil(tiles.length / COLS);
 const W = COLS * T, H = rows * T;

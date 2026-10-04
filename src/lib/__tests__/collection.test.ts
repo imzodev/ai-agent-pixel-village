@@ -11,8 +11,8 @@ const pages = collectionPages(folk);
 const page = (k: string) => pages.find((p) => p.key === k)!;
 
 describe("pages", () => {
-  it("five pages, each with entries and a unique title", () => {
-    expect(pages.map((p) => p.key)).toEqual(["fish", "crops", "creatures", "places", "folk"]);
+  it("the pages, each with entries and a unique title", () => {
+    expect(pages.map((p) => p.key)).toEqual(["fish", "crops", "creatures", "places", "folk", "relic_coins", "relic_fossils", "relic_cards", "relic_carvings"]);
     for (const p of pages) expect(p.entries.length, p.key).toBeGreaterThan(0);
     const titles = [...pages.map((p) => p.reward.title), ...ACHIEVEMENTS.map((a) => a.title)];
     expect(new Set(titles).size).toBe(titles.length);

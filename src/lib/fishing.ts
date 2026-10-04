@@ -2,7 +2,8 @@
 // store and rewards live in src/app/api/fish/route.ts.
 
 import type { FishDef, FishRarity, FishWater } from "@/types/fishing";
-import { regionAtTile, terrainAt } from "./regions";
+import { terrainAt } from "./regions";
+import { riverCenter } from "./continent";
 
 export type { FishCast, FishDef, FishRarity, FishTime, FishWater } from "@/types/fishing";
 
@@ -37,7 +38,8 @@ export const CAST_TTL_MS = 20_000;
 export function waterAt(tx: number, ty: number): FishWater | null {
   const cell = terrainAt(tx, ty);
   if (!cell.ground.startsWith("water_") || !cell.collide) return null;
-  return regionAtTile(tx, ty)?.key === "silverrun" ? "river" : "pond";
+  // The Silverrun runs from its north lake to the south coast.
+  return ty >= -330 && Math.abs(tx - riverCenter(ty)) <= 4 ? "river" : "pond";
 }
 
 /** Fishable water within reach in front of a player standing at (x, y). */

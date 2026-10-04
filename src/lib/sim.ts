@@ -31,6 +31,10 @@ import { logEvent } from "./game";
 import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
 import { syncFelledTrees } from "./treesServer";
+import { biomeAt, inHeartland, tierAt } from "./continent";
+import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildTarget } from "./wildlife";
+import { refreshBounties } from "./bountiesServer";
+import { tickEncounters } from "./encountersServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
 
 /** Enemies kept alive per wild zone (zones refill so they can be farmed). */
@@ -145,6 +149,7 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
   const writes: MoveWrite[] = [];
   for (const n of rows) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
+    if (n.kind === "encounter") continue; // encounter strangers stay where they're needed
     if (!isDue("npc", n.id, beat.index, NPC_MOVE_INTERVAL_MS)) continue;
     if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it
     if (busyAt(n, beat.startAt)) continue;
@@ -377,7 +382,11 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
     if (e.kind === BOSS_KIND) continue; // the boss stands its ground
     if (!isDue("enemy", e.id, beat.index, ENEMY_MOVE_INTERVAL_MS)) continue;
     if (busyAt(e, beat.startAt)) continue;
-    const w = await wanderWrite(e, leashOfRect(zoneForEnemy(e.x, e.y)), ENEMY_SPEED, beat);
+    // Wild enemies roam around where they appeared (home = targetX/Y).
+    const leash = (e.wild || e.elite) && e.targetX != null && e.targetY != null
+      ? leashAround({ x: e.targetX, y: e.targetY }, WILD_LEASH_TILES)
+      : leashOfRect(zoneForEnemy(e.x, e.y));
+    const w = await wanderWrite(e, leash, ENEMY_SPEED, beat);
     if (w) writes.push(w);
   }
   await writeMoves("enemy", writes);
@@ -393,8 +402,52 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
     const hp = enemyKind(kind).hp;
     await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
   }
+  await tickWild(rows, now, night);
+  // Bounty boards: lapsed bounties down, new ones up (every ~30 s).
+  if (beat.index % 6 === 0) await refreshBounties(now).catch((err) => console.warn("[tick] bounty refresh failed:", err instanceof Error ? err.message : err));
   await tickBoss(rows, now);
   return writes.length;
+}
+
+/**
+ * The continent's wild enemies follow the players: keep each player's
+ * surroundings (outside the heartland) topped up with biome- and
+ * tier-appropriate enemies, and fade the ones nobody has been near for a
+ * while. One spawn per player per beat at most.
+ */
+async function tickWild(rows: (typeof enemies.$inferSelect)[], now: Date, night: boolean): Promise<void> {
+  const nowMs = now.getTime();
+  const online = await db.select({ id: characters.id, x: characters.x, y: characters.y }).from(characters)
+    .where(gt(characters.lastSeenAt, new Date(nowMs - ONLINE_WINDOW_MS)));
+  const wild = rows.filter((e) => e.wild).map((e) => ({ e, p: rowPositionAt(e, nowMs) }));
+  const near = wild.filter(({ p }) => online.some((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WILD_RADIUS_PX * 1.5)).map(({ e }) => e.id);
+  if (near.length) await db.update(enemies).set({ nearAt: now }).where(inArray(enemies.id, near));
+  const stale = wild.filter(({ e }) => !near.includes(e.id) && (e.nearAt ?? e.spawnedAt).getTime() < nowMs - WILD_DESPAWN_MS).map(({ e }) => e.id);
+  if (stale.length) await db.delete(enemies).where(inArray(enemies.id, stale));
+
+  // Random encounters around travelling players (src/lib/encounters.ts).
+  await tickEncounters(online, now, night).catch((err) => console.warn("[tick] encounters failed:", err instanceof Error ? err.message : err));
+
+  const live = wild.filter(({ e }) => !stale.includes(e.id)).map(({ p }) => p);
+  for (const o of online) {
+    const here = tileOf(o.x, o.y);
+    if (inHeartland(here.tx, here.ty)) continue;
+    const count = live.filter((p) => Math.hypot(p.x - o.x, p.y - o.y) <= WILD_RADIUS_PX).length;
+    if (count >= wildTarget(tierAt(here.tx, here.ty)) || Math.random() > 0.4) continue;
+    for (let k = 0; k < 6; k++) {
+      const ang = Math.random() * Math.PI * 2, d = WILD_SPAWN_MIN_PX + Math.random() * (WILD_SPAWN_MAX_PX - WILD_SPAWN_MIN_PX);
+      const t = tileOf(o.x + Math.cos(ang) * d, o.y + Math.sin(ang) * d);
+      if (inHeartland(t.tx, t.ty)) continue;
+      const at = tileCenter(t);
+      if (!(await isWalkableServer(at.x, at.y))) continue;
+      const kind = wildKindFor(biomeAt(t.tx, t.ty), tierAt(t.tx, t.ty), night);
+      if (!kind) break;
+      const hp = enemyKind(kind).hp;
+      await db.insert(enemies).values({ kind, x: at.x, y: at.y, targetX: at.x, targetY: at.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now });
+      live.push(at);
+      break;
+    }
+  }
 }
 
 /** Things happened while nobody was watching. Write a few plausible entries. */

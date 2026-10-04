@@ -1,12 +1,15 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, buildings, characters, enemies, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
+import { animals, buildings, characters, enemies, forageClaims, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
-import { broadcastChunkReload, getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
+import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
+import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
+import { forageKey, isForage, readyIn } from "@/lib/forage";
 import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
@@ -14,6 +17,8 @@ import { rollForageSeed } from "@/lib/gardenRules";
 import { AXE_ITEMS, BOSS_KIND, BOSS_REWARD, bossRewardees, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
+import { ENCOUNTERS } from "@/lib/encounters";
 import { recordCollection } from "@/lib/collectionServer";
 
 export const dynamic = "force-dynamic";
@@ -113,7 +118,17 @@ export async function POST(req: Request) {
       // the user can pick 4 times before the node hits 0 and refuses
       // further picks until it regrows.
       const chop = cfg?.needsAxe === true;
-      if (n.stage < 1) {
+      // Wild patches are personal: each player picks every patch on their
+      // own cooldown, and the patch stays for everyone else.
+      const forage = isForage(n.kind);
+      if (forage) {
+        const patch = forageKey(n.kind, n.x, n.y);
+        const [claim] = await db.select({ at: forageClaims.at }).from(forageClaims).where(and(eq(forageClaims.characterId, me.id), eq(forageClaims.patch, patch)));
+        const wait = readyIn(n.kind, claim?.at.getTime() ?? null, Date.now());
+        if (wait > 0) return Response.json({ error: `You've picked this one clean. It'll be ready for you again in ${Math.ceil(wait / 60_000)}m.`, readyInMs: wait }, { status: 400 });
+        await db.insert(forageClaims).values({ characterId: me.id, patch, at: new Date() })
+          .onConflictDoUpdate({ target: [forageClaims.characterId, forageClaims.patch], set: { at: new Date() } });
+      } else if (n.stage < 1) {
         return Response.json({ error: chop ? "Just a stump. It'll grow back." : "Picked clean. It'll grow back." }, { status: 400 });
       }
       const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
@@ -124,12 +139,15 @@ export async function POST(req: Request) {
       // Pick: decrement toward empty (stage 0). If regrowthMs > 0, the
       // next regrowth tick will advance stage back toward stages-1;
       // picking again interrupts that and starts a fresh cycle.
-      const newStage = n.stage - 1;
-      const newNextAdvanceAt = regrowthMs > 0 ? new Date(Date.now() + regrowthMs) : null;
-      await db.update(resourceNodes).set({
-        stage: newStage,
-        nextAdvanceAt: newNextAdvanceAt,
-      }).where(eq(resourceNodes.id, n.id));
+      // (Wild patches don't deplete — the pick was recorded per player above.)
+      if (!forage) {
+        const newStage = n.stage - 1;
+        const newNextAdvanceAt = regrowthMs > 0 ? new Date(Date.now() + regrowthMs) : null;
+        await db.update(resourceNodes).set({
+          stage: newStage,
+          nextAdvanceAt: newNextAdvanceAt,
+        }).where(eq(resourceNodes.id, n.id));
+      }
 
       // Better axes and the Lumberjack perk add wood per chop.
       if (chop) yieldAmt += chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
@@ -201,11 +219,14 @@ export async function POST(req: Request) {
         .where(eq(enemies.id, e.id))
         .returning({ hp: enemies.hp, maxHp: enemies.maxHp, damage: enemies.damage });
       if (!after) return Response.json({ error: "It's gone." }, { status: 404 });
+      // Striking an encounter's attacker earns a share when the fight is won.
+      if (e.encounterId) await noteFighter(e.encounterId, me.id);
       let message = `You hit the ${def.name} for ${dmg}.`;
       let taken = 0;
       let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
       const notices: string[] = [];
+      let encounterResolved: number | null = null;
       // Only the request that removes the row gets the kill.
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
       const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
@@ -231,12 +252,27 @@ export async function POST(req: Request) {
           await addItem(me.id, d.itemKey, d.qty);
           gained.push(d);
         }
-        message = `You defeated the ${def.name}! +${def.xp} XP`;
+        // Wanted beasts are worth far more, and pay out their bounty to
+        // everyone close by who carries it.
+        const xp = def.xp * (e.elite ? WANTED_XP_MULT : 1);
+        message = e.title ? `⭐ You brought down ${e.title}! +${xp} XP` : `You defeated the ${def.name}! +${xp} XP`;
+        if (e.bountyId) {
+          await wantedSlain(e.bountyId, [me.id, ...livePlayersNear(e.x, e.y, 240)]);
+          notices.push(`📜 ${e.title} is down — claim the bounty at its town's board.`);
+        }
+        notices.push(...(await progressHunts(me.id, e.kind)));
+        // The last attacker of an encounter: everyone who fought is paid.
+        const won = e.encounterId ? await attackerFell(e.encounterId, me.id) : null;
+        if (e.encounterId && won) {
+          const def = ENCOUNTERS[(await encounterKindOf(e.encounterId)) ?? "beset"];
+          notices.push(`🤝 ${def.thanks} +${def.reward.coins} 🪙, +${def.reward.xp} XP`, ...won);
+          encounterResolved = e.encounterId;
+        }
         if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);
         const step = await tutorialEvent(me.id, "defeat", { enemyKind: e.kind });
         if (step) notices.push(step);
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
-        await db.update(characters).set({ xp: sql`${characters.xp} + ${def.xp}` }).where(eq(characters.id, me.id));
+        await db.update(characters).set({ xp: sql`${characters.xp} + ${xp}` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);
         daily(me.id, "defeat", { enemyKind: e.kind });
         await logEvent("combat", `${me.name} drove off a ${def.name}.`, "character", me.id, e.x, e.y);
@@ -248,12 +284,13 @@ export async function POST(req: Request) {
           message += ` It hits back for ${taken}.`;
           if (r?.knockedOut) {
             knockout = { x: r.x!, y: r.y!, coinsLost: r.coinsLost };
+            placePlayer(me.id, r.x!, r.y!);
             message += ` You're knocked out and wake in the village square${r.coinsLost ? `, ${r.coinsLost} coins lighter` : ""}.`;
           }
         }
       }
       markWorldDirty(e.x, e.y);
-      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout, notices });
+      return Response.json({ ok: true, message, gained, defeated: hp <= 0, taken, knockout, notices, encounterResolved });
     }
 
     if (action === "enter") {
@@ -270,6 +307,7 @@ export async function POST(req: Request) {
         if (!from || !to) return Response.json({ error: "The way is blocked." }, { status: 400 });
         if (Math.hypot(from.x - p.x, from.y - p.y) > 160) return Response.json({ error: "Walk up to it first." }, { status: 400 });
         await db.update(characters).set({ x: to.x, y: to.y }).where(eq(characters.id, me.id));
+        placePlayer(me.id, to.x, to.y);
         const into = entry.portalTo === "cave_exit";
         await logEvent("visit", into ? `${me.name} ventured into the Greyspine Caverns.` : `${me.name} climbed back out of the caverns.`, "building", b.id);
         return Response.json({ ok: true, teleport: to, message: into ? "You duck under the timbers and into the dark…" : "You climb the rope ladder back into daylight." });
