@@ -4,6 +4,7 @@ import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
 import { RIDE_FRAMES, riderSheet } from "./riding";
 import { REACH_PX, pickTarget } from "./interactTarget";
+import { pickedByMe } from "./forageClaims";
 import { CROP_KINDS } from "@/lib/crops";
 import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
@@ -137,6 +138,7 @@ export class WorldScene extends Phaser.Scene {
   private markerTarget: Selection | null = null;
   private targetCheckAt = 0;
   private targetFrom: { x: number; y: number; facing: Facing } | null = null;
+  private forageCheckAt = 0;
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -731,6 +733,7 @@ export class WorldScene extends Phaser.Scene {
       }
       // Garden crops show growth through their frames; wild regrowth fades.
       img.setAlpha(isReady || n.ownerId != null || ownSheet ? 1 : 0.55);
+      this.showForage(img, n.kind, n.x, n.y);
       let wet = this.wetSoil.get(n.id);
       if (n.watered && !wet) {
         wet = this.add.ellipse(n.x, n.y - 3, 22, 7, 0x3a2414, 0.55).setDepth(DEPTH_CHAR_BASE + n.y - 1);
@@ -1087,11 +1090,27 @@ export class WorldScene extends Phaser.Scene {
       e.rideKey = key;
     }).catch(() => this.rideBuilding.delete(key));
   }
-  /** A felled tree / picked-clean bush: nothing to do until it regrows. */
+  /** A felled tree / picked-clean bush (or a wild patch you've picked): nothing to do until it's back. */
   private isSpent(sel: Selection): boolean {
     if (sel.type !== "node") return false;
     const n = this.snapshot?.nodes.find((x) => x.id === sel.id);
-    return !n || n.stage < 1;
+    return !n || n.stage < 1 || pickedByMe(n.kind, n.x, n.y);
+  }
+  /** A wild patch you've picked is gone for you until your cooldown ends. */
+  private showForage(img: Phaser.GameObjects.Image, kind: string, x: number, y: number): void {
+    const hide = pickedByMe(kind, x, y);
+    if (img.visible === !hide) return;
+    img.setVisible(!hide);
+    if (img.input) img.input.enabled = !hide;
+  }
+  /** Bring picked patches back (and hide fresh picks) without waiting for a snapshot. */
+  private refreshForage(time: number): void {
+    if (time < this.forageCheckAt || !this.snapshot) return;
+    this.forageCheckAt = time + 500;
+    for (const n of this.snapshot.nodes) {
+      const img = this.nodes.get(n.id);
+      if (img) this.showForage(img, n.kind, n.x, n.y);
+    }
   }
   /** Generated trees whose trunks are within `r` px of (x, y), read off the
    *  loaded tile layers (src/lib/trees.ts). */
@@ -1130,7 +1149,7 @@ export class WorldScene extends Phaser.Scene {
     for (const a of s.animals) { const q = live(this.animals, a.id, a.x, a.y); add(q.x, q.y, (d) => ({ type: "animal", id: a.id, name: a.name, species: a.species, distance: d })); }
     for (const e of s.enemies) { const q = live(this.enemies, e.id, e.x, e.y); add(q.x, q.y, (d) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, distance: d })); }
     for (const i of s.groundItems) add(i.x, i.y, (d) => ({ type: "item", id: i.id, itemKey: i.itemKey, distance: d }));
-    for (const n of s.nodes) if (n.stage >= 1) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
+    for (const n of s.nodes) if (n.stage >= 1 && !pickedByMe(n.kind, n.x, n.y)) add(n.x, n.y, (d) => ({ type: "node", id: n.id, kind: n.kind, stage: n.stage, stages: n.stages, distance: d }));
     for (const b of s.buildings) { const door = this.buildingZones.get(b.key)?.door ?? { x: b.doorX, y: b.doorY }; add(door.x, door.y, (d) => ({ type: "building", id: b.id, key: b.key, name: b.name, reservable: b.reservable, hasSponsor: !!b.sponsor, distance: d })); }
     // Hidden relics you haven't found yet.
     if (this.relicsFound) for (const r of RELICS) if (!this.relicsFound.has(r.key)) { const at = relicPoint(r); add(at.x, at.y, (d) => ({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: d })); }
@@ -1190,6 +1209,7 @@ export class WorldScene extends Phaser.Scene {
       this.syncStreamingChunks();
       this.noticeRelics(time);
       this.updateTargetMarker(time);
+      this.refreshForage(time);
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);

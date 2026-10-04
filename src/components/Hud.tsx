@@ -22,6 +22,7 @@ import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
 import Notifications from "./Notifications";
 import { eDecision, npcOptions, optionCount, selectionKey } from "@/game/selectionOptions";
+import { claimForage, setForageClaims } from "@/game/forageClaims";
 import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
@@ -392,6 +393,11 @@ export default function Hud() {
     const t = setInterval(() => void loadBounties(), 20_000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [loggedInNow, loadBounties]);
+  // Wild patches you've picked stay hidden for you until they're back.
+  useEffect(() => {
+    if (!loggedInNow) return;
+    void api<{ claims?: { patch: string; readyAt: number }[] }>("/api/forage").then((r) => { if (r.claims) setForageClaims(r.claims); });
+  }, [loggedInNow]);
   // Hidden relics you've found: the scene only draws the rest. Loaded once
   // (only your own pickups change it); sent again whenever the scene asks,
   // so it doesn't matter which of the two comes up first.
@@ -552,7 +558,11 @@ export default function Hud() {
         void act({ action: "gather", id: s.id }).then((r) => {
           // Wild patches come back for you alone after a cooldown.
           const wait = (r as { readyInMs?: number }).readyInMs ?? (r.ok && isForage(s.kind) ? FORAGE_COOLDOWN_MS[s.kind] : 0);
-          if (wait > 0) setForageWait((m) => new Map(m).set(s.id, Date.now() + wait));
+          if (wait > 0) {
+            setForageWait((m) => new Map(m).set(s.id, Date.now() + wait));
+            // It disappears for you until it's back (the scene hides it).
+            if (isForage(s.kind)) { claimForage(s.kind, pos.x, pos.y, Date.now() + wait); setSel(null); }
+          }
         });
         break;
       }
