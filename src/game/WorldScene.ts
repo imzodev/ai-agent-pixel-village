@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
+import { RIDE_FRAMES, riderSheet } from "./riding";
 import { CROP_KINDS } from "@/lib/crops";
 import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
@@ -34,7 +35,6 @@ import { treeFromTile, trunkPoint } from "@/lib/trees";
 import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
 import { RELICS, relicPoint } from "@/lib/relics";
-import { BIKE_LIFT_PX } from "@/lib/bike";
 import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
@@ -122,6 +122,8 @@ export class WorldScene extends Phaser.Scene {
   private wetSoil = new Map<number, Phaser.GameObjects.Ellipse>();
   /** Whether the local player owns a bicycle (told by the HUD). */
   private hasBike = false;
+  /** Riding sheets being built (texture keys). */
+  private rideBuilding = new Set<string>();
   /** Hidden relics still to find glint where they lie (null until loaded). */
   private relicsFound: Set<string> | null = null;
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
@@ -790,7 +792,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.bike?.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
+    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
   }
 
   private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null; mounted?: boolean }>(
@@ -1031,26 +1033,50 @@ export class WorldScene extends Phaser.Scene {
     const p = this.player;
     if (!p || !!p.mounted === on) return;
     p.mounted = on;
+    if (on) this.ensureRideSheet(p);
+    this.playWalk(p, this.playerMoving);
     this.placeChar(p);
     this.stream?.setPosition(p.sprite.x, p.sprite.y, p.facing, on);
   }
-  /** The bike under a rider: side-on (mirrored for left), or seen from the
-   *  front or back; the wheels turn while they move. The rider sits higher. */
+  /** A rider casts a longer shadow side-on. */
   private placeBike(e: CharEnt): void {
-    if (!e.mounted) {
-      if (e.bike) { e.bike.destroy(); e.bike = undefined; e.sprite.setOrigin(0.5, 0.9); e.shadow?.setScale(0.9, 0.9); }
-      return;
-    }
-    const view = e.facing === "up" ? "back" : e.facing === "down" ? "front" : "side";
-    const moving = e === this.player ? this.playerMoving : e.sprite.anims.isPlaying;
-    const frame = moving ? Math.floor(this.time.now / 110) % 2 : 0;
-    const key = `bike_${view}_${frame}`;
-    if (!e.bike) {
-      e.bike = this.add.image(e.sprite.x, e.sprite.y, key).setOrigin(0.5, 1);
-      e.sprite.setOrigin(0.5, 0.9 + BIKE_LIFT_PX / FRAME);
-    } else if (e.bike.texture.key !== key) e.bike.setTexture(key);
-    e.bike.setPosition(e.sprite.x, e.sprite.y + 2).setFlipX(e.facing === "left").setDepth(DEPTH_CHAR_BASE + e.sprite.y + 0.5);
-    e.shadow?.setScale(view === "side" ? 1.5 : 0.9, 0.9);
+    e.shadow?.setScale(e.mounted && (e.facing === "left" || e.facing === "right") ? 1.5 : 0.9, 0.9);
+  }
+  /**
+   * Build (once per look) the character's riding sheet — their own head and
+   * torso on a bike, legs pedalling (src/game/riding.ts) — with a pedalling
+   * animation per direction. Sets `e.rideKey` when ready.
+   */
+  private ensureRideSheet(e: CharEnt): void {
+    const base = e.texKey;
+    if (!base || !e.app) return;
+    const key = `${base}_ride`;
+    if (e.rideKey === key) return;
+    if (this.textures.exists(key)) { e.rideKey = key; return; }
+    if (this.rideBuilding.has(key)) return;
+    this.rideBuilding.add(key);
+    const app = e.app;
+    void composeCharacter(app, e.equipped, e.weapon).then((sheet) => {
+      this.rideBuilding.delete(key);
+      if (!this.alive() || this.textures.exists(key)) { if (this.alive()) e.rideKey = key; return; }
+      const ctx = sheet.getContext("2d");
+      if (!ctx) return;
+      const img = ctx.getImageData(0, 0, sheet.width, sheet.height);
+      const ride = riderSheet({ w: img.width, h: img.height, d: img.data }, app.skin, app.body === "female" ? "female" : "male");
+      const c = document.createElement("canvas");
+      c.width = ride.w; c.height = ride.h;
+      const cctx = c.getContext("2d")!;
+      const out = cctx.createImageData(ride.w, ride.h);
+      out.data.set(ride.d);
+      cctx.putImageData(out, 0, 0);
+      const tex = this.textures.addCanvas(key, c);
+      if (!tex) return;
+      for (let r = 0; r < 4; r++) for (let f = 0; f < RIDE_FRAMES; f++) tex.add(`${r}_${f}`, 0, f * FRAME, r * FRAME, FRAME, FRAME);
+      for (const dir of Object.keys(ROWS) as Facing[]) {
+        this.anims.create({ key: `${key}_ride_${dir}`, frames: Array.from({ length: RIDE_FRAMES }, (_, i) => ({ key, frame: `${ROWS[dir]}_${i}` })), frameRate: 9, repeat: -1 });
+      }
+      e.rideKey = key;
+    }).catch(() => this.rideBuilding.delete(key));
   }
   /** A felled tree / picked-clean bush: nothing to do until it regrows. */
   private isSpent(sel: Selection): boolean {
@@ -1389,6 +1415,17 @@ export class WorldScene extends Phaser.Scene {
   private playWalk(e: CharEnt, moving: boolean) {
     if (!e.texKey) return;
     if (e.actingUntil !== undefined && this.time.now < e.actingUntil) return; // mid-swing
+    // On a bike: pedal (or coast with one foot down) on the riding sheet.
+    if (e.mounted) {
+      this.ensureRideSheet(e);
+      const rk = e.rideKey;
+      if (rk && rk === `${e.texKey}_ride`) {
+        const ride = `${rk}_ride_${e.facing}`;
+        if (moving) { if (e.sprite.anims.currentAnim?.key !== ride || !e.sprite.anims.isPlaying) e.sprite.play(ride, true); }
+        else if (e.sprite.anims.isPlaying || e.sprite.texture.key !== rk || e.sprite.frame.name !== `${ROWS[e.facing]}_0`) { e.sprite.stop(); e.sprite.setTexture(rk, `${ROWS[e.facing]}_0`); }
+        return;
+      }
+    }
     const anim = `${e.texKey}_walk_${e.facing}`;
     if (moving) { if (e.sprite.anims.currentAnim?.key !== anim || !e.sprite.anims.isPlaying) e.sprite.play(anim, true); }
     else if (e.sprite.anims.isPlaying || e.sprite.frame.name !== `${ROWS[e.facing]}_0` || e.sprite.texture.key !== e.texKey) {

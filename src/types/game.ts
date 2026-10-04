@@ -40,9 +40,10 @@ export type CharEnt = {
   /** Nameplate title shown above the name, and the text object. */
   title?: string | null;
   titleText?: Phaser.GameObjects.Text;
-  /** Riding a bike (src/lib/bike.ts), and the bike drawn under them. */
+  /** Riding a bike (src/lib/bike.ts), and the texture of their riding
+   *  sheet once it's built (src/game/riding.ts). */
   mounted?: boolean;
-  bike?: Phaser.GameObjects.Image;
+  rideKey?: string | null;
   /** A short-lived emote bubble ("!", "♪", "…"). */
   emote?: { t: Phaser.GameObjects.Text; until: number };
 };
@@ -74,3 +75,9 @@ export type CritterEnt = {
   /** Soft drop shadow (ground-walkers only; flyers draw their own). */
   shadow?: Phaser.GameObjects.Image;
 };
+
+/** An RGBA pixel buffer (row-major, 4 bytes a pixel). */
+export type PixelBuf = { w: number; h: number; d: Uint8ClampedArray };
+export type Rgb = readonly [number, number, number];
+/** Colours sampled from a composed character for its riding pose. */
+export type RiderColors = { shirt: Rgb; pants: Rgb; shoes: Rgb; skin: Rgb };

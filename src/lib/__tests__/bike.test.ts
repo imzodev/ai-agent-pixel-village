@@ -2,7 +2,9 @@
 // and drawn the same width in every frame.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BIKE_ART, BIKE_ITEM } from "@/lib/bike";
+import { BIKE_ITEM } from "@/lib/bike";
+import { RIDE_FRAMES, newBuf, riderSheet } from "@/game/riding";
+import { FRAME, ROWS } from "@/game/lpc";
 import { stockForNpc } from "@/lib/trade";
 import { SETTLEMENT_NPCS } from "@/lib/settlements";
 import { DEFAULT_KEY_BINDINGS } from "@/game/input/bindings";
@@ -24,15 +26,20 @@ describe("bikes", () => {
     const keys = DEFAULT_KEY_BINDINGS.flatMap((b) => b.keys);
     expect(new Set(keys).size).toBe(keys.length);
   });
-  it("every view has two frames of the same size, using only its palette", () => {
-    for (const view of ["side", "front", "back"]) {
-      const [a, b] = [BIKE_ART[`${view}_0`], BIKE_ART[`${view}_1`]];
-      expect(a.rows.length).toBe(b.rows.length);
-      const w = a.rows[0].length;
-      for (const r of [...a.rows, ...b.rows]) {
-        expect(r.length, view).toBe(w);
-        for (const c of r) if (c !== ".") expect(a.palette[c], `${view} ${c}`).toBeDefined();
-      }
+  it("the riding sheet has every direction, and the pedals really turn", () => {
+    // A blank character still gets a bike and legs in every frame.
+    const sheet = riderSheet(newBuf(576, 512), "#f1c9a5", "female");
+    expect(sheet.w).toBe(FRAME * RIDE_FRAMES);
+    expect(sheet.h).toBe(FRAME * 4);
+    const frame = (row: number, f: number) => {
+      const out: number[] = [];
+      for (let y = 0; y < FRAME; y++) for (let x = 0; x < FRAME; x++) out.push(sheet.d[((row * FRAME + y) * sheet.w + f * FRAME + x) * 4 + 3]);
+      return out.join(",");
+    };
+    for (const row of Object.values(ROWS)) {
+      const frames = Array.from({ length: RIDE_FRAMES }, (_, f) => frame(row, f));
+      for (const f of frames) expect(f).toMatch(/255/);
+      expect(new Set(frames).size, `row ${row}`).toBeGreaterThan(1); // it animates
     }
   });
 });
