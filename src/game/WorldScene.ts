@@ -1306,8 +1306,12 @@ export class WorldScene extends Phaser.Scene {
       p.sprite.anims.timeScale = p.mounted ? 1.4 : running ? RUN_ANIM_SCALE : 1;
       const nx = p.sprite.x + (vx / len) * step, ny = p.sprite.y + (vy / len) * step;
       let movedAny = false;
-      if (isWalkable(nx, p.sprite.y)) { p.sprite.x = nx; movedAny = true; }
-      if (isWalkable(p.sprite.x, ny)) { p.sprite.y = ny; movedAny = true; }
+      // Already standing in something solid (a teleport or a correction put
+      // us there)? Then any step is allowed until we're out — else every
+      // step would be refused and we could only turn on the spot.
+      const stuck = !isWalkable(p.sprite.x, p.sprite.y);
+      if (stuck || isWalkable(nx, p.sprite.y)) { p.sprite.x = nx; movedAny = true; }
+      if (stuck || isWalkable(p.sprite.x, ny)) { p.sprite.y = ny; movedAny = true; }
       if (!movedAny && this.moveTarget) { this.moveTarget = null; this.marker.setVisible(false); }
       p.facing = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? "right" : "left") : vy > 0 ? "down" : "up";
       this.playWalk(p, true);

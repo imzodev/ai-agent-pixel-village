@@ -61,3 +61,21 @@ export async function isWalkableServer(x: number, y: number): Promise<boolean> {
   await ensureChunkAt(x, y);
   return isWalkableAt(x, y);
 }
+
+/** Steps to try, in order, for somewhere to stand by a door: below it first. */
+const ARRIVAL_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0], [0, 16], [0, 24], [0, 32], [0, 48], [-16, 16], [16, 16], [-16, 32], [16, 32], [0, 64],
+];
+
+/**
+ * Where to put someone arriving at a door (a portal's far end): the door
+ * itself if they can stand there, else the nearest open ground below it.
+ * Arriving inside a stamp's collision leaves them unable to take a step.
+ */
+export async function arrivalPoint(door: { x: number; y: number }): Promise<{ x: number; y: number }> {
+  for (const [dx, dy] of ARRIVAL_STEPS) {
+    const p = { x: door.x + dx, y: door.y + dy };
+    if (await isWalkableServer(p.x, p.y)) return p;
+  }
+  return door;
+}

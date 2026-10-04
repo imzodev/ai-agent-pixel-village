@@ -16,6 +16,7 @@ import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
 import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, bowOf, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
+import { arrivalPoint } from "@/lib/chunkCollisionServer";
 import { tutorialEvent } from "@/lib/tutorialServer";
 import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
 import { ENCOUNTERS } from "@/lib/encounters";
@@ -317,9 +318,10 @@ export async function POST(req: Request) {
       // Portals (the Greyspine cave) move you to their other end.
       const entry = (await getBuildingsManifest()).buildings.find((x) => x.key === b.key);
       if (entry?.kind === "portal" && entry.portalTo) {
-        const [from, to] = await Promise.all([getBuildingDoor(b.key), getBuildingDoor(entry.portalTo)]);
+        const [from, farDoor] = await Promise.all([getBuildingDoor(b.key), getBuildingDoor(entry.portalTo)]);
         const p = livePos(me);
-        if (!from || !to) return Response.json({ error: "The way is blocked." }, { status: 400 });
+        if (!from || !farDoor) return Response.json({ error: "The way is blocked." }, { status: 400 });
+        const to = await arrivalPoint(farDoor); // open ground by the far door, not inside its stamp
         if (Math.hypot(from.x - p.x, from.y - p.y) > 160) return Response.json({ error: "Walk up to it first." }, { status: 400 });
         await db.update(characters).set({ x: to.x, y: to.y }).where(eq(characters.id, me.id));
         placePlayer(me.id, to.x, to.y);
