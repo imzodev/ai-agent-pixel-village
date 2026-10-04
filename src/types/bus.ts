@@ -36,10 +36,15 @@ export type Events = {
   teleport: { x: number; y: number };
   /** Hidden relics the local player has already found (they stop glinting). */
   relicsFound: string[];
+  /** Whether the local player owns a bicycle (the HUD watches the bag). */
+  hasBike: boolean;
+  /** Get the local player off their bike (going indoors, …). */
+  dismount: undefined;
   /** A saloon game you're in changed: re-read it. */
   saloon: { inn: string };
-  /** The scene is ready for the found-relics list (sent once it's loaded). */
-  relicsRequest: undefined;
+  /** The scene is up and listening: the HUD resends what it already knows
+   *  (found relics, whether you own a bike). */
+  sceneReady: undefined;
   /** The local player just picked up a relic: show it off over their head. */
   relicPicked: { key: string; have: number; total: number };
   /** The local player was knocked out and wakes at (x, y). */

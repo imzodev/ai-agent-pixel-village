@@ -19,6 +19,8 @@ export type Connection = {
   homePy: number;
   /** Latest facing from `pos`/`heartbeat`, used when relaying positions. */
   homeFacing: Facing;
+  /** Riding a bike, as last reported. */
+  mounted?: boolean;
   /** Last time we persisted this player's presence (in-memory throttle). */
   lastPresenceAt: number;
   /** Last snapshot version we sent this connection. Used for reconnect. */
@@ -47,7 +49,7 @@ export type StreamHandlers = {
   onSnapshot: (data: WorldSnapshot) => void;
   onDelta: () => void;
   /** Another player's live position (movement relay). */
-  onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing }) => void;
+  onPlayerPos: (data: { id: number; x: number; y: number; facing: Facing; mounted?: boolean }) => void;
   /** Another player's one-shot action (e.g. the attack swing). */
   onPlayerAct: (data: { id: number; kind: PlayerActKind; facing: Facing }) => void;
   /** An enemy hit you (amount, new HP, and what hit you). */
@@ -72,8 +74,11 @@ export type WorldStreamOptions = {
   heartbeatIntervalMs?: number;
 };
 
-/** A position the client has reported to the stream. */
-export type StreamPosition = { x: number; y: number; facing: Facing };
+/** A position the client has reported to the stream (and whether it's riding a bike). */
+export type StreamPosition = { x: number; y: number; facing: Facing; mounted: boolean };
 
 /** Best clock-offset sample so far (server clock − client clock). */
 export type ClockSample = { offsetMs: number; rttMs: number };
+
+/** A client message as it arrives, before validation (any field may be missing). */
+export type WsInbound = { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string; mounted?: boolean };

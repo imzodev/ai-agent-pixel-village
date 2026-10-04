@@ -40,6 +40,9 @@ export type CharEnt = {
   /** Nameplate title shown above the name, and the text object. */
   title?: string | null;
   titleText?: Phaser.GameObjects.Text;
+  /** Riding a bike (src/lib/bike.ts), and the bike drawn under them. */
+  mounted?: boolean;
+  bike?: Phaser.GameObjects.Image;
   /** A short-lived emote bubble ("!", "♪", "…"). */
   emote?: { t: Phaser.GameObjects.Text; until: number };
 };

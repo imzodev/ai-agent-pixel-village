@@ -49,7 +49,7 @@ import type { ChunkRef } from "@/types/trees";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import { WANTED_DMG_MULT } from "@/lib/bounties";
-import type { Connection, WsSharedState } from "@/types/websocket";
+import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
 
 const WS_PATH = "/ws";
 
@@ -137,6 +137,7 @@ function applyLivePositions(snap: WorldSnapshot): void {
       p.x = c.homePx;
       p.y = c.homePy;
       p.facing = c.homeFacing;
+      p.mounted = !!c.mounted;
     }
   }
   if (snap.me) {
@@ -218,7 +219,7 @@ async function flushDirty(): Promise<void> {
 
 /** Relay a player's live position to nearby connections. */
 function relayPosition(from: Connection, x: number, y: number, facing: Facing): void {
-  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing });
+  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing, mounted: !!from.mounted });
   for (const conn of connections.values()) {
     if (conn === from) continue;
     if (conn.ws.readyState !== conn.ws.OPEN) continue;
@@ -348,7 +349,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
 }
 
 function onMessage(conn: Connection, raw: string): void {
-  let msg: { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string };
+  let msg: WsInbound;
   try {
     msg = JSON.parse(raw);
   } catch {
@@ -392,6 +393,7 @@ if (msg.type === "pos" && typeof msg.x === "number" && typeof msg.y === "number"
     conn.homePx = msg.x;
     conn.homePy = msg.y;
     conn.homeFacing = facing;
+    conn.mounted = msg.mounted === true;
     if (changedChunk) {
       conn.homeCx = cx;
       conn.homeCy = cy;

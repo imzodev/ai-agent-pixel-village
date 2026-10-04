@@ -34,6 +34,7 @@ import { treeFromTile, trunkPoint } from "@/lib/trees";
 import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
 import { RELICS, relicPoint } from "@/lib/relics";
+import { BIKE_LIFT_PX, BIKE_SPEED_MULT } from "@/lib/bike";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
@@ -119,6 +120,8 @@ export class WorldScene extends Phaser.Scene {
   private nodes = new Map<number, Phaser.GameObjects.Image>();
   /** Dark wet-soil patch under crops watered in their current stage. */
   private wetSoil = new Map<number, Phaser.GameObjects.Ellipse>();
+  /** Whether the local player owns a bicycle (told by the HUD). */
+  private hasBike = false;
   /** Hidden relics still to find glint where they lie (null until loaded). */
   private relicsFound: Set<string> | null = null;
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
@@ -324,7 +327,15 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(inputRouter.register({
       id: "player.fish",
       scope: "gameplay",
-      run: () => this.fishing?.press(this.time.now),
+      run: () => {
+        if (this.player?.mounted) { bus.emit("toast", { text: "Get off your bike to fish (V).", kind: "info" }); return; }
+        this.fishing?.press(this.time.now);
+      },
+    }));
+    this.unsub.push(inputRouter.register({
+      id: "player.bike",
+      scope: "gameplay",
+      run: () => this.toggleBike(),
     }));
     this.unsub.push(inputRouter.register({
       id: "player.attack",
@@ -386,13 +397,20 @@ export class WorldScene extends Phaser.Scene {
       const dx = x - p.sprite.x, dy = y - p.sprite.y;
       const facing: Facing = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
       const tool = e.tool;
+      this.setMounted(false); // hop off to swing
       this.playSlash(p, facing, tool);
       this.stream?.sendAct(tool === "axe" ? "chop" : "slash", facing);
     }));
-    this.unsub.push(bus.on("hurt", ({ amount }) => this.showHurt(amount)));
+    this.unsub.push(bus.on("hurt", ({ amount }) => {
+      this.showHurt(amount);
+      if (this.player?.mounted) { this.setMounted(false); bus.emit("toast", { text: "💥 You're knocked off your bike!", kind: "bad" }); }
+    }));
+    this.unsub.push(bus.on("hasBike", (has) => { this.hasBike = has; if (!has) this.setMounted(false); }));
+    this.unsub.push(bus.on("dismount", () => this.setMounted(false)));
     this.unsub.push(bus.on("knockout", ({ x, y }) => {
       const p = this.player;
       if (!p) return;
+      this.setMounted(false);
       p.sprite.setPosition(x, y);
       p.tx = x; p.ty = y;
       this.moveTarget = null;
@@ -402,6 +420,7 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("teleport", ({ x, y }) => {
       const p = this.player;
       if (!p) return;
+      this.setMounted(false);
       const cam = this.cameras.main;
       cam.fadeOut(220, 0, 0, 0);
       cam.once("camerafadeoutcomplete", () => {
@@ -417,7 +436,7 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("relicsFound", (keys) => { this.relicsFound = new Set(keys); this.syncRelics(); }));
     this.unsub.push(bus.on("relicPicked", (p) => this.showRelicPicked(p.key, p.have, p.total)));
-    bus.emit("relicsRequest", undefined);
+    bus.emit("sceneReady", undefined);
     this.unsub.push(bus.on("modalOpen", (open) => { this.modalOpen = open; }));
 
     // Phase 2: replace 1 Hz polling with WebSocket push.
@@ -480,12 +499,13 @@ export class WorldScene extends Phaser.Scene {
           bus.emit("toast", { text: `The ${by} knocked you out! You wake in the village square${coinsLost ? `, ${coinsLost} coins lighter` : ""}.`, kind: "bad" });
           bus.emit("refreshMe", undefined);
         },
-        onPlayerPos: ({ id, x, y, facing }) => {
+        onPlayerPos: ({ id, x, y, facing, mounted }) => {
           if (!this.alive() || id === this.meId) return;
           const ent = this.players.get(id);
           if (!ent) return; // not in our proximity window yet
           ent.tx = x;
           ent.ty = y;
+          ent.mounted = mounted === true;
           if (facing === "up" || facing === "down" || facing === "left" || facing === "right") {
             ent.facing = facing;
           }
@@ -759,10 +779,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
+    e.sprite.destroy(); e.label.destroy(); e.bike?.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
   }
 
-  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null }>(
+  private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null; mounted?: boolean }>(
     map: Map<number, CharEnt>, list: T[], speed: number, labelColor: string, sel: (t: T) => Selection, badge?: (t: T) => string,
   ) {
     const seen = new Set<number>();
@@ -789,6 +809,7 @@ export class WorldScene extends Phaser.Scene {
         void this.ensureCharTexture(ent, p.appearance, eq, weapon);
       }
       ent.tx = p.x; ent.ty = p.y;
+      if (ent !== this.player) ent.mounted = p.mounted === true;
       this.applyTitle(ent, p.title ?? null);
       if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
@@ -986,6 +1007,40 @@ export class WorldScene extends Phaser.Scene {
       bus.emit("toast", { text: "✨ Something's glinting on the ground nearby — look around!", kind: "info" });
     }
   }
+  /** Get on or off your bike. */
+  private toggleBike(): void {
+    const p = this.player;
+    if (!p || this.modalOpen) return;
+    if (p.mounted) { this.setMounted(false); return; }
+    if (!this.hasBike) { bus.emit("toast", { text: "You need a bicycle — Pip and the town shops sell them.", kind: "info" }); return; }
+    if (this.fishing?.active) return;
+    this.setMounted(true);
+  }
+  private setMounted(on: boolean): void {
+    const p = this.player;
+    if (!p || !!p.mounted === on) return;
+    p.mounted = on;
+    this.placeChar(p);
+    this.stream?.setPosition(p.sprite.x, p.sprite.y, p.facing, on);
+  }
+  /** The bike under a rider: side-on (mirrored for left), or seen from the
+   *  front or back; the wheels turn while they move. The rider sits higher. */
+  private placeBike(e: CharEnt): void {
+    if (!e.mounted) {
+      if (e.bike) { e.bike.destroy(); e.bike = undefined; e.sprite.setOrigin(0.5, 0.9); e.shadow?.setScale(0.9, 0.9); }
+      return;
+    }
+    const view = e.facing === "up" ? "back" : e.facing === "down" ? "front" : "side";
+    const moving = e === this.player ? this.playerMoving : e.sprite.anims.isPlaying;
+    const frame = moving ? Math.floor(this.time.now / 110) % 2 : 0;
+    const key = `bike_${view}_${frame}`;
+    if (!e.bike) {
+      e.bike = this.add.image(e.sprite.x, e.sprite.y, key).setOrigin(0.5, 1);
+      e.sprite.setOrigin(0.5, 0.9 + BIKE_LIFT_PX / FRAME);
+    } else if (e.bike.texture.key !== key) e.bike.setTexture(key);
+    e.bike.setPosition(e.sprite.x, e.sprite.y + 2).setFlipX(e.facing === "left").setDepth(DEPTH_CHAR_BASE + e.sprite.y + 0.5);
+    e.shadow?.setScale(view === "side" ? 1.5 : 0.9, 0.9);
+  }
   /** A felled tree / picked-clean bush: nothing to do until it regrows. */
   private isSpent(sel: Selection): boolean {
     if (sel.type !== "node") return false;
@@ -1128,8 +1183,8 @@ export class WorldScene extends Phaser.Scene {
     if (moving) {
       const len = Math.hypot(vx, vy);
       const running = inputRouter.isHeld("move.run"); // also Shift+click to run somewhere
-      const step = PLAYER_SPEED * (running ? RUN_SPEED_MULT : 1) * dt;
-      p.sprite.anims.timeScale = running ? RUN_ANIM_SCALE : 1;
+      const step = PLAYER_SPEED * (p.mounted ? BIKE_SPEED_MULT : running ? RUN_SPEED_MULT : 1) * dt;
+      p.sprite.anims.timeScale = p.mounted ? 1.4 : running ? RUN_ANIM_SCALE : 1;
       const nx = p.sprite.x + (vx / len) * step, ny = p.sprite.y + (vy / len) * step;
       let movedAny = false;
       if (isWalkable(nx, p.sprite.y)) { p.sprite.x = nx; movedAny = true; }
@@ -1144,7 +1199,7 @@ export class WorldScene extends Phaser.Scene {
     // heartbeats to refreshLastSeen (10s throttled) and uses the position
     // to update proximity tracking. Sending every frame is cheap because
     // the WS layer only carries the latest snapshot forward.
-    if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing);
+    if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing, !!p.mounted);
     // Tell the HUD where we are so its proximity UI (Pick up / Gather / …)
     // reflects the live position, not the up-to-10s-stale server row.
     // Throttled to ~10 Hz and only on a meaningful move.
@@ -1208,6 +1263,7 @@ export class WorldScene extends Phaser.Scene {
   private attack() {
     const p = this.player;
     if (!p || this.modalOpen || !this.snapshot) return;
+    if (p.mounted) { bus.emit("toast", { text: "Get off your bike to fight (V).", kind: "info" }); return; }
     if (p.actingUntil !== undefined && this.time.now < p.actingUntil) return;
     let target: EnemySnapshot | null = null;
     let best = ATTACK_REACH_PX;
@@ -1334,6 +1390,7 @@ export class WorldScene extends Phaser.Scene {
   private placeChar(e: CharEnt) {
     const { x, y } = e.sprite;
     e.sprite.setDepth(DEPTH_CHAR_BASE + y);
+    this.placeBike(e);
     e.shadow?.setPosition(x, y - 4).setDepth(DEPTH_CHAR_BASE + y - 1);
     e.titleText?.setPosition(x, y - 59).setDepth(DEPTH_CHAR_BASE + y + 2);
     if (e.emote) {

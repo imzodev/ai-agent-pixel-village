@@ -17,6 +17,8 @@ export type CommandId =
   | "player.sell"
   // Cast / strike / reel while fishing (needs a rod and deep water ahead).
   | "player.fish"
+  // Get on / off your bicycle (src/lib/bike.ts).
+  | "player.bike"
   | "trade.sell"
   | "trade.focus_qty"
   | "ui.bag"

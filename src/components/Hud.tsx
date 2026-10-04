@@ -21,6 +21,7 @@ import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
 import { RELIC_REACH_PX } from "@/lib/relics";
+import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
@@ -271,6 +272,12 @@ export default function Hud() {
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
+  // The scene lets you ride (V) only with a bicycle in your bag.
+  const hasBike = (me?.inventory ?? []).some((i) => i.itemKey === BIKE_ITEM && i.qty > 0);
+  useEffect(() => {
+    if (me) bus.emit("hasBike", hasBike);
+    return bus.on("sceneReady", () => { if (me) bus.emit("hasBike", hasBike); });
+  }, [me, hasBike]);
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -402,7 +409,7 @@ export default function Hud() {
       bus.emit("relicsFound", r.found);
     });
     load(0);
-    const unsub = bus.on("relicsRequest", () => { if (relicsLoaded.current) bus.emit("relicsFound", [...relicsFound.current]); });
+    const unsub = bus.on("sceneReady", () => { if (relicsLoaded.current) bus.emit("relicsFound", [...relicsFound.current]); });
     return () => { off = true; unsub(); };
   }, [loggedInNow]);
   const pickUpRelic = async (key: string) => {
@@ -482,7 +489,8 @@ export default function Hud() {
     return () => { clearInterval(t); flush(); };
   }, [loggedInNow]);
   const enterBuilding = async (key: string, name: string) => {
-    const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number } };
+    const r = (await act({ action: "enter", key })) as { teleport?: { x: number; y: number }; error?: string };
+    if (!r.error) bus.emit("dismount", undefined); // bikes stay outside
     // Portals (the cave) move you instead of opening a panel.
     if (r.teleport) bus.emit("teleport", r.teleport);
     else if (isPortalKey(key)) { /* refused (too far, …): act() already toasted */ }
