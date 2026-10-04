@@ -65,6 +65,14 @@ Renaming a key: add `old: "new"` to `LEGACY_NPC_KEYS` (`src/lib/npcKeys.ts`).
 On boot, `renameLegacyNpcKeys` moves the row, the Folk page entries and
 "talk to" daily quests. Never reuse an old key as a new one.
 
+## Database
+
+Schema changes go through `npm run db:push` (drizzle-kit, from
+`src/db/schema.ts`). If it ever asks to **truncate** a table, answer No:
+that's drift, usually a constraint whose name differs from drizzle's
+`<table>_<col>_unique`. Fix the name instead (`scripts/fix-db-drift.sql`,
+which renamed `lots_key_key`).
+
 ## Movement (NPCs, animals, enemies)
 
 Movement is deterministic and beat-synced. **Never stream or tick
