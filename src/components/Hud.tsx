@@ -21,6 +21,7 @@ import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
 import Notifications from "./Notifications";
+import { eDecision, npcOptions, optionCount, selectionKey } from "@/game/selectionOptions";
 import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
@@ -194,6 +195,10 @@ export default function Hud() {
   // vanished — leaves WorldScene thinking the player still has the
   // stale selection, and the next E press runs primaryAction on a
   // gone entity (no menu, no action).
+  // Which target's action card is on screen (read by the E handler: a
+  // second E on an open card takes its first option).
+  const menuShownFor = useRef<string | null>(null);
+  useEffect(() => { menuShownFor.current = rawSel && !talk ? selectionKey(rawSel) : null; }, [rawSel, talk]);
   // The stored selection, not the derived `sel`: that's a new object every
   // render, and the HUD also listens for "select" — mirroring it would loop.
   useEffect(() => {
@@ -669,7 +674,12 @@ export default function Hud() {
         },
       }),
     ];
-    const offPrimary = bus.on("primaryAction", (s) => commitSelection(s));
+    // E acts at once when there's one thing to do; with several (a
+    // shopkeeper) the first E just opens the card, a second E talks.
+    const offPrimary = bus.on("primaryAction", (s) => {
+      const count = optionCount(s, snap?.npcs ?? [], me?.inventory ?? []);
+      if (eDecision({ count, inReach: s.distance <= 160, menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
+    });
     return () => {
       for (const d of disposers) d();
       offPrimary();
@@ -794,10 +804,7 @@ export default function Hud() {
           </div>
           {loggedIn && sel.type === "npc" && (() => {
             const npcKey: string | undefined = snap?.npcs?.find((n) => n.id === sel.id)?.key;
-            const trades: TradeItem[] = (npcKey ? TRADES[npcKey] : undefined) ?? [];
-            const recipes: Recipe[] = (npcKey ? recipesForNpc(npcKey) : undefined) ?? [];
-            const inv = me?.inventory ?? [];
-            const sellable = trades.some((t: TradeItem) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
+            const { recipes, sellable, stock } = npcKey ? npcOptions(npcKey, me?.inventory ?? []) : { recipes: [], sellable: false, stock: [] };
             const Buttons = (
               <>
                 {/* eslint-disable-next-line react-hooks/refs -- commitSelection is a plain function; the rule mis-flags identifiers declared near the call site. */}
@@ -810,7 +817,7 @@ export default function Hud() {
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
-                {npcKey && stockForNpc(npcKey).map((t) => {
+                {npcKey && stock.map((t) => {
                   const locked = !!t.minLevel && (me?.me?.level ?? 1) < t.minLevel;
                   return (
                     <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle disabled={locked}>
