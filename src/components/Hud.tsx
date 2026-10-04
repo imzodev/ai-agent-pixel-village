@@ -699,7 +699,7 @@ export default function Hud() {
     // E acts at once when there's one thing to do; with several (a
     // shopkeeper) the first E just opens the card, a second E talks.
     const offPrimary = bus.on("primaryAction", (s) => {
-      const count = optionCount(s, snap?.npcs ?? [], me?.inventory ?? []);
+      const count = optionCount(s, { npcs: snap?.npcs ?? [], bag: me?.inventory ?? [], lots: snap?.lots ?? [], myId });
       if (eDecision({ count, inReach: s.distance <= 160, menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
     });
     return () => {
