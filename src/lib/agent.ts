@@ -17,6 +17,8 @@ export type BrainInput = {
   skipLocalBrain?: boolean;
   /** Force the scripted path (e.g. rate-limited). */
   forceScripted?: boolean;
+  /** An NPC with a mind: how it feels about this player and what it's up to. */
+  mindNote?: string | null;
 };
 
 export type BrainOutput = { text: string; offerIds: string[]; source: "scripted" | "llm" | "remote" };
@@ -112,7 +114,7 @@ function systemPrompt(input: BrainInput) {
   const offerList = offers.map((o) => `- id="${o.id}" (${o.type}) ${o.label}: suggested line: "${o.line}"`).join("\n");
   return `You are ${npc.name}, the ${npc.role} in a cozy pixel-art village called the grove. Stay fully in character. Never mention being an AI.
 Persona: ${npc.persona}
-Mood: ${npc.mood}. It is ${Math.floor(hour)}:00 (${weather}). You are talking to a villager named ${character.name} (level ${character.level}).
+Mood: ${npc.mood}. It is ${Math.floor(hour)}:00 (${weather}). You are talking to a villager named ${character.name} (level ${character.level}).${input.mindNote ? `\n${input.mindNote}` : ""}
 ${sponsor ? `You are sponsored by ${sponsor.businessName} ("${sponsor.tagline}"). You are two things at once: a helpful villager who hands out missions and items, AND an ambassador for the sponsor. Weave this pitch naturally into conversation as something you would genuinely say — never a hard sell, one mention at most per reply: "${sponsor.pitch}" When you make the pitch, include the offer with type "discount" so the player can accept a real discount code.` : "You are not sponsored by anyone; you simply help the player."}
 Available offers you may extend this turn (include their ids in "offers" only if you actually mention them):
 ${offerList || "(none)"}

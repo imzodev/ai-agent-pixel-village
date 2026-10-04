@@ -95,6 +95,11 @@ export const TRADES: TradeConfig = {
  * `npc.key`. `price` is per `qty`. Seeds for home gardens live here.
  */
 export const SHOP_STOCK: TradeConfig = {
+  // Marigold sells off her shelf, only while she has it (src/lib/mind/profiles.ts BAKER).
+  village_marigold: [
+    { itemKey: "bread", qty: 1, price: 4, line: "A loaf from the shelf, four coppers. Still warm, love." },
+    { itemKey: "honey_bun", qty: 1, price: 6, line: "Honey bun, six coppers. Sticky fingers guaranteed." },
+  ],
   village_pip: [
     { itemKey: "radish_seeds", qty: 1, price: 2, line: "Radish seeds — quick growers. Two coppers." },
     { itemKey: "carrot_seeds", qty: 1, price: 3, line: "Carrot seeds, three coppers. Patience pays.", minLevel: 2 },
@@ -124,8 +129,11 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "hot_stew", qty: 1, price: 8, line: "Fish stew, eight coppers. Caught this morning." },
     { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers. Good for mopping up the stew." },
   ],
+  // Bjorn sells off his rack, only while he has it (src/lib/mind/profiles.ts SMITH).
   hollowmere_bjorn: [
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },
+    { itemKey: "arrow", qty: 10, price: 10, line: "Ten arrows, ten coppers. Fletched them myself." },
+    { itemKey: "stone_sword", qty: 1, price: 30, line: "A stone sword, thirty coppers. Heavy, honest, sharp enough." },
   ],
 };
 

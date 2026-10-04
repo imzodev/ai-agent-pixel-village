@@ -9,6 +9,14 @@ import type { BreadTableDef, LoafSlot } from "@/types/bakery";
 /** A loaf, 8×4 world px (src/game/textures.ts). */
 export const LOAF_ROWS = ["..cccc..", ".cLccLc.", "cccccccd", ".dddddd."];
 export const LOAF_PALETTE = { c: "#d08a40", L: "#fadaa0", d: "#7a3e18" };
+/** A honey bun, glazed (same footprint as a loaf). */
+export const BUN_ROWS = ["..hhhh..", ".hHccHh.", "hccccccd", ".dddddd."];
+export const BUN_PALETTE = { c: "#c8782e", h: "#f2b84a", H: "#fff0b0", d: "#6a3414" };
+
+/** The texture for what's on a table. */
+export function tableTexture(itemKey: string): string {
+  return itemKey === "honey_bun" ? "bread_bun" : "bread_loaf";
+}
 
 /**
  * Where each loaf of a full batch sits, front row first: a heap of three

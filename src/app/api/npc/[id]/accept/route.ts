@@ -6,6 +6,8 @@ import { buildOffers, loadSponsor } from "@/lib/offers";
 import { addItem, emitLead, grantReward, logEvent, removeItem } from "@/lib/game";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
+import { adjustStock, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
+import { regardHelped } from "@/lib/mind/regard";
 
 export const dynamic = "force-dynamic";
 
@@ -47,13 +49,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       await db.update(characterMissions).set({ status: "completed", completedAt: new Date() }).where(eq(characterMissions.id, cm.id));
       await grantReward(character.id, m.reward);
       for (const it of m.reward.items ?? []) gained.push(it);
+      await onRequestTurnedIn(npc, m, character.id, character.name); // her own requests fill her stock
       text = `${m.completeLine}`;
       await logEvent("mission", `${character.name} completed "${m.title}" for ${npc.name}.`, "npc", npc.id, npc.x, npc.y);
       if (m.sponsorId) await emitLead({ sponsorId: m.sponsorId, characterId: character.id, npcId: npc.id, kind: "mission_completed", note: m.title });
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Mission complete: ${m.title})` });
     } else if (offer.type === "sell") {
+      // An NPC with a mind pays from its own purse (src/lib/mind/).
+      const purse = await npcBuys(npc.key, offer.itemKey, offer.qty, offer.price);
+      if (!purse.ok) return Response.json({ error: `${npc.name} can't afford that today.` }, { status: 400 });
       const ok = await removeItem(character.id, offer.itemKey, offer.qty);
-      if (!ok) return Response.json({ error: "You don't have that anymore." }, { status: 400 });
+      if (!ok) {
+        if (purse.npcId) await adjustStock(purse.npcId, { [offer.itemKey]: -offer.qty }, offer.price, true);
+        return Response.json({ error: "You don't have that anymore." }, { status: 400 });
+      }
+      if (purse.npcId) await regardHelped(purse.npcId, character.id, 1);
       const newCoins = (character.coins ?? 0) + offer.price;
       await db.update(characters).set({ coins: newCoins }).where(eq(characters.id, character.id));
       gained.push({ itemKey: "coins", qty: offer.price, label: `${offer.price} coin` });

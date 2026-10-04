@@ -910,7 +910,7 @@ export default function Hud() {
             );
           })()}
           {loggedIn && sel.type === "relic" && (sel.distance > RELIC_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>✨ Pick it up {interactHint}</Btn>)}
-          {loggedIn && sel.type === "bread" && (sel.distance > BREAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🍞 Take a free loaf {interactHint}</Btn>)}
+          {loggedIn && sel.type === "bread" && (sel.distance > BREAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🍞 Take one, free {interactHint}</Btn>)}
           {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
@@ -1138,7 +1138,7 @@ function selTitle(sel: Selection) {
     case "tree": return TREE_NAMES[sel.kind] ?? "🌳 Tree";
     case "board": return `📜 ${sel.name} bounty board`;
     case "relic": return "✨ Something glinting on the ground";
-    case "bread": return `🍞 ${sel.name} · fresh, one free loaf each`;
+    case "bread": return `🍞 ${sel.name} · fresh from the oven, one each`;
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */

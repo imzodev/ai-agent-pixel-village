@@ -15,6 +15,10 @@ import { HAGGLER_MULT } from "@/lib/progression";
 import { refreshBikeOwnership } from "@/lib/world-stream";
 import { BIKE_ITEM } from "@/lib/bike";
 
+import { adjustStock, npcBuys, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
+import { isMindNpc } from "@/lib/mind/config";
+import { regardHelped, tierFor } from "@/lib/mind/regard";
+
 export const dynamic = "force-dynamic";
 
 type SellResult =
@@ -38,12 +42,18 @@ async function performSell(opts: {
   const [npc] = await db.select().from(npcs).where(eq(npcs.key, buyer.npcKey));
   if (!npc) return { ok: false, error: "Nobody here buys that." };
 
-  const ok = await removeItem(opts.characterId, opts.itemKey, qty);
-  if (!ok) return { ok: false, error: "You don't have that." };
-
   // Haggler: NPCs pay 20% more.
   const haggler = (await perksOf(opts.characterId)).has("haggler");
   const gained = Math.round(buyer.trade.price * qty * (haggler ? HAGGLER_MULT : 1));
+  // An NPC with a mind pays from its own purse (src/lib/mind/).
+  const purse = await npcBuys(buyer.npcKey, opts.itemKey, qty, gained);
+  if (!purse.ok) return { ok: false, error: `${npc.name} can't afford that today.` };
+  const ok = await removeItem(opts.characterId, opts.itemKey, qty);
+  if (!ok) {
+    if (purse.npcId) await adjustStock(purse.npcId, { [opts.itemKey]: -qty }, gained, true);
+    return { ok: false, error: "You don't have that." };
+  }
+  if (purse.npcId) await regardHelped(purse.npcId, opts.characterId, 1);
   await addCoins(opts.characterId, gained);
   const [row] = await db
     .select({ coins: sql<number>`coalesce(${characters.coins}, 0)::int` })
@@ -67,16 +77,26 @@ export async function POST(req: Request) {
       if (offer.minLevel && me.level < offer.minLevel) return Response.json({ error: `Reach level ${offer.minLevel} to buy that.` }, { status: 400 });
       // A continent town's people give their friends a discount.
       const town = townOfNpc(npcKey);
-      const unit = town ? discounted(offer.price, await reputationWith(me.id, town)) : offer.price;
+      let unit = town ? discounted(offer.price, await reputationWith(me.id, town)) : offer.price;
+      // A baker with a mind gives her dear friends 20% off (src/lib/mind/).
+      const [seller] = isMindNpc(npcKey) ? await db.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, npcKey)) : [];
+      if (seller && (await tierFor(seller.id, me.id)) === "dear") unit = Math.max(1, Math.round(unit * 0.8));
       const cost = unit * qty;
+      // …and only sells what's on her shelf.
+      const shelf = await shelfSale(npcKey, itemKey, offer.qty * qty, cost);
+      if (!shelf.ok) return Response.json({ error: "Sold out! Fresh ones come out of the oven soon." }, { status: 400 });
       // Conditional debit: never lets coins go negative, even on double clicks.
       const paid = await db
         .update(characters)
         .set({ coins: sql`${characters.coins} - ${cost}` })
         .where(and(eq(characters.id, me.id), gte(characters.coins, cost)))
         .returning({ coins: characters.coins });
-      if (paid.length === 0) return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
+      if (paid.length === 0) {
+        if (shelf.handled && shelf.npcId) await undoShelfSale(shelf.npcId, itemKey, offer.qty * qty, cost);
+        return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
+      }
       await addItem(me.id, itemKey, offer.qty * qty);
+      if (shelf.npcId) await regardHelped(shelf.npcId, me.id, 1);
       // The speed limit lets you ride as soon as the bike is yours.
       if (itemKey === BIKE_ITEM) await refreshBikeOwnership(me.id);
       const rep = town ? await addReputation(me.id, town, REP_PER_TRADE) : null;

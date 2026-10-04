@@ -17,6 +17,8 @@ import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 import { tutorialEvent } from "@/lib/tutorialServer";
 import { recordCollection } from "@/lib/collectionServer";
 
+import { mindNoteFor } from "@/lib/mind/mindServer";
+
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -72,7 +74,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // the bill, not the gameplay.
     const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString());
 
-    const reply = await generateReply({ npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted });
+    const mindNote = await mindNoteFor(npc, character.id, character.name);
+    const reply = await generateReply({ npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote });
 
     if (message) {
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "player", text: message });

@@ -136,6 +136,34 @@ so they come out as long straight legs.
   `GET /api/nav/route?from=tx,ty&to=tx,ty`, `POST /api/nav/trip { npcKey, place, learn? }`,
   `GET /api/nav/places?npcKey=…`. `scripts/route-preview.ts` draws a route on the map.
 
+## NPC minds (Jev)
+
+NPCs listed in `MIND_NPCS` (default `village_marigold`; e.g.
+`village_marigold,hollowmere_bjorn`) have a mind (`src/lib/mind/`): real stock
+and a purse (`npc_minds`), memories, and regard for players (`npc_regard`).
+Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
+
+- **Profiles** (`profiles.ts`): what a kind of NPC makes (`crafts`), sells
+  off its shelf, buys on errands (`supplies`), asks players for (`asks`) and
+  gifts. `BAKER` (Marigold) and `SMITH` (Bjorn). A new kind = a profile + its key
+  in `PROFILE_OF` + `MIND_NPCS`; shelf items also need a `SHOP_STOCK` entry.
+  A key in `MIND_NPCS` without a profile is ignored.
+- **Decide**: `feasibleActions` (`profile.ts`, shared) lists only what the NPC
+  can do *right now* (make a batch, go to a supplier, ask the village, gift a
+  friend, go home…). Jev (`jev.ts`, `TYPESAFE_API_KEY`) picks one from the plain-words
+  `stateText` and scores mood and urgency. If there's no key, an error, a timeout or
+  confidence < 0.35, `scriptedPick` decides. Never let Jev invent an action:
+  add it to `feasibleActions` and carry it out in `act()`.
+- **Carry out**: the engine does it (batches on the bread table, trips,
+  missions keyed `req_<npcKey>_<ms>`). The LLM only writes the line it says.
+- **Stock and purse** change only through `adjustStock` (one guarded UPDATE),
+  never read-modify-write: shop sales (`shelfSale`), sales to the NPC
+  (`npcBuys`) and tickd can run at once.
+- **Regard** is counters, not Jev: helping raises it, free loaves
+  past `FREEBIE_GRACE` lower it. Tiers feed the talk prompt, gifts and a 20% discount.
+- Admin: `GET /api/mind?npcKey=…` (state, last decision with probabilities),
+  `POST /api/mind { npcKey, stock?, purse?, think? }`.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

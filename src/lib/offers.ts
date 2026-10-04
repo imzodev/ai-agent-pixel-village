@@ -9,9 +9,9 @@ type Npc = typeof npcs.$inferSelect;
 type Character = typeof characters.$inferSelect;
 
 const FIRST_MEETING_GIFTS: Record<string, { itemKey: string; line: string }> = {
-  herbalist: { itemKey: "herb", line: "Here — a sprig of mint, so you know what you're looking for." },
-  baker: { itemKey: "honey_bun", line: "First visit? Then this honey bun is on the house." },
-  orphan: { itemKey: "berry", line: "You can have one of my berries. I have lots. Well, some." },
+  village_wren: { itemKey: "herb", line: "Here — a sprig of mint, so you know what you're looking for." },
+  village_marigold: { itemKey: "honey_bun", line: "First visit? Then this honey bun is on the house." },
+  village_tobin: { itemKey: "berry", line: "You can have one of my berries. I have lots. Well, some." },
 };
 
 export async function loadSponsor(npc: Npc) {

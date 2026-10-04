@@ -30,6 +30,7 @@ import type {
 import type { SponsorEvent } from "@/types/sponsor";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
+import type { MindDecision, MindIntent, MindMemory, NpcStock } from "@/types/mind";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { BountyData, BountyReward } from "@/types/bounty";
@@ -675,6 +676,8 @@ export const breadBatches = pgTable(
     bakedAt: timestamp("baked_at").notNull(),
     qty: integer("qty").notNull(),
     taken: integer("taken").notNull().default(0),
+    /** What was baked: bread, honey_bun… */
+    itemKey: text("item_key").notNull().default("bread"),
   },
   (t) => [index("bread_batches_table_idx").on(t.tableKey, t.bakedAt)],
 );
@@ -688,6 +691,34 @@ export const breadClaims = pgTable(
     at: timestamp("at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("bread_claims_pk").on(t.batchId, t.characterId)],
+);
+
+/** An NPC with a mind (src/lib/mind/): what it holds, what it's doing, what
+ *  it last decided and what it remembers. */
+export const npcMinds = pgTable("npc_minds", {
+  npcId: integer("npc_id").primaryKey(),
+  stock: jsonb("stock").$type<NpcStock>().notNull().default({}),
+  purse: integer("purse").notNull().default(0),
+  intent: text("intent").$type<MindIntent>().notNull().default(""),
+  lastThinkAt: timestamp("last_think_at"),
+  /** When it last made a batch of anything. */
+  lastCraftAt: timestamp("last_craft_at"),
+  decision: jsonb("decision").$type<MindDecision>(),
+  memory: jsonb("memory").$type<MindMemory[]>().notNull().default([]),
+});
+
+/** How an NPC with a mind feels about each player it has dealt with. */
+export const npcRegard = pgTable(
+  "npc_regard",
+  {
+    npcId: integer("npc_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    score: integer("score").notNull().default(0),
+    /** Free loaves taken since they last helped. */
+    freebies: integer("freebies").notNull().default(0),
+    lastGiftAt: timestamp("last_gift_at"),
+  },
+  (t) => [uniqueIndex("npc_regard_pk").on(t.npcId, t.characterId)],
 );
 
 /** Bounties posted on a town's notice board (src/lib/bounties.ts). */

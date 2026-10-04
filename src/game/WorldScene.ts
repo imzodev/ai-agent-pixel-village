@@ -6,7 +6,7 @@ import { BOWS, SHOT_COOLDOWN_MS } from "@/lib/progression";
 import { RIDE_FRAMES, riderSheet } from "./riding";
 import { REACH_PX, pickTarget } from "./interactTarget";
 import { pickedByMe } from "./forageClaims";
-import { breadTakenByMe, loafSlots } from "./breadTable";
+import { breadTakenByMe, loafSlots, tableTexture } from "./breadTable";
 import { ROLL_MS, ROLL_PX, canRoll, dirVec } from "@/lib/combat/strikes";
 import type { Strike, StrikeShape } from "@/types/combat";
 import { CROP_KINDS } from "@/lib/crops";
@@ -1034,7 +1034,8 @@ export class WorldScene extends Phaser.Scene {
         });
         this.breadLoaves.set(t.key, imgs);
       }
-      imgs.forEach((img, i) => img.setVisible(i < t.left));
+      const tex = tableTexture(t.itemKey);
+      imgs.forEach((img, i) => { if (img.texture.key !== tex) img.setTexture(tex); img.setVisible(i < t.left); });
     }
   }
 

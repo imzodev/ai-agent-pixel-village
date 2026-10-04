@@ -9,6 +9,8 @@ import { db } from "@/db";
 import { breadBatches, breadClaims, npcs, worldChat } from "@/db/schema";
 import { addItem, logEvent } from "@/lib/game";
 import { rowPositionAt } from "@/lib/motion";
+import { isMindNpc } from "@/lib/mind/config";
+import { regardFreebie } from "@/lib/mind/regard";
 import { BAKER_HOME_PX, BATCH_LOAVES, BREAD_ITEM, BREAD_REACH_PX, BREAD_TABLES, batchDue, loavesLeft, tableByKey, tablePoint } from "@/lib/bakery";
 import type { BreadState, BreadTableSnapshot, BreadTakeResult } from "@/types/bakery";
 import type { Point } from "@/types/world";
@@ -21,10 +23,20 @@ const BAKED_LINES = [
 
 /** The latest batch of every table. */
 async function latestBatches() {
-  const rows = await db.execute<{ id: number; table_key: string; baked_at: Date; qty: number; taken: number }>(sql`
-    select distinct on (table_key) id, table_key, baked_at, qty, taken
+  const rows = await db.execute<{ id: number; table_key: string; baked_at: Date; qty: number; taken: number; item_key: string }>(sql`
+    select distinct on (table_key) id, table_key, baked_at, qty, taken, item_key
     from bread_batches order by table_key, baked_at desc`);
-  return new Map(rows.rows.map((r) => [r.table_key, { id: r.id, bakedAt: new Date(r.baked_at).getTime(), qty: r.qty, taken: r.taken }]));
+  return new Map(rows.rows.map((r) => [r.table_key, { id: r.id, bakedAt: new Date(r.baked_at).getTime(), qty: r.qty, taken: r.taken, itemKey: r.item_key }]));
+}
+
+/** The latest batch on one table (for a mind deciding whether to bake). */
+export async function latestBatch(tableKey: string): Promise<{ id: number; bakedAt: number; qty: number; taken: number; itemKey: string } | null> {
+  return (await latestBatches()).get(tableKey) ?? null;
+}
+
+/** Set a batch out on a table (a baker with a mind decided to bake). */
+export async function setOutBatch(tableKey: string, itemKey: string, qty: number, now: number): Promise<void> {
+  await db.insert(breadBatches).values({ tableKey, itemKey, qty, bakedAt: new Date(now) });
 }
 
 /**
@@ -34,7 +46,8 @@ async function latestBatches() {
  */
 export async function bakeBatches(now: number): Promise<number> {
   const latest = await latestBatches();
-  const due = BREAD_TABLES.filter((t) => batchDue(latest.get(t.key)?.bakedAt ?? null, now));
+  // Bakers with a mind decide for themselves when to bake (src/lib/mind/).
+  const due = BREAD_TABLES.filter((t) => !isMindNpc(t.bakerKey) && batchDue(latest.get(t.key)?.bakedAt ?? null, now));
   if (!due.length) return 0;
   const bakers = await db.select().from(npcs).where(inArray(npcs.key, due.map((t) => t.bakerKey)));
   let baked = 0;
@@ -63,7 +76,7 @@ export async function breadTables(): Promise<BreadTableSnapshot[]> {
   const latest = await latestBatches();
   return BREAD_TABLES.map((t) => {
     const b = latest.get(t.key);
-    return { key: t.key, ...tablePoint(t), left: loavesLeft(b), batchId: b?.id ?? null };
+    return { key: t.key, ...tablePoint(t), left: loavesLeft(b), batchId: b?.id ?? null, itemKey: b?.itemKey ?? BREAD_ITEM };
   });
 }
 
@@ -90,11 +103,19 @@ export async function takeBread(characterId: number, tableKey: string, pos: Poin
     const [took] = await tx.update(breadBatches).set({ taken: sql`${breadBatches.taken} + 1` })
       .where(and(eq(breadBatches.id, batch.id), lt(breadBatches.taken, breadBatches.qty))).returning({ taken: breadBatches.taken, qty: breadBatches.qty });
     if (!took) { tx.rollback(); return { ok: false, error: "Someone just took the last one!" }; }
-    return { ok: true, message: "🍞 You take a warm loaf from the table.", batchId: batch.id, left: took.qty - took.taken, gained: [{ itemKey: BREAD_ITEM, qty: 1 }] };
+    const what = batch.itemKey === "honey_bun" ? "🥐 You take a sticky honey bun from the table." : "🍞 You take a warm loaf from the table.";
+    return { ok: true, message: what, batchId: batch.id, left: took.qty - took.taken, gained: [{ itemKey: batch.itemKey, qty: 1 }], bakerId: null };
   }).catch((e: unknown) => {
     if (e instanceof Error && /rollback/i.test(e.message)) return { ok: false as const, error: "Someone just took the last one!" };
     throw e;
   });
-  if (result.ok) await addItem(characterId, BREAD_ITEM, 1);
+  if (result.ok) {
+    await addItem(characterId, result.gained[0].itemKey, 1);
+    // A baker with a mind notices who takes and never helps (src/lib/mind/regard.ts).
+    if (isMindNpc(t.bakerKey)) {
+      const [baker] = await db.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, t.bakerKey));
+      if (baker) { result.bakerId = baker.id; await regardFreebie(baker.id, characterId); }
+    }
+  }
   return result;
 }

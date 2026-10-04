@@ -22,6 +22,8 @@ export type BreadTableSnapshot = {
   left: number;
   /** The current batch (null before the first one). */
   batchId: number | null;
+  /** What's on the table: bread, honey_bun… */
+  itemKey: string;
 };
 
 /** What a player knows about the tables: the batches they took from. */
@@ -29,7 +31,7 @@ export type BreadState = { taken: number[] };
 
 /** Taking a loaf. */
 export type BreadTakeResult =
-  | { ok: true; message: string; batchId: number; left: number; gained: { itemKey: string; qty: number }[] }
+  | { ok: true; message: string; batchId: number; left: number; gained: { itemKey: string; qty: number }[]; bakerId: number | null }
   | { ok: false; error: string };
 
 /** Where one loaf sits on a table (world px, its top-left). */
