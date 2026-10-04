@@ -22,6 +22,7 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   { keys: ["c"], command: "player.craft", mode: "press" },
   { keys: ["r"], command: "player.fish", mode: "press" },
   { keys: ["v"], command: "player.bike", mode: "press" },
+  { keys: ["k"], command: "player.dodge", mode: "press" },
   { keys: ["f"], command: "player.sell", mode: "press" },
   { keys: ["b"], command: "ui.bag", mode: "press" },
   { keys: ["y"], command: "ui.shop", mode: "press" },

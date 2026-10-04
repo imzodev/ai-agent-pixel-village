@@ -68,3 +68,6 @@ export type Selection =
   | { type: "relic"; key: string; name: string; x: number; y: number; distance: number }
   // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
   | { type: "tree"; vx: number; vy: number; kind: string; x: number; y: number; distance: number };
+
+/** Points bucketed into square cells (src/lib/spatialGrid.ts), for "who's near" without checking everyone. */
+export type SpatialGrid<T> = { cell: number; buckets: Map<string, T[]> };

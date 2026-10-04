@@ -6,9 +6,9 @@ import { and, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { bounties, characterBounties, characters, enemies, inventory } from "@/db/schema";
 import { TOWNS, townAt } from "./settlements";
-import { biomeAt, inHeartland } from "./continent";
+import { biomeAt, inHeartland, tierAt } from "./continent";
 import { regionAt } from "./regions";
-import { enemyKind } from "./progression";
+import { enemyHpAt, enemyKind } from "./progression";
 import { wildKindFor } from "./wildlife";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { tileCenter, tileOf } from "./motion";
@@ -82,7 +82,7 @@ async function post(t: TownDef, wantedOpen: boolean, now: Date): Promise<boolean
   const [row] = await db.insert(bounties).values({ town: t.key, kind: data.kind, data, reward: rewardFor(data), expiresAt: new Date(now.getTime() + BOUNTY_TTL_MS) }).returning({ id: bounties.id });
   if (data.kind === "wanted") {
     // The beast waits at its spot until slain or the bounty lapses.
-    const hp = enemyKind(data.enemyKind).hp * WANTED_HP_MULT;
+    const hp = enemyHpAt(data.enemyKind, tierAt(Math.floor(data.x / 16), Math.floor(data.y / 16))) * WANTED_HP_MULT;
     const [e] = await db.insert(enemies).values({
       kind: data.enemyKind, x: data.x, y: data.y, targetX: data.x, targetY: data.y, hp, maxHp: hp, spawnedAt: now,
       title: data.name, elite: true, bountyId: row.id,

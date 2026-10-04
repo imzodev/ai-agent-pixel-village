@@ -6,6 +6,8 @@ import { BOWS, SHOT_COOLDOWN_MS } from "@/lib/progression";
 import { RIDE_FRAMES, riderSheet } from "./riding";
 import { REACH_PX, pickTarget } from "./interactTarget";
 import { pickedByMe } from "./forageClaims";
+import { ROLL_MS, ROLL_PX, canRoll, dirVec } from "@/lib/combat/strikes";
+import type { Strike, StrikeShape } from "@/types/combat";
 import { CROP_KINDS } from "@/lib/crops";
 import { placeByKey, regionAt } from "@/lib/regions";
 import { Lighting, resetLights, setLightGroup } from "./lighting";
@@ -145,6 +147,14 @@ export class WorldScene extends Phaser.Scene {
   private targetCheckAt = 0;
   private targetFrom: { x: number; y: number; facing: Facing } | null = null;
   private forageCheckAt = 0;
+  /** Enemy attacks under way: their telegraphs (and bolts in flight). */
+  private fights = new Map<number, { s: Strike; g: Phaser.GameObjects.Graphics; bolt?: Phaser.GameObjects.Image }>();
+  /** When the last dodge roll started (rolls have a short cooldown). */
+  private lastRollAt: number | undefined;
+  /** A dodge roll in progress: until when, and which way. */
+  private roll: { until: number; vx: number; vy: number } | null = null;
+  /** Slowed (a frost wolf's bite) until this scene time. */
+  private slowUntil = 0;
   // Door world-px per building key, derived from the template's Interactive
   // layer during stamping. Snapshot rows also carry doorX/doorY (server-side).
   private buildingDoors = new Map<string, { x: number; y: number }>();
@@ -355,6 +365,11 @@ export class WorldScene extends Phaser.Scene {
       run: () => this.toggleBike(),
     }));
     this.unsub.push(inputRouter.register({
+      id: "player.dodge",
+      scope: "gameplay",
+      run: () => this.dodge(),
+    }));
+    this.unsub.push(inputRouter.register({
       id: "player.attack",
       scope: "gameplay",
       run: () => this.attack(),
@@ -503,9 +518,10 @@ export class WorldScene extends Phaser.Scene {
           if (kind === "shoot") this.playShoot(ent, facing);
           else this.playSlash(ent, facing, kind === "chop" ? "axe" : undefined);
         },
-        onHurt: ({ amount, hp, maxHp }) => {
+        onHurt: ({ amount, hp, maxHp, from, status }) => {
           if (!this.alive()) return;
           bus.emit("hurt", { amount, hp, maxHp });
+          this.feelHit(amount, maxHp, from, status?.kind, status?.ms);
         },
         onChunkReload: ({ chunks }) => {
           if (!this.alive()) return;
@@ -517,6 +533,8 @@ export class WorldScene extends Phaser.Scene {
           this.playEnemyAttack(id, x, y);
         },
         onSaloon: ({ inn }) => bus.emit("saloon", { inn }),
+        onStrikes: (strikes) => { if (this.alive()) for (const s of strikes) this.addStrike(s); },
+        onStrikeCancel: (id) => { if (this.alive()) this.cancelStrike(id); },
         // The server's speed limit says we're really here: snap back.
         onCorrect: ({ x, y }) => {
           const p = this.player;
@@ -1226,6 +1244,7 @@ export class WorldScene extends Phaser.Scene {
       this.noticeRelics(time);
       this.updateTargetMarker(time);
       this.refreshForage(time);
+      this.drawStrikes();
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);
@@ -1271,6 +1290,20 @@ export class WorldScene extends Phaser.Scene {
 
   private updatePlayer(dt: number) {
     const p = this.player!;
+    // Mid-roll: a quick dash the way you rolled (walls still stop it).
+    if (this.roll) {
+      if (this.time.now >= this.roll.until) { this.roll = null; p.sprite.setAlpha(1); }
+      else {
+        const step = (ROLL_PX / ROLL_MS) * 1000 * dt;
+        const nx = p.sprite.x + this.roll.vx * step, ny = p.sprite.y + this.roll.vy * step;
+        if (isWalkable(nx, p.sprite.y)) p.sprite.x = nx;
+        if (isWalkable(p.sprite.x, ny)) p.sprite.y = ny;
+        p.sprite.setAlpha(Math.floor(this.time.now / 50) % 2 ? 0.45 : 0.85);
+        this.placeChar(p);
+        this.stream?.setPosition(p.sprite.x, p.sprite.y, p.facing, !!p.mounted);
+        return;
+      }
+    }
     if (p.actingUntil !== undefined && this.time.now < p.actingUntil) {
       // Mid-swing: plant your feet until the slash finishes.
       this.placeChar(p);
@@ -1298,11 +1331,13 @@ export class WorldScene extends Phaser.Scene {
     }
     const moving = vx !== 0 || vy !== 0;
     this.playerMoving = moving;
+    // Slowed (a frost wolf's bite), you move at 60%.
     this.playerRunning = moving && inputRouter.isHeld("move.run");
     if (moving) {
       const len = Math.hypot(vx, vy);
-      const running = inputRouter.isHeld("move.run"); // also Shift+click to run somewhere
-      const step = PLAYER_SPEED * (p.mounted ? BIKE_SPEED_MULT : running ? RUN_SPEED_MULT : 1) * dt;
+      const running = this.playerRunning; // also Shift+click to run somewhere
+      const slow = this.time.now < this.slowUntil ? 0.6 : 1;
+      const step = PLAYER_SPEED * slow * (p.mounted ? BIKE_SPEED_MULT : running ? RUN_SPEED_MULT : 1) * dt;
       p.sprite.anims.timeScale = p.mounted ? 1.4 : running ? RUN_ANIM_SCALE : 1;
       const nx = p.sprite.x + (vx / len) * step, ny = p.sprite.y + (vy / len) * step;
       let movedAny = false;
@@ -1380,6 +1415,113 @@ export class WorldScene extends Phaser.Scene {
    * Attack button, so the server resolves the hit), otherwise swing freely
    * in the facing direction. Ignored mid-swing so holding the key can't spam.
    */
+  // ── Fights: telegraphs, dodging, getting hit ─────────────────────────
+  /** An enemy attack was announced: draw its telegraph; a lunge starts its move. */
+  private addStrike(s: Strike): void {
+    this.fights.get(s.id)?.g.destroy();
+    const g = this.add.graphics().setDepth(DEPTH_MARKER + 1);
+    this.fights.set(s.id, { s, g });
+    if (s.dash) {
+      const ent = this.enemies.get(s.enemyId);
+      if (ent) acceptMove(ent, s.dash);
+    }
+  }
+  private cancelStrike(id: number): void {
+    const f = this.fights.get(id);
+    if (!f) return;
+    f.g.destroy(); f.bolt?.destroy();
+    this.fights.delete(id);
+    const ent = this.enemies.get(f.s.enemyId);
+    if (ent) {
+      ent.sprite.clearTint();
+      const t = this.add.text(ent.sprite.x, ent.sprite.y - ent.top - 6, "💫", { fontSize: "14px" }).setOrigin(0.5, 1).setDepth(DEPTH_CANOPY + 2);
+      this.tweens.add({ targets: t, y: t.y - 10, alpha: 0, duration: 700, onComplete: () => t.destroy() });
+    }
+  }
+  /** Telegraphs fill up until the attack lands; bolts fly; the wind-up flashes the enemy red. */
+  private drawStrikes(): void {
+    if (!this.fights.size) return;
+    const now = this.serverNow();
+    for (const [id, f] of this.fights) {
+      const { s, g } = f;
+      if (now > s.hitAt + 140) { g.destroy(); f.bolt?.destroy(); this.fights.delete(id); continue; }
+      const p = Math.max(0, Math.min(1, (now - s.windupAt) / Math.max(1, s.releaseAt - s.windupAt)));
+      const landing = now >= s.hitAt;
+      g.clear();
+      g.lineStyle(1, 0xff3030, 0.75);
+      this.shapePath(g, s.shape, s.origin, s.dir, 1, landing ? 0.55 : 0.12, landing ? 0xffd0d0 : 0xff2a2a);
+      this.shapePath(g, s.shape, s.origin, s.dir, p, 0.32, 0xff2a2a, false);
+      const ent = this.enemies.get(s.enemyId);
+      if (ent) { if (now < s.releaseAt && Math.floor(now / 90) % 2) ent.sprite.setTint(0xff7070); else ent.sprite.clearTint(); }
+      if (s.from && now >= s.releaseAt) {
+        const t = Math.min(1, (now - s.releaseAt) / Math.max(1, s.hitAt - s.releaseAt));
+        f.bolt ??= this.add.image(s.from.x, s.from.y, "fx_bolt").setDepth(DEPTH_CANOPY + 2);
+        f.bolt.setPosition(s.from.x + (s.origin.x - s.from.x) * t, s.from.y - 14 + (s.origin.y - s.from.y + 14) * t);
+      }
+    }
+  }
+  /** Fill (and outline) an attack shape, scaled by `k` from its origin. */
+  private shapePath(g: Phaser.GameObjects.Graphics, shape: StrikeShape, o: { x: number; y: number }, dir: Facing, k: number, alpha: number, color: number, outline = true): void {
+    if (k <= 0) return;
+    g.fillStyle(color, alpha);
+    const [dx, dy] = dirVec(dir);
+    if (shape.type === "circle") {
+      g.fillCircle(o.x, o.y, shape.r * k);
+      if (outline) g.strokeCircle(o.x, o.y, shape.r);
+    } else if (shape.type === "cone") {
+      const a = Math.atan2(dy, dx);
+      g.slice(o.x, o.y, shape.r * k, a - shape.half, a + shape.half, false);
+      g.fillPath();
+      if (outline) { g.beginPath(); g.slice(o.x, o.y, shape.r, a - shape.half, a + shape.half, false); g.strokePath(); }
+    } else {
+      const len = shape.length * k, w = shape.width;
+      const x = dx ? (dx > 0 ? o.x : o.x - len) : o.x - w / 2;
+      const y = dy ? (dy > 0 ? o.y : o.y - len) : o.y - w / 2;
+      g.fillRect(x, y, dx ? len : w, dy ? len : w);
+      if (outline) {
+        const fx = dx ? (dx > 0 ? o.x : o.x - shape.length) : o.x - w / 2, fy = dy ? (dy > 0 ? o.y : o.y - shape.length) : o.y - w / 2;
+        g.strokeRect(fx, fy, dx ? shape.length : w, dy ? shape.length : w);
+      }
+    }
+  }
+  /** Dodge roll: a quick dash with a moment of invulnerability (the server grants it). */
+  private dodge(): void {
+    const p = this.player;
+    if (!p || this.modalOpen || p.mounted || this.roll) return;
+    const now = Date.now();
+    if (!canRoll(this.lastRollAt, now)) return;
+    this.lastRollAt = now;
+    const axis = inputRouter.axis();
+    let [vx, vy] = dirVec(p.facing);
+    if (axis.x || axis.y) { [vx, vy] = Math.abs(axis.x) >= Math.abs(axis.y) ? [Math.sign(axis.x), 0] : [0, Math.sign(axis.y)]; }
+    p.facing = vx > 0 ? "right" : vx < 0 ? "left" : vy < 0 ? "up" : "down";
+    p.actingUntil = undefined;
+    this.roll = { until: this.time.now + ROLL_MS, vx, vy };
+    this.stream?.sendRoll(this.serverNow(), p.facing);
+  }
+  /**
+   * Make a hit felt: a shake (harder for bigger hits), a shove away from the
+   * blow, and its effect — slowed (blue) or poisoned (green).
+   */
+  private feelHit(amount: number, maxHp: number, from?: { x: number; y: number }, status?: string, ms = 0): void {
+    const p = this.player;
+    if (!p) return;
+    this.cameras.main.shake(140, Math.min(0.012, 0.003 + (amount / Math.max(1, maxHp)) * 0.04));
+    if (from) {
+      const dx = p.sprite.x - from.x, dy = p.sprite.y - from.y, d = Math.hypot(dx, dy) || 1;
+      const nx = p.sprite.x + (dx / d) * 8, ny = p.sprite.y + (dy / d) * 8;
+      if (isWalkable(nx, ny)) p.sprite.setPosition(nx, ny);
+    }
+    if (status === "slow") {
+      this.slowUntil = this.time.now + ms;
+      this.showEmote(p, "❄", 900);
+    } else if (status === "poison") {
+      this.showEmote(p, "☠", 900);
+      p.sprite.setTint(0x80ff80);
+      this.time.delayedCall(ms, () => { if (p.sprite.active) p.sprite.clearTint(); });
+    }
+  }
+
   private attack() {
     const p = this.player;
     if (!p || this.modalOpen || !this.snapshot) return;

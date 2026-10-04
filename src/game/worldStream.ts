@@ -84,6 +84,11 @@ export class WorldStream {
     }
   }
 
+  /** A dodge roll started at server time `t` (the server checks the cooldown and grants the dodge window). */
+  sendRoll(t: number, facing: Facing): void {
+    this.send({ type: "roll", t, facing });
+  }
+
   /** Tell nearby players about a one-shot action (sent immediately). */
   sendAct(kind: PlayerActKind, facing: Facing): void {
     this.send({ type: "act", kind, facing });
@@ -140,13 +145,17 @@ export class WorldStream {
       } else if (msg.type === "playerAct") {
         this.opts.handlers.onPlayerAct({ id: msg.id, kind: msg.kind, facing: msg.facing });
       } else if (msg.type === "hurt") {
-        this.opts.handlers.onHurt?.({ amount: msg.amount, hp: msg.hp, maxHp: msg.maxHp, by: msg.by });
+        this.opts.handlers.onHurt?.({ amount: msg.amount, hp: msg.hp, maxHp: msg.maxHp, by: msg.by, from: msg.from, status: msg.status });
       } else if (msg.type === "chunkReload") {
         this.opts.handlers.onChunkReload?.({ chunks: msg.chunks });
       } else if (msg.type === "enemyAct") {
         this.opts.handlers.onEnemyAct?.({ id: msg.id, x: msg.x, y: msg.y });
       } else if (msg.type === "knockout") {
         this.opts.handlers.onKnockout?.({ x: msg.x, y: msg.y, coinsLost: msg.coinsLost, by: msg.by });
+      } else if (msg.type === "strikes") {
+        this.opts.handlers.onStrikes?.(msg.strikes);
+      } else if (msg.type === "strikeCancel") {
+        this.opts.handlers.onStrikeCancel?.(msg.id);
       } else if (msg.type === "correct") {
         this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
       } else if (msg.type === "saloon") {

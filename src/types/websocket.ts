@@ -5,6 +5,7 @@
 // `ws` import for the server-side `Connection` is type-only and erased at
 // build time; nothing here pulls Node code into the browser bundle.
 
+import type { CombatState, StatusEffect, Strike } from "@/types/combat";
 import type { WebSocket } from "ws";
 import type { ScheduledMove, WorldSnapshot } from "@/lib/protocol";
 import type { Facing, PlayerActKind } from "@/types/world";
@@ -46,6 +47,8 @@ export type WsSharedState = {
   guards: Map<number, SpeedGuard>;
   /** Whether each player owns a bicycle, and when we last looked. */
   bikes: Map<number, { has: boolean; at: number }>;
+  /** Fights: strikes under way, cooldowns and dodges (src/lib/combat). */
+  combat: CombatState;
   dirtyPoints: Array<{ x: number; y: number }>;
   dirtyTimer: ReturnType<typeof setTimeout> | null;
 };
@@ -59,7 +62,7 @@ export type StreamHandlers = {
   /** Another player's one-shot action (e.g. the attack swing). */
   onPlayerAct: (data: { id: number; kind: PlayerActKind; facing: Facing }) => void;
   /** An enemy hit you (amount, new HP, and what hit you). */
-  onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string }) => void;
+  onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string; from?: { x: number; y: number }; status?: StatusEffect }) => void;
   /** Chunks whose terrain changed (felled / regrown trees): re-read them. */
   onChunkReload?: (data: { chunks: { cx: number; cy: number }[] }) => void;
   /** An enemy struck at the player at (x, y) (plays its attack animation). */
@@ -67,6 +70,8 @@ export type StreamHandlers = {
   /** You were knocked out and woke at (x, y). */
   onKnockout?: (data: { x: number; y: number; coinsLost: number; by: string }) => void;
   onSaloon?: (data: { inn: string }) => void;
+  onStrikes?: (strikes: Strike[]) => void;
+  onStrikeCancel?: (id: number) => void;
   onCorrect?: (data: { x: number; y: number }) => void;
   /** Moves scheduled on the last beat (all starting at `startAt`). */
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;

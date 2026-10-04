@@ -19,6 +19,8 @@ export type CommandId =
   | "player.fish"
   // Get on / off your bicycle (src/lib/bike.ts).
   | "player.bike"
+  // Dodge roll: a quick dash with a moment of invulnerability (short cooldown).
+  | "player.dodge"
   | "trade.sell"
   | "trade.focus_qty"
   | "ui.bag"

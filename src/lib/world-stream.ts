@@ -37,8 +37,9 @@ import { log } from "@/lib/logger";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
 import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
-import { beatIndex, nextBeatAt, rowPositionAt } from "@/lib/motion";
-import { ENEMY_KINDS, enemyHit, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
+import { beatIndex, nextBeatAt, rowPositionAt, tileCenter, tileOf } from "@/lib/motion";
+import { ENEMY_KINDS, enemyDmgAt, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
+import { tierAt } from "@/lib/continent";
 import { damagePlayer, perksOfMany } from "@/lib/combat";
 import { planMoveFanout } from "@/lib/moveFanout";
 import { fetchMovesStartingAt, writeMoves } from "@/lib/moveStore";
@@ -50,6 +51,13 @@ import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import { WANTED_DMG_MULT } from "@/lib/bounties";
 import { guardStep, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
+import { buildGrid, nearby } from "@/lib/spatialGrid";
+import type { SpatialGrid } from "@/types/world";
+import { CHIP_EVERY_MS, ROLL_LATE_MS, ROLL_PX, canRoll, chipDamage, dirVec, dodged, inShape } from "@/lib/combat/strikes";
+import { DASH_SPEED, planStrike, speedScale, usableMoves } from "@/lib/combat/movesets";
+import { buildMoveWrite } from "@/lib/moveStore";
+import type { CombatState, StatusEffect, Strike } from "@/types/combat";
+import type { Move, MoveWrite } from "@/types/motion";
 import { BIKE_ITEM } from "@/lib/bike";
 import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
 
@@ -94,22 +102,26 @@ const wsUpgradeTimestamps = new Map<string, number[]>();
 // the same connections, live positions and dirty queue.
 const SHARED_STATE_KEY = "__grove_ws_shared__";
 
+const newCombat = (): CombatState => ({ strikes: new Map(), busyUntil: new Map(), rows: [], rowsAt: 0, nextId: 0, rolls: new Map(), timer: null });
+
 function getSharedState(): WsSharedState {
   const g = globalThis as unknown as Record<string, WsSharedState | undefined>;
   let s = g[SHARED_STATE_KEY];
   if (!s) {
-    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null, guards: new Map(), bikes: new Map() };
+    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null, guards: new Map(), bikes: new Map(), combat: newCombat() };
     g[SHARED_STATE_KEY] = s;
   }
   // Added later: a hot-reloaded process may hold an older state object.
   s.guards ??= new Map();
   s.bikes ??= new Map();
+  s.combat ??= newCombat();
   return s;
 }
 
 const shared = getSharedState();
 const connections = shared.connections;
 const guards = shared.guards;
+const combat = shared.combat;
 const bikes = shared.bikes;
 
 // ── Speed limit (src/lib/speedGuard.ts) ────────────────────────────────
@@ -455,7 +467,11 @@ function onMessage(conn: Connection, raw: string): void {
     }
     return;
   }
-if (msg.type === "pos" && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
+if (msg.type === "roll") {
+    onRoll(conn, Number(msg.t));
+    return;
+  }
+  if (msg.type === "pos" && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
     // Fast in-memory movement update. Never writes the DB for position —
     // presence (below) stays on its own slow cadence. Relay to nearby
     // players so they see movement within a frame or two. Only as far as
@@ -590,11 +606,13 @@ let periodicTimer: NodeJS.Timeout | null = null;
 export function startPeriodicRefresh(): void {
   if (periodicStarted) return;
   periodicStarted = true;
+  startCombatClock();
   log.info({ beatMs: WORLD_TICK_MS, offsetMs: BROADCAST_OFFSET_MS, resyncMs: WS_RESYNC_MS }, "beat broadcaster armed");
   scheduleNextBroadcast();
 }
 
 export function stopPeriodicRefresh(): void {
+  stopCombatClock();
   if (periodicTimer) clearTimeout(periodicTimer);
   periodicTimer = null;
   periodicStarted = false;
@@ -635,11 +653,6 @@ async function onBeat(boundary: number): Promise<void> {
     if (moves.length > 0) broadcastMoves(startAt, moves);
   } catch (err) {
     log.error({ err }, "beat move broadcast failed");
-  }
-  try {
-    await enemyAggression();
-  } catch (err) {
-    log.error({ err }, "enemy aggression failed");
   }
   if (beatIndex(boundary) % RESYNC_EVERY_BEATS === 0) await resyncAll();
 }
@@ -690,61 +703,201 @@ async function enemyHunts(startAt: number): Promise<void> {
   await writeMoves("enemy", writes);
 }
 
-/** How close an aggressive enemy must be to hit a player (players attack
- *  from 80 px, so standing in reach to fight means getting hit back). */
-const ENEMY_REACH_PX = 72;
-/** The world boss's area attack reaches further. */
-const BOSS_REACH_PX = 110;
+// ── Fights (src/lib/combat): telegraphed attacks and dodging ────────────
+/** How often the combat clock looks for attacks to start. */
+const COMBAT_TICK_MS = 200;
+/** An aggressive enemy fights players within this distance. */
+const ENGAGE_PX = 8 * 16;
+/** Aggressive enemies are re-read this often (kills happen in the API routes). */
+const COMBAT_ROWS_MS = 1000;
+/** The kinds that fight (only their rows are read each second). */
+const AGGRESSIVE_KINDS = Object.keys(ENEMY_KINDS).filter((k) => isAggressive(k));
+/** No attack shape reaches further than this from its origin (the boss's sweep). */
+const STRIKE_REACH_PX = 140;
+/** A staggered enemy can't attack again for this long. */
+const STAGGER_MS = 900;
+/** Poison: this many ticks of damage, this far apart. */
+const POISON_TICKS = 3, POISON_EVERY_MS = 1000;
+
+const openPlayers = () => [...connections.values()].filter((c) => c.ws.readyState === c.ws.OPEN);
+function sendNear(x: number, y: number, msg: string): void {
+  for (const c of connections.values()) {
+    if (c.ws.readyState !== c.ws.OPEN || Math.hypot(c.homePx - x, c.homePy - y) > RELAY_RADIUS_PX) continue;
+    try { c.ws.send(msg); } catch { /* socket closed */ }
+  }
+}
+
+function startCombatClock(): void {
+  if (combat.timer) return;
+  combat.timer = setInterval(() => { void combatTick().catch((err) => log.error({ err }, "combat tick failed")); }, COMBAT_TICK_MS);
+}
+function stopCombatClock(): void {
+  if (combat.timer) clearInterval(combat.timer);
+  combat.timer = null;
+}
+
+/** A lunge or charge: up to `tiles` along `dir`, stopping at walls. */
+async function dashMove(from: { x: number; y: number }, dir: Facing, tiles: number, startAt: number): Promise<Move | null> {
+  const start = tileOf(from.x, from.y);
+  const [dx, dy] = dirVec(dir);
+  let end = start;
+  for (let k = 1; k <= tiles; k++) {
+    const t = { tx: start.tx + dx * k, ty: start.ty + dy * k };
+    const c = tileCenter(t);
+    if (!(await isWalkableServer(c.x, c.y))) break;
+    end = t;
+  }
+  return end.tx === start.tx && end.ty === start.ty ? null : { path: [start, end], startAt, speed: DASH_SPEED };
+}
 
 /**
- * Aggressive enemies (tier 2+, the world boss) hit connected players who
- * stand next to them, once per beat. Runs here because this process knows
- * every player's live position; enemy positions come from their moves.
+ * The combat clock: aggressive enemies near players pick an attack they can
+ * reach, telegraph it to everyone nearby at once, and it lands at `hitAt`.
+ * Only engaged enemies cost anything.
  */
-async function enemyAggression(): Promise<void> {
-  const players = [...connections.values()].filter((c) => c.ws.readyState === c.ws.OPEN);
-  if (players.length === 0) return;
-  const rows = (await db.select().from(enemies)).filter((e) => isAggressive(e.kind));
-  if (rows.length === 0) return;
+async function combatTick(): Promise<void> {
+  const players = openPlayers();
+  if (!players.length) return;
   const now = Date.now();
-  const live = rows.map((e) => ({ e, p: rowPositionAt(e, now), reach: enemyKind(e.kind).tier === "boss" ? BOSS_REACH_PX : ENEMY_REACH_PX }));
-  const hits: { conn: Connection; kind: string; name: string; elite: boolean }[] = [];
-  const struck = new Map<number, { x: number; y: number; ex: number; ey: number }>(); // enemy id → its victim
-  for (const conn of players) {
-    for (const { e, p, reach } of live) {
-      if (Math.hypot(p.x - conn.homePx, p.y - conn.homePy) > reach) continue;
-      hits.push({ conn, kind: e.kind, name: e.title ?? enemyKind(e.kind).name, elite: e.elite });
-      if (!struck.has(e.id)) struck.set(e.id, { x: conn.homePx, y: conn.homePy, ex: p.x, ey: p.y });
-    }
+  if (now - combat.rowsAt > COMBAT_ROWS_MS) {
+    combat.rows = await db.select().from(enemies).where(inArray(enemies.kind, AGGRESSIVE_KINDS));
+    combat.rowsAt = now;
   }
-  if (hits.length === 0) return;
-  // Everyone nearby sees the enemy strike (bite / lunge animation).
-  for (const [id, s] of struck) {
-    const msg = JSON.stringify({ type: "enemyAct", id, x: s.x, y: s.y });
-    for (const conn of players) {
-      if (Math.hypot(conn.homePx - s.ex, conn.homePy - s.ey) > RELAY_RADIUS_PX) continue;
-      try { conn.ws.send(msg); } catch { /* socket closed */ }
-    }
-  }
-  const perks = await perksOfMany([...new Set(hits.map((h) => h.conn.playerId))]);
-  const knockedOut = new Set<number>();
-  for (const { conn, kind, name, elite } of hits) {
-    if (knockedOut.has(conn.playerId)) continue; // already out of the fight this beat
-    const amount = Math.round(enemyHit(kind, perks.get(conn.playerId)?.has("tough") ?? false) * (elite ? WANTED_DMG_MULT : 1));
-    const r = await damagePlayer(conn.playerId, amount);
-    if (!r) continue;
-    try {
-      if (r.knockedOut) {
-        placePlayer(conn.playerId, r.x!, r.y!);
-        knockedOut.add(conn.playerId);
-        conn.ws.send(JSON.stringify({ type: "knockout", x: r.x, y: r.y, coinsLost: r.coinsLost, hp: r.hp, by: name }));
-        continue;
+  // Players bucketed by area: each enemy only looks at the cells around it.
+  const grid = buildGrid(players, (c) => ({ x: c.homePx, y: c.homePy }), ENGAGE_PX);
+  await chipStrikes(grid, now);
+  const planned: Strike[] = [];
+  const dashes: MoveWrite[] = [];
+  for (const e of combat.rows) {
+    if ((combat.busyUntil.get(e.id) ?? 0) > now) continue;
+    const at = rowPositionAt(e, now);
+    const near = nearby(grid, at.x, at.y, ENGAGE_PX).map((c) => ({ c, d: Math.hypot(c.homePx - at.x, c.homePy - at.y) })).filter((x) => x.d <= ENGAGE_PX).sort((a, b) => a.d - b.d);
+    if (!near.length) continue;
+    const moves = usableMoves(e.kind, near[0].d);
+    if (!moves.length) continue;
+    const move = moves[Math.floor(Math.random() * moves.length)];
+    const def = enemyKind(e.kind);
+    const scale = speedScale(def.tier === "boss" ? 3 : def.tier, e.elite);
+    // Danger grows with the land (tierAt): the same wolf bites harder far out.
+    const baseDmg = enemyDmgAt(e.kind, tierAt(Math.floor(at.x / 16), Math.floor(at.y / 16))) * (e.elite ? WANTED_DMG_MULT : 1);
+    // Spikes and bolts aimed at a spot hit every engaged player in reach (the boss's root spikes); others pick the nearest.
+    const targets = move.atTarget && !move.projectile ? near.filter((x) => x.d <= move.trigger) : [near[0]];
+    let last = now;
+    for (const { c } of targets) {
+      const s = planStrike({ id: ++combat.nextId, enemyId: e.id, kind: e.kind, move, at, target: { x: c.homePx, y: c.homePy }, now, baseDmg, scale });
+      if (move.dash) {
+        const m = await dashMove(at, s.dir, move.dash, s.releaseAt);
+        if (m) {
+          s.dash = m;
+          const w = buildMoveWrite(e.id, m.path, m.startAt, m.speed);
+          dashes.push(w);
+          Object.assign(e, { x: w.x, y: w.y, movePath: m.path, moveStartAt: m.startAt, moveSpeed: m.speed, moveAfter: null });
+        }
       }
-      conn.ws.send(JSON.stringify({ type: "hurt", amount, hp: r.hp, maxHp: r.maxHp, by: name }));
-    } catch {
-      /* socket closed */
+      combat.strikes.set(s.id, { ...s, timer: setTimeout(() => { void resolveStrike(s.id).catch((err) => log.error({ err }, "strike failed")); }, Math.max(0, s.hitAt - Date.now())) });
+      planned.push(s);
+      last = Math.max(last, s.hitAt);
+    }
+    combat.busyUntil.set(e.id, last + Math.round(move.cooldownMs * scale));
+  }
+  if (dashes.length) await writeMoves("enemy", dashes);
+  for (const s of planned) sendNear(s.origin.x, s.origin.y, JSON.stringify({ type: "strikes", strikes: [s] }));
+}
+
+/**
+ * While an attack winds up, anyone standing in it takes a little damage every
+ * CHIP_EVERY_MS — waiting it out isn't free. Bolts don't chip (nothing has
+ * hit you until the bolt arrives); a roll avoids it like the real hit.
+ */
+async function chipStrikes(grid: SpatialGrid<Connection>, now: number): Promise<void> {
+  for (const s of combat.strikes.values()) {
+    if (s.from || now >= s.releaseAt || now - (s.chipAt ?? s.windupAt) < CHIP_EVERY_MS) continue;
+    s.chipAt = now;
+    const row = combat.rows.find((r) => r.id === s.enemyId);
+    if (!row) continue;
+    const name = row.title ?? enemyKind(row.kind).name;
+    for (const c of nearby(grid, s.origin.x, s.origin.y, STRIKE_REACH_PX)) {
+      if (!inShape(s.shape, s.origin, s.dir, { x: c.homePx, y: c.homePy }) || dodged(combat.rolls.get(c.playerId) ?? [], now)) continue;
+      await hurtPlayer(c, chipDamage(s.dmg), name, s.origin);
     }
   }
+}
+
+/** An attack lands: everyone in its shape who isn't mid-roll is hit. */
+async function resolveStrike(id: number): Promise<void> {
+  const s = combat.strikes.get(id);
+  if (!s) return; // interrupted
+  combat.strikes.delete(id);
+  const [e] = await db.select({ id: enemies.id, kind: enemies.kind, title: enemies.title }).from(enemies).where(eq(enemies.id, s.enemyId));
+  if (!e) return; // it died first
+  const name = e.title ?? enemyKind(e.kind).name;
+  const hit = openPlayers().filter((c) => inShape(s.shape, s.origin, s.dir, { x: c.homePx, y: c.homePy }) && !dodged(combat.rolls.get(c.playerId) ?? [], s.hitAt));
+  const from = s.from ?? s.origin;
+  sendNear(s.origin.x, s.origin.y, JSON.stringify({ type: "enemyAct", id: s.enemyId, x: s.origin.x, y: s.origin.y }));
+  if (!hit.length) return;
+  const perks = await perksOfMany(hit.map((c) => c.playerId));
+  for (const conn of hit) {
+    const amount = Math.max(1, s.dmg - (perks.get(conn.playerId)?.has("tough") ? 1 : 0));
+    await hurtPlayer(conn, amount, name, from, s.status);
+    if (s.status?.kind === "poison") {
+      for (let k = 1; k <= POISON_TICKS; k++) setTimeout(() => { void hurtPlayer(conn, 1, `${name}'s poison`, from).catch(() => {}); }, k * POISON_EVERY_MS);
+    }
+  }
+}
+
+/** Damage a connected player and tell them (or knock them out). */
+async function hurtPlayer(conn: Connection, amount: number, by: string, from: { x: number; y: number }, status?: StatusEffect): Promise<void> {
+  if (conn.ws.readyState !== conn.ws.OPEN) return;
+  const r = await damagePlayer(conn.playerId, amount);
+  if (!r) return;
+  try {
+    if (r.knockedOut) {
+      placePlayer(conn.playerId, r.x!, r.y!);
+      conn.ws.send(JSON.stringify({ type: "knockout", x: r.x, y: r.y, coinsLost: r.coinsLost, hp: r.hp, by }));
+      return;
+    }
+    conn.ws.send(JSON.stringify({ type: "hurt", amount, hp: r.hp, maxHp: r.maxHp, by, from, ...(status ? { status } : {}) }));
+  } catch {
+    /* socket closed */
+  }
+}
+
+/**
+ * A player hit this enemy while it was winding up: the attack is broken off
+ * and the enemy reels for a moment. Returns true when that happened (the
+ * hit counts as a stagger). Called from the attack API (same process).
+ */
+export function interruptStrike(enemyId: number): boolean {
+  const now = Date.now();
+  let hit = false;
+  for (const [id, s] of combat.strikes) {
+    if (s.enemyId !== enemyId || now >= s.releaseAt) continue;
+    if (s.timer) clearTimeout(s.timer);
+    combat.strikes.delete(id);
+    sendNear(s.origin.x, s.origin.y, JSON.stringify({ type: "strikeCancel", id }));
+    hit = true;
+    if (s.dash) {
+      // Called off: it stays where it stood.
+      const stay = buildMoveWrite(enemyId, [s.dash.path[0], s.dash.path[0]], now, DASH_SPEED);
+      void writeMoves("enemy", [stay]).catch(() => {});
+      const row = combat.rows.find((r) => r.id === enemyId);
+      if (row) Object.assign(row, { x: stay.x, y: stay.y, movePath: stay.move.path, moveStartAt: now, moveSpeed: DASH_SPEED, moveAfter: null });
+    }
+  }
+  if (hit) combat.busyUntil.set(enemyId, now + STAGGER_MS);
+  return hit;
+}
+
+/** A dodge roll: its window makes attacks miss — unless it came too soon after the last. */
+function onRoll(conn: Connection, t: number): void {
+  const now = Date.now();
+  const at = Number.isFinite(t) && t >= now - ROLL_LATE_MS && t <= now + 50 ? t : now;
+  const past = combat.rolls.get(conn.playerId) ?? [];
+  if (!canRoll(past.at(-1), at)) return;
+  combat.rolls.set(conn.playerId, [...past.filter((r) => r > now - 2000), at]);
+  // The dash covers ground fast: let the speed limit allow it.
+  const g = guards.get(conn.playerId);
+  if (g) g.budget += ROLL_PX + 8;
 }
 
 function isBackedUp(conn: Connection): boolean {

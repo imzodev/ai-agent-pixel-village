@@ -5,7 +5,7 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel, removeItem } from "@/lib/game";
-import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, interruptStrike, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
@@ -14,13 +14,17 @@ import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
-import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, bowOf, chopBonus, enemyHit, enemyKind, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
+import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, bowOf, chopBonus, enemyHit, enemyKind, enemyXpAt, isAggressive, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { arrivalPoint } from "@/lib/chunkCollisionServer";
+import { tierAt } from "@/lib/continent";
 import { tutorialEvent } from "@/lib/tutorialServer";
 import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
 import { ENCOUNTERS } from "@/lib/encounters";
 import { recordCollection } from "@/lib/collectionServer";
+
+/** A blow that interrupts an enemy's wind-up lands this much harder. */
+const STAGGER_DMG_MULT = 1.5;
 
 /** When each player last loosed an arrow (the draw takes SHOT_COOLDOWN_MS). */
 const lastShot = new Map<number, number>();
@@ -221,7 +225,10 @@ export async function POST(req: Request) {
       }
       const def = enemyKind(e.kind);
       const weapon = bow ? bow.damage + (gear.plus[bow.key] ?? 0) : weaponBonus(gear.equipped, gear.plus);
-      const dmg = playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() });
+      // Hit it while it's winding up an attack: the attack breaks off, it
+      // reels, and the blow lands harder.
+      const staggered = interruptStrike(e.id);
+      const dmg = Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1));
       const boss = e.kind === BOSS_KIND;
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).
@@ -237,7 +244,7 @@ export async function POST(req: Request) {
       if (!after) return Response.json({ error: "It's gone." }, { status: 404 });
       // Striking an encounter's attacker earns a share when the fight is won.
       if (e.encounterId) await noteFighter(e.encounterId, me.id);
-      let message = `You hit the ${def.name} for ${dmg}.`;
+      let message = staggered ? `⚡ Staggered! You hit the ${def.name} for ${dmg}.` : `You hit the ${def.name} for ${dmg}.`;
       let taken = 0;
       let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
@@ -270,7 +277,8 @@ export async function POST(req: Request) {
         }
         // Wanted beasts are worth far more, and pay out their bounty to
         // everyone close by who carries it.
-        const xp = def.xp * (e.elite ? WANTED_XP_MULT : 1);
+        // Tougher land, tougher beasts, more XP (src/lib/progression.ts TIER_XP_MULT).
+        const xp = enemyXpAt(e.kind, tierAt(Math.floor(ep.x / 16), Math.floor(ep.y / 16))) * (e.elite ? WANTED_XP_MULT : 1);
         message = e.title ? `⭐ You brought down ${e.title}! +${xp} XP` : `You defeated the ${def.name}! +${xp} XP`;
         if (e.bountyId) {
           await wantedSlain(e.bountyId, [me.id, ...livePlayersNear(e.x, e.y, 240)]);
@@ -293,8 +301,10 @@ export async function POST(req: Request) {
         daily(me.id, "defeat", { enemyKind: e.kind });
         await logEvent("combat", `${me.name} drove off a ${def.name}.`, "character", me.id, e.x, e.y);
       } else if (!boss && after.hp > 0) {
-        // (The boss strikes on its own, every beat, see world-stream.)
-        if (!ranged && Math.random() < 0.5) {
+        // Aggressive enemies attack on their own, telegraphed and dodgeable
+        // (the combat clock in world-stream); only the gentle tier-1 critters
+        // still nip back when you hit them up close.
+        if (!ranged && !isAggressive(e.kind) && Math.random() < 0.5) {
           taken = enemyHit(e.kind, perks.has("tough"));
           const r = await damagePlayer(me.id, taken);
           message += ` It hits back for ${taken}.`;

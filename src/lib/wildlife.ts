@@ -16,8 +16,22 @@ export const WILD_LEASH_TILES = 8;
 /** …and fade once nobody has been near for this long. */
 export const WILD_DESPAWN_MS = 5 * 60_000;
 
-/** How many wild enemies a player's surroundings hold at danger `tier`. */
-export const wildTarget = (tier: number): number => 2 + tier;
+/**
+ * How many wild enemies a player's surroundings hold at danger `tier`.
+ * Counted around each player, so players close together share one
+ * population — a crowd doesn't multiply the beasts.
+ */
+export const wildTarget = (tier: number): number => 6 + 4 * tier;
+/** Each spawn is a pack of the same kind: 1–3 near home, 2–4 further out, 2–5 in the far wilds. */
+export function wildPackSize(tier: number, rand = Math.random): number {
+  const [min, max] = tier >= 4 ? [2, 5] : tier >= 3 ? [2, 4] : [1, 3];
+  return min + Math.floor(rand() * (max - min + 1));
+}
+/** The chance per beat that a player's surroundings top up, and how many packs at most. */
+export const WILD_SPAWN_CHANCE = 0.85;
+export const WILD_PACKS_PER_BEAT = 3;
+/** A hard ceiling on wild enemies in the whole world (protects the database). */
+export const WILD_MAX_TOTAL = 8000;
 
 /** Which kinds live in a biome (heavier weight = more common). */
 const BIOME_KINDS: Readonly<Record<Biome, Readonly<Record<string, number>>>> = {

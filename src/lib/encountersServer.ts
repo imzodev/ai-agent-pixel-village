@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { characters, encounters, enemies, groundItems, npcs } from "@/db/schema";
 import { biomeAt, inHeartland, tierAt } from "./continent";
 import { TOWNS, townAt } from "./settlements";
-import { enemyKind } from "./progression";
+import { enemyHpAt } from "./progression";
 import { wildKindFor } from "./wildlife";
 import { isWalkableServer } from "./chunkCollisionServer";
 import { tileCenter, tileOf } from "./motion";
@@ -54,7 +54,7 @@ async function spawnAttackers(encounterId: number, around: Point, n: number, nig
     const at = await spotNear(around, 2, 4);
     if (!at) continue;
     const kind = attackerKind(at, night);
-    const hp = enemyKind(kind).hp;
+    const hp = enemyHpAt(kind, tierAt(Math.floor(at.x / 16), Math.floor(at.y / 16)));
     await db.insert(enemies).values({ kind, x: at.x, y: at.y, targetX: at.x, targetY: at.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now, encounterId });
   }
 }

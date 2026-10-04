@@ -22,4 +22,5 @@ export const TOUCH_BUTTONS: readonly TouchButton[] = [
   { id: "ui.shop", label: "Y", ariaLabel: "Shop", right: "8%", bottom: "12%" },
   { id: "ui.map", label: "M", ariaLabel: "Map", right: "20%", bottom: "20%" },
   { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "26%", bottom: "12%" },
+  { id: "player.dodge", label: "⤼", ariaLabel: "Dodge roll", right: "26%", bottom: "28%" },
 ];

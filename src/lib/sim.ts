@@ -4,7 +4,7 @@ import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEve
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
-import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyKind, inDarkZone, pickEnemyKind } from "./progression";
+import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyHpAt, enemyKind, inDarkZone, pickEnemyKind } from "./progression";
 import { perksOfMany } from "./combat";
 import { isWalkableServer } from "./chunkCollisionServer";
 import {
@@ -32,7 +32,8 @@ import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
 import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
-import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildTarget } from "./wildlife";
+import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_MAX_TOTAL, WILD_PACKS_PER_BEAT, WILD_RADIUS_PX, WILD_SPAWN_CHANCE, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildPackSize, wildTarget } from "./wildlife";
+import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
@@ -399,7 +400,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
     if (!kind) continue;
     const p = await randomPointIn(z);
     if (!p) continue;
-    const hp = enemyKind(kind).hp;
+    const hp = enemyHpAt(kind, tierAt(Math.floor(p.x / 16), Math.floor(p.y / 16)));
     await db.insert(enemies).values({ kind, x: p.x, y: p.y, hp, maxHp: hp, spawnedAt: now });
   }
   await tickWild(rows, now, night);
@@ -420,34 +421,56 @@ async function tickWild(rows: (typeof enemies.$inferSelect)[], now: Date, night:
   const online = await db.select({ id: characters.id, x: characters.x, y: characters.y }).from(characters)
     .where(gt(characters.lastSeenAt, new Date(nowMs - ONLINE_WINDOW_MS)));
   const wild = rows.filter((e) => e.wild).map((e) => ({ e, p: rowPositionAt(e, nowMs) }));
-  const near = wild.filter(({ p }) => online.some((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WILD_RADIUS_PX * 1.5)).map(({ e }) => e.id);
+  // Spatial grids: each check only looks at the few cells around it, so this
+  // stays cheap with hundreds of players and thousands of beasts.
+  const players = buildGrid(online, (o) => o, WILD_RADIUS_PX);
+  const near = wild.filter(({ p }) => countWithin(players, p.x, p.y, WILD_RADIUS_PX * 1.5, (o) => o) > 0).map(({ e }) => e.id);
+  const nearSet = new Set(near);
   if (near.length) await db.update(enemies).set({ nearAt: now }).where(inArray(enemies.id, near));
-  const stale = wild.filter(({ e }) => !near.includes(e.id) && (e.nearAt ?? e.spawnedAt).getTime() < nowMs - WILD_DESPAWN_MS).map(({ e }) => e.id);
+  const stale = wild.filter(({ e }) => !nearSet.has(e.id) && (e.nearAt ?? e.spawnedAt).getTime() < nowMs - WILD_DESPAWN_MS).map(({ e }) => e.id);
+  const staleSet = new Set(stale);
   if (stale.length) await db.delete(enemies).where(inArray(enemies.id, stale));
 
   // Random encounters around travelling players (src/lib/encounters.ts).
   await tickEncounters(online, now, night).catch((err) => console.warn("[tick] encounters failed:", err instanceof Error ? err.message : err));
 
-  const live = wild.filter(({ e }) => !stale.includes(e.id)).map(({ p }) => p);
+  const live = buildGrid(wild.filter(({ e }) => !staleSet.has(e.id)).map(({ p }) => p), (p) => p, WILD_RADIUS_PX);
+  let total = wild.length - stale.length;
+  const spawns: (typeof enemies.$inferInsert)[] = [];
   for (const o of online) {
     const here = tileOf(o.x, o.y);
     if (inHeartland(here.tx, here.ty)) continue;
-    const count = live.filter((p) => Math.hypot(p.x - o.x, p.y - o.y) <= WILD_RADIUS_PX).length;
-    if (count >= wildTarget(tierAt(here.tx, here.ty)) || Math.random() > 0.4) continue;
-    for (let k = 0; k < 6; k++) {
-      const ang = Math.random() * Math.PI * 2, d = WILD_SPAWN_MIN_PX + Math.random() * (WILD_SPAWN_MAX_PX - WILD_SPAWN_MIN_PX);
-      const t = tileOf(o.x + Math.cos(ang) * d, o.y + Math.sin(ang) * d);
-      if (inHeartland(t.tx, t.ty)) continue;
-      const at = tileCenter(t);
-      if (!(await isWalkableServer(at.x, at.y))) continue;
-      const kind = wildKindFor(biomeAt(t.tx, t.ty), tierAt(t.tx, t.ty), night);
-      if (!kind) break;
-      const hp = enemyKind(kind).hp;
-      await db.insert(enemies).values({ kind, x: at.x, y: at.y, targetX: at.x, targetY: at.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now });
-      live.push(at);
-      break;
+    const target = wildTarget(tierAt(here.tx, here.ty));
+    if (Math.random() > WILD_SPAWN_CHANCE) continue;
+    // Top up with packs: a few of one kind standing together, out of sight.
+    for (let pack = 0; pack < WILD_PACKS_PER_BEAT && total < WILD_MAX_TOTAL; pack++) {
+      if (countWithin(live, o.x, o.y, WILD_RADIUS_PX, (p) => p) >= target) break;
+      for (let k = 0; k < 6; k++) {
+        const ang = Math.random() * Math.PI * 2, d = WILD_SPAWN_MIN_PX + Math.random() * (WILD_SPAWN_MAX_PX - WILD_SPAWN_MIN_PX);
+        const t = tileOf(o.x + Math.cos(ang) * d, o.y + Math.sin(ang) * d);
+        if (inHeartland(t.tx, t.ty)) continue;
+        const at = tileCenter(t);
+        if (!(await isWalkableServer(at.x, at.y))) continue;
+        const tier = tierAt(t.tx, t.ty);
+        const kind = wildKindFor(biomeAt(t.tx, t.ty), tier, night);
+        if (!kind) break;
+        const hp = enemyHpAt(kind, tier);
+        const n = wildPackSize(tier);
+        for (let m = 0; m < n; m++) {
+          // Pack mates stand a few tiles from the first.
+          const mt = m === 0 ? t : { tx: t.tx + Math.round((Math.random() - 0.5) * 6), ty: t.ty + Math.round((Math.random() - 0.5) * 6) };
+          const mp = tileCenter(mt);
+          if (m > 0 && (inHeartland(mt.tx, mt.ty) || !(await isWalkableServer(mp.x, mp.y)))) continue;
+          spawns.push({ kind, x: mp.x, y: mp.y, targetX: mp.x, targetY: mp.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now });
+          addToGrid(live, mp, mp);
+          total++;
+        }
+        break;
+      }
     }
   }
+  // One write for the whole beat's spawns.
+  for (let i = 0; i < spawns.length; i += 500) await db.insert(enemies).values(spawns.slice(i, i + 500));
 }
 
 /** Things happened while nobody was watching. Write a few plausible entries. */

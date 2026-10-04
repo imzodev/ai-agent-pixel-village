@@ -3,6 +3,7 @@
 // that crosses the network boundary. Both ends import from here so TS
 // guarantees shape parity at compile time.
 
+import type { StatusEffect, Strike } from "@/types/combat";
 import type { Appearance } from "@/types/domain";
 import type { Facing, PlayerActKind } from "@/types/world";
 import type { Move, ScheduledMove } from "@/types/motion";
@@ -22,7 +23,9 @@ export type WsClientMessage =
   // players. Never triggers a DB write.
   | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean }
   // One-shot action (attack swing), relayed to nearby players. In-memory only.
-  | { type: "act"; kind: PlayerActKind; facing: Facing };
+  | { type: "act"; kind: PlayerActKind; facing: Facing }
+  // A dodge roll, started at server time `t` (src/lib/combat/strikes.ts).
+  | { type: "roll"; t: number; facing: Facing };
 
 export type WsServerMessage =
   | { type: "snapshot"; data: WorldSnapshot }
@@ -38,13 +41,17 @@ export type WsServerMessage =
   // hold every move before it starts. `serverTime` feeds clock sync.
   | { type: "moves"; serverTime: number; startAt: number; moves: ScheduledMove[] }
   // You were hit by an enemy (aggressive tiers, the world boss).
-  | { type: "hurt"; amount: number; hp: number; maxHp: number; by: string }
+  | { type: "hurt"; amount: number; hp: number; maxHp: number; by: string; from?: { x: number; y: number }; status?: StatusEffect }
   // These chunks' terrain changed (a tree was felled or grew back): re-read them.
   | { type: "chunkReload"; chunks: { cx: number; cy: number }[] }
   // An enemy struck at the player standing at (x, y): plays its attack.
   | { type: "enemyAct"; id: number; x: number; y: number }
   // You were knocked out and woke at (x, y).
   | { type: "knockout"; x: number; y: number; coinsLost: number; hp: number; by: string }
+  // Enemy attacks under way near you: telegraph them, they land at hitAt.
+  | { type: "strikes"; strikes: Strike[] }
+  // An attack was interrupted (its enemy was staggered or died).
+  | { type: "strikeCancel"; id: number }
   // You moved faster than you can (src/lib/speedGuard.ts): you're really here.
   | { type: "correct"; x: number; y: number }
   // A saloon game you're in changed (src/lib/saloonServer.ts): re-read it.

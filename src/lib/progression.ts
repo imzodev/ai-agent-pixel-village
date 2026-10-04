@@ -157,6 +157,25 @@ export function bowOf(equipped: readonly string[]): BowDef & { key: string } | n
   return best;
 }
 
+/**
+ * The land sets the danger: an enemy's HP and damage grow with the danger
+ * tier where it lives (src/lib/continent.ts tierAt), and so does its XP.
+ * Index = tier (1–4). The world boss keeps its own numbers.
+ */
+export const TIER_HP_MULT = [1, 1, 2, 4, 6] as const;
+export const TIER_DMG_MULT = [1, 1, 2, 3, 4.5] as const;
+export const TIER_XP_MULT = [1, 1, 1.5, 2.5, 3.5] as const;
+const tierIdx = (tier: number) => Math.max(1, Math.min(4, Math.round(tier)));
+/** An enemy's HP where it spawns. */
+export const enemyHpAt = (kind: string, tier: number): number =>
+  enemyKind(kind).tier === "boss" ? enemyKind(kind).hp : Math.round(enemyKind(kind).hp * TIER_HP_MULT[tierIdx(tier)]);
+/** How hard an enemy hits where it is (before the Tough perk). */
+export const enemyDmgAt = (kind: string, tier: number): number =>
+  enemyKind(kind).tier === "boss" ? enemyKind(kind).damage : enemyKind(kind).damage * TIER_DMG_MULT[tierIdx(tier)];
+/** XP for beating an enemy where it is. */
+export const enemyXpAt = (kind: string, tier: number): number =>
+  enemyKind(kind).tier === "boss" ? enemyKind(kind).xp : Math.round(enemyKind(kind).xp * TIER_XP_MULT[tierIdx(tier)]);
+
 /** Items that let you chop trees (any of them in the bag). */
 export const AXE_ITEMS: readonly string[] = ["axe", "sharp_axe"];
 
