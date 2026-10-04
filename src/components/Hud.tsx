@@ -20,6 +20,8 @@ import RanchPanel from "./RanchPanel";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
+import Notifications from "./Notifications";
+import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
@@ -60,7 +62,6 @@ export default function Hud() {
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
-  const [toasts, setToasts] = useState<{ id: number; text: string; kind: string }[]>([]);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
   const [craft, setCraft] = useState<{ npcId: number; npcName: string; recipes: Recipe[] } | null>(null);
@@ -69,7 +70,6 @@ export default function Hud() {
   const [auth, setAuth] = useState<"login" | null>(null);
   const [chat, setChat] = useState("");
   const [ask, setAsk] = useState("");
-  const [gained, setGained] = useState<{ id: number; text: string }[]>([]);
   const [canFish, setCanFish] = useState(false);
   // Wild patches you've picked: node id → when it's yours to pick again.
   const [forageWait, setForageWait] = useState<ReadonlyMap<number, number>>(new Map());
@@ -96,12 +96,10 @@ export default function Hud() {
   const attuned = useRef<Set<string> | null>(null);
   const attuning = useRef(new Set<string>());
   const talkInput = useRef<HTMLInputElement>(null);
-  const toastId = useRef(0);
-
-  const toast = useCallback((text: string, kind = "info") => {
-    const id = ++toastId.current;
-    setToasts((t) => [...t.slice(-4), { id, text, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
+  // Notifications are drawn by their own component (./Notifications), so a
+  // burst of them never re-renders the HUD: these just send them along.
+  const toast = useCallback((text: string, kind: ToastKind | string = "info") => {
+    bus.emit("toast", { text, kind: kind === "good" || kind === "bad" ? kind : "info" });
   }, []);
   const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
   const loadBounties = useCallback(async () => {
@@ -116,7 +114,6 @@ export default function Hud() {
       bus.on("snapshot", setSnap),
       bus.on("playerMoved", setSelfPos),
       bus.on("select", setSel),
-      bus.on("toast", (t) => toast(t.text, t.kind)),
       bus.on("refreshMe", () => void refreshMe()),
       bus.on("canFish", setCanFish),
       bus.on("guide", setGuideTarget),
@@ -235,13 +232,7 @@ export default function Hud() {
     if (Math.abs(d - sel.distance) > 4) setSel({ ...sel, distance: d });
   }, [snap, sel, selfPos]);
 
-  const showGain = (items: { itemKey: string; qty: number; label?: string }[]) => {
-    for (const g of items) {
-      const id = ++toastId.current;
-      setGained((x) => [...x, { id, text: `${ITEM_ICONS[g.itemKey] ?? "📦"} +${g.qty} ${g.label ?? g.itemKey.replace("_", " ")}` }]);
-      setTimeout(() => setGained((x) => x.filter((y) => y.id !== id)), 2600);
-    }
-  };
+  const showGain = (items: { itemKey: string; qty: number; label?: string }[]) => bus.emit("gained", items);
 
   // ---------- actions ----------
   const act = async (body: Record<string, unknown>) => {
@@ -820,7 +811,6 @@ export default function Hud() {
                 {npcKey && stockForNpc(npcKey).map((t) => {
                   const locked = !!t.minLevel && (me?.me?.level ?? 1) < t.minLevel;
                   return (
-                    // eslint-disable-next-line react-hooks/refs -- buy() only touches refs (toast ids) inside the click handler, not during render.
                     <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle disabled={locked}>
                       {locked ? `🔒 Lv ${t.minLevel}` : t.itemKey.endsWith("_seeds") ? "🌱" : ITEM_ICONS[t.itemKey] ?? "🛒"} Buy {t.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} · {t.price}🪙
                     </Btn>
@@ -846,7 +836,6 @@ export default function Hud() {
             return (
               <>
                 <span className="text-[11px] text-stone-600">{status}</span>
-                {/* eslint-disable-next-line react-hooks/refs -- garden() only touches refs (toast ids) inside the click handler, not during render. */}
                 {!ripe && <Btn on={() => void garden({ action: "water", nodeId: sel.id })} disabled={crop.watered}>💧 Water</Btn>}
                 {ripe && crop.ownerId === myId && <Btn on={() => void garden({ action: "harvest", nodeId: sel.id })}>🧺 Harvest {interactHint}</Btn>}
               </>
@@ -923,11 +912,8 @@ export default function Hud() {
       )}
       {!loggedIn && <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/40 px-2 py-1 text-[11px] text-white">Spectating · drag to pan · scroll to zoom · click things</div>}
 
-      {/* Toasts + gains */}
-      <div className="absolute right-3 top-14 flex w-72 flex-col gap-1">
-        {toasts.map((t) => <div key={t.id} className={`rounded-lg border-2 px-3 py-1.5 shadow ${t.kind === "bad" ? "border-red-800/50 bg-red-100 text-red-900" : t.kind === "good" ? "border-emerald-800/50 bg-emerald-100 text-emerald-900" : "border-stone-500/50 bg-stone-100"}`}>{t.text}</div>)}
-        {gained.map((g) => <div key={g.id} className="animate-bounce rounded-lg bg-amber-300 px-3 py-1 font-bold text-amber-900 shadow">{g.text}</div>)}
-      </div>
+      {/* Toasts + gains (their own component: bursts don't re-render the HUD) */}
+      <Notifications />
 
       {/* Trade modal — dedicated sell flow, no conversation required. */}
       {trade && (

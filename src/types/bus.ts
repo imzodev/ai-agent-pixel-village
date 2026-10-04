@@ -3,6 +3,7 @@
 
 import type { Snapshot } from "@/types/snapshot";
 import type { Selection } from "@/types/world";
+import type { GainInput } from "@/types/notifications";
 
 export type Events = {
   snapshot: Snapshot;
@@ -10,6 +11,8 @@ export type Events = {
   playerMoved: { x: number; y: number };
   select: Selection | null;
   toast: { text: string; kind?: "info" | "good" | "bad" };
+  /** Items the local player just got (the "+2 wood" badges). */
+  gained: GainInput[];
   enterBuilding: { key: string; name: string };
   focus: { x: number; y: number };
   refreshMe: undefined;
