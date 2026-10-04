@@ -45,6 +45,8 @@ export type WsServerMessage =
   | { type: "enemyAct"; id: number; x: number; y: number }
   // You were knocked out and woke at (x, y).
   | { type: "knockout"; x: number; y: number; coinsLost: number; hp: number; by: string }
+  // You moved faster than you can (src/lib/speedGuard.ts): you're really here.
+  | { type: "correct"; x: number; y: number }
   // A saloon game you're in changed (src/lib/saloonServer.ts): re-read it.
   | { type: "saloon"; inn: string }
   | { type: "pong"; t?: number; serverTime?: number }

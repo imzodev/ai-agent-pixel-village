@@ -5,7 +5,8 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { addItem, logEvent, progressMissions } from "@/lib/game";
 import { healOf } from "@/lib/inn";
-import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { getLivePlayerPosition, markWorldDirty, refreshBikeOwnership } from "@/lib/world-stream";
+import { BIKE_ITEM } from "@/lib/bike";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
       if (Math.hypot(g.x - px, g.y - py) > 90) return Response.json({ error: "Too far away." }, { status: 400 });
       await db.delete(groundItems).where(eq(groundItems.id, g.id));
       await addItem(me.id, g.itemKey, g.qty, g.meta);
+      if (g.itemKey === BIKE_ITEM) await refreshBikeOwnership(me.id);
       // A dropped treasure map is anyone's to follow.
       if (g.itemKey === "treasure_map" && typeof g.meta.mapId === "number") await db.update(treasureMaps).set({ characterId: me.id }).where(eq(treasureMaps.id, g.meta.mapId));
       await progressMissions(me.id, (r) => r.type === "collect" && r.itemKey === g.itemKey, g.qty);
@@ -58,6 +60,7 @@ export async function POST(req: Request) {
       const px = live?.x ?? me.x;
       const py = live?.y ?? me.y;
       await db.insert(groundItems).values({ itemKey: row.itemKey, qty, x: px + (Math.random() - 0.5) * 30, y: py + 18, meta: row.meta, droppedBy: me.id });
+      if (row.itemKey === BIKE_ITEM) await refreshBikeOwnership(me.id);
       markWorldDirty(px, py);
       return Response.json({ ok: true, message: `Dropped ${def?.name ?? row.itemKey}.` });
     }

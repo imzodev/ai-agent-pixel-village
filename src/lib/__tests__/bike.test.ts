@@ -2,16 +2,15 @@
 // and drawn the same width in every frame.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BIKE_ART, BIKE_ITEM, BIKE_SPEED_MULT } from "@/lib/bike";
+import { BIKE_ART, BIKE_ITEM } from "@/lib/bike";
 import { stockForNpc } from "@/lib/trade";
 import { SETTLEMENT_NPCS } from "@/lib/settlements";
 import { DEFAULT_KEY_BINDINGS } from "@/game/input/bindings";
+import { BIKE_SPEED_MULT, RUN_SPEED_MULT } from "@/lib/speedGuard";
 
 describe("bikes", () => {
   it("riding beats running", () => {
-    const src = fs.readFileSync("src/game/WorldScene.ts", "utf8");
-    const run = Number(/RUN_SPEED_MULT = ([\d.]+)/.exec(src)?.[1]);
-    expect(BIKE_SPEED_MULT).toBeGreaterThan(run);
+    expect(BIKE_SPEED_MULT).toBeGreaterThan(RUN_SPEED_MULT);
   });
   it("is a real item, sold by Pip and every town's shopkeeper", () => {
     expect(fs.readFileSync("src/lib/seed.ts", "utf8")).toContain(`key: "${BIKE_ITEM}"`);

@@ -5,7 +5,7 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
-import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty } from "@/lib/world-stream";
+import { broadcastChunkReload, getLivePlayerPosition, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
@@ -284,6 +284,7 @@ export async function POST(req: Request) {
           message += ` It hits back for ${taken}.`;
           if (r?.knockedOut) {
             knockout = { x: r.x!, y: r.y!, coinsLost: r.coinsLost };
+            placePlayer(me.id, r.x!, r.y!);
             message += ` You're knocked out and wake in the village square${r.coinsLost ? `, ${r.coinsLost} coins lighter` : ""}.`;
           }
         }
@@ -306,6 +307,7 @@ export async function POST(req: Request) {
         if (!from || !to) return Response.json({ error: "The way is blocked." }, { status: 400 });
         if (Math.hypot(from.x - p.x, from.y - p.y) > 160) return Response.json({ error: "Walk up to it first." }, { status: 400 });
         await db.update(characters).set({ x: to.x, y: to.y }).where(eq(characters.id, me.id));
+        placePlayer(me.id, to.x, to.y);
         const into = entry.portalTo === "cave_exit";
         await logEvent("visit", into ? `${me.name} ventured into the Greyspine Caverns.` : `${me.name} climbed back out of the caverns.`, "building", b.id);
         return Response.json({ ok: true, teleport: to, message: into ? "You duck under the timbers and into the dark…" : "You climb the rope ladder back into daylight." });

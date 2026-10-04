@@ -34,7 +34,8 @@ import { treeFromTile, trunkPoint } from "@/lib/trees";
 import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
 import { RELICS, relicPoint } from "@/lib/relics";
-import { BIKE_LIFT_PX, BIKE_SPEED_MULT } from "@/lib/bike";
+import { BIKE_LIFT_PX } from "@/lib/bike";
+import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
 import type { Facing } from "@/types/world";
@@ -57,10 +58,9 @@ const DEPTH_FOG = DEPTH_CANOPY + 31;
 const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable
 
 
-const PLAYER_SPEED = 120;
-// Running (hold Shift / push the joystick all the way): speed multiplier
-// and how much faster the legs cycle.
-const RUN_SPEED_MULT = 1.75;
+// Walking speed and the running multiplier (hold Shift / push the joystick
+// all the way) are shared with the server's speed limit
+// (src/lib/speedGuard.ts). Running also cycles the legs faster.
 const RUN_ANIM_SCALE = 1.6;
 // Remote characters covering ground faster than this (px/s) are shown
 // running (their positions arrive via the relay, not as a run flag).
@@ -493,6 +493,17 @@ export class WorldScene extends Phaser.Scene {
           this.playEnemyAttack(id, x, y);
         },
         onSaloon: ({ inn }) => bus.emit("saloon", { inn }),
+        // The server's speed limit says we're really here: snap back.
+        onCorrect: ({ x, y }) => {
+          const p = this.player;
+          if (!this.alive() || !p) return;
+          p.sprite.setPosition(x, y);
+          p.tx = x; p.ty = y;
+          this.moveTarget = null;
+          this.marker.setVisible(false);
+          this.placeChar(p);
+          this.stream?.setPosition(x, y, p.facing, !!p.mounted);
+        },
         onKnockout: ({ x, y, coinsLost, by }) => {
           if (!this.alive()) return;
           bus.emit("knockout", { x, y, coinsLost });

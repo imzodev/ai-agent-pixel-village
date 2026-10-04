@@ -7,7 +7,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, characterWaystones, enemies } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
-import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { getLivePlayerPosition, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { isWalkableServer } from "@/lib/chunkCollisionServer";
 import { rowPositionAt } from "@/lib/motion";
 import { isAggressive } from "@/lib/progression";
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
         .where(and(eq(characters.id, me.id), sql`${characters.coins} >= ${cost}`))
         .returning({ id: characters.id });
       if (!moved) return Response.json({ error: `Travel from here costs ${cost} coins.` }, { status: 400 });
+      placePlayer(me.id, to.x, to.y); // the speed limit knows you jumped
       markWorldDirty(to.x, to.y);
       void logEvent("visit", `${me.name} stepped out of the ${stone.name}.`, "character", me.id, to.x, to.y).catch(() => {});
       return Response.json({ ok: true, teleport: to, message: cost ? `🌀 You touch the rune… (−${cost} 🪙)` : "🌀 The stones carry you." });

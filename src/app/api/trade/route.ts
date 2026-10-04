@@ -12,6 +12,8 @@ import { tutorialEvent } from "@/lib/tutorialServer";
 import { REP_PER_TRADE, discounted, townName, townOfNpc } from "@/lib/reputation";
 import { addReputation, reputationWith } from "@/lib/reputationServer";
 import { HAGGLER_MULT } from "@/lib/progression";
+import { refreshBikeOwnership } from "@/lib/world-stream";
+import { BIKE_ITEM } from "@/lib/bike";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +77,8 @@ export async function POST(req: Request) {
         .returning({ coins: characters.coins });
       if (paid.length === 0) return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
       await addItem(me.id, itemKey, offer.qty * qty);
+      // The speed limit lets you ride as soon as the bike is yours.
+      if (itemKey === BIKE_ITEM) await refreshBikeOwnership(me.id);
       const rep = town ? await addReputation(me.id, town, REP_PER_TRADE) : null;
       return Response.json({ ok: true, itemKey, qty: offer.qty * qty, spent: cost, coins: paid[0].coins, notices: rep?.reached ? [`🏘️ ${townName(town!)} now sees you as ${rep.reached}!`] : [] });
     }

@@ -3,13 +3,12 @@
 // or fish from the saddle, and you're knocked off when something hits you
 // or when you go indoors. Pure data; the scene draws and moves the rider
 // (src/game/WorldScene.ts) and the mounted flag rides along with your
-// position to other players (src/lib/world-stream.ts).
+// position to other players (src/lib/world-stream.ts). Riding speed is set
+// with every other player speed, in src/lib/speedGuard.ts.
 
 import type { PixelArt } from "@/types/treasure";
 
 export const BIKE_ITEM = "bicycle";
-/** Riding speed as a multiple of walking (running is 1.75). */
-export const BIKE_SPEED_MULT = 2.5;
 /** Legs-on-pedals: the rider sits this many px higher. */
 export const BIKE_LIFT_PX = 5;
 

@@ -147,6 +147,8 @@ export class WorldStream {
         this.opts.handlers.onEnemyAct?.({ id: msg.id, x: msg.x, y: msg.y });
       } else if (msg.type === "knockout") {
         this.opts.handlers.onKnockout?.({ x: msg.x, y: msg.y, coinsLost: msg.coinsLost, by: msg.by });
+      } else if (msg.type === "correct") {
+        this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
       } else if (msg.type === "saloon") {
         this.opts.handlers.onSaloon?.({ inn: msg.inn });
       } else if (msg.type === "playerPos") {
