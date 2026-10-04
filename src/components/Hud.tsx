@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
 import { inputRouter } from "@/game/input/router";
@@ -57,7 +57,19 @@ async function api<T = unknown>(url: string, body?: unknown, method = body ? "PO
 export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number } | null>(null);
-  const [sel, setSel] = useState<Selection | null>(null);
+  const [rawSel, setSel] = useState<Selection | null>(null);
+  // The selection with its distance kept live as the player walks. Worked
+  // out while rendering, never stored: storing it from an effect made every
+  // step a state update, which at running speed looped ("Maximum update
+  // depth exceeded"). Uses the live sprite position — `snap.me` is the
+  // server row and can be ~10 s stale.
+  const sel = useMemo(() => {
+    if (!rawSel || !snap) return rawSel;
+    const self = selfPos ?? snap.me;
+    const pos = entityPos(snap, rawSel);
+    if (!self || !pos) return rawSel;
+    return { ...rawSel, distance: Math.hypot(pos.x - self.x, pos.y - self.y) };
+  }, [rawSel, snap, selfPos]);
   // Lot key whose "move out / give up" is waiting for a second tap.
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
@@ -182,9 +194,11 @@ export default function Hud() {
   // vanished — leaves WorldScene thinking the player still has the
   // stale selection, and the next E press runs primaryAction on a
   // gone entity (no menu, no action).
+  // The stored selection, not the derived `sel`: that's a new object every
+  // render, and the HUD also listens for "select" — mirroring it would loop.
   useEffect(() => {
-    bus.emit("select", sel);
-  }, [sel]);
+    bus.emit("select", rawSel);
+  }, [rawSel]);
 
   // (The router-registration effect lives further down, after `commitSelection`
   // and `close` are defined.)
@@ -214,23 +228,11 @@ export default function Hud() {
   useEffect(() => {
     bus.emit("modalOpen", !!talk || reading != null);
   }, [talk, reading]);
-  // Keep the selection's distance live as the player walks. Use the
-  // client's live sprite position (selfPos) — `snap.me` is the server row
-  // and can be ~10s stale, which delayed the Pick up / Gather buttons.
+  // The selected entity vanished (someone picked the item up, it despawned):
+  // drop the stale card instead of showing it forever.
   useEffect(() => {
-    if (!sel) return;
-    const self = selfPos ?? snap?.me;
-    if (!self) return;
-    const pos = snap ? entityPos(snap, sel) : null;
-    // The selected entity vanished (e.g. someone picked the item up or it
-    // despawned) — drop the stale card instead of showing it forever.
-    if (!pos) {
-      setSel(null);
-      return;
-    }
-    const d = Math.hypot(pos.x - self.x, pos.y - self.y);
-    if (Math.abs(d - sel.distance) > 4) setSel({ ...sel, distance: d });
-  }, [snap, sel, selfPos]);
+    if (rawSel && snap && !entityPos(snap, rawSel)) setSel(null);
+  }, [snap, rawSel]);
 
   const showGain = (items: { itemKey: string; qty: number; label?: string }[]) => bus.emit("gained", items);
 

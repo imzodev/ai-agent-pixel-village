@@ -1239,14 +1239,11 @@ export class WorldScene extends Phaser.Scene {
     if (this.stream) this.stream.setPosition(p.sprite.x, p.sprite.y, p.facing, !!p.mounted);
     // Tell the HUD where we are so its proximity UI (Pick up / Gather / …)
     // reflects the live position, not the up-to-10s-stale server row.
-    // Throttled to ~10 Hz and only on a meaningful move.
+    // At most ~10 Hz, only when we've actually moved (standing still sends
+    // nothing), and at once after a big jump (a teleport, a correction).
     const now = this.time.now;
-    if (
-      !this.lastSelfEmitAt
-      || now - this.lastSelfEmitAt > 100
-      || Math.abs(p.sprite.x - this.lastSelfEmitX) > 4
-      || Math.abs(p.sprite.y - this.lastSelfEmitY) > 4
-    ) {
+    const moved = Math.max(Math.abs(p.sprite.x - this.lastSelfEmitX), Math.abs(p.sprite.y - this.lastSelfEmitY));
+    if (!this.lastSelfEmitAt || (moved > 0.5 && now - this.lastSelfEmitAt >= 100) || moved > 48) {
       this.lastSelfEmitAt = now;
       this.lastSelfEmitX = p.sprite.x;
       this.lastSelfEmitY = p.sprite.y;
