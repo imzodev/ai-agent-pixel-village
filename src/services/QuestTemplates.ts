@@ -56,7 +56,7 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
     key: "talk_baker",
     title: "Catch up with the baker",
     description: "Say hello to the baker and hear today's special.",
-    requirement: { type: "talk", npcKey: "baker" },
+    requirement: { type: "talk", npcKey: "village_marigold" },
     reward: { coins: 15, xp: 4 },
     weight: 8,
   },

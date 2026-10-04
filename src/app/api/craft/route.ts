@@ -7,6 +7,7 @@ import { characters, inventory, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { addItem, logEvent, removeItem } from "@/lib/game";
 import { maxCraftable, recipeByKey } from "@/lib/recipes";
+import { npcTrades } from "@/lib/npcDefs";
 import { rowPositionAt } from "@/lib/motion";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +26,10 @@ async function performCraft(opts: {
   const recipe = recipeByKey(opts.recipeKey);
   if (!recipe) return { ok: false, error: "Nothing like that comes to mind." };
 
-  const [crafter] = await db.select().from(npcs).where(eq(npcs.key, recipe.crafterKey));
-  if (!crafter || crafter.id !== opts.crafterNpcId) {
-    return { ok: false, error: `That recipe belongs to ${crafter?.name ?? "someone else"}.` };
+  const [crafter] = await db.select().from(npcs).where(eq(npcs.id, opts.crafterNpcId));
+  if (!crafter) return { ok: false, error: "There's nobody here to craft with." };
+  if (!npcTrades(crafter.key).includes(recipe.trade)) {
+    return { ok: false, error: `${crafter.name} doesn't know that recipe.` };
   }
 
   const [me] = await db.select().from(characters).where(eq(characters.id, opts.characterId));

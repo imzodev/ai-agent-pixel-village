@@ -5,7 +5,9 @@ import {
   activities,
   animals,
   buildings,
+  characterCollection,
   cosmeticItems,
+  dailyQuests,
   enemies,
   items,
   missions,
@@ -26,7 +28,8 @@ import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
-import { SETTLEMENT_NPCS } from "./settlements";
+import { NPC_DEFS } from "./npcDefs";
+import { LEGACY_NPC_KEYS } from "./npcKeys";
 import { forageSpots } from "./forage";
 import { BOSS_KIND } from "./progression";
 
@@ -109,218 +112,7 @@ export const ITEM_DEFS = [
   { key: "elder_seal", name: "Elder's Seal", kind: "trophy", icon: "🔏", description: "Proof you helped the village.", value: 30 },
 ] as const;
 
-export const NPC_DEFS: {
-  key: string;
-  name: string;
-  role: string;
-  persona: string;
-  greeting: string;
-  /** Chunk-world tile units (ty grows down). Converted to pixels via tilePoint. */
-  tilePos: [number, number];
-  wanderRadius: number;
-  appearance: Appearance;
-  mood: string;
-}[] = [
-  {
-    key: "baker",
-    name: "Marigold",
-    role: "Cabin Dweller",
-    persona:
-      "Marigold is a warm, flour-dusted cabin dweller who calls everyone 'love'. She keeps a tidy cabin, bakes out of habit more than trade, and is happier talking than selling. Loves sharing a warm bun.",
-    greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
-    tilePos: [44, 14],
-    wanderRadius: 90,
-    appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#c94f2a", shirtColor: "#f7e7d3", pantsColor: "#7a4a2a" },
-    mood: "cheerful",
-  },
-  {
-    key: "innkeeper",
-    name: "Bram",
-    role: "Cabin Dweller",
-    persona:
-      "Bram is a jolly cabin dweller with a big laugh and an even bigger beard. Remembers every neighbor's name. Loves a good story by the fire and a bowl of root stew on a cold night.",
-    greeting: "Welcome, neighbor! Stew's on. Sit, sit — tell me where you've been.",
-    tilePos: [4, 40],
-    wanderRadius: 80,
-    appearance: { body: "male", skin: "#d9a066", hair: "messy1", hairColor: "#3b2a1a", shirtColor: "#7a3e2e", pantsColor: "#2e2e3a" },
-    mood: "jolly",
-  },
-  {
-    key: "shopkeeper",
-    name: "Pip",
-    role: "Cabin Dweller",
-    persona:
-      "Pip is a quick, curious cabin dweller who collects interesting rocks and odds. Trades small favours for small stories and is delighted by anything shiny.",
-    greeting: "Ah! A visitor. Or a neighbor. Both welcome. Do you have any interesting rocks?",
-    tilePos: [16, 8],
-    wanderRadius: 70,
-    appearance: { body: "male", skin: "#f1c9a5", hair: "spiked", hairColor: "#e8c14a", shirtColor: "#4a7c59", pantsColor: "#3a3a3a" },
-    mood: "curious",
-  },
-  {
-    key: "herbalist",
-    name: "Wren",
-    role: "Wandering Cabin Dweller",
-    persona:
-      "Wren is a soft-spoken cabin dweller who never stays put. Knows every plant in the grove by name and prefers quiet corners to crowds. Trades plant knowledge for the herbs themselves.",
-    greeting: "Shh — do you hear that? The mint is blooming. Bring me herbs and I'll teach you something.",
-    tilePos: [16, 56],
-    wanderRadius: 260,
-    appearance: { body: "female", skin: "#c68e5a", hair: "long", hairColor: "#2f4f3f", shirtColor: "#6b8f71", pantsColor: "#5a4632" },
-    mood: "serene",
-  },
-  {
-    key: "elder",
-    name: "Elder Oswin",
-    role: "Cabin Elder",
-    persona:
-      "Elder Oswin has lived in the grove longer than anyone. Slow, kind, endlessly patient. Remembers when the cabin site was a meadow. Gives small tasks that bind the village together and tells stories about the old days.",
-    greeting: "Ah, a new face. Or an old one I've forgotten — forgive me. Sit with me a moment.",
-    tilePos: [12, 12],
-    wanderRadius: 60,
-    appearance: { body: "male", skin: "#e8c39e", hair: "buzzcut", hairColor: "#dcdcdc", shirtColor: "#8a7f9e", pantsColor: "#4a4a5a" },
-    mood: "calm",
-  },
-  {
-    key: "orphan",
-    name: "Tobin",
-    role: "Village Kid",
-    persona:
-      "Tobin is a small kid who lives at one of the cabins and mostly just wants someone to talk to. Full of questions, collects feathers, afraid of the fox but also wants to be its friend.",
-    greeting: "Hi! Hi. Do you want to see my feather collection? It's mostly one feather.",
-    tilePos: [22, 18],
-    wanderRadius: 200,
-    appearance: { body: "male", skin: "#f1c9a5", hair: "cowlick", hairColor: "#6b4226", shirtColor: "#e9c46a", pantsColor: "#264653" },
-    mood: "lonely",
-  },
-  {
-    key: "tinker",
-    name: "Greta",
-    role: "Cabin Dweller",
-    persona:
-      "Greta is a focused cabin dweller with a workshop corner. Clanking, whirring, the occasional small explosion. Always glad to show a working gadget and trade repair work for firewood. Buys oak logs from the west forest and turns them into chairs, tables and bookshelves.",
-    greeting: "Careful with that wrench — the small explosion was on purpose. Need something fixed?",
-    tilePos: [50, 32],
-    wanderRadius: 80,
-    appearance: { body: "female", skin: "#d9a066", hair: "bangs", hairColor: "#222222", shirtColor: "#a07a4a", pantsColor: "#3d3d3d" },
-    mood: "focused",
-  },
-  {
-    key: "miller",
-    name: "Hollis",
-    role: "Miller",
-    persona:
-      "Hollis is a steady, methodical miller who runs the windmill just north of the wheat field. Proud of the grain. Knows everyone's name in the village and never lets a baker run out of flour.",
-    greeting: "Sheaf of wheat, eh? Good haul. Bring it here, I'll get it ground.",
-    tilePos: [40, -48],
-    wanderRadius: 80,
-    appearance: { body: "male", skin: "#f1c9a5", hair: "buzzcut", hairColor: "#5a4632", shirtColor: "#c8a06a", pantsColor: "#3a3a3a" },
-    mood: "steady",
-  },
-  // ── Hollowmere (woodcutters' town on the King's Road, west of Whisperwood)
-  {
-    key: "blacksmith",
-    name: "Bjorn",
-    role: "Blacksmith of Hollowmere",
-    persona:
-      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, buys the raw stuff off anyone brave enough to fetch it from Whisperwood, and at his forge on the south side of town he'll upgrade a sword, an axe or a fishing rod (up to +3) for coin and materials. Proud of Hollowmere, wary of the Greyspine caverns.",
-    greeting: "Hah! Another traveller off the King's Road. Need an edge on something? Step into my forge with thorns and hide and I'll make your gear sing.",
-    tilePos: [-363, 24],
-    wanderRadius: 70,
-    appearance: { body: "male", skin: "#c68e5a", hair: "buzzcut", hairColor: "#2b1d14", shirtColor: "#3a3a4a", pantsColor: "#5a4632" },
-    mood: "hearty",
-  },
-  {
-    key: "hm_innkeeper",
-    name: "Ivy",
-    role: "Innkeeper of Hollowmere",
-    persona:
-      "Ivy runs the Sawdust & Ale, Hollowmere's inn, with brisk warmth. She sells bread and calming tea to tired woodcutters, knows every rumour on the road, and worries about whoever went into the Greyspine cave last.",
-    greeting: "Come in out of the pines, traveller. Bread's fresh and the tea will put the colour back in you.",
-    tilePos: [-337, -1],
-    wanderRadius: 60,
-    appearance: { body: "female", skin: "#f1c9a5", hair: "long", hairColor: "#8c5a2b", shirtColor: "#4a7c59", pantsColor: "#3d3d3d" },
-    mood: "warm",
-  },
-  {
-    key: "hm_elder",
-    name: "Old Sorrel",
-    role: "Hollowmere Elder",
-    persona:
-      "Old Sorrel has felled more pines than anyone alive and now keeps the town's ledger of jobs. Dry humour, long memory. Worries about the bramble boars growing bolder in Whisperwood and always needs more wood for winter.",
-    greeting: "Mm. You've the look of someone who can swing an axe. Hollowmere has work, if you want it.",
-    tilePos: [-342, 5],
-    wanderRadius: 50,
-    appearance: { body: "male", skin: "#e8c39e", hair: "plain", hairColor: "#dcdcdc", shirtColor: "#7a4a2a", pantsColor: "#4a4a5a" },
-    mood: "dry",
-  },
-  // ── Brightwater (fishing town past the Silverrun bridge)
-  {
-    key: "bw_fishmonger",
-    name: "Marina",
-    role: "Fishmonger of Brightwater",
-    persona:
-      "Marina is quick-witted and sun-browned, mends nets while she talks, and runs the fishing dock on the Silverrun's west bank. Buys garden produce for the fish stews she sells to sailors, and pays better than anyone east of the river.",
-    greeting: "Mind the nets! The dock's just there if you fancy a cast — and if you've grown anything, I'll buy it for the stew pot.",
-    tilePos: [-632, 3],
-    wanderRadius: 60,
-    appearance: { body: "female", skin: "#a86a3d", hair: "bob", hairColor: "#2b1d14", shirtColor: "#2a9d8f", pantsColor: "#264653" },
-    mood: "lively",
-  },
-  {
-    key: "bw_boatwright",
-    name: "Tobias",
-    role: "Boatwright of Brightwater",
-    persona:
-      "Tobias builds the little boats of Brightwater by the bridge and is always short of good oak. Gentle, slow-spoken, pays well for logs carried all the way from Whisperwood.",
-    greeting: "Ah, good timber's hard to come by this side of the mountains. Bring me logs and I'll pay you fair — fairer than Greta, I'd wager.",
-    tilePos: [-628, 11],
-    wanderRadius: 70,
-    appearance: { body: "male", skin: "#d9a066", hair: "messy1", hairColor: "#5a3a1a", shirtColor: "#5b7db1", pantsColor: "#3a3a3a" },
-    mood: "gentle",
-  },
-  {
-    key: "bw_mayor",
-    name: "Mayor Wynn",
-    role: "Mayor of Brightwater",
-    persona:
-      "Mayor Wynn is a cheerful, slightly pompous mayor who loves ceremonies and fears the wisps that drift out of the Greyspine caverns at night. Offers generous bounties for brave deeds and trophies from the Old Rootking.",
-    greeting: "Welcome, welcome to Brightwater, jewel of the Silverrun! We do so need heroes — the caverns grow restless.",
-    tilePos: [-712, 4],
-    wanderRadius: 60,
-    appearance: { body: "male", skin: "#f1c9a5", hair: "bedhead", hairColor: "#c94f2a", shirtColor: "#7b5ea7", pantsColor: "#2e2e3a" },
-    mood: "cheerful",
-  },
-  {
-    key: "bw_innkeeper",
-    name: "Coral",
-    role: "Innkeeper of the Salted Gull",
-    persona:
-      "Coral keeps the Salted Gull, Brightwater's harbour inn, full of fishermen's stories and fish stew. Quick-witted, a little salty, and the first to hear when someone lands a legendary catch. Sells stew, bread and tea; lets weary travellers rest by the fire.",
-    greeting: "In you come, out of the spray! Stew's on, and there's a story going round about a giant pike.",
-    tilePos: [-709, -1],
-    wanderRadius: 40,
-    appearance: { body: "female", skin: "#8d5524", hair: "long", hairColor: "#1a1a1a", shirtColor: "#2a6a7a", pantsColor: "#3a3a3a" },
-    mood: "wry",
-  },
-  // ── The village inn
-  {
-    key: "innkeeper",
-    name: "Hettie",
-    role: "Innkeeper of the Wayfarer's Rest",
-    persona:
-      "Hettie runs the Wayfarer's Rest on the village plaza: a round, rosy woman who remembers every face and every rumour. Sells hot stew, bread and tea, lets the weary rest by the hearth, and loves to tell newcomers what's worth doing — the Rootking, the rare fish, the wolves in Whisperwood.",
-    greeting: "Welcome to the Wayfarer's Rest, dear! Sit, eat, and I'll tell you what's going on in the grove.",
-    tilePos: [31, 19],
-    wanderRadius: 40,
-    appearance: { body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#a04a2a", shirtColor: "#a43a32", pantsColor: "#4a3a2a" },
-    mood: "warm",
-  },
-];
-// The continent's townsfolk (scripts/gen-settlements.ts → settlementsData.json).
-for (const n of SETTLEMENT_NPCS) {
-  NPC_DEFS.push({ key: n.key, name: n.name, role: n.role, persona: n.persona, greeting: n.greeting, tilePos: n.tilePos, wanderRadius: n.wanderRadius, appearance: n.appearance, mood: n.mood });
-}
+export { NPC_DEFS };
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
 // Village species stay near the houses (chunks 1..2, south of them);
@@ -370,7 +162,7 @@ const MISSION_DEFS: {
 }[] = [
   {
     key: "baker_eggs",
-    npc: "baker",
+    npc: "village_marigold",
     title: "Three Eggs for Marigold",
     description: "Marigold needs 3 fresh eggs for the weekend cinnamon knots. The chickens near the apothecary drop them.",
     offerLine: "Tell you what, love — bring me three fresh eggs and I'll teach you my cinnamon knot recipe. The chickens by the apothecary are generous if you're kind to them.",
@@ -381,7 +173,7 @@ const MISSION_DEFS: {
   },
   {
     key: "herbalist_herbs",
-    npc: "herbalist",
+    npc: "village_wren",
     title: "Gather Wild Herbs",
     description: "Wren wants 3 wild herbs from the herb patches at the edges of the grove.",
     offerLine: "Bring me three herbs — the good ones grow where the trees thin out — and I'll teach you a recipe for calming tea.",
@@ -391,7 +183,7 @@ const MISSION_DEFS: {
   },
   {
     key: "elder_pet",
-    npc: "elder",
+    npc: "village_oswin",
     title: "Say Hello to the Sheep",
     description: "Elder Oswin thinks the sheep have been lonely. Pet 2 of them.",
     offerLine: "The sheep out west have seemed glum. Would you go and say hello? Pet two of them for me — my knees aren't what they were.",
@@ -401,7 +193,7 @@ const MISSION_DEFS: {
   },
   {
     key: "orphan_talk",
-    npc: "orphan",
+    npc: "village_tobin",
     title: "Visit the Inn with Tobin",
     description: "Tobin wants you to go see Bram at the inn and tell him Tobin says hi.",
     offerLine: "Can you go tell Bram I said hi? He's at the inn. He makes a funny face when you say my name.",
@@ -411,7 +203,7 @@ const MISSION_DEFS: {
   },
   {
     key: "innkeeper_slimes",
-    npc: "innkeeper",
+    npc: "village_hettie",
     title: "Slimes in the Cellar Field",
     description: "Slimes keep creeping toward the inn from the wild edges. Defeat 3.",
     offerLine: "Those slimes out past the trees have been getting bold. Knock three of them back and there's stew and a proper sword in it for you.",
@@ -421,7 +213,7 @@ const MISSION_DEFS: {
   },
   {
     key: "shopkeeper_stones",
-    npc: "shopkeeper",
+    npc: "village_pip",
     title: "Interesting Rocks",
     description: "Pip will trade furniture for 4 river stones from the rocks near the pond.",
     offerLine: "Bring me four river stones from near the pond and I'll give you a chair. A good chair. Possibly the best chair.",
@@ -432,7 +224,7 @@ const MISSION_DEFS: {
   },
   {
     key: "tinker_gel",
-    npc: "tinker",
+    npc: "village_greta",
     title: "Gel for the Gears",
     description: "Greta needs 2 slime gel to grease her contraption. She'll build you a table.",
     offerLine: "Slime gel! Best lubricant in the grove. Bring me two blobs of it and I'll build you a table. Round. Very round.",
@@ -443,7 +235,7 @@ const MISSION_DEFS: {
   },
   {
     key: "miller_wheat",
-    npc: "miller",
+    npc: "village_hollis",
     title: "Grind the Wheat",
     description: "Hollis will turn your wheat into flour. Bring 4 sheaves.",
     offerLine: "Four wheat and I'll grind you four flour, straight off the millstone. Don't let it sit in the rain.",
@@ -454,7 +246,7 @@ const MISSION_DEFS: {
   },
   {
     key: "tinker_wool",
-    npc: "tinker",
+    npc: "village_greta",
     title: "Spinning a New Hat",
     description: "Greta can weave a straw hat if you bring her 3 tufts of wool.",
     offerLine: "Three tufts of wool and I'll stitch you a proper hat. I make them breathable, I promise.",
@@ -465,7 +257,7 @@ const MISSION_DEFS: {
   },
   {
     key: "herbalist_mushroom",
-    npc: "herbalist",
+    npc: "village_wren",
     title: "Tincture of the Cap",
     description: "Wren will trade a calming tincture for 3 speckled mushrooms.",
     offerLine: "Three mushrooms and I'll brew you a tincture. Tastes the way the woods smell after rain.",
@@ -475,7 +267,7 @@ const MISSION_DEFS: {
   },
   {
     key: "shopkeeper_slimy",
-    npc: "shopkeeper",
+    npc: "village_pip",
     title: "Slime-Gel Stockroom",
     description: "Pip buys slime gel in bulk. Bring him 5 blobs.",
     offerLine: "Five slime gel and I'll do the lamp. Brass and everything, and the rug to put under it.",
@@ -486,7 +278,7 @@ const MISSION_DEFS: {
   },
   {
     key: "orphan_bunny",
-    npc: "orphan",
+    npc: "village_tobin",
     title: "Catching the Sunset Bunny",
     description: "Tobin lost his favorite rabbit. Pet two of them to calm them down.",
     offerLine: "The bunnies at the north end get nervous around dusk. Pet a couple and see if one of them is BunBun.",
@@ -496,7 +288,7 @@ const MISSION_DEFS: {
   },
   {
     key: "shopkeeper_cabins",
-    npc: "shopkeeper",
+    npc: "village_pip",
     title: "Visit a Cabin",
     description: "Pip wants you to drop by one of the cabins and say hello.",
     offerLine: "Stick your head in a cabin, any cabin, and tell me what the kettle's doing. I'll furnish the rest.",
@@ -506,7 +298,7 @@ const MISSION_DEFS: {
   },
   {
     key: "innkeeper_bats",
-    npc: "innkeeper",
+    npc: "village_hettie",
     title: "Bats in the Belfry",
     description: "Bats are roosting where they shouldn't. Defeat 2 of them.",
     offerLine: "Two bats in the belfry and I'll throw in a painting and a round on the house.",
@@ -516,7 +308,7 @@ const MISSION_DEFS: {
   },
   {
     key: "hm_boars",
-    npc: "hm_elder",
+    npc: "hollowmere_sorrel",
     title: "Thin the Boars of Whisperwood",
     description: "Bramble boars have been charging woodcutters near Hollowmere. Old Sorrel wants 5 of them driven off.",
     offerLine: "The boars have grown bold — tusked half a cart to splinters last week. Drive off five of 'em and Hollowmere will owe you.",
@@ -526,7 +318,7 @@ const MISSION_DEFS: {
   },
   {
     key: "hm_wood",
-    npc: "hm_elder",
+    npc: "hollowmere_sorrel",
     title: "Wood for the Winter",
     description: "Hollowmere needs firewood before the frost. Bring Old Sorrel 30 logs.",
     offerLine: "Winter comes early this close to the Greyspine. Thirty logs would see the town through. Oaks grow in the grove past the pines.",
@@ -537,7 +329,7 @@ const MISSION_DEFS: {
   },
   {
     key: "bw_wisps",
-    npc: "bw_mayor",
+    npc: "brightwater_wynn",
     title: "Lights in the Dark",
     description: "Shade wisps drift out of the Greyspine caverns. Mayor Wynn will pay a bounty for 3.",
     offerLine: "Those cold little lights from the caverns — they frighten the fishermen something terrible. Three of them, and the town treasury is yours! Well, part of it.",
@@ -547,7 +339,7 @@ const MISSION_DEFS: {
   },
   {
     key: "bw_heartwood",
-    npc: "bw_mayor",
+    npc: "brightwater_wynn",
     title: "A Trophy for the Town Hall",
     description: "Mayor Wynn wants a Rootking Heartwood to display in the town hall.",
     offerLine: "They say the Old Rootking rises in the north woods each week. A piece of its heartwood in our town hall! Imagine the ceremony!",
@@ -573,6 +365,7 @@ async function syncNpcLayout() {
   if (npcSynced) return;
   npcSynced = true;
   try {
+    await renameLegacyNpcKeys();
     for (const n of NPC_DEFS) {
       const p = tilePoint(n.tilePos[0], n.tilePos[1]);
       let x = p.x;
@@ -589,6 +382,7 @@ async function syncNpcLayout() {
           homeX: x, homeY: y,
           // Back home only when where it stands is no longer walkable.
           ...(stranded ? { x, y, movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null } : {}),
+          name: n.name, appearance: n.appearance,
           role: n.role, persona: n.persona, greeting: n.greeting,
           mood: n.mood, wanderRadius: n.wanderRadius,
           buildingId: null, sponsorId: null,
@@ -619,6 +413,44 @@ async function syncNpcLayout() {
     npcSynced = false;
     console.warn("[seed] NPC layout sync failed:", e instanceof Error ? e.message : e);
   }
+}
+
+// Move saved data from old NPC keys to new ones (src/lib/npcKeys.ts): the
+// npc row itself, the Folk page of the collection book and "talk to"
+// daily quests. Everything else points at NPCs by id. Idempotent: once no
+// old key is left this is a handful of no-op updates.
+async function renameLegacyNpcKeys() {
+  const olds = Object.keys(LEGACY_NPC_KEYS);
+  const found = await db.select({ key: npcs.key }).from(npcs).where(inArray(npcs.key, olds));
+  const left = await db.select({ key: characterCollection.key }).from(characterCollection)
+    .where(and(eq(characterCollection.kind, "npc"), inArray(characterCollection.key, olds))).limit(1);
+  const quests = await db.select({ id: dailyQuests.id }).from(dailyQuests)
+    .where(inArray(sql`${dailyQuests.requirement}->>'npcKey'`, olds)).limit(1);
+  if (!found.length && !left.length && !quests.length) return;
+  await db.transaction(async (tx) => {
+    for (const [from, to] of Object.entries(LEGACY_NPC_KEYS)) {
+      const [stale] = await tx.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, from));
+      if (stale) {
+        // A server that booted with the new defs before this ran may have
+        // seeded a fresh row under the new key: retire it (hidden, history
+        // kept) so the established row, with its conversations, keeps going.
+        const [fresh] = await tx.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, to));
+        if (fresh) await tx.update(npcs).set({ key: `retired_${fresh.id}`, active: false }).where(eq(npcs.id, fresh.id));
+        await tx.update(npcs).set({ key: to }).where(eq(npcs.id, stale.id));
+      }
+      await tx.execute(sql`
+        insert into character_collection (character_id, kind, key, count, first_at)
+        select character_id, 'npc', ${to}, count, first_at from character_collection where kind = 'npc' and key = ${from}
+        on conflict (character_id, kind, key) do update
+          set count = greatest(character_collection.count, excluded.count),
+              first_at = least(character_collection.first_at, excluded.first_at)`);
+      await tx.execute(sql`delete from character_collection where kind = 'npc' and key = ${from}`);
+      await tx.execute(sql`
+        update daily_quests set requirement = jsonb_set(requirement, '{npcKey}', to_jsonb(${to}::text))
+        where requirement->>'npcKey' = ${from}`);
+    }
+  });
+  console.log(`[seed] renamed ${found.length} NPC keys to <place>_<name>: ${found.map((r) => `${r.key} → ${LEGACY_NPC_KEYS[r.key]}`).join(", ")}`);
 }
 
 async function nearestWalkable(tx: number, ty: number): Promise<{ x: number; y: number }> {

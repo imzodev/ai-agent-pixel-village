@@ -121,9 +121,17 @@ function appearance(seed: number, salt: number): Appearance {
 }
 
 function people(t: TownDef, seed: number): SettlementNpcDef[] {
-  const name = (k: number) => pick(FIRST, seed, k, 610);
+  // First names are unique within a town: the key is <town>_<name>.
+  const used = new Set<string>();
+  const names = [1, 2, 3, 4, 5].map((k) => {
+    let n = pick(FIRST, seed, k, 610);
+    for (let s = 1; used.has(n); s++) n = pick(FIRST, seed, k, 610 + s * 7);
+    used.add(n);
+    return n;
+  });
+  const name = (k: number) => names[k - 1];
   const inn = { tx: t.sq.tx + 11, ty: t.sq.ty - 1 };
-  const base = (job: SettlementNpcDef["job"], k: number) => ({ town: t.key, job, appearance: appearance(seed, k), key: `${t.key}_${job}${job === "folk" ? k : ""}` });
+  const base = (job: SettlementNpcDef["job"], k: number) => ({ town: t.key, job, appearance: appearance(seed, k), key: `${t.key}_${name(k).toLowerCase()}` });
   return [
     { ...base("innkeeper", 1), name: name(1), role: `Innkeeper of ${t.name}`, mood: "warm", wanderRadius: 30, tilePos: [inn.tx, inn.ty],
       persona: `${name(1)} keeps the inn in ${t.name}, ${FLAVOUR[t.family]}. Knows every traveller's tale, sells hot stew and bread, lets the weary rest by the fire, and worries about ${DANGER[t.family]}.`,

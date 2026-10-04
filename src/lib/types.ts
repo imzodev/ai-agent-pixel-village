@@ -1,6 +1,8 @@
 // Shared app-level types. Domain-neutral (no DB, no Phaser). Imported by
 // server routes, the HUD, the rate limiter, and agent.ts when needed.
 
+import type { NpcTrade } from "@/types/npc";
+
 export type ConversationSource = "llm" | "scripted" | "remote";
 
 /** One line in the NPC conversation panel. `source` is set only for lines
@@ -38,8 +40,8 @@ export type TradeConfig = Record<string, TradeItem[]>;
 /** One input slot for a crafting recipe. */
 export type RecipeInput = { itemKey: string; qty: number };
 
-/** A crafting recipe: each recipe belongs to ONE NPC (the crafter). The
- *  player must stand near that NPC to use it — that's the discovery game. */
+/** A crafting recipe: it belongs to a trade, and any NPC with that trade
+ *  crafts it. The player must stand near them — that's the discovery game. */
 export type Recipe = {
   /** Stable id used by the API and persisted in client state. */
   key: string;
@@ -47,8 +49,8 @@ export type Recipe = {
   name: string;
   /** Emoji or short string shown in the row. */
   icon: string;
-  /** The NPC.key that crafts this recipe. */
-  crafterKey: string;
+  /** The trade that crafts this recipe (src/lib/npcDefs.ts). */
+  trade: NpcTrade;
   inputs: RecipeInput[];
   output: { itemKey: string; qty: number };
   /** Optional flavor line shown in the modal header. */

@@ -2,6 +2,7 @@
 // reward exists, and the finished / skipped markers sit past the steps.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
+import { NPC_DEFS } from "@/lib/npcDefs";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, stepMatches } from "@/lib/tutorial";
 
 // seed.ts talks to the database on import, so read its keys as text.
@@ -17,7 +18,7 @@ describe("tutorial steps", () => {
   });
 
   it("rewards and NPC targets refer to real items and folk", () => {
-    const items = SEED_KEYS, npcs = SEED_KEYS;
+    const items = SEED_KEYS, npcs = new Set(NPC_DEFS.map((n) => n.key));
     for (const s of TUTORIAL_STEPS) {
       for (const i of s.reward.items ?? []) expect(items.has(i.itemKey), i.itemKey).toBe(true);
       if (s.target.kind === "npc") expect(npcs.has(s.target.npcKey), s.target.npcKey).toBe(true);
@@ -27,8 +28,8 @@ describe("tutorial steps", () => {
 
   it("advances only on the matching event", () => {
     const [talk, plant, chop, slime, sell] = TUTORIAL_STEPS;
-    expect(stepMatches(talk, "talk", { npcKey: "elder" })).toBe(true);
-    expect(stepMatches(talk, "talk", { npcKey: "shopkeeper" })).toBe(false);
+    expect(stepMatches(talk, "talk", { npcKey: "village_oswin" })).toBe(true);
+    expect(stepMatches(talk, "talk", { npcKey: "village_pip" })).toBe(false);
     expect(stepMatches(talk, "plant", {})).toBe(false);
     expect(stepMatches(plant, "plant", {})).toBe(true);
     expect(stepMatches(chop, "collect", { itemKey: "wood" })).toBe(true);
@@ -36,6 +37,6 @@ describe("tutorial steps", () => {
     expect(stepMatches(slime, "defeat", { enemyKind: "slime" })).toBe(true);
     expect(stepMatches(slime, "defeat", { enemyKind: "wolf" })).toBe(false);
     expect(stepMatches(sell, "sell", {})).toBe(true);
-    expect(stepMatches(sell, "talk", { npcKey: "shopkeeper" })).toBe(false);
+    expect(stepMatches(sell, "talk", { npcKey: "village_pip" })).toBe(false);
   });
 });

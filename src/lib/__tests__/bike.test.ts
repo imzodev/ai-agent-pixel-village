@@ -16,7 +16,7 @@ describe("bikes", () => {
   });
   it("is a real item, sold by Pip and every town's shopkeeper", () => {
     expect(fs.readFileSync("src/lib/seed.ts", "utf8")).toContain(`key: "${BIKE_ITEM}"`);
-    expect(stockForNpc("shopkeeper").some((t) => t.itemKey === BIKE_ITEM)).toBe(true);
+    expect(stockForNpc("village_pip").some((t) => t.itemKey === BIKE_ITEM)).toBe(true);
     const shops = SETTLEMENT_NPCS.filter((n) => n.job === "shopkeeper");
     expect(shops.length).toBeGreaterThan(0);
     for (const n of shops) expect(stockForNpc(n.key).some((t) => t.itemKey === BIKE_ITEM), n.key).toBe(true);

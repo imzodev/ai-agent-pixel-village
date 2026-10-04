@@ -76,7 +76,7 @@ describe("crop data", () => {
   it("longer crops earn more per harvest after the seed cost", () => {
     const profit = (seedKey: string) => {
       const def = GARDEN_CROPS[seedKey];
-      const seed = SHOP_STOCK.shopkeeper.find((t) => t.itemKey === seedKey)!.price;
+      const seed = SHOP_STOCK.village_pip.find((t) => t.itemKey === seedKey)!.price;
       return CROP_KINDS[def.kind].yield * findBuyer(def.produceKey)!.trade.price - seed;
     };
     const order = ["radish_seeds", "carrot_seeds", "tomato_seeds", "pumpkin_seeds"].map(profit);

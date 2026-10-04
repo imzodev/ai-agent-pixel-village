@@ -1,10 +1,12 @@
-// Crafting recipes — data + pure helpers. Each recipe belongs to ONE NPC
-// (the crafter); the player must stand near that NPC to use it. Adding a
-// recipe = one entry here; adding a crafter = give them recipes by key.
+// Crafting recipes — data + pure helpers. Each recipe belongs to a trade
+// (baker, smith, …); any NPC with that trade (src/lib/npcDefs.ts) crafts
+// it, and the player must stand near them. Adding a recipe = one entry
+// here; adding a crafter = give an NPC the trade.
 //
 // Pure module — no DB imports — so the HUD can import RECIPES without
 // pulling the pg driver into the client bundle. Server-side logic
 // (validation, debit/credit) lives in the route.
+import { npcTrades } from "./npcDefs";
 import type { Recipe } from "./types";
 
 export const RECIPES: Recipe[] = [
@@ -12,7 +14,7 @@ export const RECIPES: Recipe[] = [
     key: "bread",
     name: "Fresh Bread",
     icon: "🍞",
-    crafterKey: "baker",
+    trade: "baker",
     inputs: [
       { itemKey: "flour", qty: 1 },
       { itemKey: "egg",   qty: 1 },
@@ -25,7 +27,7 @@ export const RECIPES: Recipe[] = [
     key: "tea",
     name: "Calming Tea",
     icon: "🍵",
-    crafterKey: "herbalist",
+    trade: "herbalist",
     inputs: [{ itemKey: "herb", qty: 3 }],
     output: { itemKey: "tea", qty: 1 },
     line: "Steep three herbs in hot water for a quiet minute. I'll do the rest.",
@@ -34,7 +36,7 @@ export const RECIPES: Recipe[] = [
     key: "honey_bun",
     name: "Honey Bun",
     icon: "🥐",
-    crafterKey: "baker",
+    trade: "baker",
     inputs: [
       { itemKey: "flour", qty: 1 },
       { itemKey: "egg",   qty: 1 },
@@ -46,7 +48,7 @@ export const RECIPES: Recipe[] = [
     key: "cinnamon_knot",
     name: "Cinnamon Knot",
     icon: "🥯",
-    crafterKey: "baker",
+    trade: "baker",
     inputs: [
       { itemKey: "flour", qty: 1 },
       { itemKey: "berry", qty: 2 },
@@ -59,7 +61,7 @@ export const RECIPES: Recipe[] = [
     key: "flour",
     name: "Bag of Flour",
     icon: "🌾",
-    crafterKey: "miller",
+    trade: "miller",
     inputs: [{ itemKey: "wheat", qty: 2 }],
     output: { itemKey: "flour", qty: 1 },
     line: "Two sheaves, ground while you wait. A full sack of flour.",
@@ -68,7 +70,7 @@ export const RECIPES: Recipe[] = [
     key: "lantern",
     name: "Brass Lantern",
     icon: "🏮",
-    crafterKey: "tinker",
+    trade: "tinker",
     inputs: [
       { itemKey: "stone", qty: 2 },
       { itemKey: "slime_gel", qty: 1 },
@@ -80,7 +82,7 @@ export const RECIPES: Recipe[] = [
     key: "rug",
     name: "Woven Rug",
     icon: "🟥",
-    crafterKey: "tinker",
+    trade: "tinker",
     inputs: [{ itemKey: "wool", qty: 4 }],
     output: { itemKey: "rug", qty: 1 },
     line: "Four tufts of wool, felted tight. Ties the room together.",
@@ -91,7 +93,7 @@ export const RECIPES: Recipe[] = [
     key: "stone_sword",
     name: "Stone Sword",
     icon: "🗡️",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "stone", qty: 4 }, { itemKey: "wood", qty: 4 }],
     output: { itemKey: "stone_sword", qty: 1 },
     line: "A good river stone, knapped to an edge, on an oak grip. +4 attack.",
@@ -101,7 +103,7 @@ export const RECIPES: Recipe[] = [
     key: "thorn_blade",
     name: "Thorn Blade",
     icon: "🗡️",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "thorn", qty: 6 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "wood", qty: 4 }],
     output: { itemKey: "thorn_blade", qty: 1 },
     line: "Thornling thorns set in oak, wrapped in boar hide. +6 attack.",
@@ -111,7 +113,7 @@ export const RECIPES: Recipe[] = [
     key: "sharp_axe",
     name: "Sharp Axe",
     icon: "🪓",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "axe", qty: 1 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "stone", qty: 4 }],
     output: { itemKey: "sharp_axe", qty: 1 },
     line: "I'll hone your axe and wrap the haft. +1 wood every chop.",
@@ -121,7 +123,7 @@ export const RECIPES: Recipe[] = [
     key: "wisp_blade",
     name: "Wisp Blade",
     icon: "🗡️",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "wisp_essence", qty: 4 }, { itemKey: "thorn_blade", qty: 1 }],
     output: { itemKey: "wisp_blade", qty: 1 },
     line: "Bring me wisp light and your thorn blade. +9 attack.",
@@ -132,7 +134,7 @@ export const RECIPES: Recipe[] = [
     key: "recurve_bow",
     name: "Recurve Bow",
     icon: "🏹",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "wood", qty: 6 }, { itemKey: "boar_hide", qty: 2 }, { itemKey: "wolf_pelt", qty: 1 }],
     output: { itemKey: "recurve_bow", qty: 1 },
     line: "Six good logs, boar hide for the grip and a wolf pelt for the string. It'll outshoot any short bow.",
@@ -142,7 +144,7 @@ export const RECIPES: Recipe[] = [
     key: "arrows",
     name: "Arrows ×10",
     icon: "➶",
-    crafterKey: "tinker",
+    trade: "smith",
     inputs: [{ itemKey: "wood", qty: 2 }, { itemKey: "stone", qty: 1 }],
     output: { itemKey: "arrow", qty: 10 },
     line: "Two logs and a stone: ten arrows, fletched and pointed.",
@@ -152,7 +154,7 @@ export const RECIPES: Recipe[] = [
     key: "chair",
     name: "Oak Chair",
     icon: "🪑",
-    crafterKey: "tinker",
+    trade: "tinker",
     inputs: [{ itemKey: "wood", qty: 6 }],
     output: { itemKey: "chair", qty: 1 },
     line: "Six oak logs and an afternoon. Sturdy enough for Bram.",
@@ -161,7 +163,7 @@ export const RECIPES: Recipe[] = [
     key: "table",
     name: "Round Table",
     icon: "🟤",
-    crafterKey: "tinker",
+    trade: "tinker",
     inputs: [{ itemKey: "wood", qty: 10 }],
     output: { itemKey: "table", qty: 1 },
     line: "Ten logs, planed and pegged. Seats four friends.",
@@ -170,23 +172,17 @@ export const RECIPES: Recipe[] = [
     key: "bookshelf",
     name: "Bookshelf",
     icon: "📚",
-    crafterKey: "tinker",
+    trade: "tinker",
     inputs: [{ itemKey: "wood", qty: 14 }],
     output: { itemKey: "bookshelf", qty: 1 },
     line: "Fourteen logs of good oak. Room for every cookbook you own.",
   },
 ];
 
-// Bjorn, Hollowmere's smith, forges the same gear as Greta.
-const SMITH_GEAR = ["stone_sword", "thorn_blade", "sharp_axe", "wisp_blade", "recurve_bow", "arrows"];
-for (const key of SMITH_GEAR) {
-  const r = RECIPES.find((x) => x.key === key)!;
-  RECIPES.push({ ...r, key: `smith_${key}`, crafterKey: "blacksmith" });
-}
-
-/** Recipes the given NPC can craft. */
+/** Recipes the given NPC can craft: those of every trade it does. */
 export function recipesForNpc(npcKey: string): Recipe[] {
-  return RECIPES.filter((r) => r.crafterKey === npcKey);
+  const trades = npcTrades(npcKey);
+  return RECIPES.filter((r) => trades.includes(r.trade));
 }
 
 /** Quick lookup. */

@@ -52,10 +52,12 @@ describe("towns", () => {
     for (const t of TOWNS) {
       const folk = SETTLEMENT_NPCS.filter((n) => n.town === t.key);
       for (const job of ["innkeeper", "shopkeeper", "bounty", "folk"]) expect(folk.some((n) => n.job === job), `${t.name} ${job}`).toBe(true);
-      expect(SHOP_STOCK[`${t.key}_innkeeper`]?.length).toBeGreaterThan(0);
-      expect(SHOP_STOCK[`${t.key}_shopkeeper`]?.length).toBeGreaterThan(0);
-      expect(TRADES[`${t.key}_shopkeeper`]?.length).toBeGreaterThan(1);
-      expect(INNS[`st_${t.key}_inn`]).toBe(`${t.key}_innkeeper`);
+      const inn = folk.find((n) => n.job === "innkeeper")!;
+      const shop = folk.find((n) => n.job === "shopkeeper")!;
+      expect(SHOP_STOCK[inn.key]?.length).toBeGreaterThan(0);
+      expect(SHOP_STOCK[shop.key]?.length).toBeGreaterThan(0);
+      expect(TRADES[shop.key]?.length).toBeGreaterThan(1);
+      expect(INNS[`st_${t.key}_inn`]).toBe(inn.key);
     }
     expect(new Set(SETTLEMENT_NPCS.map((n) => n.key)).size).toBe(SETTLEMENT_NPCS.length);
   });

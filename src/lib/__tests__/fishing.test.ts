@@ -15,7 +15,7 @@ describe("fish data", () => {
   it("12 fish, each an item Marina buys", () => {
     expect(FISH_DEFS).toHaveLength(12);
     const items = SEED_KEYS;
-    const marina = new Set((TRADES.bw_fishmonger ?? []).map((t) => t.itemKey));
+    const marina = new Set((TRADES.brightwater_marina ?? []).map((t) => t.itemKey));
     for (const f of FISH_DEFS) {
       expect(items.has(f.key), f.key).toBe(true);
       expect(marina.has(f.key), f.key).toBe(true);

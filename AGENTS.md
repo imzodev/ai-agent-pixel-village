@@ -52,6 +52,19 @@ Selection:
 Without any key, NPCs fall back to the scripted brain (`scriptedReply`).
 No application code change needed to add providers — config only.
 
+## NPC keys and trades
+
+Seeded NPCs live in `src/lib/npcDefs.ts` (pure data; `seed.ts` syncs the
+`npcs` table to it). A key is `<place>_<name>` (`village_marigold`,
+`hollowmere_bjorn`, `coralwick_milo`) and **never names a job**. Jobs are
+`trades` (`["baker"]`, `["tinker", "smith"]`), and recipes (`Recipe.trade`)
+and shop rules key off trades, so any number of NPCs can share one.
+Shop stock (`SHOP_STOCK`/`TRADES`) stays per NPC, since each shop has its own goods.
+
+Renaming a key: add `old: "new"` to `LEGACY_NPC_KEYS` (`src/lib/npcKeys.ts`).
+On boot, `renameLegacyNpcKeys` moves the row, the Folk page entries and
+"talk to" daily quests. Never reuse an old key as a new one.
+
 ## Movement (NPCs, animals, enemies)
 
 Movement is deterministic and beat-synced. **Never stream or tick

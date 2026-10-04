@@ -39,7 +39,7 @@ describe("woodcutting data", () => {
   });
 
   it("the axe is for sale and wood has a buyer and recipes", () => {
-    expect(SHOP_STOCK.shopkeeper.some((t) => t.itemKey === "axe")).toBe(true);
+    expect(SHOP_STOCK.village_pip.some((t) => t.itemKey === "axe")).toBe(true);
     expect(findBuyer("wood")).not.toBeNull();
     expect(RECIPES.filter((r) => r.inputs.some((i) => i.itemKey === "wood")).length).toBeGreaterThan(0);
   });

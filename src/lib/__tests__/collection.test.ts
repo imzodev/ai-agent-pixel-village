@@ -6,7 +6,7 @@ import type { CollectionCounts } from "@/types/collection";
 import { FISH_DEFS } from "@/lib/fishing";
 import { REGIONS } from "@/lib/regions";
 
-const folk = [{ key: "elder", name: "Elder Oswin", icon: "🧓" }, { key: "shopkeeper", name: "Pip", icon: "🧑" }];
+const folk = [{ key: "village_oswin", name: "Elder Oswin", icon: "🧓" }, { key: "village_pip", name: "Pip", icon: "🧑" }];
 const pages = collectionPages(folk);
 const page = (k: string) => pages.find((p) => p.key === k)!;
 
@@ -24,7 +24,7 @@ describe("pages", () => {
     const missing: CollectionCounts = { fish: { ...all.fish, [FISH_DEFS[0].key]: 0 } };
     expect(pageComplete(fish, missing)).toBe(false);
     expect(pageComplete(fish, {})).toBe(false);
-    expect(pageComplete(page("folk"), { npc: { elder: 1, shopkeeper: 2 } })).toBe(true);
+    expect(pageComplete(page("folk"), { npc: { village_oswin: 1, village_pip: 2 } })).toBe(true);
   });
 });
 

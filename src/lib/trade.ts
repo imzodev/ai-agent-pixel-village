@@ -13,14 +13,14 @@ import { MERCHANT_STOCK, isMerchantKey } from "./encounters";
 import { FISH_DEFS } from "./fishing";
 
 export const TRADES: TradeConfig = {
-  baker: [
+  village_marigold: [
     { itemKey: "egg", qty: 1, price: 1, line: "Hand it here, love. A copper for a fresh egg, same as ever." },
     { itemKey: "pumpkin", qty: 1, price: 20, line: "A whole pumpkin! Twenty coppers — that's three pies." },
     { itemKey: "tomato", qty: 1, price: 3, line: "Garden tomatoes, three coppers each. Sauce day!" },
     { itemKey: "berry", qty: 1, price: 2, line: "Fresh berries? Two coppers a basket. For the pie." },
   ],
   // Different character sells the crafted good — keeps the economy moving.
-  tinker: [
+  village_greta: [
     { itemKey: "bread", qty: 1, price: 5, line: "My bread, back so soon? Lovely." },
     { itemKey: "stone", qty: 1, price: 1, line: "I'll take river stones off your hands. A copper each." },
     { itemKey: "wool", qty: 1, price: 2, line: "Wool tufts? Two coppers. I can always use more." },
@@ -33,19 +33,19 @@ export const TRADES: TradeConfig = {
   ],
   // Real economy: miller buys your wheat, sells you flour. Wheat → flour is
   // a 1:1 grind; the miller charges 1 copper for the service.
-  miller: [
+  village_hollis: [
     { itemKey: "milk", qty: 1, price: 3, line: "Milk for the dairy? Three coppers a jug." },
     { itemKey: "wheat", qty: 1, price: 1, line: "I'll buy your wheat for a copper." },
     { itemKey: "flour", qty: 1, price: 2, line: "Flour for your baking — two coppers." },
   ],
-  herbalist: [
+  village_wren: [
     { itemKey: "herb", qty: 1, price: 2, line: "Herbs in good nick. Two coppers a bundle." },
     { itemKey: "mushroom", qty: 1, price: 3, line: "Speckled mushrooms? Three coppers. Best in the grove." },
     { itemKey: "bat_wing", qty: 1, price: 2, line: "Bat wings, two coppers. Don't ask what for." },
     { itemKey: "wisp_essence", qty: 1, price: 10, line: "Wisp essence... ten coppers, and handle it gently." },
     { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
-  shopkeeper: [
+  village_pip: [
     { itemKey: "mushroom", qty: 1, price: 2, line: "Mushrooms, two coppers. I'll pickle 'em." },
     { itemKey: "carrot", qty: 1, price: 2, line: "Carrots, two coppers apiece. The rabbits'll be jealous." },
     { itemKey: "radish", qty: 1, price: 2, line: "Radishes — two coppers. Crunchy!" },
@@ -53,7 +53,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "slime_gel", qty: 1, price: 2, line: "Slime gel, two coppers. I find a use for everything." },
   ],
   // Hollowmere: the smith buys raw materials for blades.
-  blacksmith: [
+  hollowmere_bjorn: [
     { itemKey: "stone", qty: 1, price: 1, line: "Good stone's always welcome at the forge. A copper each." },
     { itemKey: "thorn", qty: 1, price: 2, line: "Thornling thorns! Two coppers. They take an edge like nothing else." },
     { itemKey: "boar_hide", qty: 1, price: 5, line: "Boar hide, five coppers. Best grip wrapping there is." },
@@ -61,29 +61,29 @@ export const TRADES: TradeConfig = {
     { itemKey: "lurker_hide", qty: 1, price: 7, line: "Lurker hide, seven coppers. Wraps a hilt like nothing else." },
     { itemKey: "frost_pelt", qty: 1, price: 9, line: "A frost pelt! Nine coppers — you've been up in the cold." },
   ],
-  hm_innkeeper: [
+  hollowmere_ivy: [
     { itemKey: "milk", qty: 1, price: 4, line: "Fresh milk! Four coppers — the woodcutters drink it by the bucket." },
     { itemKey: "egg", qty: 1, price: 2, line: "Eggs for breakfast, two coppers each." },
     { itemKey: "berry", qty: 1, price: 2, line: "Berries for the jam pot — two coppers a handful." },
     { itemKey: "herb", qty: 1, price: 2, line: "Herbs for the tea, two coppers. Bless you." },
   ],
-  innkeeper: [
+  village_hettie: [
     { itemKey: "milk", qty: 1, price: 4, line: "Milk for the stew pot — four coppers a jug." },
     { itemKey: "egg", qty: 1, price: 2, line: "Fresh eggs, two coppers each. Breakfast is sorted!" },
   ],
-  bw_innkeeper: [
+  brightwater_coral: [
     { itemKey: "milk", qty: 1, price: 5, line: "Milk's dear out here on the coast. Five coppers!" },
     { itemKey: "egg", qty: 1, price: 2, line: "Eggs! Two coppers each." },
   ],
   // Brightwater pays a little more: it's a long road.
-  bw_fishmonger: [
+  brightwater_marina: [
     // Every fish in the river and the ponds, at its price.
     ...FISH_DEFS.map((f) => ({ itemKey: f.key, qty: 1, price: f.price, line: `${f.name}? ${f.price} coppers — ${f.rarity === "legendary" ? "and a story for the whole town!" : "fresh for the stew pot."}` })),
     { itemKey: "carrot", qty: 1, price: 3, line: "Carrots for the stew — three coppers each." },
     { itemKey: "tomato", qty: 1, price: 4, line: "Tomatoes! Four coppers. The sailors love a red stew." },
     { itemKey: "pumpkin", qty: 1, price: 24, line: "A whole pumpkin? Twenty-four coppers, and a smile." },
   ],
-  bw_boatwright: [
+  brightwater_tobias: [
     { itemKey: "wood", qty: 1, price: 3, line: "Oak logs — three coppers each. Boats don't build themselves." },
   ],
   // Future examples:
@@ -95,7 +95,7 @@ export const TRADES: TradeConfig = {
  * `npc.key`. `price` is per `qty`. Seeds for home gardens live here.
  */
 export const SHOP_STOCK: TradeConfig = {
-  shopkeeper: [
+  village_pip: [
     { itemKey: "radish_seeds", qty: 1, price: 2, line: "Radish seeds — quick growers. Two coppers." },
     { itemKey: "carrot_seeds", qty: 1, price: 3, line: "Carrot seeds, three coppers. Patience pays.", minLevel: 2 },
     { itemKey: "tomato_seeds", qty: 1, price: 5, line: "Tomato seeds, five coppers. Water them well!", minLevel: 3 },
@@ -106,25 +106,25 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "short_bow", qty: 1, price: 60, line: "A short bow, sixty coppers. Equip it and you can hit things from a safe distance." },
     { itemKey: "arrow", qty: 10, price: 8, line: "Ten arrows for eight coppers. Every shot uses one." },
   ],
-  bw_fishmonger: [
+  brightwater_marina: [
     { itemKey: "fishing_rod", qty: 1, price: 30, line: "Thirty coppers for a good rod. The Silverrun's full of them — fish, I mean." },
   ],
-  hm_innkeeper: [
+  hollowmere_ivy: [
     { itemKey: "hot_stew", qty: 1, price: 8, line: "Hot stew, eight coppers. Sticks to your ribs." },
     { itemKey: "bread", qty: 1, price: 4, line: "Fresh bread, four coppers. Restores a body after the road." },
     { itemKey: "tea", qty: 1, price: 6, line: "Calming tea, six coppers. Good for what ails you." },
     { itemKey: "honey_bun", qty: 1, price: 9, line: "Honey bun — nine coppers. Worth every one." },
   ],
-  innkeeper: [
+  village_hettie: [
     { itemKey: "hot_stew", qty: 1, price: 8, line: "A bowl of hot stew, eight coppers. Warms you right through." },
     { itemKey: "bread", qty: 1, price: 4, line: "Bread's fresh from Marigold's oven, four coppers." },
     { itemKey: "tea", qty: 1, price: 6, line: "Calming tea, six coppers." },
   ],
-  bw_innkeeper: [
+  brightwater_coral: [
     { itemKey: "hot_stew", qty: 1, price: 8, line: "Fish stew, eight coppers. Caught this morning." },
     { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers. Good for mopping up the stew." },
   ],
-  blacksmith: [
+  hollowmere_bjorn: [
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },
   ],
 };

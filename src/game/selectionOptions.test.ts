@@ -10,15 +10,15 @@ describe("selection options", () => {
   it("shopkeepers have several options; a plain townsperson has one", () => {
     const shop = SETTLEMENT_NPCS.find((n) => n.job === "shopkeeper")!;
     const folk = SETTLEMENT_NPCS.find((n) => n.job === "folk")!;
-    const npcs = [{ id: 1, key: "shopkeeper" }, { id: 2, key: shop.key }, { id: 3, key: folk.key }];
+    const npcs = [{ id: 1, key: "village_pip" }, { id: 2, key: shop.key }, { id: 3, key: folk.key }];
     expect(optionCount(npc(1), npcs, [])).toBeGreaterThan(1);
     expect(optionCount(npc(2), npcs, [])).toBeGreaterThan(1);
     expect(optionCount(npc(3), npcs, [])).toBe(1);
     expect(optionCount(npc(99), npcs, [])).toBe(1); // unknown: talk
   });
   it("selling only counts when you carry something they buy", () => {
-    expect(npcOptions("shopkeeper", []).sellable).toBe(false);
-    expect(npcOptions("shopkeeper", [{ itemKey: "stone", qty: 3 }]).sellable).toBe(true);
+    expect(npcOptions("village_pip", []).sellable).toBe(false);
+    expect(npcOptions("village_pip", [{ itemKey: "stone", qty: 3 }]).sellable).toBe(true);
   });
   it("everything else is a single option", () => {
     const tree: Selection = { type: "tree", vx: 1, vy: 2, kind: "oak", x: 0, y: 0, distance: 10 };

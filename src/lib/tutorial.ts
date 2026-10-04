@@ -21,8 +21,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   {
     title: "Say hello to Elder Oswin",
     hint: "The Elder knows everyone in the grove. Walk up to him and talk (E).",
-    event: "talk", match: { npcKey: "elder" }, qty: 1,
-    target: { kind: "npc", npcKey: "elder" },
+    event: "talk", match: { npcKey: "village_oswin" }, qty: 1,
+    target: { kind: "npc", npcKey: "village_oswin" },
     reward: { coins: 10, items: [{ itemKey: "radish_seeds", qty: 3 }] },
   },
   {
@@ -50,7 +50,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     title: "Sell something to a villager",
     hint: "Pip buys stones, mushrooms and crops. Talk to him and sell anything from your bag.",
     event: "sell", qty: 1,
-    target: { kind: "npc", npcKey: "shopkeeper" },
+    target: { kind: "npc", npcKey: "village_pip" },
     reward: { coins: 30, items: [{ itemKey: "bread", qty: 2 }], title: "Newcomer" },
   },
 ];

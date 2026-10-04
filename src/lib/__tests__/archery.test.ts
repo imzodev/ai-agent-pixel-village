@@ -22,10 +22,10 @@ describe("archery", () => {
     expect(bowOf(["wooden_sword"])).toBeNull();
   });
   it("shops sell the short bow and arrows; smiths make the recurve bow and arrows", () => {
-    const pip = stockForNpc("shopkeeper").map((t) => t.itemKey);
+    const pip = stockForNpc("village_pip").map((t) => t.itemKey);
     expect(pip).toContain("short_bow");
     expect(pip).toContain(ARROW_ITEM);
-    const outs = RECIPES.filter((r) => r.crafterKey === "tinker" || r.crafterKey === "blacksmith").map((r) => r.output.itemKey);
+    const outs = RECIPES.filter((r) => r.trade === "smith").map((r) => r.output.itemKey);
     expect(outs).toContain("recurve_bow");
     expect(outs).toContain(ARROW_ITEM);
   });
