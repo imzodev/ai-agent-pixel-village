@@ -4,6 +4,7 @@
 // lib/protocol.ts) that the client and DB assembler both speak.
 
 import type { BreadTableSnapshot } from "./bakery";
+import type { ShopDisplaySnapshot } from "./shopDisplay";
 import type {
   animals,
   buildings,
@@ -64,6 +65,8 @@ export type RawSnapshot = {
   lots: LotSnapshot[];
   /** Bakery bread tables in the proximity box (src/lib/bakery.ts). */
   breadTables: BreadTableSnapshot[];
+  /** Shop displays in the proximity box (src/lib/shopDisplay.ts). */
+  displays: ShopDisplaySnapshot[];
   enemies: Array<typeof enemies.$inferSelect>;
   chat: Array<typeof worldChat.$inferSelect>;
   events: Array<typeof worldEvents.$inferSelect>;

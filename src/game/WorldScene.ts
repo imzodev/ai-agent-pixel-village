@@ -42,6 +42,7 @@ import { TOWNS } from "@/lib/settlements";
 import { boardPoint } from "@/lib/bounties";
 import { RELICS, relicPoint } from "@/lib/relics";
 import { tableByKey } from "@/lib/bakery";
+import { SHOP_DISPLAYS, piecePoint } from "@/lib/shopDisplay";
 import { BIKE_SPEED_MULT, PLAYER_SPEED, RUN_SPEED_MULT } from "@/lib/speedGuard";
 import type { TreeSpot } from "@/types/trees";
 import { inputRouter } from "./input/router";
@@ -50,6 +51,7 @@ import type { CharEnt, CritterEnt, InteractCandidate } from "@/types/game";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { EnemySnapshot } from "@/lib/protocol";
 import type { BreadTableSnapshot } from "@/types/bakery";
+import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -142,6 +144,8 @@ export class WorldScene extends Phaser.Scene {
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
   /** The loaf images on each bakery bread table. */
   private breadLoaves = new Map<string, Phaser.GameObjects.Image[]>();
+  /** The goods on each shop display, per item. */
+  private displayPieces = new Map<string, Map<string, Phaser.GameObjects.Image[]>>();
   /** Relics we've already pointed out ("something glints nearby"). */
   private relicsNoticed = new Set<string>();
   private relicCheckAt = 0;
@@ -624,6 +628,7 @@ export class WorldScene extends Phaser.Scene {
     this.snapshot = s;
     this.meId = s.me?.id ?? null;
     this.syncBreadTables(s.breadTables ?? []);
+    this.syncDisplays(s.displays ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
@@ -1036,6 +1041,28 @@ export class WorldScene extends Phaser.Scene {
       }
       const tex = tableTexture(t.itemKey);
       imgs.forEach((img, i) => { if (img.texture.key !== tex) img.setTexture(tex); img.setVisible(i < t.left); });
+    }
+  }
+
+  /** Shop displays (src/lib/shopDisplay.ts): one image per piece of each
+   *  good, shown up to what the shop really has in stock. */
+  private syncDisplays(displays: readonly ShopDisplaySnapshot[]): void {
+    for (const snap of displays) {
+      const def = SHOP_DISPLAYS.find((d) => d.key === snap.key);
+      if (!def) continue;
+      let byItem = this.displayPieces.get(def.key);
+      if (!byItem) {
+        byItem = new Map();
+        const depth = DEPTH_CHAR_BASE + (def.buildingTy + 13) * 16 + 1; // just over the rack's own art
+        for (const slot of def.slots) {
+          byItem.set(slot.itemKey, slot.at.map((at) => {
+            const p = piecePoint(def, at);
+            return this.add.image(p.x, p.y, slot.sprite).setOrigin(0, 0).setDepth(depth).setVisible(false);
+          }));
+        }
+        this.displayPieces.set(def.key, byItem);
+      }
+      for (const [item, imgs] of byItem) imgs.forEach((img, i) => img.setVisible(i < (snap.counts[item] ?? 0)));
     }
   }
 

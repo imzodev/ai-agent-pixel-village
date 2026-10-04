@@ -12,7 +12,7 @@ import { tutorialEvent } from "@/lib/tutorialServer";
 import { REP_PER_TRADE, discounted, townName, townOfNpc } from "@/lib/reputation";
 import { addReputation, reputationWith } from "@/lib/reputationServer";
 import { HAGGLER_MULT } from "@/lib/progression";
-import { refreshBikeOwnership } from "@/lib/world-stream";
+import { getLivePlayerPosition, markWorldDirty, refreshBikeOwnership } from "@/lib/world-stream";
 import { BIKE_ITEM } from "@/lib/bike";
 
 import { adjustStock, npcBuys, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
@@ -96,7 +96,11 @@ export async function POST(req: Request) {
         return Response.json({ error: `You need ${cost} coins.` }, { status: 400 });
       }
       await addItem(me.id, itemKey, offer.qty * qty);
-      if (shelf.npcId) await regardHelped(shelf.npcId, me.id, 1);
+      if (shelf.npcId) {
+        await regardHelped(shelf.npcId, me.id, 1);
+        const at = getLivePlayerPosition(me.id) ?? me;
+        markWorldDirty(at.x, at.y); // the shop's display out front shows one fewer
+      }
       // The speed limit lets you ride as soon as the bike is yours.
       if (itemKey === BIKE_ITEM) await refreshBikeOwnership(me.id);
       const rep = town ? await addReputation(me.id, town, REP_PER_TRADE) : null;

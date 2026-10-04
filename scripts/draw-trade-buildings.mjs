@@ -2,9 +2,12 @@
 // Working buildings in the detailed (DS-era) style of scripts/draw-houses.mjs,
 // baked into their own templates:
 //
-//   forge — Hollowmere's smithy: stone walls under a slate roof, a broad
-//           stone chimney, and an open lean-to bay with a glowing hearth,
-//           anvil, quench barrel and weapon rack (public/buildings/forge.json)
+//   forge — Bjorn's smithy in Hollowmere: stone walls under a slate roof, a
+//           broad stone chimney, a SMITHY board, a window onto the tools, an
+//           open lean-to bay with a glowing hearth, hanging tongs and
+//           hammers, anvil, quench barrel and coal, and a display rack out
+//           front whose goods the game draws from his real stock
+//           (src/lib/shopDisplay.ts) (public/buildings/forge.json)
 //   inn   — a two-storey timber inn with a hanging tankard sign, lanterns
 //           by the door, a bench and barrels (public/buildings/inn.json)
 //   waystone — a carved standing stone with a glowing blue rune on a
@@ -184,6 +187,26 @@ function bench(c, x, y, w) {
 }
 
 // ── The forge ───────────────────────────────────────────────────────────
+/** A window onto the workshop: dark, lit by the forge, tools on the wall. */
+function toolWindow(c, x, y, w, h) {
+  shade(c, x - 3, y - 3, w + 6, h + 6, PAL.wood, (px, py) => (py === y - 3 || px === x - 3 ? 0.9 : 0.5));
+  shade(c, x, y, w, h, [hex(0x2a160c), hex(0x4a2410), hex(0x7a3a14), hex(0xb85a1c)], (px, py) => 0.25 + ((py - y) / h) * 0.55 + (rand(px >> 1, py >> 1, 33) - 0.5) * 0.1); // warm from below
+  for (const [tx2, kind] of [[x + 4, "hammer"], [x + 12, "tongs"], [x + 21, "hammer"]]) hangingTool(c, tx2, y + 2, kind);
+  vline(c, x + Math.floor(w / 2), y, y + h - 1, PAL.wood[1]); line(c, x, x + w - 1, y + Math.floor(h / 2), PAL.wood[1]);
+  for (let k = 0; k < 6; k++) c.put(x + 3 + k, y + h - 4 - k, PAL.white, 60);
+  line(c, x - 4, x + w + 3, y + h + 3, PAL.wood[4]); line(c, x - 4, x + w + 3, y + h + 4, PAL.wood[1]);
+}
+/** Tongs or a hammer hanging from a nail. */
+function hangingTool(c, x, y, kind) {
+  c.put(x + 1, y, PAL.ironLt);
+  if (kind === "hammer") {
+    vline(c, x + 1, y + 1, y + 10, PAL.wood[2]); vline(c, x + 2, y + 1, y + 10, PAL.wood[1]);
+    shade(c, x - 1, y + 10, 6, 3, [hex(0x2c2c36), hex(0x5a5a68), hex(0x8a8a9a)], (px) => 0.8 - (px - x) * 0.1);
+  } else {
+    for (let k = 0; k < 9; k++) { c.put(x + (k < 6 ? 0 : k - 6), y + 1 + k, PAL.iron); c.put(x + 3 - (k < 6 ? 0 : k - 6), y + 1 + k, PAL.iron); }
+    c.put(x + 1, y + 6, PAL.ironLt); c.put(x + 2, y + 6, PAL.ironLt);
+  }
+}
 async function forge() {
   // Smithy: cols 7–15, the lean-to bay cols 16–20, door at col 11.
   G = { X0: 7 * T, X1: 16 * T - 1, BOTTOM: 207, DOOR_X: 11 * T };
@@ -192,8 +215,15 @@ async function forge() {
   chimney(art, G.X0 + 8, ridgeY - 18, ridgeY + 30, 24); // broad stone stack
   stoneWall(art, wallTop);
   roof(art, ridgeY, eaveY, PAL.roofSlate);
-  window_(art, G.X0 + 14, 154, 16, 16, null, null);
-  window_(art, G.X1 - 30, 154, 16, 16, null, null);
+  toolWindow(art, G.X0 + 8, 156, 30, 18);
+  window_(art, G.X1 - 30, 156, 16, 16, null, null);
+  // the SMITHY board over the door, iron-dark with gilt letters
+  const sb0 = G.X0 + 40, sb1 = G.X1 - 38, by0 = 135, by1 = 148;
+  shade(art, sb0, by0, sb1 - sb0 + 1, by1 - by0 + 1, [hex(0x22222a), hex(0x2e2e38), hex(0x3c3c48)], (px, py) => (py === by0 ? 0.95 : 0.5));
+  line(art, sb0 - 1, sb1 + 1, by0 - 1, PAL.ink); line(art, sb0 - 1, sb1 + 1, by1 + 1, PAL.ink); vline(art, sb0 - 1, by0, by1, PAL.ink); vline(art, sb1 + 1, by0, by1, PAL.ink);
+  for (const [rx, ry] of [[sb0 + 2, by0 + 2], [sb1 - 2, by0 + 2], [sb0 + 2, by1 - 2], [sb1 - 2, by1 - 2]]) art.put(rx, ry, PAL.ironLt); // rivets
+  const tw = 6 * 7 - 2, tx = Math.round((sb0 + sb1) / 2 - tw / 2) + 1;
+  lettering(art, "SMITHY", tx, by0 + 3, PAL.yellow, hex(0x101014));
   foundation(art);
   const d = door(art, null, 14, false);
   // iron straps across the door
@@ -239,10 +269,27 @@ async function forge() {
   line(art, ax + 6, ax + 9, ay - 19, PAL.iron); vline(art, ax + 7, ay - 18, ay - 12, PAL.wood[2]);
   barrel(art, bx1 - 14, G.BOTTOM - 1, 16);
   shade(art, bx1 - 19, G.BOTTOM - 19, 11, 2, [hex(0x2a4a7a), hex(0x3c6aa8), hex(0x5c90cc)], () => 0.5); // water
-  const rx = G.X0 - 22; // rack beside the west wall
-  line(art, rx, rx + 16, G.BOTTOM - 22, PAL.wood[1]); line(art, rx, rx + 16, G.BOTTOM - 8, PAL.wood[1]);
-  vline(art, rx, G.BOTTOM - 24, G.BOTTOM, PAL.wood[0]); vline(art, rx + 16, G.BOTTOM - 24, G.BOTTOM, PAL.wood[0]);
-  for (const sx of [rx + 4, rx + 8, rx + 12]) { vline(art, sx, G.BOTTOM - 30, G.BOTTOM - 6, PAL.stone[4]); art.put(sx, G.BOTTOM - 31, PAL.stone[5]); line(art, sx - 1, sx + 1, G.BOTTOM - 20, PAL.wood[2]); }
+  // the display rack west of the door (template x 52–106): a beam with
+  // pegs for axes and swords, a shelf for arrow bundles. The goods on it
+  // are drawn by the game from Bjorn's stock (src/lib/shopDisplay.ts).
+  const rk0 = 52, rk1 = 106, beamY = 170, shelfY = 197;
+  for (const px of [rk0, rk1 - 2]) shade(art, px, beamY - 4, 3, G.BOTTOM - beamY + 4, PAL.wood, (x) => 0.62 - (x - px) * 0.12);
+  shade(art, rk0 - 2, beamY, rk1 - rk0 + 4, 3, PAL.wood, (x, y) => (y === beamY ? 0.85 : 0.5));
+  shade(art, rk0, shelfY, rk1 - rk0, 3, PAL.wood, (x, y) => (y === shelfY ? 0.85 : 0.45));
+  for (const px of [58, 67, 76, 88, 95, 102]) { art.put(px + 2, beamY + 3, PAL.iron); art.put(px + 2, beamY + 4, PAL.ironLt); } // pegs
+  line(art, rk0 - 3, rk1 + 2, beamY - 1, PAL.ink); line(art, rk0, rk1 - 1, shelfY + 3, PAL.ink);
+  vline(art, rk0 - 1, beamY - 4, G.BOTTOM, PAL.ink); vline(art, rk1 + 1, beamY - 4, G.BOTTOM, PAL.ink);
+  // tongs and hammers hanging on the bay's back wall
+  for (const [tx2, kind] of [[bx0 + 12, "tongs"], [bx0 + 21, "hammer"], [bx0 + 29, "tongs"], [bx0 + 38, "hammer"]]) hangingTool(art, tx2, 155, kind);
+  // a heap of coal in front of the bay: lumps on a low mound
+  const COAL = [hex(0x101016), hex(0x1c1c24), hex(0x2c2c36), hex(0x44444f), hex(0x6a6a78)];
+  const cx = bx0 + 12, cy = G.BOTTOM + 14;
+  for (let y = -6; y <= 0; y++) for (let x = -11; x <= 11; x++) {
+    if ((x / 11) ** 2 + (y / 6.5) ** 2 > 1) continue;
+    const lump = (Math.floor((x + 20) / 3) + Math.floor((y + 20) / 2)) % 2;
+    art.put(cx + x, cy + y, ramp(COAL, 0.35 + lump * 0.25 - y * 0.03 - x * 0.012 + (rand(x, y, 61) - 0.5) * 0.25, cx + x, cy + y));
+  }
+  for (let x = -11; x <= 11; x++) art.put(cx + x, cy + 1, PAL.ink);
 
   softShadow(shadowC, G.X0 - 4, G.BOTTOM + 1, bx1 - G.X0 + 9, 7, 110);
   step(groundC, d.x - 2, d.w);
@@ -253,7 +300,8 @@ async function forge() {
   const collision = [];
   for (let r = 8; r <= 12; r++) for (let c = 7; c <= 15; c++) collision.push([r, c]);
   for (let r = 10; r <= 12; r++) for (let c = 16; c <= 20; c++) collision.push([r, c]); // bay (hearth, barrel)
-  collision.push([12, 5], [12, 6]); // weapon rack
+  collision.push([12, 3], [12, 4], [12, 5], [12, 6]); // display rack
+  collision.push([13, 16]); // coal heap
   await bakeCanvases({
     name: "Forge", jsonName: "forge",
     layers: { GroundUpper: groundC, DecorationLowerShadow: shadowC, DecorationLower: lower, DecorationUpper1: upper },
@@ -336,6 +384,11 @@ const FONT = {
   E: ["11111", "1....", "1....", "1111.", "1....", "1....", "11111"],
   R: ["1111.", "1...1", "1...1", "1111.", "1.1..", "1..1.", "1...1"],
   Y: ["1...1", "1...1", ".1.1.", "..1..", "..1..", "..1..", "..1.."],
+  S: [".1111", "1....", "1....", ".111.", "....1", "....1", "1111."],
+  M: ["1...1", "11.11", "1.1.1", "1.1.1", "1...1", "1...1", "1...1"],
+  I: ["11111", "..1..", "..1..", "..1..", "..1..", "..1..", "11111"],
+  T: ["11111", "..1..", "..1..", "..1..", "..1..", "..1..", "..1.."],
+  H: ["1...1", "1...1", "1...1", "11111", "1...1", "1...1", "1...1"],
 };
 function lettering(c, text, x, y, col, shadow) {
   for (const ch of text) {

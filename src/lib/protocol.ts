@@ -9,6 +9,7 @@ import type { Facing, PlayerActKind } from "@/types/world";
 import type { Move, ScheduledMove } from "@/types/motion";
 import type { LotSnapshot } from "@/types/garden";
 import type { BreadTableSnapshot } from "@/types/bakery";
+import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 
 // Re-exported for callers that already import protocol types together.
 export type { Facing, Move, ScheduledMove };
@@ -85,6 +86,8 @@ export type WorldSnapshot = {
   lots: LotSnapshot[];
   /** Bakery bread tables nearby: loaves left in the current batch. */
   breadTables: BreadTableSnapshot[];
+  /** Shop displays nearby: pieces of each good on show. */
+  displays: ShopDisplaySnapshot[];
   enemies: EnemySnapshot[];
   chat: ChatSnapshot[];
   events: EventSnapshot[];
