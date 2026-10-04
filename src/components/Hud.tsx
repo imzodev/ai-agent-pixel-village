@@ -56,6 +56,9 @@ async function api<T = unknown>(url: string, body?: unknown, method = body ? "PO
   }
 }
 
+/** Stop a press on the HUD from reaching the game (see the HUD's root). */
+const keepOffCanvas = (e: React.SyntheticEvent) => e.stopPropagation();
+
 export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [selfPos, setSelfPos] = useState<{ x: number; y: number } | null>(null);
@@ -711,7 +714,10 @@ export default function Hud() {
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800">
+    // Presses on the HUD stay on the HUD: Phaser listens on the window for
+    // presses outside its canvas and would otherwise hit-test the sprite
+    // under a button (clicking a menu item selected what was behind it).
+    <div className="pointer-events-none absolute inset-0 select-none font-pixel text-[14px] text-stone-800" onMouseDown={keepOffCanvas} onTouchStart={keepOffCanvas}>
       <LocationBanner />
       {loggedIn && (selfPos ?? snap?.me) && (
         // Where you stand, in world tiles (x grows east, y grows south).

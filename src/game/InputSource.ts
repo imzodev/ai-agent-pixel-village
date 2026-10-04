@@ -52,6 +52,13 @@ export function createInputSource(opts: {
     opts.router.setHeld("move.run", false);
   });
 
+  // Presses on the touch controls stay there: Phaser listens on the window
+  // for presses outside its canvas and would select whatever is under a
+  // button or the stick. (Listeners on this element itself still run.)
+  const keepOffCanvas = (e: Event) => e.stopPropagation();
+  opts.container.addEventListener("touchstart", keepOffCanvas);
+  opts.container.addEventListener("mousedown", keepOffCanvas);
+
   // --- Action buttons (right thumb) ---
   for (const b of TOUCH_BUTTONS) {
     const el = document.createElement("button");
@@ -74,6 +81,8 @@ export function createInputSource(opts: {
     getAxis: () => ({ x: 0, y: 0 }),
     destroy() {
       joy.destroy();
+      opts.container.removeEventListener("touchstart", keepOffCanvas);
+      opts.container.removeEventListener("mousedown", keepOffCanvas);
       opts.container.querySelectorAll(".grove-action-btn").forEach((el) => el.remove());
     },
   };
