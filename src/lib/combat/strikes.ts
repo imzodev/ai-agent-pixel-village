@@ -40,9 +40,10 @@ export function inShape(shape: StrikeShape, origin: Point, dir: Facing, p: Point
 // ── Chip damage ──────────────────────────────────────────────────────────
 /** Standing in a telegraph hurts a little while it fills: this often… */
 export const CHIP_EVERY_MS = 450;
-/** …for this share of the full hit (at least 1). */
+/** …for this share of the full hit, and never less than CHIP_MIN. */
 export const CHIP_FRAC = 0.2;
-export const chipDamage = (dmg: number): number => Math.max(1, Math.round(dmg * CHIP_FRAC));
+export const CHIP_MIN = 2;
+export const chipDamage = (dmg: number): number => Math.max(CHIP_MIN, Math.round(dmg * CHIP_FRAC));
 
 // ── Dodging ──────────────────────────────────────────────────────────────
 /** A roll's invulnerable window, its length (px) and how long the dash takes. */

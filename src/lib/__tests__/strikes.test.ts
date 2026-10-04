@@ -75,8 +75,9 @@ describe("the land sets the danger", () => {
 describe("pressure", () => {
   it("standing in a telegraph chips a little off; the full hit is the heavy one", async () => {
     const { chipDamage } = await import("@/lib/combat/strikes");
-    expect(chipDamage(20)).toBe(4);
-    expect(chipDamage(2)).toBe(1);
+    expect(chipDamage(20)).toBe(4); // 20%
+    expect(chipDamage(5)).toBe(2); // 20% would be 1: at least 2
+    expect(chipDamage(2)).toBe(2);
     expect(chipDamage(20)).toBeLessThan(20);
   });
   it("the wilds hold more enemies, in packs, the further out you go", async () => {
