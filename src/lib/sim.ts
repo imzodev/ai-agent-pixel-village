@@ -34,6 +34,7 @@ import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
 import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_MAX_TOTAL, WILD_PACKS_PER_BEAT, WILD_RADIUS_PX, WILD_SPAWN_CHANCE, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildPackSize, wildTarget } from "./wildlife";
 import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
+import { advanceTrips, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
 import type { MoveWrite, MovingRow, TickBeat, TileLeash } from "@/types/motion";
@@ -131,6 +132,7 @@ export async function tickWorld(): Promise<number | null> {
     tickWeather(ws, now),
     tickResources(now),
     tickEnemies(beat, now, night),
+    advanceTrips(beat).catch((err) => { console.warn("[tick] trips failed:", err instanceof Error ? err.message : err); return 0; }),
   ]);
   if (beat.index % HP_REGEN_EVERY_BEATS === 0) await regenHp(now);
   await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
@@ -148,8 +150,10 @@ async function tickNpcs(beat: TickBeat): Promise<number> {
     .from(npcs)
     .where(eq(npcs.active, true));
   const writes: MoveWrite[] = [];
+  const travelling = await npcsOnTrips();
   for (const n of rows) {
     if (n.kind === "remote") continue; // remote agents drive themselves over HTTP
+    if (travelling.has(n.id)) continue; // walking a planned route (src/lib/nav/trips.ts)
     if (n.kind === "encounter") continue; // encounter strangers stay where they're needed
     if (!isDue("npc", n.id, beat.index, NPC_MOVE_INTERVAL_MS)) continue;
     if (n.holdUntil != null && n.holdUntil > beat.startAt) continue; // someone is talking to it

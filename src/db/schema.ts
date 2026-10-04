@@ -616,6 +616,44 @@ export const saloonResults = pgTable(
   (t) => [index("saloon_results_char_at_idx").on(t.characterId, t.at), index("saloon_results_at_idx").on(t.at)],
 );
 
+/** Navigation (src/lib/nav): the places each NPC knows (it can only route
+ *  to those), and how it found out. */
+export const npcKnownPlaces = pgTable(
+  "npc_known_places",
+  {
+    npcId: integer("npc_id").notNull(),
+    placeKey: text("place_key").notNull(),
+    how: text("how").notNull().default("seen"), // seen | home | told
+    learnedAt: timestamp("learned_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("npc_known_places_pk").on(t.npcId, t.placeKey)],
+);
+
+/** The blocks (game chunks) each NPC has walked through, for exploring. */
+export const npcExplored = pgTable(
+  "npc_explored",
+  {
+    npcId: integer("npc_id").notNull(),
+    bx: integer("bx").notNull(),
+    by: integer("by").notNull(),
+  },
+  (t) => [uniqueIndex("npc_explored_pk").on(t.npcId, t.bx, t.by)],
+);
+
+/** An NPC's trip: its planned route (every tile) and how far along it is. */
+export const npcTrips = pgTable("npc_trips", {
+  npcId: integer("npc_id").primaryKey(),
+  destKey: text("dest_key"),
+  destName: text("dest_name").notNull(),
+  destX: real("dest_x").notNull(),
+  destY: real("dest_y").notNull(),
+  tiles: jsonb("tiles").$type<GridPoint[]>().notNull(),
+  /** Index into `tiles` where the next segment starts. */
+  idx: integer("idx").notNull().default(0),
+  status: text("status").notNull().default("active"), // active | arrived | failed
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 /** Wild patches a character has picked (src/lib/forage.ts): each player
  *  forages every patch on their own cooldown. */
 export const forageClaims = pgTable(

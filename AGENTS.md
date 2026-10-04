@@ -85,3 +85,39 @@ positions for these entities.**
 | `WS_RESYNC_MS` | 30000 | full-snapshot safety resync per client |
 
 tickd refuses to start if a `MOVE_MAX_TILES` walk can't finish within an interval.
+
+## Navigation (NPC routes, places, trips)
+
+NPCs travel between places with `src/lib/nav/`, like a maps app. Moves stay
+four-directional (see Movement); routes are made fluent by penalising turns,
+so they come out as long straight legs.
+
+- **Plan** with `worldRouter.plan(fromTile, toTile)` (`walkGrid.ts`): hierarchical
+  A* (`route.ts`) over blocks = game chunks (24×15). Short trips search tiles
+  directly; long ones search block *entrances*, then fill in tiles and
+  straighten the result. Roads and bridges cost less (6 vs 10), so routes keep
+  to them. Walkability is the exact step check (`isWalkableAt`), so routes
+  never disagree with movement. Never call the old 80-tile `planPath` for trips.
+- **Caches**: block grids and block graphs live in memory and on disk under
+  `.cache/nav/<mapVersion>/` (rebuilt automatically when the terrain changes).
+  In memory they're refreshed after 5 minutes, so felled/regrown trees are
+  picked up; a trip also re-checks its next segment and re-plans if blocked.
+- **Places** (`places.ts`): building doors, towns, regions and provinces. An NPC
+  only routes to places it knows (`npc_known_places`): its home surroundings
+  from the start, others discovered by walking within 12 tiles, or told.
+- **Trips** (`trips.ts`, `npc_trips`): a stored route walked as chained moves
+  written by tickd, each starting on a beat boundary (so the beat broadcast
+  carries it) and never before the previous one ends; `SEG_BEATS` = 4 beats
+  per segment. NPCs on a trip are skipped by the random wander.
+- **Admin endpoints** (see "Admin endpoints" below):
+  `GET /api/nav/route?from=tx,ty&to=tx,ty`, `POST /api/nav/trip { npcKey, place, learn? }`,
+  `GET /api/nav/places?npcKey=…`. `scripts/route-preview.ts` draws a route on the map.
+
+## Admin endpoints
+
+Anything that lets someone steer the world (send NPCs on trips, inspect or
+change an NPC's mind, plan routes) must check `isAdmin(req)` from
+`src/lib/adminAuth.ts` and return `notFound()` otherwise. Requests carry
+`x-admin-token: <ADMIN_TOKEN>`. With `ADMIN_TOKEN` unset (or under 24
+characters) these endpoints don't exist, in development too. Never gate them
+on `NODE_ENV` alone.
