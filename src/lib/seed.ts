@@ -133,6 +133,18 @@ export const ITEM_DEFS = [
   { key: "aged_white_wine", name: "Aged White Wine", kind: "material", icon: "🥂", description: "Rested in your racks. Golden and rare.", value: 60 },
   { key: "jam", name: "Jar of Jam", kind: "consumable", icon: "🫙", description: "Fruit and honey. Restores 10 HP.", value: 9 },
   { key: "apple_pie", name: "Apple Pie", kind: "consumable", icon: "🥧", description: "Marigold's, from your apples. Restores 16 HP.", value: 10 },
+  // Carpenter's workshops (src/lib/furniture.ts): planks, and the furniture made from them.
+  { key: "plank", name: "Plank", kind: "material", icon: "🪵", description: "Sawn from a log at a workshop's saw bench.", value: 1 },
+  { key: "stool", name: "Stool", kind: "furniture", icon: "🪑", description: "Three legs, no wobble. Place it at home.", value: 6, placeable: true },
+  { key: "cabinet", name: "Cabinet", kind: "furniture", icon: "🗄️", description: "Two doors and brass knobs.", value: 20, placeable: true },
+  { key: "wardrobe", name: "Wardrobe", kind: "furniture", icon: "🚪", description: "Tall enough to hide in.", value: 32, placeable: true },
+  { key: "rocking_chair", name: "Rocking Chair", kind: "furniture", icon: "🪑", description: "Turned on a lathe. Creaks just right.", value: 24, placeable: true },
+  { key: "armchair", name: "Armchair", kind: "furniture", icon: "🛋️", description: "Upholstered in your own cloth and wool.", value: 30, placeable: true },
+  { key: "sofa", name: "Sofa", kind: "furniture", icon: "🛋️", description: "Room for three and a cat.", value: 44, placeable: true },
+  { key: "polished_chair", name: "Polished Chair", kind: "furniture", icon: "🪑", description: "Walnut-dark and waxed with honey.", value: 22, placeable: true },
+  { key: "polished_table", name: "Polished Table", kind: "furniture", icon: "🟫", description: "You can see your face in it.", value: 30, placeable: true },
+  { key: "polished_cabinet", name: "Polished Cabinet", kind: "furniture", icon: "🗄️", description: "Waxed to a deep shine.", value: 42, placeable: true },
+  { key: "polished_wardrobe", name: "Polished Wardrobe", kind: "furniture", icon: "🚪", description: "The pride of any bedroom.", value: 66, placeable: true },
 ] as const;
 
 export { NPC_DEFS };

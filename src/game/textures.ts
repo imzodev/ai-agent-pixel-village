@@ -4,6 +4,11 @@ import { BUN_PALETTE, BUN_ROWS, LOAF_PALETTE, LOAF_ROWS, PIE_PALETTE, PIE_ROWS }
 import { DISPLAY_SPRITES } from "./shopDisplay";
 import { RANCH_PROP_SPRITES } from "./ranchProps";
 import { VINEYARD_PROP_SPRITES } from "./vineyardProps";
+import { WORKSHOP_PROP_SPRITES } from "./workshopProps";
+import { FURNITURE_CELL, FURNITURE_SHEET } from "./furnitureArt";
+
+/** Phaser texture key of the furniture sheet. */
+export const FURNITURE_TEXTURE = "furniture";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
 import { ANIMAL_SPRITES } from "./animalSprites";
@@ -67,6 +72,8 @@ export function loadPropSprites(scene: Scene): void {
   scene.load.image(LPC_CROPS_KEY, "/assets/food/crops.png");
   // Other node sheets (e.g. choppable trees).
   for (const [key, url] of Object.entries(NODE_SHEETS)) scene.load.image(key, url);
+  // Furniture, one 32×32 frame per piece (src/game/furnitureArt.ts): workshop showrooms.
+  scene.load.spritesheet(FURNITURE_TEXTURE, FURNITURE_SHEET, { frameWidth: FURNITURE_CELL, frameHeight: FURNITURE_CELL });
 }
 
 /**
@@ -144,7 +151,7 @@ export function makePropTextures(scene: Scene) {
   // Goods on shop displays (src/game/shopDisplay.ts), at world scale.
   for (const [key, sp] of Object.entries(DISPLAY_SPRITES)) pixelTexture(scene, key, sp.rows, sp.palette, 1);
   // What players build on their ranch (src/game/ranchProps.ts).
-  for (const [key, sp] of Object.entries({ ...RANCH_PROP_SPRITES, ...VINEYARD_PROP_SPRITES })) pixelTexture(scene, key, sp.rows, sp.palette, 1);
+  for (const [key, sp] of Object.entries({ ...RANCH_PROP_SPRITES, ...VINEYARD_PROP_SPRITES, ...WORKSHOP_PROP_SPRITES })) pixelTexture(scene, key, sp.rows, sp.palette, 1);
   pixelTexture(scene, "marker", ["...y...", "..yyy..", ".yyyyy.", "...y...", "...y..."], { y: "#fff176" }, 2);
 }
 

@@ -18,6 +18,7 @@ import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
+import FurnitureSprite from "./FurnitureSprite";
 import { plantablesFor } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
@@ -1087,7 +1088,7 @@ export default function Hud() {
         <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
-          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
+          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
           {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
@@ -1530,7 +1531,7 @@ function HomePanel({ me, onAction, onTheme }: { me: Me; onAction: (b: Record<str
               <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const id = Number(e.dataTransfer.getData("decor")); if (id) void onAction({ decorId: id, gx, gy }, "PATCH"); }}
                 onClick={() => { if (placing && !d) { void onAction({ action: "place", inventoryId: placing, gx, gy }); setPlacing(null); } }}
                 className={`flex aspect-square items-center justify-center rounded-sm text-lg ${placing && !d ? "cursor-pointer bg-white/30 hover:bg-white/60" : "bg-black/5"}`}>
-                {d && <span draggable onDragStart={(e) => e.dataTransfer.setData("decor", String(d.id))} onDoubleClick={() => onAction({ decorId: d.id, action: "unplace" }, "PATCH")} className="cursor-grab" title="drag to move · double-click to pick up">{ITEM_ICONS[d.itemKey] ?? "📦"}</span>}
+                {d && <span draggable onDragStart={(e) => e.dataTransfer.setData("decor", String(d.id))} onDoubleClick={() => onAction({ decorId: d.id, action: "unplace" }, "PATCH")} className="cursor-grab"><FurnitureSprite itemKey={d.itemKey} size={32} title="drag to move · double-click to pick up" /></span>}
               </div>
             );
           })}
@@ -1538,8 +1539,8 @@ function HomePanel({ me, onAction, onTheme }: { me: Me; onAction: (b: Record<str
       </div>
       <div className="mt-2 text-[11px] font-bold uppercase text-stone-400">Furniture in your bag</div>
       <div className="mt-1 flex flex-wrap gap-1">
-        {placeables.length === 0 && <div className="text-[12px] text-stone-500">None yet — Pip and Greta trade furniture for stones and slime gel.</div>}
-        {placeables.map((i) => <button key={i.id} onClick={() => setPlacing(placing === i.id ? null : i.id)} className={`rounded-lg border-2 bg-white px-2 py-1 ${placing === i.id ? "border-emerald-500" : "border-transparent"}`}>{i.def?.icon} {i.def?.name} ×{i.qty}</button>)}
+        {placeables.length === 0 && <div className="text-[12px] text-stone-500">None yet — Greta makes a few pieces, and carpenters make the rest in their Hollowmere workshops.</div>}
+        {placeables.map((i) => <button key={i.id} onClick={() => setPlacing(placing === i.id ? null : i.id)} className={`flex items-center gap-1 rounded-lg border-2 bg-white px-2 py-1 ${placing === i.id ? "border-emerald-500" : "border-transparent"}`}><FurnitureSprite itemKey={i.itemKey} size={24} /> {i.def?.name} ×{i.qty}</button>)}
       </div>
     </div>
   );

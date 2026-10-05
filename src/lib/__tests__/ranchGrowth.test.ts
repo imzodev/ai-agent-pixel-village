@@ -7,6 +7,7 @@ import {
 } from "@/lib/ranchUpgrades";
 import { RANCH_PROP_SPOTS, RANCH_PROP_SPRITES } from "@/game/ranchProps";
 import { VINEYARD_PROP_SPOTS, VINEYARD_PROP_SPRITES } from "@/game/vineyardProps";
+import { WORKSHOP_PROP_SPOTS, WORKSHOP_PROP_SPRITES } from "@/game/workshopProps";
 import type { RanchGrowth } from "@/types/ranchGrowth";
 
 const step = (id: string) => BUILD_STEPS.find((s) => s.id === id)!;
@@ -84,7 +85,7 @@ describe("workshop", () => {
   });
   it("every building that can be built has a sprite spot (coop and barn are the template's)", () => {
     for (const s of BUILD_STEPS) if (s.key !== "coop" && s.key !== "barn") {
-      const [spots, sprites] = s.lot === "vineyard" ? [VINEYARD_PROP_SPOTS, VINEYARD_PROP_SPRITES] : [RANCH_PROP_SPOTS, RANCH_PROP_SPRITES];
+      const [spots, sprites] = s.lot === "vineyard" ? [VINEYARD_PROP_SPOTS, VINEYARD_PROP_SPRITES] : s.lot === "workshop" ? [WORKSHOP_PROP_SPOTS, WORKSHOP_PROP_SPRITES] : [RANCH_PROP_SPOTS, RANCH_PROP_SPRITES];
       const spot = spots[s.key];
       expect(spot, s.key).toBeDefined();
       expect(sprites[spot!.sprite], spot!.sprite).toBeDefined();

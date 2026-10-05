@@ -335,6 +335,10 @@ const even = (n: number) => ((n % 2) + 2) % 2 === 0;
 // with a stump — until it regrows.
 export { setFelledTrees };
 
+/** The carpenters' workshop lots south of Hollowmere (public/buildings/buildings.json
+ *  workshop_1–4, 24×15 tiles each from tx -400 to -301 at ty 38), kept clear of trees. */
+export const WORKSHOP_ROW = { tx0: -402, tx1: -299, ty0: 37, ty1: 53 } as const;
+
 /** Forest: tree walls framing the road, Whisperwood's woods, lone trees.
  *  Trees stand on corners of a 2-tile lattice, one big 2×2 tree each. */
 function forestV(vx: number, vy: number): boolean {
@@ -359,6 +363,8 @@ function forestV(vx: number, vy: number): boolean {
  *  heartland box's edges follow the lattice, so a corner's whole tree is
  *  on one side of it. */
 export function treeAt(vx: number, vy: number): string | null {
+  // Hollowmere's workshop lots straddle the heartland's edge: no trees there on either side.
+  if (vx >= WORKSHOP_ROW.tx0 && vx <= WORKSHOP_ROW.tx1 && vy >= WORKSHOP_ROW.ty0 && vy <= WORKSHOP_ROW.ty1) return null;
   if (!inHeartland(vx, vy)) return continentTreeAt(vx, vy);
   return forestV(vx, vy) ? treeKind(vx, vy) : null;
 }

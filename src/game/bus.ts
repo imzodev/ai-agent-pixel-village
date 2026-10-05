@@ -30,4 +30,6 @@ export const ITEM_ICONS: Record<string, string> = {
   golden_egg: "🥚", fine_wool: "🧶", rich_milk: "🥛", honey: "🍯", cheese: "🧀", cloth: "🧵", fittings: "🔩",
   grape_cutting: "🌱", white_grape_cutting: "🌱", apple_sapling: "🌱", red_grape: "🍇", white_grape: "🍇", apple: "🍎", grape_juice: "🧃", cider: "🍺",
   red_wine: "🍷", white_wine: "🥂", aged_red_wine: "🍷", aged_white_wine: "🥂", jam: "🫙", apple_pie: "🥧",
+  plank: "🪵", stool: "🪑", cabinet: "🗄️", wardrobe: "🚪", rocking_chair: "🪑", armchair: "🛋️", sofa: "🛋️",
+  polished_chair: "🪑", polished_table: "🟫", polished_cabinet: "🗄️", polished_wardrobe: "🚪",
 };

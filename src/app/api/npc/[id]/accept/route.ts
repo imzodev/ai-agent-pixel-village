@@ -9,6 +9,8 @@ import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 import { adjustStock, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
 import { regardHelped } from "@/lib/mind/regard";
 import { deliverOrder, takeOrder } from "@/lib/ordersServer";
+import { onCommissionDone } from "@/lib/commissionsServer";
+import { isCommissionKey } from "@/lib/commissions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +45,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         .from(characterMissions)
         .where(and(eq(characterMissions.characterId, character.id), eq(characterMissions.missionId, m.id), eq(characterMissions.status, "active")));
       if (!cm) return Response.json({ error: "Mission not active." }, { status: 400 });
+      // A commission goes to the first player who delivers: claim it in one
+      // guarded update, so two players turning in at once can't both win.
+      const commission = isCommissionKey(m.key);
+      if (commission) {
+        const [won] = await db.update(missions).set({ active: false }).where(and(eq(missions.id, m.id), eq(missions.active, true))).returning({ id: missions.id });
+        if (!won) return Response.json({ error: "Someone delivered that order first." }, { status: 400 });
+      }
+      const reopen = async () => { if (commission) await db.update(missions).set({ active: true }).where(eq(missions.id, m.id)); };
+      // Complete it once: a double click must not pay the reward twice.
+      const [done] = await db.update(characterMissions).set({ status: "completed", completedAt: new Date() })
+        .where(and(eq(characterMissions.id, cm.id), eq(characterMissions.status, "active"))).returning({ id: characterMissions.id });
+      if (!done) { await reopen(); return Response.json({ error: "Already turned in." }, { status: 400 }); }
       if (m.requirement.type === "collect") {
         const ok = await removeItem(character.id, m.requirement.itemKey, m.requirement.qty);
-        if (!ok) return Response.json({ error: "You don't have the items anymore." }, { status: 400 });
+        if (!ok) {
+          await db.update(characterMissions).set({ status: "active", completedAt: null }).where(eq(characterMissions.id, cm.id));
+          await reopen();
+          return Response.json({ error: "You don't have the items anymore." }, { status: 400 });
+        }
       }
-      await db.update(characterMissions).set({ status: "completed", completedAt: new Date() }).where(eq(characterMissions.id, cm.id));
       await grantReward(character.id, m.reward);
       for (const it of m.reward.items ?? []) gained.push(it);
       await onRequestTurnedIn(npc, m, character.id, character.name); // her own requests fill her stock
+      await onCommissionDone(npc, m, character.id, character.name); // furniture orders close for everyone
       text = `${m.completeLine}`;
       await logEvent("mission", `${character.name} completed "${m.title}" for ${npc.name}.`, "npc", npc.id, npc.x, npc.y);
       if (m.sponsorId) await emitLead({ sponsorId: m.sponsorId, characterId: character.id, npcId: npc.id, kind: "mission_completed", note: m.title });

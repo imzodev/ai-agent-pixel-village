@@ -56,6 +56,11 @@ export const BUILD_STEPS: readonly BuildStep[] = [
   { id: "cellar", lot: "vineyard", key: "cellar", level: 1, name: "Wine cellar", description: "Make red and white wine from your grapes (2 hours a bottle).", coins: 300, items: { stone: 20, wood: 15, fittings: 6 }, farmLevel: 2 },
   { id: "racks", lot: "vineyard", key: "racks", level: 1, name: "Cellar racks", description: "Age a bottle 4 hours into aged wine, worth three times as much.", coins: 250, items: { wood: 20, fittings: 8 }, farmLevel: 3, needs: "cellar" },
   { id: "jam", lot: "vineyard", key: "jam", level: 1, name: "Jam kitchen", description: "Cook fruit and honey into jam.", coins: 150, items: { stone: 10, fittings: 4 }, farmLevel: 2 },
+  // Workshops: the carpenter's stations (the workbench comes with the lot).
+  { id: "saw", lot: "workshop", key: "saw", level: 1, name: "Saw bench", description: "Saw logs into planks.", coins: 80, items: { stone: 10, fittings: 2 }, farmLevel: 1 },
+  { id: "lathe", lot: "workshop", key: "lathe", level: 1, name: "Lathe", description: "Turn rocking chairs and wardrobes.", coins: 200, items: { plank: 20, fittings: 4 }, farmLevel: 2 },
+  { id: "upholstery", lot: "workshop", key: "upholstery", level: 1, name: "Upholstery bench", description: "Beds, armchairs, sofas and rugs, from your ranch's cloth and wool.", coins: 250, items: { plank: 15, cloth: 4, fittings: 6 }, farmLevel: 3 },
+  { id: "varnish", lot: "workshop", key: "varnish", level: 1, name: "Varnish shelf", description: "Polish a piece with honey wax: worth twice as much.", coins: 300, items: { plank: 20, honey: 2, fittings: 6 }, farmLevel: 4 },
 ];
 
 export const MACHINE_RECIPES: readonly MachineRecipe[] = [
@@ -73,13 +78,33 @@ export const MACHINE_RECIPES: readonly MachineRecipe[] = [
   { id: "age_white", lot: "vineyard", machine: "racks", inputs: { white_wine: 1 }, output: "aged_white_wine", qty: 1, ms: 240 * MIN, name: "Age a white wine" },
   { id: "jam_apple", lot: "vineyard", machine: "jam", inputs: { apple: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 apples and a honey into jam" },
   { id: "jam_grape", lot: "vineyard", machine: "jam", inputs: { red_grape: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 red grapes and a honey into jam" },
+  { id: "saw_planks", lot: "workshop", machine: "saw", inputs: { wood: 2 }, output: "plank", qty: 3, ms: 5 * MIN, name: "Saw 2 logs into 3 planks", xp: 1 },
+  { id: "make_chair", lot: "workshop", machine: "workbench", inputs: { plank: 4 }, output: "chair", qty: 1, ms: 10 * MIN, name: "Make a chair (4 planks)", xp: 3 },
+  { id: "make_stool", lot: "workshop", machine: "workbench", inputs: { plank: 2 }, output: "stool", qty: 1, ms: 6 * MIN, name: "Make a stool (2 planks)", xp: 3 },
+  { id: "make_table", lot: "workshop", machine: "workbench", inputs: { plank: 6, fittings: 1 }, output: "table", qty: 1, ms: 15 * MIN, name: "Make a table (6 planks, 1 fitting)", xp: 3 },
+  { id: "make_bookshelf", lot: "workshop", machine: "workbench", inputs: { plank: 8, fittings: 2 }, output: "bookshelf", qty: 1, ms: 20 * MIN, name: "Make a bookshelf (8 planks, 2 fittings)", xp: 3 },
+  { id: "make_lamp", lot: "workshop", machine: "workbench", inputs: { plank: 1, cloth: 1, fittings: 1 }, output: "lamp", qty: 1, ms: 10 * MIN, name: "Make a lamp (1 plank, 1 cloth, 1 fitting)", xp: 3 },
+  { id: "make_cabinet", lot: "workshop", machine: "workbench", inputs: { plank: 8, fittings: 3 }, output: "cabinet", qty: 1, ms: 20 * MIN, name: "Make a cabinet (8 planks, 3 fittings)", xp: 3 },
+  { id: "turn_rocking", lot: "workshop", machine: "lathe", inputs: { plank: 6, fittings: 1 }, output: "rocking_chair", qty: 1, ms: 20 * MIN, name: "Turn a rocking chair (6 planks, 1 fitting)", xp: 3 },
+  { id: "turn_wardrobe", lot: "workshop", machine: "lathe", inputs: { plank: 12, fittings: 3 }, output: "wardrobe", qty: 1, ms: 30 * MIN, name: "Build a wardrobe (12 planks, 3 fittings)", xp: 3 },
+  { id: "up_bed", lot: "workshop", machine: "upholstery", inputs: { plank: 6, cloth: 2, wool: 2 }, output: "bed", qty: 1, ms: 25 * MIN, name: "Make a bed (6 planks, 2 cloth, 2 wool)", xp: 3 },
+  { id: "up_armchair", lot: "workshop", machine: "upholstery", inputs: { plank: 5, cloth: 2, wool: 2, fittings: 1 }, output: "armchair", qty: 1, ms: 25 * MIN, name: "Make an armchair (5 planks, 2 cloth, 2 wool, 1 fitting)", xp: 3 },
+  { id: "up_sofa", lot: "workshop", machine: "upholstery", inputs: { plank: 8, cloth: 3, wool: 3, fittings: 2 }, output: "sofa", qty: 1, ms: 35 * MIN, name: "Make a sofa (8 planks, 3 cloth, 3 wool, 2 fittings)", xp: 3 },
+  { id: "up_rug", lot: "workshop", machine: "upholstery", inputs: { cloth: 3 }, output: "rug", qty: 1, ms: 15 * MIN, name: "Weave a rug (3 cloth)", xp: 3 },
+  { id: "pol_chair", lot: "workshop", machine: "varnish", inputs: { chair: 1, honey: 1 }, output: "polished_chair", qty: 1, ms: 20 * MIN, name: "Polish a chair (1 honey)", xp: 3 },
+  { id: "pol_table", lot: "workshop", machine: "varnish", inputs: { table: 1, honey: 1 }, output: "polished_table", qty: 1, ms: 20 * MIN, name: "Polish a table (1 honey)", xp: 3 },
+  { id: "pol_cabinet", lot: "workshop", machine: "varnish", inputs: { cabinet: 1, honey: 1 }, output: "polished_cabinet", qty: 1, ms: 20 * MIN, name: "Polish a cabinet (1 honey)", xp: 3 },
+  { id: "pol_wardrobe", lot: "workshop", machine: "varnish", inputs: { wardrobe: 1, honey: 1 }, output: "polished_wardrobe", qty: 1, ms: 20 * MIN, name: "Polish a wardrobe (1 honey)", xp: 3 },
 ];
 
-/** Is it built (coop/barn count as built at level 1)? */
+/** Stations every lot of its kind starts with (the workshop's workbench is in the template). */
+export const BUILT_IN: readonly RanchBuildKey[] = ["workbench"];
+
+/** Is it built (coop/barn count as built at level 1; built-in stations always)? */
 export function hasBuilt(g: RanchGrowth, key: RanchBuildKey): boolean {
   if (key === "coop") return g.coopLevel >= 1;
   if (key === "barn") return g.barnLevel >= 1;
-  return g.machines.includes(key);
+  return BUILT_IN.includes(key) || g.machines.includes(key);
 }
 
 /** Is this step the next one for its building (not built, not skipping a level)? */
@@ -141,7 +166,7 @@ export function recipeById(id: string): MachineRecipe | undefined {
 
 /** A machine is free when it's built and has no job running. */
 export function machineFree(g: RanchGrowth, machine: MachineKey): boolean {
-  return g.machines.includes(machine) && !g.jobs.some((j) => j.machine === machine);
+  return hasBuilt(g, machine) && !g.jobs.some((j) => j.machine === machine);
 }
 
 export function newJob(r: MachineRecipe, now: number): RanchJob {
@@ -171,5 +196,5 @@ export function takeFeed(silo: Readonly<Record<string, number>>): { item: string
   return { item, silo: next };
 }
 
-export const EMPTY_GROWTH: RanchGrowth = { farmXp: 0, coopLevel: 1, barnLevel: 1, silo: {}, machines: [], jobs: [], hivesAt: null };
-export const MACHINES: readonly MachineKey[] = ["mill", "press", "loom", "hives", "fruit_press", "cellar", "racks", "jam"];
+export const EMPTY_GROWTH: RanchGrowth = { farmXp: 0, coopLevel: 1, barnLevel: 1, silo: {}, machines: [], jobs: [], hivesAt: null, display: [] };
+export const MACHINES: readonly MachineKey[] = ["mill", "press", "loom", "hives", "fruit_press", "cellar", "racks", "jam", "workbench", "saw", "lathe", "upholstery", "varnish"];

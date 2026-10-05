@@ -506,6 +506,58 @@
       "ty": 10
     },
     {
+      "key": "workshop_1",
+      "file": "/buildings/workshop_lot.json",
+      "name": "Hollowmere Workshop 1",
+      "kind": "workshop",
+      "description": "A carpenter’s yard on the road south of Hollowmere: a shed with a workbench, room for stations, and a porch to show off your furniture.",
+      "color": "#8a5a32",
+      "menu": [],
+      "reservable": false,
+      "price": 80,
+      "tx": -400,
+      "ty": 38
+    },
+    {
+      "key": "workshop_2",
+      "file": "/buildings/workshop_lot.json",
+      "name": "Hollowmere Workshop 2",
+      "kind": "workshop",
+      "description": "A carpenter’s yard on the road south of Hollowmere: a shed with a workbench, room for stations, and a porch to show off your furniture.",
+      "color": "#8a5a32",
+      "menu": [],
+      "reservable": false,
+      "price": 80,
+      "tx": -376,
+      "ty": 38
+    },
+    {
+      "key": "workshop_3",
+      "file": "/buildings/workshop_lot.json",
+      "name": "Hollowmere Workshop 3",
+      "kind": "workshop",
+      "description": "A carpenter’s yard on the road south of Hollowmere: a shed with a workbench, room for stations, and a porch to show off your furniture.",
+      "color": "#8a5a32",
+      "menu": [],
+      "reservable": false,
+      "price": 80,
+      "tx": -348,
+      "ty": 38
+    },
+    {
+      "key": "workshop_4",
+      "file": "/buildings/workshop_lot.json",
+      "name": "Hollowmere Workshop 4",
+      "kind": "workshop",
+      "description": "A carpenter’s yard on the road south of Hollowmere: a shed with a workbench, room for stations, and a porch to show off your furniture.",
+      "color": "#8a5a32",
+      "menu": [],
+      "reservable": false,
+      "price": 80,
+      "tx": -324,
+      "ty": 38
+    },
+    {
       "key": "ranch_-5",
       "file": "/buildings/ranch_lot.json",
       "name": "Meadow Ranch 1",

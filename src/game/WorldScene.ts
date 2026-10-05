@@ -15,7 +15,7 @@ import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
 import { FishingController } from "./fishing";
 import type { AtmosphereState, LightSource } from "@/types/lighting";
-import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
+import { FURNITURE_TEXTURE, makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { chimneySources, stampBuildings, stampLights } from "./buildingStamps";
@@ -56,6 +56,8 @@ import type { LotSnapshot } from "@/types/garden";
 import type { RanchBuildKey } from "@/types/ranchGrowth";
 import { RANCH_PROP_SPOTS } from "./ranchProps";
 import { VINEYARD_PROP_SPOTS } from "./vineyardProps";
+import { SHOWROOM_SPOTS, WORKSHOP_PROP_SPOTS } from "./workshopProps";
+import { FURNITURE_CELLS } from "./furnitureArt";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -1055,19 +1057,28 @@ export class WorldScene extends Phaser.Scene {
    *  added as they're built and cleared when the ranch is given up. */
   private syncRanchProps(lots: readonly LotSnapshot[]): void {
     for (const lot of lots) {
-      if (lot.kind !== "ranch" && lot.kind !== "vineyard") continue;
-      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : RANCH_PROP_SPOTS;
+      if (lot.kind !== "ranch" && lot.kind !== "vineyard" && lot.kind !== "workshop") continue;
+      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : lot.kind === "workshop" ? WORKSHOP_PROP_SPOTS : RANCH_PROP_SPOTS;
       const have = this.ranchProps.get(lot.key) ?? new Map<string, Phaser.GameObjects.Image>();
-      const want = new Set(lot.ranch?.props ?? []);
-      for (const [key, img] of have) if (!want.has(key as RanchBuildKey)) { img.destroy(); have.delete(key); }
-      if (lot.ranch) {
-        for (const key of want) {
-          const spot = spots[key];
-          if (!spot || have.has(key)) continue;
-          const x = lot.ranch.ox + spot.x, y = lot.ranch.oy + spot.y;
-          have.set(key, this.add.image(x, y + 1, spot.sprite).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + y));
+      // What should stand there: built stations, and a workshop's pieces on show.
+      const want = new Map<string, () => Phaser.GameObjects.Image>();
+      const r = lot.ranch;
+      if (r) {
+        for (const key of r.props) {
+          const spot = spots[key as RanchBuildKey];
+          if (!spot) continue;
+          const x = r.ox + spot.x, y = r.oy + spot.y;
+          want.set(key, () => this.add.image(x, y + 1, spot.sprite).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + y));
         }
+        (r.display ?? []).forEach((item, i) => {
+          const spot = SHOWROOM_SPOTS[i], frame = FURNITURE_CELLS[item];
+          if (!spot || frame == null) return;
+          const x = r.ox + spot.x, y = r.oy + spot.y;
+          want.set(`show:${i}:${item}`, () => this.add.image(x, y + 1, FURNITURE_TEXTURE, frame).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + y));
+        });
       }
+      for (const [key, img] of have) if (!want.has(key)) { img.destroy(); have.delete(key); }
+      for (const [key, make] of want) if (!have.has(key)) have.set(key, make());
       this.ranchProps.set(lot.key, have);
     }
   }

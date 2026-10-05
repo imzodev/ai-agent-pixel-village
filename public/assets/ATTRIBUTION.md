@@ -74,3 +74,10 @@ upstream license chain.
 
 Original art made for this project by `scripts/draw-orchard.mjs` and
 `scripts/draw-vineyard-lot.mjs`. Not derived from any third-party asset.
+
+## Furniture and workshops (`furniture.png`, `WorkshopLot.png`)
+
+Original art made for this project by `scripts/draw-furniture.mjs` (every
+furniture piece, front view, 32×32) and `scripts/draw-workshop-lot.mjs` (the
+carpenter's yard); the stations are drawn in `src/game/workshopProps.ts`. Not
+derived from any third-party asset.

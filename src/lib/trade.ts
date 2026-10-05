@@ -7,6 +7,7 @@
 //   2. Add an entry to TRADES below.
 // That's it — the modal, route, NPC-conversation Sell offer, and the
 // in-character "I buy X" line pick it up automatically.
+import { FURNITURE_ITEMS, FURNITURE_VALUE } from "./furniture";
 import type { TradeConfig, TradeItem } from "./types";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { MERCHANT_STOCK, isMerchantKey } from "./encounters";
@@ -46,6 +47,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
   village_pip: [
+    ...FURNITURE_ITEMS.map((itemKey) => ({ itemKey, qty: 1, price: Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.0), line: `Good furniture always sells. I'll give you ${Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.0)} coppers for the ${itemKey.replace(/_/g, " ")}.` })),
     { itemKey: "cloth", qty: 1, price: 16, line: "Good cloth! Sixteen coppers — I'll sell it on to the tailors." },
     { itemKey: "fine_wool", qty: 1, price: 12, line: "Fine wool, twelve coppers. Softest I've seen." },
     { itemKey: "mushroom", qty: 1, price: 2, line: "Mushrooms, two coppers. I'll pickle 'em." },
@@ -64,6 +66,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "frost_pelt", qty: 1, price: 9, line: "A frost pelt! Nine coppers — you've been up in the cold." },
   ],
   hollowmere_ivy: [
+    ...FURNITURE_ITEMS.map((itemKey) => ({ itemKey, qty: 1, price: Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.1), line: `For the Sawdust & Ale? Gladly — ${Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.1)} coppers for the ${itemKey.replace(/_/g, " ")}.` })),
     { itemKey: "cider", qty: 1, price: 13, line: "Cider for the woodcutters, thirteen coppers." },
     { itemKey: "red_wine", qty: 1, price: 21, line: "Red wine, twenty-one coppers." },
     { itemKey: "aged_red_wine", qty: 1, price: 62, line: "Aged red! Sixty-two coppers." },
@@ -208,6 +211,7 @@ for (const n of SETTLEMENT_NPCS) {
     ];
     TRADES[n.key] = [
       { itemKey: "stone", qty: 1, price: 1, line: "Stone, a copper each." },
+      ...FURNITURE_ITEMS.map((itemKey) => ({ itemKey, qty: 1, price: Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.15), line: `Furniture's dear out in ${town.name}. ${Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.15)} coppers.` })),
       ...REGIONAL_BUYS[town.family].map((b) => ({ ...b, qty: 1 })),
     ];
   }

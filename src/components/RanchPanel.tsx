@@ -2,20 +2,22 @@
 // Inside a ranch: your animals, their hunger, love and produce, buying
 // chicks / lambs / calves, feeding them, collecting eggs, wool and milk —
 // and growing the farm (Build and Workshop tabs: RanchUpgrades, RanchWorkshop).
-// Vineyards share it: no animals, just their winery's Build and Workshop.
+// Vineyards and workshops share it: no animals, just their Build and Workshop
+// tabs (and a workshop's Showroom, RanchShowroom).
 import { useCallback, useEffect, useState } from "react";
 import { ITEM_ICONS } from "@/game/bus";
 import { FED_BELOW, HUNGRY_AT, MAX_STORED, RANCH_SPECIES, isRanchSpecies } from "@/lib/ranch";
 import type { RanchView } from "@/types/ranch";
 import RanchUpgrades from "./RanchUpgrades";
 import RanchWorkshop from "./RanchWorkshop";
+import RanchShowroom from "./RanchShowroom";
 
 const mins = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))}m`;
 
 export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: string; onMessage: (text: string, kind: "good" | "bad") => void; onGain: (items: { itemKey: string; qty: number }[]) => void }) {
   const [view, setView] = useState<RanchView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"animals" | "build" | "workshop">("animals");
+  const [tab, setTab] = useState<"animals" | "build" | "workshop" | "showroom">("animals");
   const load = useCallback(() => fetch(`/api/ranch?key=${encodeURIComponent(ranchKey)}`).then((r) => r.json()).then((r) => { if (r && !r.error) setView(r); }).catch(() => {}), [ranchKey]);
   useEffect(() => {
     void load();
@@ -35,9 +37,13 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
   };
 
   if (!view) return <div className="mt-3 text-stone-500">The hens cluck as you open the gate…</div>;
-  const vineyard = view.kind === "vineyard";
+  const vineyard = view.kind === "vineyard", workshop = view.kind === "workshop";
+  const animalless = vineyard || workshop;
   if (!view.mine && vineyard) {
     return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🍇 {view.owner.name}&apos;s vineyard.</> : <>This vineyard is free. Claim it at the gate to grow grapes and apples.</>}</div>;
+  }
+  if (!view.mine && workshop) {
+    return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🪚 {view.owner.name}&apos;s workshop. Their best pieces are on the porch.</> : <>This workshop is free. Claim it at the gate to make furniture.</>}</div>;
   }
   if (!view.mine) {
     return (
@@ -60,15 +66,17 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
           <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-300"><div className="h-full bg-emerald-500" style={{ width: `${g.nextAt ? Math.min(100, (100 * g.farmXp) / g.nextAt) : 100}%` }} /></div>
           <span className="text-stone-600">{g.nextAt ? `${g.farmXp}/${g.nextAt} XP` : "max"}</span>
           <span className="flex-1" />
-          {(vineyard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${tab === t ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : "⚙️ Workshop"}</button>
+          {(workshop ? (["build", "workshop", "showroom"] as const) : vineyard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${(tab === t || (animalless && tab === "animals" && t === "build")) ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : t === "showroom" ? "🪑 Showroom" : workshop ? "🪚 Make" : "⚙️ Workshop"}</button>
           ))}
         </div>
       )}
       {vineyard && <div className="text-[11px] text-stone-600">🍇 Plant grape cuttings on the trellises and apple saplings in the orchard (Pip sells them). Once grown they fruit again and again. Water them to speed them up.</div>}
-      {g && (tab === "build" || (vineyard && tab === "animals")) && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
+      {workshop && <div className="text-[11px] text-stone-600">🪚 Saw logs into planks, then make furniture at the workbench. Cloth and wool come from a ranch, honey wax from its hives, fittings from Bjorn. Put your best pieces on the porch.</div>}
+      {g && (tab === "build" || (animalless && tab === "animals")) && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
+      {g && tab === "showroom" && <RanchShowroom g={g} busy={busy} act={(b) => void act(b)} />}
       {g && tab === "workshop" && <RanchWorkshop g={g} busy={busy} act={(b) => void act(b)} />}
-      {!vineyard && (!g || tab === "animals") && <>
+      {!animalless && (!g || tab === "animals") && <>
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={busy || ready === 0} onClick={() => void act({ action: "collect" })} className="pixel-btn bg-amber-300 px-2 py-1 text-sm font-bold disabled:opacity-40">🧺 Collect {ready > 0 ? `(${ready})` : ""}</button>
         <button disabled={busy || hungry === 0 || feedTotal === 0} onClick={() => void act({ action: "feed" })} className="pixel-btn bg-amber-200 px-2 py-1 text-sm font-bold disabled:opacity-40">🌾 Feed {hungry > 0 ? `${hungry} hungry` : ""}</button>

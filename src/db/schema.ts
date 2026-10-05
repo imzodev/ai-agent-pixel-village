@@ -735,6 +735,8 @@ export const ranchState = pgTable("ranch_state", {
   machines: jsonb("machines").$type<RanchBuildKey[]>().notNull().default([]),
   jobs: jsonb("jobs").$type<RanchJob[]>().notNull().default([]),
   hivesAt: timestamp("hives_at"),
+  /** Workshops: furniture on show on the porch. */
+  display: jsonb("display").$type<string[]>().notNull().default([]),
 });
 
 /** A player's standing order with an NPC with a mind: so many of an item a week. */

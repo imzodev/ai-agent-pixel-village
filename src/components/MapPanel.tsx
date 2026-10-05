@@ -14,7 +14,7 @@ import { boardPoint } from "@/lib/bounties";
 
 const images = new Map<string, HTMLImageElement>(); // map tiles, shared across opens
 const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️" } as const;
-const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔", vineyard: "🍇" } as const;
+const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔", vineyard: "🍇", workshop: "🪚" } as const;
 const MIN_SCALE = 1 / 16, MAX_SCALE = 4;
 
 export default function MapPanel({ me, guide, bounties = [], encounters = [], extraSeen, travelMode, onClose, onMessage }: {

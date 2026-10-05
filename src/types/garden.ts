@@ -8,7 +8,7 @@
 /** What kind of parcel a lot is. */
 import type { RanchLook } from "./ranchGrowth";
 
-export type LotKind = "home" | "land" | "ranch" | "vineyard";
+export type LotKind = "home" | "land" | "ranch" | "vineyard" | "workshop";
 
 /** A vineyard plot: a trellis for a vine, or room for a fruit tree. */
 export type VineyardSlot = "vine" | "tree";

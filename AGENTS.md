@@ -196,6 +196,20 @@ with ranches through `ranch_state`, `/api/ranch` and RanchPanel. Sprites:
 `src/game/vineyardProps.ts`. Perennials grow `regrowthMs` a stage up to
 `perennial.mature`, then ripen their fruit over `fruitMs` (`stageMs`).
 
+## Workshops (furniture)
+
+Carpenter's workshop lots (`kind: "workshop"`, 4 on the road south of
+Hollowmere; `scripts/draw-workshop-lot.mjs`; `WORKSHOP_ROW` in regions.ts keeps
+trees off them) use farm growth with `lot: "workshop"`: a built-in workbench
+(`BUILT_IN`) plus a saw bench (logs → planks), lathe, upholstery bench and
+varnish shelf (polished pieces). Furniture is listed in `src/lib/furniture.ts`
+with its value; every piece has a sprite on `public/assets/furniture.png`
+(`scripts/draw-furniture.mjs`, `src/game/furnitureArt.ts`, `FurnitureSprite`),
+shown in the Home panel and on the workshop's porch (`ranch_state.display`,
+6 spots, drawn from `LotSnapshot.ranch.display`). Shops buy furniture, and
+NPCs post **commissions** (`src/lib/commissions.ts`): missions keyed
+`com_<npcKey>_<ms>` from tickd's `tickCommissions`; the first delivery closes it.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

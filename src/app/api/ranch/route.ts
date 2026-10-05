@@ -7,8 +7,9 @@
 //   "deposit"         — pour feed from your bag into the silo
 //   "start" { recipe } / "workshop" — run a machine / collect its work and honey
 // Only the owner tends a ranch, from near its gate. Growth: src/lib/ranchUpgrades.ts.
-// Vineyards use this route too (their winery: build / start / workshop);
-// the animal actions are the ranch's alone.
+// Vineyards and workshops use this route too (their winery / stations:
+// build / start / workshop; a workshop's showroom: "display" { item } and
+// "undisplay" { index }); the animal actions are the ranch's alone.
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -23,13 +24,17 @@ import {
   afterCollect, afterFeed, isRanchSpecies, nextIn, nextName, penRect, readyCount,
 } from "@/lib/ranch";
 import { PET_AFFECTION, PET_COOLDOWN_MS, FED_AFFECTION, XP_PER_GOOD, capFor, clampAffection, collectGoods } from "@/lib/ranchUpgrades";
-import { addFarmXp, build, collectWorkshop, deposit, growthView, loadGrowth, startJob } from "@/lib/ranchServer";
+import { addFarmXp, build, collectWorkshop, deposit, growthView, loadGrowth, showroom, startJob } from "@/lib/ranchServer";
 import type { RanchView } from "@/types/ranch";
+import type { GrowthLot } from "@/types/ranchGrowth";
+
+/** Which growth a lot kind uses (its steps and recipes). */
+const growthLotOf = (kind: string): GrowthLot => (kind === "vineyard" ? "vineyard" : kind === "workshop" ? "workshop" : "ranch");
 
 export const dynamic = "force-dynamic";
 
 async function ranchOf(key: string) {
-  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), inArray(lots.kind, ["ranch", "vineyard"])));
+  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), inArray(lots.kind, ["ranch", "vineyard", "workshop"])));
   return lot ?? null;
 }
 
@@ -47,7 +52,7 @@ async function view(key: string, meId: number): Promise<RanchView | null> {
   for (const b of bag) feed.set(b.itemKey, (feed.get(b.itemKey) ?? 0) + b.qty);
   const mine = r.lot.ownerId === meId;
   const growth = await loadGrowth(key);
-  const kind = r.lot.kind === "vineyard" ? "vineyard" : "ranch";
+  const kind = growthLotOf(r.lot.kind);
   return {
     key,
     kind,
@@ -92,8 +97,8 @@ export async function POST(req: Request) {
     if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: r.lot.kind === "vineyard" ? "Head over to your vineyard first." : "Head over to your ranch first." }, { status: 400 });
     const now = Date.now();
     const herd = await db.select().from(animals).where(eq(animals.ranchKey, key));
-    const kind = r.lot.kind === "vineyard" ? "vineyard" : "ranch";
-    if (kind === "vineyard" && ["buy", "feed", "collect", "pet_all", "deposit"].includes(String(body.action))) return Response.json({ error: "There are no animals in a vineyard." }, { status: 400 });
+    const kind = growthLotOf(r.lot.kind);
+    if (kind !== "ranch" && ["buy", "feed", "collect", "pet_all", "deposit"].includes(String(body.action))) return Response.json({ error: "There are no animals here." }, { status: 400 });
 
     if (body.action === "buy") {
       const species = String(body.species ?? "");
@@ -171,10 +176,12 @@ export async function POST(req: Request) {
       : body.action === "deposit" ? await deposit(key, me.id)
       : body.action === "start" ? await startJob(key, kind, me.id, String(body.recipe ?? ""), now)
       : body.action === "workshop" ? await collectWorkshop(key, me.id, now)
+      : kind === "workshop" && body.action === "display" ? await showroom(key, me.id, "display", String(body.item ?? ""))
+      : kind === "workshop" && body.action === "undisplay" ? await showroom(key, me.id, "undisplay", Number(body.index))
       : null;
     if (grow) {
       if (!grow.ok) return Response.json({ error: grow.error }, { status: 400 });
-      if (body.action === "build") markWorldDirty(door.x, door.y); // neighbours see the new building
+      if (body.action === "build" || body.action === "display" || body.action === "undisplay") markWorldDirty(door.x, door.y); // neighbours see it
       return Response.json({ ok: true, message: grow.message, gained: grow.gained, view: await view(key, me.id) });
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });
