@@ -179,6 +179,23 @@ NPCs with a mind offer **standing orders** (`profile.orders`, `ordersServer.ts`,
 `standing_orders`): a player supplies so many of an item a week. Deliveries are
 paid from the NPC's purse and go into its stock; filling the week pays a bonus.
 
+## Vineyards
+
+Vineyard lots (`kind: "vineyard"`, a row at ty 90; template from
+`scripts/draw-vineyard-lot.mjs`) grow **perennials** (`CROP_KINDS[k].perennial`):
+grapevines on the trellises (garden cells with dx < 12) and apple trees in the
+orchard. `src/lib/vineyard.ts` decides what may be planted where
+(`plantRule`: lot kind, vine/tree plot, farm level). A perennial's harvest
+doesn't remove it; it drops back to mature and fruits again after `fruitMs`.
+The winery (fruit press, wine cellar, cellar racks for aging, jam kitchen)
+is farm growth scoped by lot (`BuildStep.lot` / `MachineRecipe.lot`), shared
+with ranches through `ranch_state`, `/api/ranch` and RanchPanel. Sprites:
+`scripts/draw-orchard.mjs` (vines), the "[LPC] Fruit Trees" sheet
+`public/assets/trees/fruit-trees.png` (96×128 cells; credits in
+`public/assets/ATTRIBUTION.md`; a crop's `baseX`/`baseY` anchor its trunk), and
+`src/game/vineyardProps.ts`. Perennials grow `regrowthMs` a stage up to
+`perennial.mature`, then ripen their fruit over `fruitMs` (`stageMs`).
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

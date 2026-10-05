@@ -37,6 +37,7 @@ import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
 import { bakeBatches } from "./bakeryServer";
 import { thinkMinds } from "./mind/mindServer";
 import { tickRanches } from "./ranchServer";
+import { stageMs } from "./vineyard";
 import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
@@ -354,9 +355,10 @@ async function tickResources(now: Date) {
     const cfg = getCropKind(row.kind);
     const stages = cfg?.stages ?? 2;
     const thumb = row.ownerId != null && perks.get(row.ownerId)?.has("green_thumb");
-    const regrowthMs = Math.round((cfg?.regrowthMs ?? 0) * (thumb ? GREEN_THUMB_MULT : 1));
-    if (regrowthMs <= 0) continue;
+    if (!cfg || cfg.regrowthMs <= 0) continue;
     const nextStage = row.stage + 1;
+    // Perennials ripen their fruit at their own pace (src/lib/vineyard.ts).
+    const regrowthMs = Math.round(stageMs(cfg, nextStage) * (thumb ? GREEN_THUMB_MULT : 1));
     const fullyGrown = nextStage >= stages - 1;
     await db
       .update(resourceNodes)

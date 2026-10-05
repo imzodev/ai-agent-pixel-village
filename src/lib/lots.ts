@@ -32,7 +32,7 @@ export async function syncLotsFromManifest(): Promise<void> {
   for (const entry of manifest.buildings) {
     // Home lots come from reservable houses; land lots are fenced fields;
     // ranch lots are the pens south of the fields.
-    const kind: LotKind | null = entry.kind === "land" ? "land" : entry.kind === "ranch" ? "ranch" : entry.kind === "home" && entry.reservable !== false ? "home" : null;
+    const kind: LotKind | null = entry.kind === "land" ? "land" : entry.kind === "ranch" ? "ranch" : entry.kind === "vineyard" ? "vineyard" : entry.kind === "home" && entry.reservable !== false ? "home" : null;
     if (!kind) continue;
     const template = await getTemplate(entry);
     const fp = footprintOf(template);
@@ -92,7 +92,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
       lte(lots.ty, y1), gte(sql`${lots.ty} + ${lots.th}`, y0),
     ));
   // Ranches show what's been built on them (silo, mill, hives…).
-  const ranchKeys = rows.filter((r) => r.lot.kind === "ranch" && r.lot.ownerId != null).map((r) => r.lot.key);
+  const ranchKeys = rows.filter((r) => (r.lot.kind === "ranch" || r.lot.kind === "vineyard") && r.lot.ownerId != null).map((r) => r.lot.key);
   const looks = await ranchLooks(ranchKeys);
   const manifest = looks.size ? (await getBuildingsManifest()).buildings : [];
   return rows.map(({ lot, ownerName }) => {
@@ -129,13 +129,15 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
     if (lot.ownerId === characterId) return { ok: false, error: "It's already yours." };
     const land = lot.kind === "land";
     const ranch = lot.kind === "ranch";
-    if (lot.ownerId != null) return { ok: false, error: land ? "Someone already farms this land." : ranch ? "Someone already keeps animals here." : "Someone already lives here." };
+    const vineyard = lot.kind === "vineyard";
+    if (lot.ownerId != null) return { ok: false, error: land ? "Someone already farms this land." : ranch ? "Someone already keeps animals here." : vineyard ? "Someone already tends these vines." : "Someone already lives here." };
     // Lock the character row so two parallel claims can't both pass the limit.
     const [me] = await tx.select({ level: characters.level }).from(characters).where(eq(characters.id, characterId)).for("update");
     const limit = land ? landLotLimit(me?.level ?? 1) : 1;
     const owned = await tx.select({ id: lots.id }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, lot.kind)));
     if (owned.length >= limit) {
       if (ranch) return { ok: false, error: "You already have a ranch. Give it up first." };
+      if (vineyard) return { ok: false, error: "You already have a vineyard. Give it up first." };
       if (!land) return { ok: false, error: "You already have a home. Move out first." };
       return { ok: false, error: limit > 1 ? `You already farm ${limit} plots of land.` : "You already have a plot of land. Reach level 10 for a second one, or give it up first." };
     }
@@ -150,6 +152,7 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
     await tx.update(lots).set({ ownerId: characterId, acquiredAt: new Date(), forSale: false }).where(eq(lots.id, lot.id));
     if (land) return { ok: true, message: lot.price > 0 ? `The land is yours, for ${lot.price} coins. Happy planting!` : "The land is yours! Plant away." };
     if (ranch) return { ok: true, message: `The ranch is yours${lot.price > 0 ? `, for ${lot.price} coins` : ""}! Step through the gate to stock the coop and the barn.` };
+    if (vineyard) return { ok: true, message: `The vineyard is yours${lot.price > 0 ? `, for ${lot.price} coins` : ""}! Pip sells grape cuttings and apple saplings.` };
     return { ok: true, message: lot.price > 0 ? `It's yours, for ${lot.price} coins. Welcome home!` : "Welcome home! The garden is yours to plant." };
   });
 }
@@ -157,10 +160,11 @@ export async function acquireLot(characterId: number, key: string): Promise<Gard
 /** Give up the character's lot `key`. Clears its garden. */
 export async function releaseLot(characterId: number, key: string): Promise<GardenResult> {
   const [lot] = await db.select().from(lots).where(eq(lots.key, key));
-  if (!lot || lot.ownerId !== characterId) return { ok: false, error: lot?.kind === "land" ? "That isn't your land." : lot?.kind === "ranch" ? "That isn't your ranch." : "That isn't your home." };
+  if (!lot || lot.ownerId !== characterId) return { ok: false, error: lot?.kind === "land" ? "That isn't your land." : lot?.kind === "ranch" ? "That isn't your ranch." : lot?.kind === "vineyard" ? "That isn't your vineyard." : "That isn't your home." };
   await clearLot(lot.id);
   if (lot.kind === "land") return { ok: true, message: "You gave up the land. Its crops were cleared." };
   if (lot.kind === "ranch") return { ok: true, message: "You gave up the ranch. Your animals went to a good home." };
+  if (lot.kind === "vineyard") return { ok: true, message: "You gave up the vineyard. The vines will wait for a new keeper." };
   return { ok: true, message: "You've moved out. The garden was cleared." };
 }
 

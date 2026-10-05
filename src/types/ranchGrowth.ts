@@ -2,14 +2,18 @@
 // a ranch, the workshop's jobs, and what the panel shows. Types only.
 
 /** Something you can build on a ranch (coop / barn are upgraded by level). */
-export type RanchBuildKey = "coop" | "barn" | "silo" | "feeder" | "mill" | "press" | "loom" | "hives";
+export type RanchBuildKey = "coop" | "barn" | "silo" | "feeder" | "mill" | "press" | "loom" | "hives" | "fruit_press" | "cellar" | "racks" | "jam";
+
+/** The kinds of lot that grow (ranches and vineyards share farm growth). */
+export type GrowthLot = "ranch" | "vineyard";
 
 /** A machine that turns goods into better goods (hives make honey alone). */
-export type MachineKey = "mill" | "press" | "loom" | "hives";
+export type MachineKey = "mill" | "press" | "loom" | "hives" | "fruit_press" | "cellar" | "racks" | "jam";
 
 /** One step you can build: what it costs and what it needs first. */
 export type BuildStep = {
   id: string;
+  lot: GrowthLot;
   key: RanchBuildKey;
   /** The level it brings the building to (1 for one-off buildings). */
   level: number;
@@ -22,7 +26,7 @@ export type BuildStep = {
 };
 
 /** A workshop recipe: inputs in, output out after `ms`. */
-export type MachineRecipe = { id: string; machine: MachineKey; inputs: Readonly<Record<string, number>>; output: string; qty: number; ms: number; name: string };
+export type MachineRecipe = { id: string; lot: GrowthLot; machine: MachineKey; inputs: Readonly<Record<string, number>>; output: string; qty: number; ms: number; name: string };
 
 /** Work in progress on a machine. */
 export type RanchJob = { machine: MachineKey; recipe: string; output: string; qty: number; readyAt: number };

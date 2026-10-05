@@ -38,6 +38,8 @@ export type RanchAnimalView = {
 /** The ranch panel's data. */
 export type RanchView = {
   key: string;
+  /** Ranches raise animals; vineyards only grow (their plants live in the plots). */
+  kind: "ranch" | "vineyard";
   name: string;
   owner: { id: number; name: string } | null;
   mine: boolean;

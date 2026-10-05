@@ -28,7 +28,7 @@ export const REST_COST = 5;
 export const REST_FREE_BELOW = 0.25;
 export const STEW_COST = 8;
 /** HP restored by eating each consumable (anything else: 4). */
-export const CONSUMABLE_HEAL: Readonly<Record<string, number>> = { honey_bun: 8, hot_stew: 12 };
+export const CONSUMABLE_HEAL: Readonly<Record<string, number>> = { honey_bun: 8, hot_stew: 12, grape_juice: 6, jam: 10, apple_pie: 16 };
 
 /** HP a consumable restores. */
 export const healOf = (itemKey: string): number => CONSUMABLE_HEAL[itemKey] ?? 4;

@@ -16,7 +16,24 @@ export type { CropKindConfig, CropRect } from "@/types/crops";
 /** Extra node spritesheets (texture key → URL), besides lpc_crops. */
 export const NODE_SHEETS: Readonly<Record<string, string>> = {
   tree_oak: "/assets/trees/oak.png",
+  // Vineyard plants: vines (scripts/draw-orchard.mjs) and "[LPC] Fruit Trees"
+  // by bluecarrot16, Joshua Taylor and cynicmusic (public/assets/ATTRIBUTION.md).
+  vines: "/assets/trees/vines.png",
+  fruit_trees: "/assets/trees/fruit-trees.png",
 };
+
+const MIN = 60_000;
+/** Vine frames (32×40), one row per grape colour; apple tree frames (48×64). */
+const vineFrames = (row: number): CropRect[] => [0, 1, 2, 3, 4].map((i) => ({ x: i * 32, y: row * 40, w: 32, h: 40 }));
+/**
+ * A fruit tree from the LPC fruit-tree sheet (96×128 cells): stage 0 the bare
+ * trunk (row 7), 1–4 growing (rows 3 → 0), 5–7 the fruit ripening (rows 18
+ * → 16). `col` picks the tree (0 = red apple). The trunk meets the ground at
+ * (45, 118) in each cell.
+ */
+const FRUIT_CELL = { w: 96, h: 128 };
+const fruitTreeFrames = (col: number): CropRect[] =>
+  [7, 3, 2, 1, 0, 18, 17, 16].map((row) => ({ x: col * FRUIT_CELL.w, y: row * FRUIT_CELL.h, ...FRUIT_CELL }));
 
 // 5-stage wheat progression harvested from public/assets/food/crops.png
 // (LPC crops by bluecarrot16 / Eddeland / Taylor / Kettering). The
@@ -80,6 +97,12 @@ export const CROP_KINDS: Record<string, CropKindConfig> = {
   // Oak (wood, needs an axe): a full tree takes 3 chops of 3 wood each,
   // then the stump grows back stage by stage (3 × 90 s ≈ 4.5 min).
   // Frames come from scripts/draw-tree.mjs: stump, sapling, young, full.
+  // Vineyard perennials: grow to stage 3 (mature), fruit at 4, and after a
+  // harvest drop back to 3 and fruit again (src/lib/garden.ts).
+  red_vine:   { stages: 5, regrowthMs: 60 * MIN,  yield: 4, frames: vineFrames(0), sheet: "vines", perennial: { fruitMs: 40 * MIN, mature: 3 } },
+  white_vine: { stages: 5, regrowthMs: 75 * MIN,  yield: 4, frames: vineFrames(1), sheet: "vines", perennial: { fruitMs: 45 * MIN, mature: 3 } },
+  // Grows 1 → 4 (2.5 h a stage), then its apples ripen over 3 stages (75 min in all).
+  apple_tree: { stages: 8, regrowthMs: 150 * MIN, yield: 12, frames: fruitTreeFrames(0), sheet: "fruit_trees", perennial: { fruitMs: 75 * MIN, mature: 4 }, baseX: 45, baseY: 118 },
   oak_tree: {
     stages: 4,
     regrowthMs: 90_000,
@@ -96,6 +119,10 @@ export const GARDEN_CROPS: Record<string, GardenCropDef> = {
   carrot_seeds:  { kind: "carrot_crop",  seedKey: "carrot_seeds",  produceKey: "carrot" },
   tomato_seeds:  { kind: "tomato_crop",  seedKey: "tomato_seeds",  produceKey: "tomato" },
   pumpkin_seeds: { kind: "pumpkin_crop", seedKey: "pumpkin_seeds", produceKey: "pumpkin" },
+  // Vineyards only: perennials that fruit again and again.
+  grape_cutting:       { kind: "red_vine",   seedKey: "grape_cutting",       produceKey: "red_grape",   lots: ["vineyard"], slot: "vine", minFarmLevel: 1 },
+  white_grape_cutting: { kind: "white_vine", seedKey: "white_grape_cutting", produceKey: "white_grape", lots: ["vineyard"], slot: "vine", minFarmLevel: 2 },
+  apple_sapling:       { kind: "apple_tree", seedKey: "apple_sapling",       produceKey: "apple",       lots: ["vineyard"], slot: "tree", minFarmLevel: 1 },
 };
 
 /**

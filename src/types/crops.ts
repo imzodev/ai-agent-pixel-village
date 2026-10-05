@@ -21,4 +21,15 @@ export type CropKindConfig = {
   sheet?: string;
   /** Needs an axe in the bag to pick (trees). */
   needsAxe?: boolean;
+  /**
+   * Bears fruit again and again (vines, fruit trees). Stages up to `mature`
+   * are growth (each `regrowthMs`); the stages after it are fruit ripening,
+   * `fruitMs` in all. Harvesting drops it back to `mature` instead of
+   * removing it.
+   */
+  perennial?: { fruitMs: number; mature: number };
+  /** Where the ground line is in a frame (px from its top-left): the node
+   *  stands there. Default: bottom centre. */
+  baseX?: number;
+  baseY?: number;
 };

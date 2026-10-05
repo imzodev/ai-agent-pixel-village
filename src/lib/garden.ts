@@ -21,6 +21,17 @@ import { perksOf } from "./combat";
 import { tutorialEvent } from "./tutorialServer";
 import { recordCollection } from "./collectionServer";
 import { GREEN_THUMB_MULT } from "./progression";
+import { afterPerennialHarvest, plantRule, vineyardSlot } from "./vineyard";
+import { addFarmXp, loadGrowth } from "./ranchServer";
+import { XP_PER_GOOD, farmLevel } from "./ranchUpgrades";
+import { getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { gardenCellsOf } from "./buildingManifest";
+
+/** The garden cells of a lot's template (which plot is where). */
+async function lotCells(lot: { buildingKey: string | null }) {
+  const entry = lot.buildingKey ? (await getBuildingsManifest()).buildings.find((b) => b.key === lot.buildingKey) : undefined;
+  return entry ? gardenCellsOf(await getTemplate(entry)) : [];
+}
 
 export { isRipe, wateredAdvanceAt, waterCheck };
 
@@ -40,6 +51,11 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   if (lot.ownerId !== characterId) return { ok: false, error: "This isn't your garden." };
   const target = (await plotsOfLot(lot)).find((p) => p.plot === plot);
   if (!target) return { ok: false, error: "There's no plot there." };
+  // Vines on trellises, trees in the orchard, vegetables in fields (src/lib/vineyard.ts).
+  const vineyard = lot.kind === "vineyard";
+  const cell = vineyard ? (await lotCells(lot)).find((c) => c.plot === plot) : undefined;
+  const why = plantRule(crop, lot.kind, cell ? vineyardSlot(cell) : null, vineyard ? farmLevel((await loadGrowth(lot.key)).farmXp) : 1);
+  if (why) return { ok: false, error: why };
   if ((await countItem(characterId, seedKey)) < 1) return { ok: false, error: "You don't have any of those seeds." };
   // Green Thumb shortens every stage of the owner's crops.
   const stageMs = Math.round(cfg.regrowthMs * ((await perksOf(characterId)).has("green_thumb") ? GREEN_THUMB_MULT : 1));
@@ -94,16 +110,28 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   if (node.ownerId !== characterId) return { ok: false, error: "That's someone else's garden." };
   const cfg = CROP_KINDS[node.kind];
   if (!cfg || !isRipe(node.stage, cfg.stages)) return { ok: false, error: "It isn't ready yet." };
-  // Delete-returning so a double click can't harvest twice.
-  const gone = await db
-    .delete(resourceNodes)
-    .where(and(eq(resourceNodes.id, node.id), gte(resourceNodes.stage, cfg.stages - 1)))
-    .returning({ id: resourceNodes.id });
+  // Vines and fruit trees stay and fruit again; everything else is pulled.
+  // Both are conditional so a double click can't harvest twice.
+  const regrow = cfg.perennial ? afterPerennialHarvest(cfg.stages, cfg.perennial, Date.now()) : null;
+  const gone = regrow
+    ? await db.update(resourceNodes)
+      .set({ stage: regrow.stage, nextAdvanceAt: new Date(regrow.nextAdvanceAt), wateredStage: null })
+      .where(and(eq(resourceNodes.id, node.id), gte(resourceNodes.stage, cfg.stages - 1)))
+      .returning({ id: resourceNodes.id })
+    : await db
+      .delete(resourceNodes)
+      .where(and(eq(resourceNodes.id, node.id), gte(resourceNodes.stage, cfg.stages - 1)))
+      .returning({ id: resourceNodes.id });
   if (gone.length === 0) return { ok: false, error: "It's already been harvested." };
+  // A vineyard grows with every harvest.
+  if (cfg.perennial && node.lotId != null) {
+    const [lot] = await db.select({ key: lots.key, kind: lots.kind }).from(lots).where(eq(lots.id, node.lotId));
+    if (lot?.kind === "vineyard") await addFarmXp(lot.key, node.qty * XP_PER_GOOD);
+  }
   await addItem(characterId, node.itemKey, node.qty);
   const gained = [{ itemKey: node.itemKey, qty: node.qty }];
-  // Sometimes the harvest leaves seeds to replant.
-  const seedKey = Object.values(GARDEN_CROPS).find((c) => c.kind === node.kind)?.seedKey;
+  // Sometimes the harvest leaves seeds to replant (not perennials: they stay).
+  const seedKey = cfg.perennial ? undefined : Object.values(GARDEN_CROPS).find((c) => c.kind === node.kind)?.seedKey;
   const seeds = seedKey ? rollHarvestSeeds() : 0;
   if (seedKey && seeds > 0) {
     await addItem(characterId, seedKey, seeds);

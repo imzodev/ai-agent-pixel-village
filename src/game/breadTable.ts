@@ -13,9 +13,13 @@ export const LOAF_PALETTE = { c: "#d08a40", L: "#fadaa0", d: "#7a3e18" };
 export const BUN_ROWS = ["..hhhh..", ".hHccHh.", "hccccccd", ".dddddd."];
 export const BUN_PALETTE = { c: "#c8782e", h: "#f2b84a", H: "#fff0b0", d: "#6a3414" };
 
+/** An apple pie, latticed (same footprint as a loaf). */
+export const PIE_ROWS = [".llllll.", "lalalall", "aaaaaaad", ".dddddd."];
+export const PIE_PALETTE = { l: "#f0c070", a: "#c83a32", d: "#8a5a2a" };
+
 /** The texture for what's on a table. */
 export function tableTexture(itemKey: string): string {
-  return itemKey === "honey_bun" ? "bread_bun" : "bread_loaf";
+  return itemKey === "honey_bun" ? "bread_bun" : itemKey === "apple_pie" ? "bread_pie" : "bread_loaf";
 }
 
 /**

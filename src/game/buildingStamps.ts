@@ -179,7 +179,7 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       for (const [c, r] of SQUARE_LAMPS) out.push({ x: (entry.tx + c) * CHUNK_TILE_PX + 8, y: (entry.ty + r) * CHUNK_TILE_PX + 8, radius: 76, color: 0xffd27a });
       continue;
     }
-    if (!door || entry.kind === "land" || entry.kind === "ranch") continue;
+    if (!door || entry.kind === "land" || entry.kind === "ranch" || entry.kind === "vineyard") continue;
     if (entry.kind === "waystone") {
       // the carved rune glows blue (scripts/draw-trade-buildings.mjs)
       out.push({ x: s.origin.x + 192, y: s.origin.y + 168, radius: 54, color: 0x6cc4ff, flicker: true });

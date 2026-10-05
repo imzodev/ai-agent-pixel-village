@@ -9,7 +9,7 @@
 import type { RanchSpecies } from "@/types/ranch";
 import type { BuildStep, MachineKey, MachineRecipe, RanchBuildKey, RanchGrowth, RanchJob } from "@/types/ranchGrowth";
 
-export type { BuildStep, MachineKey, MachineRecipe, RanchBuildKey, RanchGrowth, RanchGrowthView, RanchJob, RanchLook } from "@/types/ranchGrowth";
+export type { BuildStep, GrowthLot, MachineKey, MachineRecipe, RanchBuildKey, RanchGrowth, RanchGrowthView, RanchJob, RanchLook } from "@/types/ranchGrowth";
 
 const MIN = 60_000;
 
@@ -41,24 +41,38 @@ export const HIVE_MAX = 4;
 export const HIVE_MS = 30 * MIN;
 
 export const BUILD_STEPS: readonly BuildStep[] = [
-  { id: "coop2", key: "coop", level: 2, name: "Hen house", description: "A bigger coop: room for 10 hens.", coins: 150, items: { wood: 20, stone: 10, fittings: 4 }, farmLevel: 2 },
-  { id: "coop3", key: "coop", level: 3, name: "Grand hen house", description: "Room for 14 hens.", coins: 400, items: { wood: 40, stone: 20, fittings: 10 }, farmLevel: 4 },
-  { id: "barn2", key: "barn", level: 2, name: "Barn extension", description: "Room for 5 sheep and 3 cows.", coins: 250, items: { wood: 30, stone: 15, fittings: 6 }, farmLevel: 3 },
-  { id: "barn3", key: "barn", level: 3, name: "Great barn", description: "Room for 7 sheep and 4 cows.", coins: 600, items: { wood: 50, stone: 30, fittings: 12 }, farmLevel: 5 },
-  { id: "silo", key: "silo", level: 1, name: "Silo", description: `Store up to ${SILO_CAP} feed.`, coins: 120, items: { wood: 15, stone: 10, fittings: 2 }, farmLevel: 1 },
-  { id: "feeder", key: "feeder", level: 1, name: "Feeder", description: "Feeds hungry animals from the silo while you're away.", coins: 80, items: { fittings: 3 }, farmLevel: 2, needs: "silo" },
-  { id: "mill", key: "mill", level: 1, name: "Mill", description: "Grind wheat into flour.", coins: 100, items: { wood: 10, stone: 6, fittings: 2 }, farmLevel: 1 },
-  { id: "press", key: "press", level: 1, name: "Cheese press", description: "Press milk into cheese.", coins: 120, items: { wood: 8, fittings: 4 }, farmLevel: 2 },
-  { id: "loom", key: "loom", level: 1, name: "Loom", description: "Weave wool into cloth.", coins: 140, items: { wood: 12, fittings: 4 }, farmLevel: 3 },
-  { id: "hives", key: "hives", level: 1, name: "Beehives", description: `Bees make a honey every ${HIVE_MS / MIN} minutes (up to ${HIVE_MAX}).`, coins: 60, items: { wood: 8 }, farmLevel: 1 },
+  { id: "coop2", lot: "ranch", key: "coop", level: 2, name: "Hen house", description: "A bigger coop: room for 10 hens.", coins: 150, items: { wood: 20, stone: 10, fittings: 4 }, farmLevel: 2 },
+  { id: "coop3", lot: "ranch", key: "coop", level: 3, name: "Grand hen house", description: "Room for 14 hens.", coins: 400, items: { wood: 40, stone: 20, fittings: 10 }, farmLevel: 4 },
+  { id: "barn2", lot: "ranch", key: "barn", level: 2, name: "Barn extension", description: "Room for 5 sheep and 3 cows.", coins: 250, items: { wood: 30, stone: 15, fittings: 6 }, farmLevel: 3 },
+  { id: "barn3", lot: "ranch", key: "barn", level: 3, name: "Great barn", description: "Room for 7 sheep and 4 cows.", coins: 600, items: { wood: 50, stone: 30, fittings: 12 }, farmLevel: 5 },
+  { id: "silo", lot: "ranch", key: "silo", level: 1, name: "Silo", description: `Store up to ${SILO_CAP} feed.`, coins: 120, items: { wood: 15, stone: 10, fittings: 2 }, farmLevel: 1 },
+  { id: "feeder", lot: "ranch", key: "feeder", level: 1, name: "Feeder", description: "Feeds hungry animals from the silo while you're away.", coins: 80, items: { fittings: 3 }, farmLevel: 2, needs: "silo" },
+  { id: "mill", lot: "ranch", key: "mill", level: 1, name: "Mill", description: "Grind wheat into flour.", coins: 100, items: { wood: 10, stone: 6, fittings: 2 }, farmLevel: 1 },
+  { id: "press", lot: "ranch", key: "press", level: 1, name: "Cheese press", description: "Press milk into cheese.", coins: 120, items: { wood: 8, fittings: 4 }, farmLevel: 2 },
+  { id: "loom", lot: "ranch", key: "loom", level: 1, name: "Loom", description: "Weave wool into cloth.", coins: 140, items: { wood: 12, fittings: 4 }, farmLevel: 3 },
+  { id: "hives", lot: "ranch", key: "hives", level: 1, name: "Beehives", description: `Bees make a honey every ${HIVE_MS / MIN} minutes (up to ${HIVE_MAX}).`, coins: 60, items: { wood: 8 }, farmLevel: 1 },
+  // Vineyards: the winery (src/lib/vineyard.ts).
+  { id: "fruit_press", lot: "vineyard", key: "fruit_press", level: 1, name: "Fruit press", description: "Press grapes into juice and apples into cider.", coins: 120, items: { wood: 10, fittings: 4 }, farmLevel: 1 },
+  { id: "cellar", lot: "vineyard", key: "cellar", level: 1, name: "Wine cellar", description: "Make red and white wine from your grapes (2 hours a bottle).", coins: 300, items: { stone: 20, wood: 15, fittings: 6 }, farmLevel: 2 },
+  { id: "racks", lot: "vineyard", key: "racks", level: 1, name: "Cellar racks", description: "Age a bottle 4 hours into aged wine, worth three times as much.", coins: 250, items: { wood: 20, fittings: 8 }, farmLevel: 3, needs: "cellar" },
+  { id: "jam", lot: "vineyard", key: "jam", level: 1, name: "Jam kitchen", description: "Cook fruit and honey into jam.", coins: 150, items: { stone: 10, fittings: 4 }, farmLevel: 2 },
 ];
 
 export const MACHINE_RECIPES: readonly MachineRecipe[] = [
-  { id: "mill_wheat", machine: "mill", inputs: { wheat: 3 }, output: "flour", qty: 1, ms: 10 * MIN, name: "Grind 3 wheat into flour" },
-  { id: "press_milk", machine: "press", inputs: { milk: 2 }, output: "cheese", qty: 1, ms: 20 * MIN, name: "Press 2 milk into cheese" },
-  { id: "press_rich", machine: "press", inputs: { rich_milk: 1 }, output: "cheese", qty: 1, ms: 20 * MIN, name: "Press 1 rich milk into cheese" },
-  { id: "loom_wool", machine: "loom", inputs: { wool: 3 }, output: "cloth", qty: 1, ms: 20 * MIN, name: "Weave 3 wool into cloth" },
-  { id: "loom_fine", machine: "loom", inputs: { fine_wool: 1 }, output: "cloth", qty: 1, ms: 20 * MIN, name: "Weave 1 fine wool into cloth" },
+  { id: "mill_wheat", lot: "ranch", machine: "mill", inputs: { wheat: 3 }, output: "flour", qty: 1, ms: 10 * MIN, name: "Grind 3 wheat into flour" },
+  { id: "press_milk", lot: "ranch", machine: "press", inputs: { milk: 2 }, output: "cheese", qty: 1, ms: 20 * MIN, name: "Press 2 milk into cheese" },
+  { id: "press_rich", lot: "ranch", machine: "press", inputs: { rich_milk: 1 }, output: "cheese", qty: 1, ms: 20 * MIN, name: "Press 1 rich milk into cheese" },
+  { id: "loom_wool", lot: "ranch", machine: "loom", inputs: { wool: 3 }, output: "cloth", qty: 1, ms: 20 * MIN, name: "Weave 3 wool into cloth" },
+  { id: "loom_fine", lot: "ranch", machine: "loom", inputs: { fine_wool: 1 }, output: "cloth", qty: 1, ms: 20 * MIN, name: "Weave 1 fine wool into cloth" },
+  { id: "press_red", lot: "vineyard", machine: "fruit_press", inputs: { red_grape: 4 }, output: "grape_juice", qty: 1, ms: 10 * MIN, name: "Press 4 red grapes into juice" },
+  { id: "press_white", lot: "vineyard", machine: "fruit_press", inputs: { white_grape: 4 }, output: "grape_juice", qty: 1, ms: 10 * MIN, name: "Press 4 white grapes into juice" },
+  { id: "press_apples", lot: "vineyard", machine: "fruit_press", inputs: { apple: 3 }, output: "cider", qty: 1, ms: 15 * MIN, name: "Press 3 apples into cider" },
+  { id: "wine_red", lot: "vineyard", machine: "cellar", inputs: { red_grape: 6 }, output: "red_wine", qty: 1, ms: 120 * MIN, name: "Make red wine from 6 red grapes" },
+  { id: "wine_white", lot: "vineyard", machine: "cellar", inputs: { white_grape: 6 }, output: "white_wine", qty: 1, ms: 120 * MIN, name: "Make white wine from 6 white grapes" },
+  { id: "age_red", lot: "vineyard", machine: "racks", inputs: { red_wine: 1 }, output: "aged_red_wine", qty: 1, ms: 240 * MIN, name: "Age a red wine" },
+  { id: "age_white", lot: "vineyard", machine: "racks", inputs: { white_wine: 1 }, output: "aged_white_wine", qty: 1, ms: 240 * MIN, name: "Age a white wine" },
+  { id: "jam_apple", lot: "vineyard", machine: "jam", inputs: { apple: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 apples and a honey into jam" },
+  { id: "jam_grape", lot: "vineyard", machine: "jam", inputs: { red_grape: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 red grapes and a honey into jam" },
 ];
 
 /** Is it built (coop/barn count as built at level 1)? */
@@ -158,4 +172,4 @@ export function takeFeed(silo: Readonly<Record<string, number>>): { item: string
 }
 
 export const EMPTY_GROWTH: RanchGrowth = { farmXp: 0, coopLevel: 1, barnLevel: 1, silo: {}, machines: [], jobs: [], hivesAt: null };
-export const MACHINES: readonly MachineKey[] = ["mill", "press", "loom", "hives"];
+export const MACHINES: readonly MachineKey[] = ["mill", "press", "loom", "hives", "fruit_press", "cellar", "racks", "jam"];

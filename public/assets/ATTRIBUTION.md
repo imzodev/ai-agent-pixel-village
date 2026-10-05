@@ -51,3 +51,26 @@ upstream license chain.
 
 - **License**: CC-BY-SA 3.0+ / GPL 3.0+. **Attribution required** when
   redistributing.
+
+## Fruit trees (`trees/fruit-trees.png`)
+
+- **Source**: "[LPC] Fruit Trees" by bluecarrot16, Joshua Taylor, and
+  cynicmusic. Commissioned by castelonia.
+  Submission: https://opengameart.org/content/lpc-fruit-trees
+- **License**: CC-BY-SA 3.0 / GPL 3.0. Based on "Fruit and Veggie Inventory"
+  by Joshua Taylor (CC-BY-SA 3.0 / GPL 3.0,
+  https://opengameart.org/content/fruit-and-veggie-inventory) and "Pixelsphere
+  32x32 Tileset + Grass + Trees" by cynicmusic (CC0,
+  http://opengameart.org/content/pixelsphere-32x32-tileset-grass-trees).
+- **Credits**: `trees/CREDITS-fruit-trees.txt` (from the submission's
+  `lpc-fruit-trees.zip`), shipped with the game as its license requires,
+  together with the link above. Changes to the sheet itself stay under
+  CC-BY-SA 3.0 / GPL 3.0.
+- **Use**: the vineyard's apple trees (`src/lib/crops.ts` `apple_tree`, column 0
+  of the sheet: four growth stages, then three fruiting stages).
+- **Attribution required** when redistributing.
+
+## Grapevines and vineyard (`trees/vines.png`, `VineyardLot.png`)
+
+Original art made for this project by `scripts/draw-orchard.mjs` and
+`scripts/draw-vineyard-lot.mjs`. Not derived from any third-party asset.

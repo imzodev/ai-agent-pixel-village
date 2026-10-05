@@ -2,6 +2,7 @@
 // Inside a ranch: your animals, their hunger, love and produce, buying
 // chicks / lambs / calves, feeding them, collecting eggs, wool and milk —
 // and growing the farm (Build and Workshop tabs: RanchUpgrades, RanchWorkshop).
+// Vineyards share it: no animals, just their winery's Build and Workshop.
 import { useCallback, useEffect, useState } from "react";
 import { ITEM_ICONS } from "@/game/bus";
 import { FED_BELOW, HUNGRY_AT, MAX_STORED, RANCH_SPECIES, isRanchSpecies } from "@/lib/ranch";
@@ -34,6 +35,10 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
   };
 
   if (!view) return <div className="mt-3 text-stone-500">The hens cluck as you open the gate…</div>;
+  const vineyard = view.kind === "vineyard";
+  if (!view.mine && vineyard) {
+    return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🍇 {view.owner.name}&apos;s vineyard.</> : <>This vineyard is free. Claim it at the gate to grow grapes and apples.</>}</div>;
+  }
   if (!view.mine) {
     return (
       <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">
@@ -55,14 +60,15 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
           <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-300"><div className="h-full bg-emerald-500" style={{ width: `${g.nextAt ? Math.min(100, (100 * g.farmXp) / g.nextAt) : 100}%` }} /></div>
           <span className="text-stone-600">{g.nextAt ? `${g.farmXp}/${g.nextAt} XP` : "max"}</span>
           <span className="flex-1" />
-          {(["animals", "build", "workshop"] as const).map((t) => (
+          {(vineyard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${tab === t ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : "⚙️ Workshop"}</button>
           ))}
         </div>
       )}
-      {g && tab === "build" && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
+      {vineyard && <div className="text-[11px] text-stone-600">🍇 Plant grape cuttings on the trellises and apple saplings in the orchard (Pip sells them). Once grown they fruit again and again. Water them to speed them up.</div>}
+      {g && (tab === "build" || (vineyard && tab === "animals")) && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
       {g && tab === "workshop" && <RanchWorkshop g={g} busy={busy} act={(b) => void act(b)} />}
-      {(!g || tab === "animals") && <>
+      {!vineyard && (!g || tab === "animals") && <>
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={busy || ready === 0} onClick={() => void act({ action: "collect" })} className="pixel-btn bg-amber-300 px-2 py-1 text-sm font-bold disabled:opacity-40">🧺 Collect {ready > 0 ? `(${ready})` : ""}</button>
         <button disabled={busy || hungry === 0 || feedTotal === 0} onClick={() => void act({ action: "feed" })} className="pixel-btn bg-amber-200 px-2 py-1 text-sm font-bold disabled:opacity-40">🌾 Feed {hungry > 0 ? `${hungry} hungry` : ""}</button>

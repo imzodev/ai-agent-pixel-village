@@ -8,7 +8,10 @@
 /** What kind of parcel a lot is. */
 import type { RanchLook } from "./ranchGrowth";
 
-export type LotKind = "home" | "land" | "ranch";
+export type LotKind = "home" | "land" | "ranch" | "vineyard";
+
+/** A vineyard plot: a trellis for a vine, or room for a fruit tree. */
+export type VineyardSlot = "vine" | "tree";
 
 /** A lot as sent to clients. */
 export type LotSnapshot = {
@@ -45,6 +48,12 @@ export type GardenCropDef = {
   seedKey: string;
   /** Inventory item produced on harvest. */
   produceKey: string;
+  /** Lot kinds it can be planted in (default: land and home gardens). */
+  lots?: readonly LotKind[];
+  /** Vineyards: the kind of plot it needs. */
+  slot?: VineyardSlot;
+  /** Farm level of the lot needed to plant it (src/lib/ranchUpgrades.ts). */
+  minFarmLevel?: number;
 };
 
 /** Result of a lot / garden action. */

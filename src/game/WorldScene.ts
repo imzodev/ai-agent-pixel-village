@@ -15,7 +15,7 @@ import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
 import { FishingController } from "./fishing";
 import type { AtmosphereState, LightSource } from "@/types/lighting";
-import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
+import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
 import { chimneySources, stampBuildings, stampLights } from "./buildingStamps";
@@ -55,6 +55,7 @@ import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 import type { LotSnapshot } from "@/types/garden";
 import type { RanchBuildKey } from "@/types/ranchGrowth";
 import { RANCH_PROP_SPOTS } from "./ranchProps";
+import { VINEYARD_PROP_SPOTS } from "./vineyardProps";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -747,7 +748,7 @@ export class WorldScene extends Phaser.Scene {
         continue;
       }
       if (!img) {
-        img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + n.y);
+        img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(...nodeOrigin(n.kind)).setDepth(DEPTH_CHAR_BASE + n.y);
         if (n.ownerId != null) {
           // Garden crop: the frame is 32×64 but plots are only 32 px apart,
           // so a full-frame hit area would swallow clicks meant for the plot
@@ -1054,13 +1055,14 @@ export class WorldScene extends Phaser.Scene {
    *  added as they're built and cleared when the ranch is given up. */
   private syncRanchProps(lots: readonly LotSnapshot[]): void {
     for (const lot of lots) {
-      if (lot.kind !== "ranch") continue;
+      if (lot.kind !== "ranch" && lot.kind !== "vineyard") continue;
+      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : RANCH_PROP_SPOTS;
       const have = this.ranchProps.get(lot.key) ?? new Map<string, Phaser.GameObjects.Image>();
       const want = new Set(lot.ranch?.props ?? []);
       for (const [key, img] of have) if (!want.has(key as RanchBuildKey)) { img.destroy(); have.delete(key); }
       if (lot.ranch) {
         for (const key of want) {
-          const spot = RANCH_PROP_SPOTS[key];
+          const spot = spots[key];
           if (!spot || have.has(key)) continue;
           const x = lot.ranch.ox + spot.x, y = lot.ranch.oy + spot.y;
           have.set(key, this.add.image(x, y + 1, spot.sprite).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + y));

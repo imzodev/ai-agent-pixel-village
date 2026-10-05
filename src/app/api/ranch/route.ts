@@ -7,6 +7,8 @@
 //   "deposit"         — pour feed from your bag into the silo
 //   "start" { recipe } / "workshop" — run a machine / collect its work and honey
 // Only the owner tends a ranch, from near its gate. Growth: src/lib/ranchUpgrades.ts.
+// Vineyards use this route too (their winery: build / start / workshop);
+// the animal actions are the ranch's alone.
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -27,7 +29,7 @@ import type { RanchView } from "@/types/ranch";
 export const dynamic = "force-dynamic";
 
 async function ranchOf(key: string) {
-  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), eq(lots.kind, "ranch")));
+  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), inArray(lots.kind, ["ranch", "vineyard"])));
   return lot ?? null;
 }
 
@@ -45,8 +47,10 @@ async function view(key: string, meId: number): Promise<RanchView | null> {
   for (const b of bag) feed.set(b.itemKey, (feed.get(b.itemKey) ?? 0) + b.qty);
   const mine = r.lot.ownerId === meId;
   const growth = await loadGrowth(key);
+  const kind = r.lot.kind === "vineyard" ? "vineyard" : "ranch";
   return {
     key,
+    kind,
     name: entry?.name ?? key,
     owner: r.lot.ownerId != null ? { id: r.lot.ownerId, name: r.ownerName ?? "someone" } : null,
     mine,
@@ -61,7 +65,7 @@ async function view(key: string, meId: number): Promise<RanchView | null> {
     shop: Object.values(RANCH_SPECIES).map((s) => ({ ...s, cap: capFor(s.species, growth), owned: herd.filter((a) => a.species === s.species).length })),
     feed: [...feed].filter(([, q]) => q > 0).map(([itemKey, qty]) => ({ itemKey, qty })),
     coins: me?.coins ?? 0,
-    growth: mine ? await growthView(key, meId, me?.coins ?? 0, now) : null,
+    growth: mine ? await growthView(key, kind, meId, me?.coins ?? 0, now) : null,
   };
 }
 
@@ -85,9 +89,11 @@ export async function POST(req: Request) {
     if (r.lot.ownerId !== me.id) return Response.json({ error: "This isn't your ranch." }, { status: 403 });
     const door = await getBuildingDoor(key);
     const p = getLivePlayerPosition(me.id) ?? me;
-    if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: "Head over to your ranch first." }, { status: 400 });
+    if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: r.lot.kind === "vineyard" ? "Head over to your vineyard first." : "Head over to your ranch first." }, { status: 400 });
     const now = Date.now();
     const herd = await db.select().from(animals).where(eq(animals.ranchKey, key));
+    const kind = r.lot.kind === "vineyard" ? "vineyard" : "ranch";
+    if (kind === "vineyard" && ["buy", "feed", "collect", "pet_all", "deposit"].includes(String(body.action))) return Response.json({ error: "There are no animals in a vineyard." }, { status: 400 });
 
     if (body.action === "buy") {
       const species = String(body.species ?? "");
@@ -161,9 +167,9 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, message: `💕 You gave ${due.length} animal${due.length === 1 ? "" : "s"} a good fuss.`, view: await view(key, me.id) });
     }
     // Growth: building, the silo and the workshop (src/lib/ranchServer.ts).
-    const grow = body.action === "build" ? await build(key, me.id, String(body.step ?? ""), now)
+    const grow = body.action === "build" ? await build(key, kind, me.id, String(body.step ?? ""), now)
       : body.action === "deposit" ? await deposit(key, me.id)
-      : body.action === "start" ? await startJob(key, me.id, String(body.recipe ?? ""), now)
+      : body.action === "start" ? await startJob(key, kind, me.id, String(body.recipe ?? ""), now)
       : body.action === "workshop" ? await collectWorkshop(key, me.id, now)
       : null;
     if (grow) {

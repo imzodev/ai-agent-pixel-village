@@ -28,4 +28,6 @@ export const ITEM_ICONS: Record<string, string> = {
   recipe_cinnamon: "📜", recipe_tea: "📜", wooden_sword: "🗡️", stone_sword: "🗡️", thorn_blade: "🗡️", wisp_blade: "🗡️", axe: "🪓", sharp_axe: "🪓", wood: "🪵", fishing_rod: "🎣", silver_minnow: "🐟", river_trout: "🐟", pond_perch: "🐠", mud_carp: "🐟", bluegill: "🐠", rainbow_trout: "🐠", catfish: "🐡", golden_carp: "🐠", moonfin: "🐟", storm_eel: "🐍", ghost_koi: "🐠", silverrun_pike: "🦈", bat_wing: "🦇", thorn: "🌵", boar_hide: "🐗", wolf_pelt: "🐺", milk: "🥛", chitin: "🦂", parcel: "📦", treasure_map: "🗺️", bicycle: "🚲", sunken_cutlass: "🗡️", lost_doll: "🧸", lurker_hide: "🐸", frost_pelt: "🐺", shade_essence: "🟢", hot_stew: "🍲", wisp_essence: "✨", rootking_heartwood: "🌳", straw_hat: "👒", lantern: "🏮", chair: "🪑", table: "🟤", plant: "🪴",
   rug: "🟥", bed: "🛏️", lamp: "💡", bookshelf: "📚", painting: "🖼️", discount: "🎟️", fox_charm: "🦊", elder_seal: "🔏",
   golden_egg: "🥚", fine_wool: "🧶", rich_milk: "🥛", honey: "🍯", cheese: "🧀", cloth: "🧵", fittings: "🔩",
+  grape_cutting: "🌱", white_grape_cutting: "🌱", apple_sapling: "🌱", red_grape: "🍇", white_grape: "🍇", apple: "🍎", grape_juice: "🧃", cider: "🍺",
+  red_wine: "🍷", white_wine: "🥂", aged_red_wine: "🍷", aged_white_wine: "🥂", jam: "🫙", apple_pie: "🥧",
 };

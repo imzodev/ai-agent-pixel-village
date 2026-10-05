@@ -17,6 +17,8 @@ import CollectionBook from "./CollectionBook";
 import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
+import { LOT_LABELS } from "@/game/lotLabels";
+import { plantablesFor } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
@@ -597,8 +599,11 @@ export default function Hud() {
         break;
       case "plot":
         if (d > 90) { walk(); break; }
-        if (seedsInBag[0]) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: seedsInBag[0].itemKey });
-        else toast("You need seeds. The shopkeeper sells them.", "info");
+        {
+          const fit = plantablesFor(snap?.lots.find((l) => l.key === s.lotKey)?.kind, seedsInBag, GARDEN_CROPS)[0];
+          if (fit) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: fit.itemKey });
+          else toast("Nothing to plant here. Pip sells seeds, cuttings and saplings.", "info");
+        }
         break;
       case "animal":
         if (d <= 90) void act({ action: "pet", id: s.id });
@@ -887,10 +892,11 @@ export default function Hud() {
             if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "land" ? "Empty farmland. Claim this lot at its gate to plant here." : "An empty garden plot. Move into the house to plant here."}</span>;
             if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
-            if (seedsInBag.length === 0) return <span className="text-[11px] text-stone-600">No seeds — the shopkeeper sells them.</span>;
-            return seedsInBag.map((i) => (
+            const fits = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
+            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "vineyard" ? "No cuttings or saplings — Pip sells them." : "No seeds — the shopkeeper sells them."}</span>;
+            return fits.map((i) => (
               <Btn key={i.itemKey} on={() => void garden({ action: "plant", lotKey: sel.lotKey, plot: sel.plot, seedKey: i.itemKey })}>
-                🌱 Plant {i.itemKey.replace(/_seeds$/, "")} ×{i.qty}
+                🌱 Plant {i.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} ×{i.qty}
               </Btn>
             ));
           })()}
@@ -925,21 +931,16 @@ export default function Hud() {
           {loggedIn && sel.type === "building" && (() => {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
             if (!lot) return null;
-            const land = lot.kind === "land";
-            const ranch = lot.kind === "ranch";
+            const L = LOT_LABELS[lot.kind];
             if (lot.owner?.id === myId) {
               const confirming = confirmRelease === lot.key;
               return <>
-                <span className="text-[11px] font-bold text-emerald-700">{land ? "🌱 Your land" : ranch ? "🐔 Your ranch" : "🏡 Your home"}</span>
-                <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>
-                  {confirming ? (ranch ? "Sure? Animals leave" : "Sure? Crops are cleared") : land || ranch ? "Give up" : "Move out"}
-                </Btn>
+                <span className="text-[11px] font-bold text-emerald-700">{L.icon} {L.yours}</span>
+                <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>{confirming ? L.confirm : L.giveUp}</Btn>
               </>;
             }
-            if (lot.owner) return <span className="text-[11px] text-stone-600">{land ? `🌱 Land of ${lot.owner.name}` : ranch ? `🐔 Ranch of ${lot.owner.name}` : `🏡 Home of ${lot.owner.name}`}</span>;
-            if (land) return <Btn on={() => void lotAction("acquire", lot.key)}>🌱 {lot.price > 0 ? `Buy land · ${lot.price}🪙` : "Claim land (free)"}</Btn>;
-            if (ranch) return <Btn on={() => void lotAction("acquire", lot.key)}>🐔 {lot.price > 0 ? `Buy ranch · ${lot.price}🪙` : "Claim ranch (free)"}</Btn>;
-            return <Btn on={() => void lotAction("acquire", lot.key)}>🏡 {lot.price > 0 ? `Buy · ${lot.price}🪙` : "Move in (free)"}</Btn>;
+            if (lot.owner) return <span className="text-[11px] text-stone-600">{L.icon} {L.of} {lot.owner.name}</span>;
+            return <Btn on={() => void lotAction("acquire", lot.key)}>{L.icon} {lot.price > 0 ? `${L.buy} · ${lot.price}🪙` : L.claim}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}
           {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
@@ -1086,7 +1087,7 @@ export default function Hud() {
         <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
-          {bInfo?.kind === "ranch" && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
+          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
           {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">

@@ -11,7 +11,7 @@ import {
   BUILD_STEPS, EMPTY_GROWTH, FED_AFFECTION, MACHINE_RECIPES, SILO_CAP, STARVING_PENALTY, XP_PER_PROCESSED,
   afterHoney, applyBuild, canBuild, clampAffection, farmLevel, honeyReady, isNextStep, machineFree, newJob, nextLevelAt, recipeById, siloStored, takeFeed,
 } from "@/lib/ranchUpgrades";
-import type { RanchBuildKey, RanchGrowth, RanchGrowthView } from "@/types/ranchGrowth";
+import type { GrowthLot, RanchBuildKey, RanchGrowth, RanchGrowthView } from "@/types/ranchGrowth";
 
 type Result = { ok: true; message: string; gained?: { itemKey: string; qty: number }[] } | { ok: false; error: string };
 
@@ -51,25 +51,26 @@ async function bagOf(characterId: number, keys: readonly string[]): Promise<Reco
 }
 
 // ── The panel ────────────────────────────────────────────────────────────
-export async function growthView(lotKey: string, characterId: number, coins: number, now = Date.now()): Promise<RanchGrowthView> {
+export async function growthView(lotKey: string, lot: GrowthLot, characterId: number, coins: number, now = Date.now()): Promise<RanchGrowthView> {
   const g = await loadGrowth(lotKey);
-  const keys = [...new Set([...BUILD_STEPS.flatMap((s) => Object.keys(s.items)), ...MACHINE_RECIPES.flatMap((r) => Object.keys(r.inputs))])];
+  const steps = BUILD_STEPS.filter((s) => s.lot === lot), recipes = MACHINE_RECIPES.filter((r) => r.lot === lot);
+  const keys = [...new Set([...steps.flatMap((s) => Object.keys(s.items)), ...recipes.flatMap((r) => Object.keys(r.inputs))])];
   const bag = await bagOf(characterId, keys);
   return {
     farmLevel: farmLevel(g.farmXp), farmXp: g.farmXp, nextAt: nextLevelAt(g.farmXp),
     coopLevel: g.coopLevel, barnLevel: g.barnLevel,
     silo: g.machines.includes("silo") ? { stored: siloStored(g.silo), cap: SILO_CAP } : null,
     built: g.machines,
-    builds: BUILD_STEPS.filter((s) => isNextStep(g, s)).map((s) => { const c = canBuild(g, s, bag, coins); return { ...s, can: c.ok, why: c.why }; }),
-    recipes: MACHINE_RECIPES.filter((r) => g.machines.includes(r.machine)).map((r) => ({ ...r, can: machineFree(g, r.machine) && Object.entries(r.inputs).every(([k, n]) => (bag[k] ?? 0) >= n) })),
+    builds: steps.filter((s) => isNextStep(g, s)).map((s) => { const c = canBuild(g, s, bag, coins); return { ...s, can: c.ok, why: c.why }; }),
+    recipes: recipes.filter((r) => g.machines.includes(r.machine)).map((r) => ({ ...r, can: machineFree(g, r.machine) && Object.entries(r.inputs).every(([k, n]) => (bag[k] ?? 0) >= n) })),
     jobs: g.jobs.map((j) => ({ ...j, ready: j.readyAt <= now, inMs: Math.max(0, j.readyAt - now) })),
     honey: g.machines.includes("hives") ? honeyReady(g, now) : null,
   };
 }
 
 // ── Actions (the owner, at the ranch; checked by the route) ──────────────
-export async function build(lotKey: string, characterId: number, stepId: string, now = Date.now()): Promise<Result> {
-  const step = BUILD_STEPS.find((s) => s.id === stepId);
+export async function build(lotKey: string, lot: GrowthLot, characterId: number, stepId: string, now = Date.now()): Promise<Result> {
+  const step = BUILD_STEPS.find((s) => s.id === stepId && s.lot === lot);
   if (!step) return { ok: false, error: "You can't build that." };
   const g = await loadGrowth(lotKey);
   const [me] = await db.select({ coins: characters.coins }).from(characters).where(eq(characters.id, characterId));
@@ -115,9 +116,9 @@ export async function deposit(lotKey: string, characterId: number): Promise<Resu
 }
 
 /** Start a workshop job (one per machine at a time). */
-export async function startJob(lotKey: string, characterId: number, recipeId: string, now = Date.now()): Promise<Result> {
+export async function startJob(lotKey: string, lot: GrowthLot, characterId: number, recipeId: string, now = Date.now()): Promise<Result> {
   const r = recipeById(recipeId);
-  if (!r) return { ok: false, error: "No such work." };
+  if (!r || r.lot !== lot) return { ok: false, error: "No such work." };
   const g = await loadGrowth(lotKey);
   if (!g.machines.includes(r.machine)) return { ok: false, error: "Build it first." };
   if (!machineFree(g, r.machine)) return { ok: false, error: "That's already working. Collect it first." };

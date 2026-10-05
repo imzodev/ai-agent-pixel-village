@@ -118,6 +118,21 @@ export const ITEM_DEFS = [
   { key: "cheese", name: "Wheel of Cheese", kind: "material", icon: "🧀", description: "Pressed on your ranch. The inns pay well for it.", value: 12 },
   { key: "cloth", name: "Bolt of Cloth", kind: "material", icon: "🧵", description: "Woven on your ranch's loom.", value: 14 },
   { key: "fittings", name: "Iron Fittings", kind: "material", icon: "🔩", description: "Hinges, nails and brackets from Bjorn's forge. For building.", value: 6 },
+  // Vineyards (src/lib/vineyard.ts): what you plant, what it bears, and the winery's goods.
+  { key: "grape_cutting", name: "Grape Cutting", kind: "seed", icon: "🌱", description: "A red grapevine. Plant it on a vineyard trellis; it fruits again and again.", value: 12 },
+  { key: "white_grape_cutting", name: "White Grape Cutting", kind: "seed", icon: "🌱", description: "A white grapevine (vineyard level 2). Plant it on a trellis.", value: 18 },
+  { key: "apple_sapling", name: "Apple Sapling", kind: "seed", icon: "🌱", description: "Plant it in a vineyard's orchard. Slow to grow, then apples for good.", value: 22 },
+  { key: "red_grape", name: "Red Grapes", kind: "material", icon: "🍇", description: "Sweet and dark. Press them, or make wine.", value: 2 },
+  { key: "white_grape", name: "White Grapes", kind: "material", icon: "🍇", description: "Pale gold and crisp. For white wine.", value: 2 },
+  { key: "apple", name: "Apple", kind: "consumable", icon: "🍎", description: "Crunchy. Restores 4 HP. Marigold bakes them into pies.", value: 2 },
+  { key: "grape_juice", name: "Grape Juice", kind: "consumable", icon: "🧃", description: "Fresh-pressed. Restores 6 HP.", value: 8 },
+  { key: "cider", name: "Cider", kind: "material", icon: "🍺", description: "Pressed from your apples. The inns love it.", value: 10 },
+  { key: "red_wine", name: "Red Wine", kind: "material", icon: "🍷", description: "A young red from your cellar.", value: 18 },
+  { key: "white_wine", name: "White Wine", kind: "material", icon: "🥂", description: "A young white from your cellar.", value: 20 },
+  { key: "aged_red_wine", name: "Aged Red Wine", kind: "material", icon: "🍷", description: "Rested in your racks. Deep and rare.", value: 55 },
+  { key: "aged_white_wine", name: "Aged White Wine", kind: "material", icon: "🥂", description: "Rested in your racks. Golden and rare.", value: 60 },
+  { key: "jam", name: "Jar of Jam", kind: "consumable", icon: "🫙", description: "Fruit and honey. Restores 10 HP.", value: 9 },
+  { key: "apple_pie", name: "Apple Pie", kind: "consumable", icon: "🥧", description: "Marigold's, from your apples. Restores 16 HP.", value: 10 },
 ] as const;
 
 export { NPC_DEFS };

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { isRipe, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
 import { gardenCellsOf, gardenPlotsAt } from "@/lib/buildingManifest";
-import { CROP_KINDS, FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, GARDEN_CROPS, HARVEST_SEED_CHANCE } from "@/lib/crops";
+import { NODE_SHEETS, CROP_KINDS, FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, GARDEN_CROPS, HARVEST_SEED_CHANCE } from "@/lib/crops";
 import { SHOP_STOCK, findBuyer } from "@/lib/trade";
 
 describe("growth rules", () => {
@@ -53,15 +53,22 @@ describe("garden plots from templates", () => {
 });
 
 describe("crop data", () => {
-  it("every seed plants a known crop whose frames fit the 1024×1024 crops sheet", () => {
+  it("every seed plants a known crop whose frames fit its sheet", () => {
+    // Width and height from the PNG header (IHDR); default sheet: the 1024×1024 LPC crops.
+    const size = (sheet?: string) => {
+      if (!sheet) return { w: 1024, h: 1024 };
+      const png = fs.readFileSync(`public${NODE_SHEETS[sheet]}`);
+      return { w: png.readUInt32BE(16), h: png.readUInt32BE(20) };
+    };
     for (const def of Object.values(GARDEN_CROPS)) {
       const cfg = CROP_KINDS[def.kind];
       expect(cfg, def.kind).toBeDefined();
       expect(cfg.frames).toHaveLength(cfg.stages);
       expect(cfg.regrowthMs).toBeGreaterThan(0);
+      const { w, h } = size(cfg.sheet);
       for (const f of cfg.frames) {
-        expect(f.x + f.w).toBeLessThanOrEqual(1024);
-        expect(f.y + f.h).toBeLessThanOrEqual(1024);
+        expect(f.x + f.w, def.kind).toBeLessThanOrEqual(w);
+        expect(f.y + f.h, def.kind).toBeLessThanOrEqual(h);
       }
     }
   });
