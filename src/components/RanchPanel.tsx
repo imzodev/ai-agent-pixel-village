@@ -1,16 +1,20 @@
 "use client";
-// Inside a ranch: your animals, their hunger and produce, buying chicks /
-// lambs / calves, feeding them crops, and collecting eggs, wool and milk.
+// Inside a ranch: your animals, their hunger, love and produce, buying
+// chicks / lambs / calves, feeding them, collecting eggs, wool and milk —
+// and growing the farm (Build and Workshop tabs: RanchUpgrades, RanchWorkshop).
 import { useCallback, useEffect, useState } from "react";
 import { ITEM_ICONS } from "@/game/bus";
 import { FED_BELOW, HUNGRY_AT, MAX_STORED, RANCH_SPECIES, isRanchSpecies } from "@/lib/ranch";
 import type { RanchView } from "@/types/ranch";
+import RanchUpgrades from "./RanchUpgrades";
+import RanchWorkshop from "./RanchWorkshop";
 
 const mins = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))}m`;
 
 export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: string; onMessage: (text: string, kind: "good" | "bad") => void; onGain: (items: { itemKey: string; qty: number }[]) => void }) {
   const [view, setView] = useState<RanchView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<"animals" | "build" | "workshop">("animals");
   const load = useCallback(() => fetch(`/api/ranch?key=${encodeURIComponent(ranchKey)}`).then((r) => r.json()).then((r) => { if (r && !r.error) setView(r); }).catch(() => {}), [ranchKey]);
   useEffect(() => {
     void load();
@@ -41,11 +45,28 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
   const ready = view.animals.reduce((s, a) => s + a.ready, 0);
   const hungry = view.animals.filter((a) => a.hunger >= FED_BELOW).length;
   const feedTotal = view.feed.reduce((s, f) => s + f.qty, 0);
+  const g = view.growth;
+  const pettable = view.animals.filter((a) => a.pettable).length;
   return (
     <div className="mt-3 space-y-2">
+      {g && (
+        <div className="flex items-center gap-2 text-[12px]">
+          <b>🏡 Farm level {g.farmLevel}</b>
+          <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-300"><div className="h-full bg-emerald-500" style={{ width: `${g.nextAt ? Math.min(100, (100 * g.farmXp) / g.nextAt) : 100}%` }} /></div>
+          <span className="text-stone-600">{g.nextAt ? `${g.farmXp}/${g.nextAt} XP` : "max"}</span>
+          <span className="flex-1" />
+          {(["animals", "build", "workshop"] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${tab === t ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : "⚙️ Workshop"}</button>
+          ))}
+        </div>
+      )}
+      {g && tab === "build" && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
+      {g && tab === "workshop" && <RanchWorkshop g={g} busy={busy} act={(b) => void act(b)} />}
+      {(!g || tab === "animals") && <>
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={busy || ready === 0} onClick={() => void act({ action: "collect" })} className="pixel-btn bg-amber-300 px-2 py-1 text-sm font-bold disabled:opacity-40">🧺 Collect {ready > 0 ? `(${ready})` : ""}</button>
         <button disabled={busy || hungry === 0 || feedTotal === 0} onClick={() => void act({ action: "feed" })} className="pixel-btn bg-amber-200 px-2 py-1 text-sm font-bold disabled:opacity-40">🌾 Feed {hungry > 0 ? `${hungry} hungry` : ""}</button>
+        <button disabled={busy || pettable === 0} onClick={() => void act({ action: "pet_all" })} className="pixel-btn bg-pink-200 px-2 py-1 text-sm font-bold disabled:opacity-40" title="Once a day each: loved animals sometimes give golden eggs, fine wool and rich milk">💕 Pet everyone {pettable > 0 ? `(${pettable})` : ""}</button>
         <span className="text-[11px] text-stone-600">Feed: {feedTotal > 0 ? view.feed.map((f) => `${ITEM_ICONS[f.itemKey] ?? "🌾"}${f.qty}`).join(" ") : "none — bring wheat or crops"}</span>
         <span className="flex-1" /><span className="text-xs font-bold">🪙 {view.coins}</span>
       </div>
@@ -57,7 +78,7 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
               const starving = a.hunger >= HUNGRY_AT;
               return (
                 <div key={a.id} className="rounded border border-amber-900/20 bg-white/60 p-1.5 text-[12px]">
-                  <div className="font-bold">{def?.icon} {a.name}</div>
+                  <div className="font-bold">{def?.icon} {a.name} <span className="font-normal text-pink-600" title={`Affection ${a.affection}/100`}>{"♥".repeat(Math.round(a.affection / 20)) || "♡"}</span></div>
                   <div className="mt-0.5 h-1.5 overflow-hidden rounded bg-stone-300" title={`Hunger ${a.hunger}/100`}><div className={`h-full ${starving ? "bg-red-500" : a.hunger >= FED_BELOW ? "bg-amber-500" : "bg-emerald-500"}`} style={{ width: `${100 - a.hunger}%` }} /></div>
                   <div className="text-[11px] text-stone-600">
                     {starving ? "Too hungry to produce" : `${ITEM_ICONS[def?.produce ?? ""] ?? ""} ${a.ready}/${MAX_STORED}${a.nextInMs != null ? ` · next in ${mins(a.nextInMs)}` : ""}`}
@@ -75,6 +96,7 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
           </button>
         ))}
       </div>
+      </>}
     </div>
   );
 }

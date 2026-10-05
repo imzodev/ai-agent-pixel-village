@@ -46,6 +46,8 @@ export const TRADES: TradeConfig = {
     { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
   village_pip: [
+    { itemKey: "cloth", qty: 1, price: 16, line: "Good cloth! Sixteen coppers — I'll sell it on to the tailors." },
+    { itemKey: "fine_wool", qty: 1, price: 12, line: "Fine wool, twelve coppers. Softest I've seen." },
     { itemKey: "mushroom", qty: 1, price: 2, line: "Mushrooms, two coppers. I'll pickle 'em." },
     { itemKey: "carrot", qty: 1, price: 2, line: "Carrots, two coppers apiece. The rabbits'll be jealous." },
     { itemKey: "radish", qty: 1, price: 2, line: "Radishes — two coppers. Crunchy!" },
@@ -62,16 +64,24 @@ export const TRADES: TradeConfig = {
     { itemKey: "frost_pelt", qty: 1, price: 9, line: "A frost pelt! Nine coppers — you've been up in the cold." },
   ],
   hollowmere_ivy: [
+    { itemKey: "cheese", qty: 1, price: 15, line: "Cheese! Fifteen coppers — the woodcutters will fight over it." },
+    { itemKey: "honey", qty: 1, price: 8, line: "Honey, eight coppers. Mead season is coming." },
     { itemKey: "milk", qty: 1, price: 4, line: "Fresh milk! Four coppers — the woodcutters drink it by the bucket." },
     { itemKey: "egg", qty: 1, price: 2, line: "Eggs for breakfast, two coppers each." },
     { itemKey: "berry", qty: 1, price: 2, line: "Berries for the jam pot — two coppers a handful." },
     { itemKey: "herb", qty: 1, price: 2, line: "Herbs for the tea, two coppers. Bless you." },
   ],
   village_hettie: [
+    { itemKey: "cheese", qty: 1, price: 14, line: "A whole wheel of cheese! Fourteen coppers — the stew will sing." },
+    { itemKey: "honey", qty: 1, price: 7, line: "Honey for the tea, seven coppers a jar." },
+    { itemKey: "golden_egg", qty: 1, price: 15, line: "A golden egg?! Fifteen coppers, and I'll frame the shell." },
+    { itemKey: "rich_milk", qty: 1, price: 14, line: "Rich milk — fourteen coppers. Cream on everything tonight." },
     { itemKey: "milk", qty: 1, price: 4, line: "Milk for the stew pot — four coppers a jug." },
     { itemKey: "egg", qty: 1, price: 2, line: "Fresh eggs, two coppers each. Breakfast is sorted!" },
   ],
   brightwater_coral: [
+    { itemKey: "cheese", qty: 1, price: 16, line: "Cheese, out here? Sixteen coppers!" },
+    { itemKey: "honey", qty: 1, price: 8, line: "Honey for the sailors' tea, eight coppers." },
     { itemKey: "milk", qty: 1, price: 5, line: "Milk's dear out here on the coast. Five coppers!" },
     { itemKey: "egg", qty: 1, price: 2, line: "Eggs! Two coppers each." },
   ],
@@ -134,6 +144,7 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },
     { itemKey: "arrow", qty: 10, price: 10, line: "Ten arrows, ten coppers. Fletched them myself." },
     { itemKey: "stone_sword", qty: 1, price: 30, line: "A stone sword, thirty coppers. Heavy, honest, sharp enough." },
+    { itemKey: "fittings", qty: 1, price: 6, line: "Iron fittings, six coppers each. Every barn needs a few." },
   ],
 };
 
@@ -156,6 +167,8 @@ for (const n of SETTLEMENT_NPCS) {
       { itemKey: "tea", qty: 1, price: 6, line: "Tea, six coppers. Warms the bones." },
     ];
     TRADES[n.key] = [
+      { itemKey: "cheese", qty: 1, price: 15, line: `Cheese! Fifteen coppers — rare in ${town.name}.` },
+      { itemKey: "honey", qty: 1, price: 8, line: "Honey, eight coppers a jar." },
       { itemKey: "milk", qty: 1, price: 5, line: "Milk for the kitchen — five coppers." },
       { itemKey: "egg", qty: 1, price: 2, line: "Eggs, two coppers each." },
     ];

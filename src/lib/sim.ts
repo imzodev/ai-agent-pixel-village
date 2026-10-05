@@ -36,6 +36,7 @@ import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_MAX_TOTAL, WILD_PACKS_PER_BEAT,
 import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
 import { bakeBatches } from "./bakeryServer";
 import { thinkMinds } from "./mind/mindServer";
+import { tickRanches } from "./ranchServer";
 import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
@@ -139,6 +140,7 @@ export async function tickWorld(): Promise<number | null> {
   if (beat.index % HP_REGEN_EVERY_BEATS === 0) await regenHp(now);
   await bakeBatches(nowMs).catch((err) => console.warn("[tick] baking failed:", err instanceof Error ? err.message : err));
   await thinkMinds(nowMs).catch((err) => console.warn("[tick] minds failed:", err instanceof Error ? err.message : err));
+  await tickRanches(nowMs).catch((err) => console.warn("[tick] ranch feeders failed:", err instanceof Error ? err.message : err));
   await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);
   return animalMoves + npcMoves + enemyMoves;

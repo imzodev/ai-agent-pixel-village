@@ -42,7 +42,7 @@ export function feasibleActions(p: MindProfile, v: MindView): MindOption[] {
   const tableFree = !!v.table && (v.table.left === 0 || (v.table.bakedAt != null && v.now - v.table.bakedAt >= p.tableStaleMs));
   if (working && rested) {
     for (const [key, r] of Object.entries(p.crafts)) {
-      if (!canCraft(v.stock, r) || have(v.stock, r.itemKey) >= p.shelfFull) continue;
+      if (!canCraft(v.stock, r) || have(v.stock, r.itemKey) >= (p.shelfCap?.[r.itemKey] ?? p.shelfFull)) continue;
       if (r.toTable > 0 && !tableFree) continue;
       const uses = Object.entries(r.uses).map(([k, n]) => `${n} ${word(p, k)}`).join(" and ");
       out.push({ key, description: `${r.verb[0].toUpperCase()}${r.verb.slice(1)} (uses ${uses}${r.toTable ? `; ${r.toTable} go on the free table, the rest on the shelf to sell` : "; for the shelf, to sell"})` });

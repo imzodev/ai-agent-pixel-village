@@ -29,7 +29,11 @@ export type Offer =
   | { id: string; type: "discount"; label: string; line: string }
   | { id: string; type: "gift"; itemKey: string; label: string; line: string }
   /** The NPC buys `qty` of `itemKey` from the player for `price` coins. */
-  | { id: string; type: "sell"; itemKey: string; qty: number; price: number; label: string; line: string };
+  | { id: string; type: "sell"; itemKey: string; qty: number; price: number; label: string; line: string }
+  /** Sign up to bring `qty` of `itemKey` a week at `price` each (src/lib/ordersServer.ts). */
+  | { id: string; type: "order"; itemKey: string; qty: number; price: number; label: string; line: string }
+  /** Deliver `qty` on a standing order. */
+  | { id: string; type: "deliver"; itemKey: string; qty: number; price: number; label: string; line: string };
 
 /** A single buyable item a trader NPC will pay for. */
 export type TradeItem = { itemKey: string; qty: number; price: number; line: string; /** Level needed to buy it (shop stock). */ minLevel?: number };

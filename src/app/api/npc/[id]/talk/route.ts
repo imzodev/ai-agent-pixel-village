@@ -114,7 +114,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // they're always shown regardless of whether the brain mentioned them.
     // Everything else (turnin, mission, gift, discount) is gated on the
     // brain's choice so the panel reflects only what the NPC "said".
-    const shown = offers.filter((o) => o.type === "sell" || reply.offerIds.includes(o.id));
+    const shown = offers.filter((o) => o.type === "sell" || o.type === "order" || o.type === "deliver" || reply.offerIds.includes(o.id));
     return Response.json({ text: reply.text, offers: shown, source: reply.source, notices, npc: { id: npc.id, name: npc.name, role: npc.role, sponsored: !!sponsor, sponsor: sponsor ? { businessName: sponsor.businessName, brandColor: sponsor.brandColor } : null } });
   } catch (e) {
     return handleApiError(e);

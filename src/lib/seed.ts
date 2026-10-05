@@ -110,6 +110,14 @@ export const ITEM_DEFS = [
   { key: "discount", name: "Discount Code", kind: "discount", icon: "🎟️", description: "A real code from a real sponsor.", value: 0 },
   { key: "fox_charm", name: "Fox Charm", kind: "trophy", icon: "🦊", description: "The fox trusts you now.", value: 25 },
   { key: "elder_seal", name: "Elder's Seal", kind: "trophy", icon: "🔏", description: "Proof you helped the village.", value: 30 },
+  // Ranch growth (src/lib/ranchUpgrades.ts): quality goods from happy animals, workshop goods, and Bjorn's fittings.
+  { key: "golden_egg", name: "Golden Egg", kind: "material", icon: "🥚", description: "From a hen who adores you. Worth a small fortune.", value: 15 },
+  { key: "fine_wool", name: "Fine Wool", kind: "material", icon: "🧶", description: "Soft as a cloud. Weaves into cloth on its own.", value: 12 },
+  { key: "rich_milk", name: "Rich Milk", kind: "material", icon: "🥛", description: "Thick and golden. Makes cheese on its own.", value: 14 },
+  { key: "honey", name: "Jar of Honey", kind: "material", icon: "🍯", description: "From your own hives. Marigold's buns need it.", value: 6 },
+  { key: "cheese", name: "Wheel of Cheese", kind: "material", icon: "🧀", description: "Pressed on your ranch. The inns pay well for it.", value: 12 },
+  { key: "cloth", name: "Bolt of Cloth", kind: "material", icon: "🧵", description: "Woven on your ranch's loom.", value: 14 },
+  { key: "fittings", name: "Iron Fittings", kind: "material", icon: "🔩", description: "Hinges, nails and brackets from Bjorn's forge. For building.", value: 6 },
 ] as const;
 
 export { NPC_DEFS };

@@ -16,6 +16,7 @@ import { footprintOf, gardenCellsOf, gardenPlotsAt } from "./buildingManifest";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/garden";
 import { landLotLimit } from "./progression";
+import { clearRanch, ranchLooks } from "./ranchServer";
 
 /** Owners who haven't logged in for this long lose their lot. */
 export const LOT_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -90,14 +91,23 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
       lte(lots.tx, x1), gte(sql`${lots.tx} + ${lots.tw}`, x0),
       lte(lots.ty, y1), gte(sql`${lots.ty} + ${lots.th}`, y0),
     ));
-  return rows.map(({ lot, ownerName }) => ({
-    key: lot.key,
-    kind: lot.kind,
-    buildingKey: lot.buildingKey,
-    owner: lot.ownerId != null ? { id: lot.ownerId, name: ownerName ?? "someone" } : null,
-    price: lot.price,
-    forSale: lot.forSale,
-  }));
+  // Ranches show what's been built on them (silo, mill, hives…).
+  const ranchKeys = rows.filter((r) => r.lot.kind === "ranch" && r.lot.ownerId != null).map((r) => r.lot.key);
+  const looks = await ranchLooks(ranchKeys);
+  const manifest = looks.size ? (await getBuildingsManifest()).buildings : [];
+  return rows.map(({ lot, ownerName }) => {
+    const props = looks.get(lot.key);
+    const entry = props?.length ? manifest.find((b) => b.key === lot.buildingKey) : undefined;
+    return {
+      key: lot.key,
+      kind: lot.kind,
+      buildingKey: lot.buildingKey,
+      owner: lot.ownerId != null ? { id: lot.ownerId, name: ownerName ?? "someone" } : null,
+      price: lot.price,
+      forSale: lot.forSale,
+      ...(props?.length && entry ? { ranch: { props, ox: entry.tx * 16, oy: entry.ty * 16 } } : {}),
+    };
+  });
 }
 
 /** The home lot a character owns, if any. */
@@ -158,7 +168,10 @@ async function clearLot(lotId: number): Promise<void> {
   await db.delete(resourceNodes).where(eq(resourceNodes.lotId, lotId));
   // A ranch's animals belong to the ranch (src/lib/ranch.ts).
   const [lot] = await db.select({ key: lots.key }).from(lots).where(eq(lots.id, lotId));
-  if (lot) await db.delete(animals).where(eq(animals.ranchKey, lot.key));
+  if (lot) {
+    await db.delete(animals).where(eq(animals.ranchKey, lot.key));
+    await clearRanch(lot.key); // its buildings and workshop go with it (src/lib/ranchServer.ts)
+  }
   await db.update(lots).set({ ownerId: null, acquiredAt: null, forSale: false }).where(eq(lots.id, lotId));
 }
 

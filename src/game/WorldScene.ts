@@ -52,6 +52,9 @@ import type { Move, ScheduledMove } from "@/types/motion";
 import type { EnemySnapshot } from "@/lib/protocol";
 import type { BreadTableSnapshot } from "@/types/bakery";
 import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
+import type { LotSnapshot } from "@/types/garden";
+import type { RanchBuildKey } from "@/types/ranchGrowth";
+import { RANCH_PROP_SPOTS } from "./ranchProps";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -144,6 +147,8 @@ export class WorldScene extends Phaser.Scene {
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
   /** The loaf images on each bakery bread table. */
   private breadLoaves = new Map<string, Phaser.GameObjects.Image[]>();
+  /** What's been built on each ranch lot, by building. */
+  private ranchProps = new Map<string, Map<string, Phaser.GameObjects.Image>>();
   /** The goods on each shop display, per item. */
   private displayPieces = new Map<string, Map<string, Phaser.GameObjects.Image[]>>();
   /** Relics we've already pointed out ("something glints nearby"). */
@@ -629,6 +634,7 @@ export class WorldScene extends Phaser.Scene {
     this.meId = s.me?.id ?? null;
     this.syncBreadTables(s.breadTables ?? []);
     this.syncDisplays(s.displays ?? []);
+    this.syncRanchProps(s.lots ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
@@ -1041,6 +1047,26 @@ export class WorldScene extends Phaser.Scene {
       }
       const tex = tableTexture(t.itemKey);
       imgs.forEach((img, i) => { if (img.texture.key !== tex) img.setTexture(tex); img.setVisible(i < t.left); });
+    }
+  }
+
+  /** Buildings on ranch lots (silo, mill, hives…; src/game/ranchProps.ts),
+   *  added as they're built and cleared when the ranch is given up. */
+  private syncRanchProps(lots: readonly LotSnapshot[]): void {
+    for (const lot of lots) {
+      if (lot.kind !== "ranch") continue;
+      const have = this.ranchProps.get(lot.key) ?? new Map<string, Phaser.GameObjects.Image>();
+      const want = new Set(lot.ranch?.props ?? []);
+      for (const [key, img] of have) if (!want.has(key as RanchBuildKey)) { img.destroy(); have.delete(key); }
+      if (lot.ranch) {
+        for (const key of want) {
+          const spot = RANCH_PROP_SPOTS[key];
+          if (!spot || have.has(key)) continue;
+          const x = lot.ranch.ox + spot.x, y = lot.ranch.oy + spot.y;
+          have.set(key, this.add.image(x, y + 1, spot.sprite).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + y));
+        }
+      }
+      this.ranchProps.set(lot.key, have);
     }
   }
 

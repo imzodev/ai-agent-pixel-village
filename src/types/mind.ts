@@ -75,6 +75,9 @@ export type CraftRecipe = {
 /** Where an NPC goes to buy an ingredient itself (an errand). */
 export type SupplyDef = { supplierKey: string; place: string; price: number; buy: number; low: number };
 
+/** A standing order an NPC offers players: so many a week, at this price each. */
+export type OrderDef = { qty: number; pay: number };
+
 /** An ingredient an NPC asks players for when it runs low. */
 export type AskDef = { qty: number; pay: number; low: number };
 
@@ -88,6 +91,8 @@ export type MindProfile = {
   /** What they sell off their shelf, only while they have it (item → unit price, for the state text). */
   shelf: Readonly<Record<string, number>>;
   shelfFull: number;
+  /** Per-item shelf limits where `shelfFull` doesn't fit (arrows come in 20s). */
+  shelfCap?: Readonly<Record<string, number>>;
   minCraftGapMs: number;
   /** A table batch this old may be replaced (bakers). */
   tableStaleMs: number;
@@ -99,6 +104,8 @@ export type MindProfile = {
   asks: Readonly<Record<string, AskDef>>;
   /** What they give friends, if anything. */
   gift: { itemKey: string; qty: number } | null;
+  /** Item → what they'll buy from players on a standing order, each week. */
+  orders: Readonly<Record<string, OrderDef>>;
   /** Item → plural words ("bags of flour"). */
   words: Readonly<Record<string, string>>;
 };

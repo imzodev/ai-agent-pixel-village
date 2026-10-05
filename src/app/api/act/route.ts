@@ -29,6 +29,8 @@ const STAGGER_DMG_MULT = 1.5;
 /** When each player last loosed an arrow (the draw takes SHOT_COOLDOWN_MS). */
 const lastShot = new Map<number, number>();
 
+import { PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } from "@/lib/ranchUpgrades";
+
 export const dynamic = "force-dynamic";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -70,7 +72,9 @@ export async function POST(req: Request) {
       const ap = rowPositionAt(a, Date.now());
       if (Math.hypot(ap.x - p.x, ap.y - p.y) > 90) return Response.json({ error: "Get a little closer." }, { status: 400 });
       const recently = a.lastPettedAt && Date.now() - a.lastPettedAt.getTime() < 20_000;
-      await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5) }).where(eq(animals.id, a.id));
+      // Your own ranch animals grow fond of you: affection once a day (src/lib/ranchUpgrades.ts).
+      const fond = a.ranchKey != null && a.ownerId === me.id && (!a.lastPettedAt || Date.now() - a.lastPettedAt.getTime() >= PET_COOLDOWN_MS);
+      await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5), ...(fond ? { affection: clampAffection(a.affection + PET_AFFECTION) } : {}) }).where(eq(animals.id, a.id));
       const reactions: Record<string, string[]> = {
         sheep: ["baas softly and leans into your hand", "closes its eyes and hums"],
         cow: ["moos approvingly", "licks your sleeve"],

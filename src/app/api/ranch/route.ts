@@ -1,8 +1,12 @@
 // Ranch plots. GET ?key=<ranch key> → the panel; POST { key, action }:
 //   "buy" { species } — a chick / lamb / calf for your pen
 //   "feed"            — feed hungry animals crops from your bag
-//   "collect"         — gather eggs, wool and milk
-// Only the owner tends a ranch, from near its gate.
+//   "collect"         — gather eggs, wool and milk (happy animals: better ones)
+//   "pet_all"         — pet everyone (affection, once a day each)
+//   "build" { step }  — upgrade the coop / barn, build a silo, feeder, machine
+//   "deposit"         — pour feed from your bag into the silo
+//   "start" { recipe } / "workshop" — run a machine / collect its work and honey
+// Only the owner tends a ranch, from near its gate. Growth: src/lib/ranchUpgrades.ts.
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -13,9 +17,11 @@ import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 import { addItem, progressMissions } from "@/lib/game";
 import { getContainer } from "@/lib/container";
 import {
-  FED_BELOW, FEED_ITEMS, RANCH_REACH_PX, RANCH_SPECIES,
+  FED_BELOW, FEED_ITEMS, HUNGRY_AT, RANCH_REACH_PX, RANCH_SPECIES,
   afterCollect, afterFeed, isRanchSpecies, nextIn, nextName, penRect, readyCount,
 } from "@/lib/ranch";
+import { PET_AFFECTION, PET_COOLDOWN_MS, FED_AFFECTION, XP_PER_GOOD, capFor, clampAffection, collectGoods } from "@/lib/ranchUpgrades";
+import { addFarmXp, build, collectWorkshop, deposit, growthView, loadGrowth, startJob } from "@/lib/ranchServer";
 import type { RanchView } from "@/types/ranch";
 
 export const dynamic = "force-dynamic";
@@ -37,18 +43,25 @@ async function view(key: string, meId: number): Promise<RanchView | null> {
   ]);
   const feed = new Map<string, number>();
   for (const b of bag) feed.set(b.itemKey, (feed.get(b.itemKey) ?? 0) + b.qty);
+  const mine = r.lot.ownerId === meId;
+  const growth = await loadGrowth(key);
   return {
     key,
     name: entry?.name ?? key,
     owner: r.lot.ownerId != null ? { id: r.lot.ownerId, name: r.ownerName ?? "someone" } : null,
-    mine: r.lot.ownerId === meId,
+    mine,
     animals: herd.map((a) => {
       const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
-      return { id: a.id, name: a.name, species: a.species, hunger: a.hunger, ready: readyCount(last, a.hunger, now), nextInMs: nextIn(last, a.hunger, now) };
+      return {
+        id: a.id, name: a.name, species: a.species, hunger: a.hunger, affection: a.affection,
+        pettable: !a.lastPettedAt || now - a.lastPettedAt.getTime() >= PET_COOLDOWN_MS,
+        ready: readyCount(last, a.hunger, now), nextInMs: nextIn(last, a.hunger, now),
+      };
     }),
-    shop: Object.values(RANCH_SPECIES).map((s) => ({ ...s, owned: herd.filter((a) => a.species === s.species).length })),
+    shop: Object.values(RANCH_SPECIES).map((s) => ({ ...s, cap: capFor(s.species, growth), owned: herd.filter((a) => a.species === s.species).length })),
     feed: [...feed].filter(([, q]) => q > 0).map(([itemKey, qty]) => ({ itemKey, qty })),
     coins: me?.coins ?? 0,
+    growth: mine ? await growthView(key, meId, me?.coins ?? 0, now) : null,
   };
 }
 
@@ -81,7 +94,8 @@ export async function POST(req: Request) {
       if (!isRanchSpecies(species)) return Response.json({ error: "You can't raise that here." }, { status: 400 });
       const def = RANCH_SPECIES[species];
       const mine = herd.filter((a) => a.species === species);
-      if (mine.length >= def.cap) return Response.json({ error: `Your ${def.home} is full (${def.cap} max).` }, { status: 400 });
+      const cap = capFor(species, await loadGrowth(key));
+      if (mine.length >= cap) return Response.json({ error: `Your ${def.home} is full (${cap} max). Upgrade it to fit more.` }, { status: 400 });
       const [paid] = await db.update(characters).set({ coins: sql`${characters.coins} - ${def.price}` })
         .where(and(eq(characters.id, me.id), sql`${characters.coins} >= ${def.price}`)).returning({ id: characters.id });
       if (!paid) return Response.json({ error: `A ${def.young.toLowerCase()} costs ${def.price} coins.` }, { status: 400 });
@@ -108,7 +122,10 @@ export async function POST(req: Request) {
         if (row.qty > 0) await db.update(inventory).set({ qty: row.qty }).where(eq(inventory.id, row.id));
         else await db.delete(inventory).where(eq(inventory.id, row.id));
         const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
-        await db.update(animals).set({ hunger: 0, lastFedAt: new Date(now), lastProducedAt: new Date(afterFeed(last, a.hunger, now)), mood: "content" }).where(eq(animals.id, a.id));
+        await db.update(animals).set({
+          hunger: 0, lastFedAt: new Date(now), lastProducedAt: new Date(afterFeed(last, a.hunger, now)), mood: "content",
+          affection: clampAffection(a.affection + (a.hunger < HUNGRY_AT ? FED_AFFECTION : 0)),
+        }).where(eq(animals.id, a.id));
         fed++;
       }
       if (fed === 0) return Response.json({ error: "You've no feed. Bring wheat or crops from your field." }, { status: 400 });
@@ -122,8 +139,8 @@ export async function POST(req: Request) {
         const last = (a.lastProducedAt ?? a.lastFedAt).getTime();
         const n = readyCount(last, a.hunger, now);
         if (n === 0) continue;
-        const item = RANCH_SPECIES[a.species].produce;
-        gained.set(item, (gained.get(item) ?? 0) + n);
+        // Happy animals sometimes give better goods (golden eggs, fine wool, rich milk).
+        for (const [item, q] of Object.entries(collectGoods(RANCH_SPECIES[a.species].produce, n, a.affection))) gained.set(item, (gained.get(item) ?? 0) + q);
         await db.update(animals).set({ lastProducedAt: new Date(afterCollect(last, n, now)) }).where(eq(animals.id, a.id));
       }
       if (gained.size === 0) return Response.json({ error: "Nothing to collect yet." }, { status: 400 });
@@ -134,7 +151,25 @@ export async function POST(req: Request) {
         void quest.recordEvent(me.id, { kind: "collect", payload: { itemKey } }, qty).catch(() => {});
       }
       const list = [...gained].map(([k, q]) => ({ itemKey: k, qty: q }));
+      await addFarmXp(key, list.reduce((s, g) => s + g.qty, 0) * XP_PER_GOOD);
       return Response.json({ ok: true, message: `🧺 Collected ${list.map((g) => `${g.qty} ${g.itemKey}`).join(", ")}.`, gained: list, view: await view(key, me.id) });
+    }
+    if (body.action === "pet_all") {
+      const due = herd.filter((a) => !a.lastPettedAt || now - a.lastPettedAt.getTime() >= PET_COOLDOWN_MS);
+      if (!due.length) return Response.json({ error: "They've all had their fuss today. Come back tomorrow." }, { status: 400 });
+      for (const a of due) await db.update(animals).set({ affection: clampAffection(a.affection + PET_AFFECTION), lastPettedAt: new Date(now), pets: a.pets + 1, mood: "delighted" }).where(eq(animals.id, a.id));
+      return Response.json({ ok: true, message: `💕 You gave ${due.length} animal${due.length === 1 ? "" : "s"} a good fuss.`, view: await view(key, me.id) });
+    }
+    // Growth: building, the silo and the workshop (src/lib/ranchServer.ts).
+    const grow = body.action === "build" ? await build(key, me.id, String(body.step ?? ""), now)
+      : body.action === "deposit" ? await deposit(key, me.id)
+      : body.action === "start" ? await startJob(key, me.id, String(body.recipe ?? ""), now)
+      : body.action === "workshop" ? await collectWorkshop(key, me.id, now)
+      : null;
+    if (grow) {
+      if (!grow.ok) return Response.json({ error: grow.error }, { status: 400 });
+      if (body.action === "build") markWorldDirty(door.x, door.y); // neighbours see the new building
+      return Response.json({ ok: true, message: grow.message, gained: grow.gained, view: await view(key, me.id) });
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });
   } catch (e) {

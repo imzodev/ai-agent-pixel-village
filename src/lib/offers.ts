@@ -4,6 +4,7 @@ import { characterMissions, conversations, inventory, missions, npcs, sponsors, 
 import { missionProgressFor, requirementTarget } from "./game";
 import type { Offer } from "./types";
 import { TRADES } from "./trade";
+import { orderOffers } from "./ordersServer";
 
 type Npc = typeof npcs.$inferSelect;
 type Character = typeof characters.$inferSelect;
@@ -58,6 +59,8 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
       offers.push({ id: `discount:${sponsor.id}`, type: "discount", label: `Take the ${sponsor.businessName} code`, line: sponsor.pitch });
     }
   }
+  // Standing orders with an NPC with a mind (src/lib/ordersServer.ts).
+  offers.push(...(await orderOffers(npc, character.id)));
   const gift = FIRST_MEETING_GIFTS[npc.key];
   if (gift) {
     const [c] = await db

@@ -2,6 +2,7 @@ import type Phaser from "phaser";
 import { RELIC_ART } from "@/lib/relicArt";
 import { BUN_PALETTE, BUN_ROWS, LOAF_PALETTE, LOAF_ROWS } from "./breadTable";
 import { DISPLAY_SPRITES } from "./shopDisplay";
+import { RANCH_PROP_SPRITES } from "./ranchProps";
 import { buildingTextureKey, makeBuildingTexture } from "./buildings";
 import type { BuildingView } from "./buildings";
 import { ANIMAL_SPRITES } from "./animalSprites";
@@ -132,6 +133,8 @@ export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "bread_bun", BUN_ROWS, BUN_PALETTE, 1);
   // Goods on shop displays (src/game/shopDisplay.ts), at world scale.
   for (const [key, sp] of Object.entries(DISPLAY_SPRITES)) pixelTexture(scene, key, sp.rows, sp.palette, 1);
+  // What players build on their ranch (src/game/ranchProps.ts).
+  for (const [key, sp] of Object.entries(RANCH_PROP_SPRITES)) pixelTexture(scene, key, sp.rows, sp.palette, 1);
   pixelTexture(scene, "marker", ["...y...", "..yyy..", ".yyyyy.", "...y...", "...y..."], { y: "#fff176" }, 2);
 }
 

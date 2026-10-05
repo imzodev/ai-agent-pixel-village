@@ -1023,8 +1023,8 @@ export default function Hud() {
           {talk.offers.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pb-2">
               {talk.offers.map((o) => (
-                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`pixel-btn px-3 py-1.5 font-bold text-white hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "sell" ? "bg-yellow-600" : o.type === "turnin" ? "bg-emerald-600" : o.type === "mission" ? "bg-sky-600" : "bg-violet-600"}`}>
-                  {o.type === "discount" ? "🎟️ " : o.type === "turnin" ? "✅ " : o.type === "mission" ? "📜 " : "🎁 "}{o.label}
+                <button key={o.id} onClick={() => acceptOffer(o.id)} className={`pixel-btn px-3 py-1.5 font-bold text-white hover:brightness-110 ${o.type === "discount" ? "bg-orange-500" : o.type === "sell" ? "bg-yellow-600" : o.type === "turnin" || o.type === "deliver" ? "bg-emerald-600" : o.type === "mission" || o.type === "order" ? "bg-sky-600" : "bg-violet-600"}`}>
+                  {o.type === "discount" ? "🎟️ " : o.type === "turnin" ? "✅ " : o.type === "mission" ? "📜 " : o.type === "order" || o.type === "deliver" ? "" : "🎁 "}{o.label}
                 </button>
               ))}
             </div>

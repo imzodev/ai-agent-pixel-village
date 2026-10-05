@@ -6,6 +6,8 @@
 // resource_nodes rows carrying owner_id / lot_id / plot.
 
 /** What kind of parcel a lot is. */
+import type { RanchLook } from "./ranchGrowth";
+
 export type LotKind = "home" | "land" | "ranch";
 
 /** A lot as sent to clients. */
@@ -19,6 +21,8 @@ export type LotSnapshot = {
   price: number;
   /** Listed for resale by its owner (reserved for a later release). */
   forSale: boolean;
+  /** Ranch lots: the buildings to draw on it (src/lib/ranchUpgrades.ts). */
+  ranch?: RanchLook;
 };
 
 /** One plantable cell of a garden, in template tile units. */

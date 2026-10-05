@@ -8,6 +8,7 @@ import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 import { adjustStock, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
 import { regardHelped } from "@/lib/mind/regard";
+import { deliverOrder, takeOrder } from "@/lib/ordersServer";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Gave you code ${sponsor.discountCode}${lead ? "" : " — sponsor paused"})` });
       const c = getContainer();
       await recordSponsorEvent({ attribution: c.services.sponsorAttribution }, { sponsorId: sponsor.id, characterId: character.id, type: "discount_claimed", meta: { code: sponsor.discountCode } });
+    } else if (offer.type === "order" || offer.type === "deliver") {
+      const r = offer.type === "order" ? await takeOrder(npc, character.id, offer.itemKey) : await deliverOrder(npc, character.id, character.name, offer.itemKey);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      if (r.coins) gained.push({ itemKey: "coins", qty: r.coins, label: `${r.coins} coin` });
+      text = `${r.message} "${offer.line}"`;
+      await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(${r.message})` });
     } else if (offer.type === "gift") {
       await addItem(character.id, offer.itemKey, 1);
       gained.push({ itemKey: offer.itemKey, qty: 1 });

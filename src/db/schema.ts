@@ -31,6 +31,7 @@ import type { SponsorEvent } from "@/types/sponsor";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { MindDecision, MindIntent, MindMemory, NpcStock } from "@/types/mind";
+import type { RanchBuildKey, RanchJob } from "@/types/ranchGrowth";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { BountyData, BountyReward } from "@/types/bounty";
@@ -197,6 +198,8 @@ export const animals = pgTable("animals", {
   mood: text("mood").notNull().default("content"),
   hunger: integer("hunger").notNull().default(20), // 0 full - 100 starving
   pets: integer("pets").notNull().default(0),
+  /** Ranch animals: how much they love their keeper (0–100); more means better goods. */
+  affection: integer("affection").notNull().default(0),
   lastFedAt: timestamp("last_fed_at").defaultNow().notNull(),
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
@@ -719,6 +722,34 @@ export const npcRegard = pgTable(
     lastGiftAt: timestamp("last_gift_at"),
   },
   (t) => [uniqueIndex("npc_regard_pk").on(t.npcId, t.characterId)],
+);
+
+/** How a ranch has grown (src/lib/ranchUpgrades.ts): farm XP, coop / barn
+ *  levels, the silo's feed, buildings and the workshop's jobs. */
+export const ranchState = pgTable("ranch_state", {
+  lotKey: text("lot_key").primaryKey(),
+  farmXp: integer("farm_xp").notNull().default(0),
+  coopLevel: integer("coop_level").notNull().default(1),
+  barnLevel: integer("barn_level").notNull().default(1),
+  silo: jsonb("silo").$type<Record<string, number>>().notNull().default({}),
+  machines: jsonb("machines").$type<RanchBuildKey[]>().notNull().default([]),
+  jobs: jsonb("jobs").$type<RanchJob[]>().notNull().default([]),
+  hivesAt: timestamp("hives_at"),
+});
+
+/** A player's standing order with an NPC with a mind: so many of an item a week. */
+export const standingOrders = pgTable(
+  "standing_orders",
+  {
+    id: serial("id").primaryKey(),
+    npcId: integer("npc_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    itemKey: text("item_key").notNull(),
+    qtyPerWeek: integer("qty_per_week").notNull(),
+    delivered: integer("delivered").notNull().default(0),
+    weekStart: timestamp("week_start").notNull(),
+  },
+  (t) => [uniqueIndex("standing_orders_pk").on(t.npcId, t.characterId, t.itemKey)],
 );
 
 /** Bounties posted on a town's notice board (src/lib/bounties.ts). */

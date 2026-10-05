@@ -164,6 +164,21 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
 - Admin: `GET /api/mind?npcKey=…` (state, last decision with probabilities),
   `POST /api/mind { npcKey, stock?, purse?, think? }`.
 
+## Ranch growth and standing orders
+
+A ranch grows (`src/lib/ranchUpgrades.ts` rules, `ranchServer.ts` server,
+`ranch_state` table): farm XP from goods, processing and deliveries unlocks
+coop / barn levels (bigger caps via `capFor`), a silo and feeder (tickd's
+`tickRanches` feeds hungry animals from the silo every 5 min), and machines
+(mill, cheese press, loom, beehives) whose jobs finish on a timer. Building
+costs coins, wood, stone and Bjorn's fittings. Petting raises `animals.affection`,
+which gives a chance (up to 40%) of quality goods (golden egg, fine wool, rich milk).
+Built things are drawn on the lot from `LotSnapshot.ranch` (`src/game/ranchProps.ts`).
+
+NPCs with a mind offer **standing orders** (`profile.orders`, `ordersServer.ts`,
+`standing_orders`): a player supplies so many of an item a week. Deliveries are
+paid from the NPC's purse and go into its stock; filling the week pays a bonus.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

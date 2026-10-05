@@ -1,5 +1,7 @@
 // Ranch plots (src/lib/ranch.ts): owned animals and their produce. Types only.
 
+import type { RanchGrowthView } from "./ranchGrowth";
+
 export type RanchSpecies = "chicken" | "sheep" | "cow";
 
 /** What a ranch can raise: price, how many fit, and what each makes. */
@@ -23,6 +25,10 @@ export type RanchAnimalView = {
   name: string;
   species: string;
   hunger: number;
+  /** 0–100: how much it loves you; more means better goods. */
+  affection: number;
+  /** Can be petted for affection again (once a day). */
+  pettable: boolean;
   /** Produce waiting to be collected. */
   ready: number;
   /** Ms until the next one (null when hungry or full). */
@@ -40,4 +46,6 @@ export type RanchView = {
   /** Crops in your bag that animals eat. */
   feed: { itemKey: string; qty: number }[];
   coins: number;
+  /** Farm level, buildings, workshop (owner only). */
+  growth: RanchGrowthView | null;
 };

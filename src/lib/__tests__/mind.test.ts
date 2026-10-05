@@ -20,7 +20,7 @@ const MIN_BAKE_GAP_MS = BAKER.minCraftGapMs;
 const NOW = 10_000_000_000;
 const view = (over: Partial<MindView> = {}): MindView => ({
   now: NOW, hour: 10, weather: "clear", name: "Marigold", atHome: true, onTrip: false, intent: "", errandArrived: false,
-  stock: { flour: 12, egg: 6, bread: 2, honey_bun: 1 }, purse: 40, lastCraftAt: NOW - 3600_000,
+  stock: { flour: 12, egg: 6, honey: 2, bread: 2, honey_bun: 1 }, purse: 40, lastCraftAt: NOW - 3600_000,
   table: { left: 0, itemKey: "bread", bakedAt: NOW - 3600_000 }, requests: [], nearby: [], memories: [],
   ...over,
 });
@@ -64,7 +64,7 @@ describe("what she can do", () => {
 describe("the scripted policy", () => {
   it("goes home first, then bakes what the shelf lacks, then restocks", () => {
     expect(scriptedPick(view({ atHome: false }), feasibleActions(view({ atHome: false })))).toBe("go_home");
-    const v = view({ stock: { flour: 12, egg: 6, bread: 6, honey_bun: 0 } });
+    const v = view({ stock: { flour: 12, egg: 6, honey: 2, bread: 6, honey_bun: 0 } });
     expect(scriptedPick(v, feasibleActions(v))).toBe("bake_buns");
     const low = view({ stock: { flour: 2, egg: 6 }, table: { left: 3, itemKey: "bread", bakedAt: NOW - 60_000 } });
     expect(scriptedPick(low, feasibleActions(low))).toBe("buy_flour");
