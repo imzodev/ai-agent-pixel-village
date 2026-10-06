@@ -32,6 +32,12 @@ export const ROAD = { tx0: -770, tx1: -25, ty0: 6, ty1: 8 } as const;
 const BARRIER_TY0 = -300;
 const BARRIER_TY1 = 314;
 
+/** The Greyspine caverns lie under the sea far north of the continent
+ *  (reached only by the cave mouth's ladder). They moved north with the
+ *  bigger continent (src/lib/continent.ts CONTINENT); every cavern
+ *  coordinate is written relative to this shift. */
+export const CAVE_DY = -1120;
+
 export const REGIONS: Region[] = [
   { key: "meadow", name: "the Western Meadow", tx0: -120, tx1: -25, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
   { key: "whisperwood", name: "Whisperwood", tx0: -288, tx1: -121, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
@@ -39,7 +45,7 @@ export const REGIONS: Region[] = [
   { key: "greyspine", name: "the Greyspine Mountains", tx0: -576, tx1: -385, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
   { key: "silverrun", name: "the Silverrun", tx0: -648, tx1: -577, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
   { key: "brightwater", name: "Brightwater", tx0: -800, tx1: -649, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
-  { key: "caverns", name: "the Greyspine Caverns", tx0: -528, tx1: -409, ty0: -480, ty1: -436 },
+  { key: "caverns", name: "the Greyspine Caverns", tx0: -528, tx1: -409, ty0: -480 + CAVE_DY, ty1: -436 + CAVE_DY },
 ];
 const regionByKey = (k: string) => REGIONS.find((r) => r.key === k)!;
 /** Inside this strip, open ground uses the detailed Wilds grass. */
@@ -148,7 +154,7 @@ const QUAY: TileBox = { tx0: -620, tx1: -618, ty0: -4, ty1: 16 };
 export const CAVE_MOUTH_TX = -480;
 export const CAVE_MOUTH_AREA = { tx0: CAVE_MOUTH_TX - 2, tx1: CAVE_MOUTH_TX + 2, ty0: -1, ty1: 1 } as const;
 /** The ladder out of the caverns: the wall-face tile above the entry hall. */
-export const CAVE_EXIT_TILE = { tx: -423, ty: -447 } as const;
+export const CAVE_EXIT_TILE = { tx: -423, ty: -447 + CAVE_DY } as const;
 
 /** Resource nodes of the generated regions (seeded by src/lib/seed.ts);
  *  props and trees keep clear of them. */
@@ -162,11 +168,11 @@ export const REGION_NODES: RegionNode[] = [
   { kind: "rock", itemKey: "stone", tx: -500, ty: 3 }, { kind: "rock", itemKey: "stone", tx: -530, ty: 11 },
   { kind: "rock", itemKey: "stone", tx: -560, ty: 3 },
   // The Greyspine caverns
-  { kind: "rock", itemKey: "stone", tx: -420, ty: -442 }, { kind: "rock", itemKey: "stone", tx: -480, ty: -450 },
-  { kind: "rock", itemKey: "stone", tx: -470, ty: -441 }, { kind: "rock", itemKey: "stone", tx: -490, ty: -473 },
-  { kind: "rock", itemKey: "stone", tx: -475, ty: -474 }, { kind: "rock", itemKey: "stone", tx: -517, ty: -447 },
-  { kind: "mushroom_ring", itemKey: "mushroom", tx: -485, ty: -445 }, { kind: "mushroom_ring", itemKey: "mushroom", tx: -500, ty: -472 },
-  { kind: "mushroom_ring", itemKey: "mushroom", tx: -515, ty: -443 },
+  { kind: "rock", itemKey: "stone", tx: -420, ty: -442 + CAVE_DY }, { kind: "rock", itemKey: "stone", tx: -480, ty: -450 + CAVE_DY },
+  { kind: "rock", itemKey: "stone", tx: -470, ty: -441 + CAVE_DY }, { kind: "rock", itemKey: "stone", tx: -490, ty: -473 + CAVE_DY },
+  { kind: "rock", itemKey: "stone", tx: -475, ty: -474 + CAVE_DY }, { kind: "rock", itemKey: "stone", tx: -517, ty: -447 + CAVE_DY },
+  { kind: "mushroom_ring", itemKey: "mushroom", tx: -485, ty: -445 + CAVE_DY }, { kind: "mushroom_ring", itemKey: "mushroom", tx: -500, ty: -472 + CAVE_DY },
+  { kind: "mushroom_ring", itemKey: "mushroom", tx: -515, ty: -443 + CAVE_DY },
 ];
 /** Other spots that must stay open: river NPCs and the pier's dock. */
 const KEEP_OPEN: [number, number][] = [[-632, 3], [-628, 11], [-615, 2], ...REGION_NODES.map((n): [number, number] => [n.tx, n.ty])];
@@ -225,13 +231,13 @@ export const PIER: TileBox = { tx0: -618, tx1: -614, ty0: 1, ty1: 2 };
 // ── Caverns ──────────────────────────────────────────────────────────────
 /** Open floor of the caverns: rooms and the tunnels joining them. */
 export const CAVERN_FLOOR: ReadonlyArray<TileBox> = [
-  { tx0: -432, tx1: -414, ty0: -446, ty1: -439 }, // entry hall (ladder up)
-  { tx0: -462, tx1: -433, ty0: -444, ty1: -442 }, // east tunnel (mine rails)
-  { tx0: -490, tx1: -463, ty0: -455, ty1: -439 }, // crystal hall
-  { tx0: -481, tx1: -477, ty0: -470, ty1: -456 }, // north tunnel (mine rails)
-  { tx0: -505, tx1: -466, ty0: -476, ty1: -471 }, // deep gallery
-  { tx0: -509, tx1: -491, ty0: -447, ty1: -445 }, // west tunnel
-  { tx0: -524, tx1: -510, ty0: -453, ty1: -440 }, // west den
+  { tx0: -432, tx1: -414, ty0: -446 + CAVE_DY, ty1: -439 + CAVE_DY }, // entry hall (ladder up)
+  { tx0: -462, tx1: -433, ty0: -444 + CAVE_DY, ty1: -442 + CAVE_DY }, // east tunnel (mine rails)
+  { tx0: -490, tx1: -463, ty0: -455 + CAVE_DY, ty1: -439 + CAVE_DY }, // crystal hall
+  { tx0: -481, tx1: -477, ty0: -470 + CAVE_DY, ty1: -456 + CAVE_DY }, // north tunnel (mine rails)
+  { tx0: -505, tx1: -466, ty0: -476 + CAVE_DY, ty1: -471 + CAVE_DY }, // deep gallery
+  { tx0: -509, tx1: -491, ty0: -447 + CAVE_DY, ty1: -445 + CAVE_DY }, // west tunnel
+  { tx0: -524, tx1: -510, ty0: -453 + CAVE_DY, ty1: -440 + CAVE_DY }, // west den
 ];
 const TUNNELS = [CAVERN_FLOOR[1], CAVERN_FLOOR[3], CAVERN_FLOOR[5]];
 const CAVERNS = regionByKey("caverns");

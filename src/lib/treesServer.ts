@@ -9,6 +9,7 @@ import { and, eq, gt, isNull, lt, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import { felledTrees } from "@/db/schema";
 import { setFelledTrees, treeAt } from "./regions";
+import { dropChunks } from "./chunkCache";
 import { unregisterChunk } from "./chunkCollision";
 import { TREE_HITS, TREE_HITS_RESET_MS, TREE_REGROW_MS, treeChunks, treeKey } from "./trees";
 import type { ChopTreeResult, ChunkRef } from "@/types/trees";
@@ -32,6 +33,7 @@ function apply(next: Set<string>): ChunkRef[] {
     for (const c of treeChunks(vx, vy)) chunks.set(`${c.cx},${c.cy}`, c);
   }
   for (const c of chunks.values()) unregisterChunk(c.cx, c.cy);
+  dropChunks([...chunks.values()]); // served chunks must show the change
   return [...chunks.values()];
 }
 

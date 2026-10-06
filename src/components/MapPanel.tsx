@@ -12,10 +12,24 @@ import type { BountyView } from "@/types/bounty";
 import type { EncounterView } from "@/types/encounter";
 import { boardPoint } from "@/lib/bounties";
 
-const images = new Map<string, HTMLImageElement>(); // map tiles, shared across opens
+const images = new Map<string, HTMLImageElement>(); // map tiles, shared across opens (bounded)
+const IMAGES_CAP = 800;
+/** A map tile image, requested once; one that isn't ready yet (the server is
+ *  still building the world overview) is asked for again a few seconds later. */
+function tileImage(version: string, z: number, mx: number, my: number): HTMLImageElement {
+  const key = `${version}/${z}/${mx}/${my}`;
+  let img = images.get(key);
+  if (img) return img;
+  img = new Image();
+  img.onerror = () => { setTimeout(() => { if (images.get(key) === img) images.delete(key); }, 4000); };
+  img.src = `/api/map/tile/${z}/${mx}/${my}?v=${version}`;
+  images.set(key, img);
+  if (images.size > IMAGES_CAP) images.delete(images.keys().next().value!);
+  return img;
+}
 const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️" } as const;
 const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔", vineyard: "🍇", workshop: "🪚" } as const;
-const MIN_SCALE = 1 / 16, MAX_SCALE = 4;
+const MIN_SCALE = 1 / 32, MAX_SCALE = 4;
 
 export default function MapPanel({ me, guide, bounties = [], encounters = [], extraSeen, travelMode, onClose, onMessage }: {
   me: { x: number; y: number } | null;
@@ -78,17 +92,14 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
     const tx1 = camX / 16 + W / 2 / scale, ty1 = camY / 16 + H / 2 / scale;
 
     // map tiles at the zoom that fits the scale
-    const z = Math.max(0, Math.min(MAP_MAX_ZOOM, Math.floor(Math.log2(1 / scale) + 0.5)));
-    const k = 2 ** z, tw = MAP_TILE_W * k, th = MAP_TILE_H * k;
-    for (let my = Math.floor(ty0 / th); my <= Math.floor(ty1 / th); my++) for (let mx = Math.floor(tx0 / tw); mx <= Math.floor(tx1 / tw); mx++) {
-      const key = `${markers.version}/${z}/${mx}/${my}`;
-      let img = images.get(key);
-      if (!img) {
-        img = new Image();
-        img.src = `/api/map/tile/${z}/${mx}/${my}?v=${markers.version}`;
-        images.set(key, img);
+    // (a coarser zoom underneath, so the view is never blank while finer tiles load)
+    const zFit = Math.max(0, Math.min(MAP_MAX_ZOOM, Math.floor(Math.log2(1 / scale) + 0.5)));
+    for (const z of zFit + 2 <= MAP_MAX_ZOOM ? [zFit + 2, zFit] : [zFit]) {
+      const k = 2 ** z, tw = MAP_TILE_W * k, th = MAP_TILE_H * k;
+      for (let my = Math.floor(ty0 / th); my <= Math.floor(ty1 / th); my++) for (let mx = Math.floor(tx0 / tw); mx <= Math.floor(tx1 / tw); mx++) {
+        const img = tileImage(markers.version, z, mx, my);
+        if (img.complete && img.naturalWidth) g.drawImage(img, sx(mx * tw * 16), sy(my * th * 16), tw * scale, th * scale);
       }
-      if (img.complete && img.naturalWidth) g.drawImage(img, sx(mx * tw * 16), sy(my * th * 16), tw * scale, th * scale);
     }
 
     // fog of war, per chunk (edges next to explored ground are lighter)

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { defaultChunk } from "@/lib/chunkGen";
+import { generatedChunkJson } from "@/lib/chunkCache";
 import { readAuthored, restyleAuthored } from "@/lib/villageRestyle";
 import { ensureFelledLoaded } from "@/lib/treesServer";
 
@@ -30,8 +30,8 @@ export async function GET(
     }
 
     await ensureFelledLoaded(); // felled trees are left out of the terrain
-    return NextResponse.json(defaultChunk(cx, cy), {
-      headers: { "Cache-Control": "no-store" },
+    return new NextResponse(generatedChunkJson(cx, cy), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -3,7 +3,9 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { terrainAt } from "@/lib/regions";
-import { CONTINENT, HEARTLAND, biomeAt, continentAt, elevation, inHeartland } from "@/lib/continent";
+import { CONTINENT, HEARTLAND, PROVINCES, biomeAt, continentAt, elevation, inHeartland } from "@/lib/continent";
+import { ROADS, TOWNS } from "@/lib/settlements";
+import { CAVE_EXIT_TILE, regionAt } from "@/lib/regions";
 import { nearRoad } from "@/lib/settlements";
 import type { Biome } from "@/types/continent";
 
@@ -79,5 +81,35 @@ describe("shores and ground edges", () => {
   it("swamp pools fade into the river; grounds meet each other, not a strip of grass", () => {
     expect(cells.some((c) => c.ground.startsWith("swamp_mix_"))).toBe(true);
     expect(cells.some((c) => /^\w+_on_\w+_\d+$/.test(c.ground))).toBe(true);
+  });
+});
+
+describe("the bigger world (10× the area)", () => {
+  it("is about ten times the old 1,200 × 750 continent", () => {
+    const area = (CONTINENT.tx1 - CONTINENT.tx0 + 1) * (CONTINENT.ty1 - CONTINENT.ty0 + 1);
+    expect(area / (1200 * 750)).toBeGreaterThan(9.5);
+    expect(area / (1200 * 750)).toBeLessThan(10.5);
+  });
+  it("keeps every town and its road on open land", () => {
+    for (const t of TOWNS) {
+      for (const [x, y] of [[t.sq.tx + 12, t.sq.ty + 7], [t.box.tx0, t.box.ty0], [t.box.tx1, t.box.ty1]]) {
+        expect(elevation(x, y), `${t.name} at ${x},${y}`).toBeGreaterThan(0.33);
+        expect(elevation(x, y), `${t.name} at ${x},${y}`).toBeLessThan(0.78);
+      }
+    }
+    for (const road of ROADS) for (let i = 0; i < road.length; i += 10) {
+      const [x, y] = road[i];
+      if (!inHeartland(x, y)) expect(continentAt(x, y).collide ?? false, `road ${x},${y}`).toBe(false);
+    }
+  });
+  it("names about fifty provinces, all different", () => {
+    expect(PROVINCES.length).toBeGreaterThan(40);
+    expect(new Set(PROVINCES.map((p) => p.name)).size).toBe(PROVINCES.length);
+    expect(new Set(PROVINCES.map((p) => p.key)).size).toBe(PROVINCES.length);
+  });
+  it("puts the caverns under the sea north of the coast, and leaves their old spot to the overworld", () => {
+    expect(CAVE_EXIT_TILE.ty).toBeLessThan(CONTINENT.ty0 - 100);
+    expect(regionAt(-470 * 16, -450 * 16)?.key).not.toBe("caverns");
+    expect(regionAt(CAVE_EXIT_TILE.tx * 16, CAVE_EXIT_TILE.ty * 16)?.key).toBe("caverns");
   });
 });

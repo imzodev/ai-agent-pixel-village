@@ -47,7 +47,7 @@ import { planHunt } from "@/lib/hunt";
 import { postponeRegrowth, syncFelledTrees } from "@/lib/treesServer";
 import { trunkPoint } from "@/lib/trees";
 import type { ChunkRef } from "@/types/trees";
-import { isWalkableServer } from "@/lib/chunkCollisionServer";
+import { isWalkableServer, nearestOpenGround } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import { WANTED_DMG_MULT } from "@/lib/bounties";
 import { guardStep, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
@@ -361,7 +361,14 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   const now = Date.now();
   let guard = guards.get(auth.playerId);
   if (guard) resumeGuard(guard, now);
-  else { guard = newGuard(auth.x, auth.y, now); guards.set(auth.playerId, guard); }
+  else {
+    // A saved spot that's no longer walkable (the continent was regenerated
+    // around it): start on the nearest open ground instead.
+    const at = await nearestOpenGround(auth.x, auth.y);
+    if (at.x !== auth.x || at.y !== auth.y) await db.update(characters).set({ x: at.x, y: at.y }).where(eq(characters.id, auth.playerId));
+    guard = newGuard(at.x, at.y, now);
+    guards.set(auth.playerId, guard);
+  }
   void refreshBikeOwnership(auth.playerId).catch(() => {});
   const { cx, cy } = chunkAtWorldPx(guard.x, guard.y);
   const conn: Connection = {

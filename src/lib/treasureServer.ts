@@ -43,6 +43,25 @@ async function pickSpot(tier: number): Promise<{ tx: number; ty: number } | null
 }
 
 /**
+ * Undug maps whose X is no longer open, walkable ground (the continent was
+ * regenerated under it) get a new spot of the same tier; the sketch is drawn
+ * from the terrain, so it follows. Runs once per server start.
+ */
+export async function resiteTreasureMaps(): Promise<number> {
+  const undug = await db.select().from(treasureMaps).where(isNull(treasureMaps.dugAt));
+  let moved = 0;
+  for (const m of undug) {
+    const ok = !inHeartland(m.tx, m.ty) && openGround(m.tx, m.ty) && (await isWalkableServer(m.tx * 16 + 8, m.ty * 16 + 8));
+    if (ok) continue;
+    const spot = await pickSpot(m.tier);
+    if (!spot) continue;
+    await db.update(treasureMaps).set({ tx: spot.tx, ty: spot.ty }).where(eq(treasureMaps.id, m.id));
+    moved++;
+  }
+  return moved;
+}
+
+/**
  * Give a character a new treasure map. Returns how to announce it, or null
  * when their bag already holds MAX_MAPS undug maps (or no spot was found).
  */

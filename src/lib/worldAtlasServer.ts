@@ -20,17 +20,18 @@ import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
 import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
+import { mapOverview, tileFromOverview } from "./mapOverview";
 import { MAP_BOUNDS, MAP_MAX_ZOOM, MAP_TILE_CHUNKS, MAP_TILE_H, MAP_TILE_W, chunkInBounds, mapTileInBounds, mapTileRect, seenMasks } from "./worldAtlas";
 import type { MapMarkers, MapPlace, MapSourceJson, MapWaystone, SeenBlock, TilesetColors } from "@/types/map";
 
 /** Bump when the renderer changes, so cached tiles re-render. */
 const RENDER_VERSION = 1;
 const DATA_LAYERS = new Set(["Collision", "Interactive", "Garden"]);
-const CACHE_DIR = path.join(process.cwd(), ".cache", "map");
+export const CACHE_DIR = path.join(process.cwd(), ".cache", "map");
 
 // ── Tileset colours ──────────────────────────────────────────────────────
 const colorCache = new Map<string, Promise<TilesetColors | null>>();
-function tilesetColors(image: string, transparentBlack: boolean): Promise<TilesetColors | null> {
+export function tilesetColors(image: string, transparentBlack: boolean): Promise<TilesetColors | null> {
   const file = path.join(process.cwd(), "public", "assets", path.basename(image));
   const key = `${file}|${transparentBlack}`;
   let p = colorCache.get(key);
@@ -63,7 +64,7 @@ function tilesetColors(image: string, transparentBlack: boolean): Promise<Tilese
 }
 
 /** Composite a map's visible layers onto `px` (RGBA, `pw` px wide) at (ox, oy). */
-async function paint(src: MapSourceJson, px: Buffer, pw: number, ph: number, ox: number, oy: number, width: number): Promise<void> {
+export async function paint(src: MapSourceJson, px: Buffer, pw: number, ph: number, ox: number, oy: number, width: number): Promise<void> {
   const sets = [...src.tilesets].sort((a, b) => b.firstgid - a.firstgid);
   const colors = await Promise.all(sets.map((t) => (t.image ? tilesetColors(t.image, (t.transparentcolor ?? "").toLowerCase() === "#000000") : Promise.resolve(null))));
   for (const layer of src.layers) {
@@ -111,25 +112,12 @@ async function renderBase(mx: number, my: number): Promise<Buffer> {
   return px;
 }
 
-/** Zoom z: the four zoom z−1 tiles below, averaged 2×2. */
-async function renderZoom(z: number, mx: number, my: number): Promise<Buffer> {
-  const W = MAP_TILE_W, H = MAP_TILE_H;
-  const px = Buffer.alloc(W * H * 4);
-  for (let q = 0; q < 4; q++) {
-    const sx = q % 2, sy = Math.floor(q / 2);
-    if (!mapTileInBounds(z - 1, mx * 2 + sx, my * 2 + sy)) continue;
-    const child = await tileRaw(z - 1, mx * 2 + sx, my * 2 + sy);
-    for (let y = 0; y < H / 2; y++) for (let x = 0; x < W / 2; x++) {
-      let r = 0, g = 0, b = 0, a = 0;
-      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
-        const o = ((y * 2 + dy) * W + x * 2 + dx) * 4, al = child[o + 3];
-        r += child[o] * al; g += child[o + 1] * al; b += child[o + 2] * al; a += al;
-      }
-      const o = ((sy * H / 2 + y) * W + sx * W / 2 + x) * 4;
-      if (a > 0) { px[o] = r / a; px[o + 1] = g / a; px[o + 2] = b / a; px[o + 3] = Math.round(a / 4); }
-    }
-  }
-  return px;
+/** Zoom z ≥ 1: cut from the whole-world overview (src/lib/mapOverview.ts),
+ *  so no chunk is generated however far out the map is zoomed. Null while
+ *  the overview is still being built. */
+async function renderZoom(z: number, mx: number, my: number): Promise<Buffer | null> {
+  const o = mapOverview(CACHE_DIR, await mapVersion());
+  return o ? tileFromOverview(o, mapTileRect(z, mx, my), z, MAP_TILE_W, MAP_TILE_H) : null;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────
@@ -150,13 +138,13 @@ export function mapVersion(): Promise<string> {
   return versionMemo;
 }
 
-const raw = new Map<string, Promise<Buffer>>(); // in-memory RGBA (bounded below)
+const raw = new Map<string, Promise<Buffer>>(); // in-memory RGBA of zoom-0 tiles (bounded below)
 const RAW_CAP = 400;
-function tileRaw(z: number, mx: number, my: number): Promise<Buffer> {
-  const key = `${z}/${mx}/${my}`;
+function tileRaw(mx: number, my: number): Promise<Buffer> {
+  const key = `${mx}/${my}`;
   let p = raw.get(key);
   if (p) { raw.delete(key); raw.set(key, p); return p; }
-  p = z === 0 ? renderBase(mx, my) : renderZoom(z, mx, my);
+  p = renderBase(mx, my);
   raw.set(key, p);
   p.catch(() => raw.delete(key));
   if (raw.size > RAW_CAP) raw.delete(raw.keys().next().value!);
@@ -169,7 +157,7 @@ export async function mapPatchRaw(tx0: number, ty0: number, w: number, h: number
   for (let my = Math.floor(ty0 / MAP_TILE_H); my <= Math.floor((ty0 + h - 1) / MAP_TILE_H); my++) {
     for (let mx = Math.floor(tx0 / MAP_TILE_W); mx <= Math.floor((tx0 + w - 1) / MAP_TILE_W); mx++) {
       if (!mapTileInBounds(0, mx, my)) continue;
-      const src = await tileRaw(0, mx, my);
+      const src = await tileRaw(mx, my);
       for (let y = 0; y < h; y++) {
         const sy = ty0 + y - my * MAP_TILE_H;
         if (sy < 0 || sy >= MAP_TILE_H) continue;
@@ -186,14 +174,17 @@ export async function mapPatchRaw(tx0: number, ty0: number, w: number, h: number
 
 const EMPTY = sharp({ create: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
 
-/** The PNG of map tile (z, mx, my): from disk if rendered before. */
-export async function mapTilePng(z: number, mx: number, my: number): Promise<Buffer> {
+/** The PNG of map tile (z, mx, my): from disk if rendered before; null while
+ *  the overview it's cut from is still being built (try again shortly). */
+export async function mapTilePng(z: number, mx: number, my: number): Promise<Buffer | null> {
   if (!Number.isInteger(z) || z < 0 || z > MAP_MAX_ZOOM || !Number.isInteger(mx) || !Number.isInteger(my) || !mapTileInBounds(z, mx, my)) return EMPTY;
   const file = path.join(CACHE_DIR, await mapVersion(), String(z), `${mx}_${my}.png`);
   try {
     return await fs.promises.readFile(file);
   } catch { /* not rendered yet */ }
-  const png = await sharp(await tileRaw(z, mx, my), { raw: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4 } }).png().toBuffer();
+  const px = z === 0 ? await tileRaw(mx, my) : await renderZoom(z, mx, my);
+  if (!px) return null;
+  const png = await sharp(px, { raw: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4 } }).png().toBuffer();
   await fs.promises.mkdir(path.dirname(file), { recursive: true }).then(() => fs.promises.writeFile(file, png)).catch(() => {});
   return png;
 }

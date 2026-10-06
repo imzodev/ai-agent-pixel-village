@@ -273,7 +273,7 @@ const chunkStates = new Map<string, ChunkState>();
 
 // In-flight lazy loads keyed by cache key. Concurrent callers awaiting the
 // same chunk share one Promise and one network request.
-const inFlightLoads = new Map<string, Promise<ChunkLoadResult>>();
+const inFlightLoads = new Map<string, Promise<boolean>>();
 
 /**
  * Drop all module-global chunk/render state. These maps outlive a Phaser
@@ -320,9 +320,10 @@ function sceneAlive(scene: Phaser.Scene): boolean {
 // original GID array is gone. Mutating the JSON before
 // scene.make.tilemap({ key }) is the only window where we still have it.
 //
-// Idempotent: the second call sees all-zero SORTED_LAYERS GIDs (because
-// we zeroed them on the first call) and produces an empty sortedTiles list,
-// so a cache-hit loadChunk behaves like the network path on re-entry.
+// Idempotent: the first call zeroes the SORTED_LAYERS GIDs in the cached
+// JSON, so its lift result is kept (liftByKey) and every later call for the
+// same cached chunk returns it again — a chunk prefetched, or rebuilt after
+// leaving the window, keeps its tree crowns.
 //
 // Exported so buildingStamps.ts can apply the same lift/anchor pass to
 // building template JSONs (which use the same layer schema as chunks).
@@ -337,9 +338,24 @@ export function parseCachedTilemap(scene: Phaser.Scene, key: string): ChunkLoadR
       anchorByObjectId: new Map(),
     };
   }
-  const { sortedTiles, anchorGrid, anchorByObjectId } = extractFromChunkJson(json);
+  // Lifting zeroes the sorted tiles out of the cached JSON, so it can only
+  // happen once per cached copy: keep its result for every later parse
+  // (a prefetched chunk, a chunk rebuilt after leaving the window).
+  let lift = liftByKey.get(key);
+  if (!lift) { lift = extractFromChunkJson(json); liftByKey.set(key, lift); }
   const tilemap = scene.make.tilemap({ key }) ?? null;
-  return { tilemap, sortedTiles, anchorGrid, anchorByObjectId };
+  return { tilemap, ...lift };
+}
+
+/** The lifted tiles of each cached chunk JSON (see parseCachedTilemap). Plain
+ *  data tied to the game-wide tilemap cache, not to a scene, so it survives
+ *  scene restarts; dropped whenever that cached JSON is removed or replaced. */
+const liftByKey = new Map<string, ReturnType<typeof extractFromChunkJson>>();
+
+/** Remove a chunk's cached JSON (and what was lifted from it). */
+function dropCachedChunk(scene: Phaser.Scene, key: string): void {
+  if (scene.sys.cache.tilemap.exists(key)) scene.sys.cache.tilemap.remove(key);
+  liftByKey.delete(key);
 }
 
 function emptyAnchorGrid(): AnchorGrid {
@@ -360,20 +376,28 @@ export function loadChunk(
   if (scene.sys.cache.tilemap.exists(key)) {
     return Promise.resolve(parseCachedTilemap(scene, key));
   }
+  return fetchChunkJson(scene, cx, cy).then((ok) =>
+    ok ? parseCachedTilemap(scene, key) : { tilemap: null, sortedTiles: [], anchorGrid: emptyAnchorGrid(), anchorByObjectId: new Map() },
+  );
+}
+
+// Fetch a chunk's JSON into the tilemap cache (no parsing). Concurrent
+// callers share one request; resolves false when it failed.
+function fetchChunkJson(scene: Phaser.Scene, cx: number, cy: number): Promise<boolean> {
+  const key = chunkKey(cx, cy);
   const inflight = inFlightLoads.get(key);
   if (inflight) return inflight;
-
-  const promise = new Promise<ChunkLoadResult>((resolve) => {
+  const promise = new Promise<boolean>((resolve) => {
     const onComplete = (loadedKey: string) => {
       if (loadedKey !== key) return;
       cleanup();
-      resolve(parseCachedTilemap(scene, key));
+      resolve(true);
     };
     const onError = (file: { key?: string } | undefined) => {
       if (!file || file.key !== key) return;
       cleanup();
       console.warn(`[worldTilemap] failed to load chunk ${key} (url=${`/api/chunks/${cx}/${cy}`})`);
-      resolve({ tilemap: null, sortedTiles: [], anchorGrid: emptyAnchorGrid(), anchorByObjectId: new Map() });
+      resolve(false);
     };
     const cleanup = () => {
       scene.load.off("filecomplete", onComplete);
@@ -387,6 +411,13 @@ export function loadChunk(
   inFlightLoads.set(key, promise);
   void promise.finally(() => inFlightLoads.delete(key));
   return promise;
+}
+
+/** Fetch a chunk's JSON into the cache without parsing it (built later, when
+ *  the player gets near). Shares the in-flight request with loadChunk. */
+function prefetchChunk(scene: Phaser.Scene, cx: number, cy: number): void {
+  if (scene.sys.cache.tilemap.exists(chunkKey(cx, cy))) return;
+  void fetchChunkJson(scene, cx, cy);
 }
 
 function extractFromChunkJson(
@@ -791,17 +822,37 @@ function instantiateSortedTile(
 // not yet seen are streamed via loadChunk. A chunk whose JSON fails to
 // load (e.g. 404) is silently skipped so the camera can keep streaming the
 // remaining ones.
+/** Chunks beyond the window whose JSON is fetched ahead, so walking (or
+ *  riding) into them never waits on the network. */
+const PREFETCH_RADIUS = 3;
+/** Chunks kept built in memory; past this, the farthest are freed entirely
+ *  (map data, cached JSON, collision), so memory stays flat however far you go. */
+const MAX_KEPT_CHUNKS = 120;
+/** The chunk the window is centred on now (an older load must not build behind it). */
+let windowCenter: { cx: number; cy: number } | null = null;
+
 export async function ensureChunks(
   scene: Phaser.Scene,
   { cx, cy }: { cx: number; cy: number },
 ): Promise<void> {
   if (!sceneAlive(scene)) return;
-  const { chunks } = getActiveWindow(scene, { cx, cy });
-  for (const c of chunks) {
+  windowCenter = { cx, cy };
+  // Nearest first, all requested at once: the ones under the player arrive
+  // first instead of waiting behind the whole window.
+  const dist = (c: { cx: number; cy: number }) => Math.max(Math.abs(c.cx - cx), Math.abs(c.cy - cy));
+  const chunks = getActiveWindow(scene, { cx, cy }).chunks.sort((a, b) => dist(a) - dist(b));
+  const loads = chunks.map((c) => (chunkStates.has(chunkKey(c.cx, c.cy)) ? null : loadChunk(scene, c.cx, c.cy)));
+  // Then the ring beyond, JSON only (built if the player gets there).
+  for (let dx = -PREFETCH_RADIUS; dx <= PREFETCH_RADIUS; dx++) for (let dy = -PREFETCH_RADIUS; dy <= PREFETCH_RADIUS; dy++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) === PREFETCH_RADIUS) prefetchChunk(scene, cx + dx, cy + dy);
+  }
+  for (let i = 0; i < chunks.length; i++) {
     // The scene can be shut down at any await boundary (StrictMode remount,
     // HMR, scene restart). Bail before touching Phaser with a dead scene.
     if (!sceneAlive(scene)) return;
-    const state = chunkStates.get(chunkKey(c.cx, c.cy));
+    const c = chunks[i];
+    const key = chunkKey(c.cx, c.cy);
+    const state = chunkStates.get(key);
     if (state) {
       // Guard against a state entry left over from a previous scene
       // instance (its tilemap belongs to a destroyed scene).
@@ -809,13 +860,37 @@ export async function ensureChunks(
       buildChunkLayers(state, chunkOrigin(c.cx, c.cy));
       continue;
     }
-    const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = await loadChunk(scene, c.cx, c.cy);
+    // (evicted by another call since the snapshot: load it now)
+    const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = await (loads[i] ?? loadChunk(scene, c.cx, c.cy));
     if (!sceneAlive(scene)) return;
     if (!tilemap) continue;
+    // The player moved on while this loaded: don't build outside the new window.
+    const now = windowCenter;
+    if (now && Math.max(Math.abs(c.cx - now.cx), Math.abs(c.cy - now.cy)) > WINDOW_RADIUS) continue;
+    if (chunkStates.has(key)) continue; // a newer call built it meanwhile
     registerCollisionIfNeeded(scene, c.cx, c.cy);
     const fresh = buildChunkState(tilemap, sortedTiles, anchorGrid, anchorByObjectId);
-    chunkStates.set(chunkKey(c.cx, c.cy), fresh);
+    chunkStates.set(key, fresh);
     buildChunkLayers(fresh, chunkOrigin(c.cx, c.cy));
+  }
+  evictFar(scene, { cx, cy });
+}
+
+/** Free the farthest chunks once more than MAX_KEPT_CHUNKS are kept. */
+function evictFar(scene: Phaser.Scene, { cx, cy }: { cx: number; cy: number }): void {
+  if (chunkStates.size <= MAX_KEPT_CHUNKS) return;
+  const far = [...chunkStates.keys()]
+    .map((key) => { const [, x, y] = key.split("_"); return { key, cx: Number(x), cy: Number(y) }; })
+    .filter((c) => Math.max(Math.abs(c.cx - cx), Math.abs(c.cy - cy)) > PREFETCH_RADIUS)
+    .sort((a, b) => Math.max(Math.abs(b.cx - cx), Math.abs(b.cy - cy)) - Math.max(Math.abs(a.cx - cx), Math.abs(a.cy - cy)));
+  for (const c of far.slice(0, chunkStates.size - MAX_KEPT_CHUNKS)) {
+    const state = chunkStates.get(c.key)!;
+    destroyChunkLayers(state);
+    destroySortedSprites(state);
+    state.tilemap.destroy();
+    chunkStates.delete(c.key);
+    dropCachedChunk(scene, c.key);
+    unregisterChunk(c.cx, c.cy);
   }
 }
 
@@ -855,7 +930,7 @@ export function releaseOutside(
 export async function reloadChunk(scene: Phaser.Scene, cx: number, cy: number, around: { cx: number; cy: number }): Promise<void> {
   const key = chunkKey(cx, cy);
   if (!chunkStates.has(key)) {
-    if (scene.sys.cache.tilemap.exists(key)) scene.sys.cache.tilemap.remove(key);
+    dropCachedChunk(scene, key);
     unregisterChunk(cx, cy);
     return;
   }
@@ -877,7 +952,7 @@ export async function reloadChunk(scene: Phaser.Scene, cx: number, cy: number, a
   }
   // Same shape Phaser's tilemapTiledJSON loader caches: { format, data }
   // (format 1 = Phaser.Tilemaps.Formats.TILED_JSON).
-  if (scene.sys.cache.tilemap.exists(key)) scene.sys.cache.tilemap.remove(key);
+  dropCachedChunk(scene, key);
   scene.sys.cache.tilemap.add(key, { format: 1, data: json });
   unregisterChunk(cx, cy);
   // The map is cached now, so this rebuilds it before the next frame.

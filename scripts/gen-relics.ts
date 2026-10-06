@@ -65,8 +65,10 @@ function inTowns(): Spot[] {
 
 /** Pick `n` walkable spots from `cands`, each as far as can be from those already picked. */
 async function spread(cands: Spot[], n: number, seed: Spot[] = []): Promise<Spot[]> {
-  const ok: Spot[] = [];
-  for (const c of cands) if (await walkable(c)) ok.push(c);
+  // Walkability loads the spot's chunk, so it's checked only for the spots
+  // actually picked (a spot that fails is dropped and the next best tried),
+  // not for every candidate on the continent.
+  const ok = [...cands];
   const picked = [...seed];
   const out: Spot[] = [];
   while (out.length < n && ok.length) {
@@ -76,6 +78,7 @@ async function spread(cands: Spot[], n: number, seed: Spot[] = []): Promise<Spot
       if (d > bestD) { bestD = d; best = i; }
     }
     const [s] = ok.splice(best, 1);
+    if (!(await walkable(s))) continue;
     picked.push(s);
     out.push(s);
   }

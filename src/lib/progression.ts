@@ -6,6 +6,7 @@
 
 import type { BowDef, EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
 import { chunkRect, tileRect } from "./worldmap";
+import { CAVE_DY } from "./regions";
 
 export type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
 
@@ -93,7 +94,7 @@ export const ENEMY_ZONES: EnemyZone[] = [
   { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2, wolf: 3 }, target: 6 },
   { name: "greyspine pass", rect: tileRect(-576, 2, 192, 11), kinds: { boar: 2, bat: 2, thornling: 1 }, target: 6 },
   { name: "silverrun banks", rect: tileRect(-648, -45, 72, 105), kinds: { slime: 3 }, target: 4 },
-  { name: "greyspine caverns", rect: tileRect(-528, -480, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
+  { name: "greyspine caverns", rect: tileRect(-528, -480 + CAVE_DY, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
 ];
 
 /** The wild zone (x, y) roams in, with a small margin at the borders. */

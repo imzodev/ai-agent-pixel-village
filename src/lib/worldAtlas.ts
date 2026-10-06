@@ -19,8 +19,9 @@ export const MAP_MAX_ZOOM = 5;
 export const SEEN_BLOCK = 8;
 
 /** What the map renders (chunks): the continent (src/lib/continent.ts,
- *  cx −40…9, cy −24…25) and, up north, the Greyspine caverns. */
-export const MAP_BOUNDS: MapBounds = { cx0: -40, cx1: 9, cy0: -24, cy1: 33 };
+ *  cx −117…41, cy −80…80) and, far up north, the Greyspine caverns
+ *  (cy 104–107, src/lib/regions.ts CAVE_DY). */
+export const MAP_BOUNDS: MapBounds = { cx0: -117, cx1: 41, cy0: -80, cy1: 107 };
 
 /** Fast travel: free from beside a waystone, this much from anywhere else. */
 export const TRAVEL_COST = 10;

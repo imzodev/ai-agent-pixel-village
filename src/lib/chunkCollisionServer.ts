@@ -79,3 +79,24 @@ export async function arrivalPoint(door: { x: number; y: number }): Promise<{ x:
   }
   return door;
 }
+
+/** The village plaza, where someone with nowhere else to stand ends up. */
+const VILLAGE_SPAWN = { x: 32 * 16 + 8, y: 21 * 16 + 8 };
+
+/**
+ * The nearest spot a player can stand on, searching rings of tiles out to
+ * `maxTiles`; the village plaza when there's none (they stood on land that
+ * became sea when the continent was regenerated, say).
+ */
+export async function nearestOpenGround(x: number, y: number, maxTiles = 40): Promise<{ x: number; y: number }> {
+  if (await isWalkableServer(x, y)) return { x, y };
+  const tx = Math.floor(x / 16), ty = Math.floor(y / 16);
+  for (let r = 1; r <= maxTiles; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const p = { x: (tx + dx) * 16 + 8, y: (ty + dy) * 16 + 8 };
+      if (await isWalkableServer(p.x, p.y)) return p;
+    }
+  }
+  return VILLAGE_SPAWN;
+}

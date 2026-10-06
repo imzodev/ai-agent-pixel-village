@@ -99,7 +99,7 @@ describe("caverns", () => {
 describe("generator", () => {
   it("is deterministic, and beyond the continent is open sea", () => {
     expect(defaultChunk(-10, 1)).toEqual(defaultChunk(-10, 1));
-    const sea = defaultChunk(30, 30);
+    const sea = defaultChunk(60, 0); // tx 1440, well past the continent's east coast (CONTINENT.tx1 999)
     const collision = sea.layers.find((L) => L.name === "Collision")!;
     expect(collision.data.every((g) => g === 1)).toBe(true);
     for (const L of sea.layers) if (L.name !== "Ground" && L.name !== "Collision") expect(L.data.every((g) => g === 0), L.name).toBe(true);

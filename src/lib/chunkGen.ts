@@ -15,7 +15,7 @@ function emptyLayerData(width: number, height: number): number[] {
   return new Array(width * height).fill(0);
 }
 
-function fullTilesets() {
+export function fullTilesets() {
   return [
     { columns: 10, firstgid: 1, image: "../beginnertileset.png", imageheight: 160, imagewidth: 160, margin: 0, name: "beginnertileset", spacing: 0, tilecount: 100, tileheight: TILE_PX, tilewidth: TILE_PX, transparentcolor: "#000000" },
     { columns: 25, firstgid: 101, image: "../Floors.png", imageheight: 400, imagewidth: 400, margin: 0, name: "Floors", spacing: 0, tilecount: 625, tileheight: TILE_PX, tilewidth: TILE_PX, transparentcolor: "#000000" },

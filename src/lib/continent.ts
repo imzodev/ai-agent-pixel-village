@@ -1,4 +1,4 @@
-// The open continent: a 50 × 50-chunk world (1,200 × 750 tiles) around the
+// The open continent: a 158 × 160-chunk world (3,800 × 2,400 tiles) around the
 // hand-made heartland (src/lib/regions.ts: the King's Road, its towns, the
 // village, fields and ranches). Every tile outside the heartland is
 // generated here from seeded noise — elevation (a ragged coast, islands, a
@@ -8,15 +8,19 @@
 // Pure and deterministic: every process builds the same world.
 
 import { fbm, hash, noise } from "./terrain/noise";
+import { memoXY } from "./terrain/memo";
 import { isFelled } from "./terrain/felled";
-import { nearRoad, roadTile, roadV, townAt, townDecorAt, townPathV } from "./settlements";
+import { ROADS, TOWNS, nearRoad, roadTile, roadV, townAt, townDecorAt, townPathV } from "./settlements";
 import type { Biome, GroundKind, ProvinceSeed } from "@/types/continent";
 import type { Region, TerrainCell, TileBox } from "@/types/regions";
 
 export type { Biome, GroundKind } from "@/types/continent";
 
-/** The continent (tiles, inclusive): chunks cx −40…9, cy −24…25. Ocean beyond. */
-export const CONTINENT: TileBox = { tx0: -960, tx1: 239, ty0: -375, ty1: 374 };
+/** The continent (tiles, inclusive): chunks cx −117…41, cy −80…80. Ocean beyond. */
+export const CONTINENT: TileBox = { tx0: -2800, tx1: 999, ty0: -1200, ty1: 1199 };
+/** Feature size: the noise wavelengths grew with the world (×2 for a 10×
+ *  larger area), so lands, seas and biomes are proportionally bigger. */
+const WAVE = 2;
 /** The hand-made heartland (src/lib/regions.ts): the King's Road with its
  *  towns, and the village with its fields and ranches. Edges sit on the
  *  tree lattice's parity (odd west/north, even east/south), so no tree is
@@ -31,6 +35,12 @@ const SEA = 0.3;
 const MOUNTAIN = 0.78;
 /** The Greyspine range continues north and south of the pass as a crest. */
 const RIDGE = { tx0: -525, tx1: -435 };
+/** A second range splits the far west, with saddles to cross. */
+const WEST_RIDGE = { tx0: -1960, tx1: -1880 };
+/** Passes through the western range: one every this many tiles north–south. */
+const WEST_PASS_EVERY = 320;
+/** A great inland lake in the south-west. */
+const GREAT_LAKE = { x: -1500, y: 520, rx: 150, ry: 95 };
 /** The Old Rootking's clearing (BOSS_SPOT, src/lib/progression.ts) stays open. */
 const BOSS_TILE = { tx: 36, ty: -45 };
 
@@ -60,32 +70,70 @@ export function riverCenter(vy: number): number {
 /** The snow-melt lake the Silverrun flows out of. */
 const SOURCE_LAKE = { x: -613, y: -330, r: 15 };
 
+// ── Land kept for towns and roads ────────────────────────────────────────
+/** Coarse cells (8×8 tiles) along every town road: the land stays walkable there. */
+const KEEP_CELL = 8;
+const ROAD_KEEP: ReadonlySet<string> = (() => {
+  const out = new Set<string>();
+  for (const road of ROADS) for (const [x, y] of road) {
+    const cx = Math.floor(x / KEEP_CELL), cy = Math.floor(y / KEEP_CELL);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) out.add(`${cx + dx},${cy + dy}`);
+  }
+  return out;
+})();
+/** Tiles from the nearest town's box (Infinity when far). */
+function townDist(x: number, y: number): number {
+  let best = Infinity;
+  for (const t of TOWNS) {
+    const b = t.box;
+    const dx = x < b.tx0 ? b.tx0 - x : x > b.tx1 ? x - b.tx1 : 0;
+    const dy = y < b.ty0 ? b.ty0 - y : y > b.ty1 ? y - b.ty1 : 0;
+    best = Math.min(best, Math.max(dx, dy));
+  }
+  return best;
+}
+
 // ── Fields ───────────────────────────────────────────────────────────────
 /** Land height 0..1: < SEA is sea, > MOUNTAIN is rock. */
-export function elevation(x: number, y: number): number {
+export const elevation = memoXY(elevationRaw);
+function elevationRaw(x: number, y: number): number {
   if (x < CONTINENT.tx0 || x > CONTINENT.tx1 || y < CONTINENT.ty0 || y > CONTINENT.ty1) return 0;
   const cx = (CONTINENT.tx0 + CONTINENT.tx1) / 2, cy = (CONTINENT.ty0 + CONTINENT.ty1) / 2;
   const nx = Math.abs(x - cx) / ((CONTINENT.tx1 - CONTINENT.tx0) / 2), ny = Math.abs(y - cy) / ((CONTINENT.ty1 - CONTINENT.ty0) / 2);
   const edge = Math.max(nx, ny) ** 3 + Math.min(nx, ny) ** 3 * 0.35;
-  const coast = clamp01((0.92 - edge + (fbm(x, y, 70, 3, 701) - 0.5) * 0.5) / 0.25); // ragged shore, bays, islands
-  let e = 0.18 + fbm(x, y, 170, 4, 501) * 0.95;
+  const coast = clamp01((0.92 - edge + (fbm(x, y, 70 * WAVE, 3, 701) - 0.5) * 0.5) / 0.25); // ragged shore, bays, islands
+  let e = 0.18 + fbm(x, y, 170 * WAVE, 4, 501) * 0.95;
   // the Greyspine: a ridge across the continent, broken by saddles
   const rx = x < RIDGE.tx0 ? RIDGE.tx0 - x : x > RIDGE.tx1 ? x - RIDGE.tx1 : 0;
-  e += Math.max(0, 1 - rx / 40) * 0.26 * (0.6 + noise(x, y, 60, 503) * 0.6);
+  e += Math.max(0, 1 - rx / 40) * 0.3 * (0.6 + noise(x, y, 60, 503) * 0.6);
+  // the western range, crossed by a pass every WEST_PASS_EVERY tiles (and the odd saddle)
+  const wx = x < WEST_RIDGE.tx0 ? WEST_RIDGE.tx0 - x : x > WEST_RIDGE.tx1 ? x - WEST_RIDGE.tx1 : 0;
+  const m = ((y % WEST_PASS_EVERY) + WEST_PASS_EVERY) % WEST_PASS_EVERY;
+  const toPass = Math.min(m, WEST_PASS_EVERY - m);
+  e += Math.max(0, 1 - wx / 50) * 0.24 * Math.max(0, noise(x, y, 90, 505) * 1.6 - 0.35) * clamp01((toPass - 12) / 20);
+  // the great lake: a basin in the south-west
+  const lake = Math.hypot((x - GREAT_LAKE.x) / GREAT_LAKE.rx, (y - GREAT_LAKE.y) / GREAT_LAKE.ry) + (noise(x, y, 30, 507) - 0.5) * 0.25;
+  if (lake < 1.3) e -= Math.max(0, 1.3 - lake) * 0.4;
+  e *= coast;
   // ease into the heartland: middling ground, except where the ridge meets it
   const d = heartDist(x, y);
   if (d < SEAM) e = e + (0.55 - e) * (1 - d / SEAM) * (rx === 0 ? 0.2 : 1);
-  return e * coast;
+  // towns and their roads always stand on open, walkable land
+  const td = townDist(x, y);
+  if (td < 24) e = e + (0.55 - e) * (1 - td / 24);
+  else if (ROAD_KEEP.has(`${Math.floor(x / KEEP_CELL)},${Math.floor(y / KEEP_CELL)}`)) e = Math.min(0.7, Math.max(0.4, e));
+  return e;
 }
 export function temperature(x: number, y: number, e = elevation(x, y)): number {
-  return 0.5 + (y / CONTINENT.ty1) * 0.36 + (fbm(x, y, 220, 2, 801) - 0.5) * 0.4 - Math.max(0, e - 0.66) * 1.4;
+  return 0.5 + (y / CONTINENT.ty1) * 0.36 + (fbm(x, y, 220 * WAVE, 2, 801) - 0.5) * 0.4 - Math.max(0, e - 0.66) * 1.4;
 }
-export function moisture(x: number, y: number): number {
-  return fbm(x, y, 140, 3, 901);
-}
+export const moisture = memoXY((x: number, y: number): number => fbm(x, y, 140 * WAVE, 3, 901));
 
 /** The biome at world tile (x, y) (outside the heartland). */
-export function biomeAt(x: number, y: number): Biome {
+export const biomeAt = (x: number, y: number): Biome => BIOMES[biomeIndex(x, y)];
+const BIOMES: readonly Biome[] = ["ocean", "beach", "meadow", "forest", "darkwood", "swamp", "desert", "badlands", "mesa", "snow", "snowpeak", "peak"];
+const biomeIndex = memoXY((x: number, y: number): number => BIOMES.indexOf(biomeRaw(x, y)));
+function biomeRaw(x: number, y: number): Biome {
   const e = elevation(x, y);
   if (e < SEA) return "ocean";
   if (e < SEA + 0.022) return "beach";
@@ -130,9 +178,9 @@ function rawWaterV(vx: number, vy: number): boolean {
   return e < 0.42 && moisture(vx, vy) > 0.55 && noise(vx, vy, 16, 513) > 0.74;
 }
 
-/** Towns are dry and flat. */
-const waterV = (vx: number, vy: number): boolean => !townAt(vx, vy) && rawWaterV(vx, vy);
-const levelAt = (tx: number, ty: number): number => (townAt(tx, ty) ? 0 : rawLevelAt(tx, ty));
+/** Towns are dry and flat. (Cached per corner: pure.) */
+const waterV = ((f) => (vx: number, vy: number): boolean => f(vx, vy) === 1)(memoXY((vx: number, vy: number) => (!townAt(vx, vy) && rawWaterV(vx, vy) ? 1 : 0)));
+const levelAt = memoXY((tx: number, ty: number): number => (townAt(tx, ty) ? 0 : rawLevelAt(tx, ty)));
 /** The untouched terrain, for scripts/gen-settlements.ts. */
 export const terrainProbe = { water: (vx: number, vy: number) => rawWaterV(vx, vy), level: (tx: number, ty: number) => rawLevelAt(tx, ty) };
 
@@ -156,15 +204,29 @@ const TREE_DENSITY: Readonly<Record<Biome, number>> = {
   ocean: 0, beach: 0.08, meadow: 0.05, forest: 0.62, darkwood: 0.78, swamp: 0.2,
   desert: 0.006, badlands: 0.02, snow: 0.18, peak: 0, snowpeak: 0, mesa: 0,
 };
+/** Forest trails: winding north–south and east–west lanes every TRAIL_EVERY
+ *  tiles where no tree grows, so even the deepest woods can be crossed on
+ *  foot (and routed through by NPCs) in a world this size. */
+const TRAIL_EVERY = 48, TRAIL_HALF = 2;
+function onTrail(vx: number, vy: number): boolean {
+  const wx = vx + (noise(vy, 0, 40, 541) - 0.5) * 18; // a north–south lane wobbles with y
+  const wy = vy + (noise(vx, 0, 40, 542) - 0.5) * 18; // an east–west lane wobbles with x
+  const mx = ((wx % TRAIL_EVERY) + TRAIL_EVERY) % TRAIL_EVERY, my = ((wy % TRAIL_EVERY) + TRAIL_EVERY) % TRAIL_EVERY;
+  return Math.min(mx, TRAIL_EVERY - mx) <= TRAIL_HALF || Math.min(my, TRAIL_EVERY - my) <= TRAIL_HALF;
+}
+
 /** Is there a tree on lattice corner (vx, vy)? */
-function forestV(vx: number, vy: number): boolean {
+/** Felled trees change at runtime, so they're checked outside the cache. */
+const forestV = (vx: number, vy: number): boolean => !isFelled(vx, vy) && forestCached(vx, vy) === 1;
+const forestCached = memoXY((vx: number, vy: number): number => (forestRaw(vx, vy) ? 1 : 0));
+function forestRaw(vx: number, vy: number): boolean {
   if (((vx % 2) + 2) % 2 || ((vy % 2) + 2) % 2) return false;
-  if (isFelled(vx, vy)) return false;
   if (townAt(vx, vy) || townAt(vx - 1, vy - 1) || nearRoad(vx, vy, 2)) return false;
   const b = biomeAt(vx, vy);
   const density = TREE_DENSITY[b];
   if (!density) return false;
   if (Math.hypot(vx - BOSS_TILE.tx, vy - BOSS_TILE.ty) < 9) return false;
+  if (density > 0.15 && onTrail(vx, vy)) return false;
   // clearings break up the woods
   const clear = b === "forest" || b === "darkwood" ? noise(vx, vy, 18, 521) < 0.3 : false;
   if (clear || hash(vx, vy, 522) > density) return false;
@@ -364,18 +426,19 @@ export function tierAt(x: number, y: number): number {
 
 // ── Provinces ────────────────────────────────────────────────────────────
 // The land outside the heartland is split into named provinces: seed
-// points on a jittered 4 × 4 grid (skipping sea), each tile belonging to
-// its nearest seed. The name comes from the biome around the seed.
+// points on a jittered GRID × GRID grid (skipping sea), each tile belonging
+// to its nearest seed. The name comes from the biome around the seed.
+const GRID = 8;
 const PROVINCE_NAMES: Readonly<Record<string, readonly string[]>> = {
-  snow: ["the Frostfang Reach", "Whitecap Fells", "the Rimewood", "Hoarfrost Hollow", "the Pale Tundra"],
-  peak: ["the High Crags", "Stormcrown Heights", "the Greyspine Crest", "Eagle's Roost"],
-  desert: ["the Ember Sands", "the Sunscald Dunes", "the Glass Waste", "the Scorched Expanse"],
-  badlands: ["the Red Mesas", "the Rustcliff Badlands", "Coyote Gulch"],
-  swamp: ["Mirewood", "the Sunken Fen", "Blackwater Bog"],
-  darkwood: ["the Gloamwood", "Nightbriar Forest", "the Hushwood"],
-  forest: ["Oakhollow Woods", "the Greenmantle", "Fernvale", "the Elderwood", "Mossbrook Forest", "Wren's Wood"],
-  meadow: ["the Golden Downs", "Thistle Plains", "Brookfield Vale", "the Clover Heath", "Larkspur Fields", "Windmere Meadows"],
-  beach: ["the Shell Coast", "Gull's Rest Shore", "the Saltwind Strand"],
+  snow: ["the Frostfang Reach", "Whitecap Fells", "the Rimewood", "Hoarfrost Hollow", "the Pale Tundra", "the Glacier Steps", "Snowveil Barrens", "the Howling Wastes"],
+  peak: ["the High Crags", "Stormcrown Heights", "the Greyspine Crest", "Eagle's Roost", "the Thunder Spires", "Anvil Peaks", "the Broken Teeth"],
+  desert: ["the Ember Sands", "the Sunscald Dunes", "the Glass Waste", "the Scorched Expanse", "the Bonewind Flats", "Mirage Basin", "the Copper Dunes"],
+  badlands: ["the Red Mesas", "the Rustcliff Badlands", "Coyote Gulch", "the Cinder Canyons", "Vulture Ridge", "the Ochre Breaks"],
+  swamp: ["Mirewood", "the Sunken Fen", "Blackwater Bog", "the Drowned Marches", "Leechwater", "the Rotting Mere"],
+  darkwood: ["the Gloamwood", "Nightbriar Forest", "the Hushwood", "the Weeping Thicket", "Ravenhold Wood", "the Umbral Grove"],
+  forest: ["Oakhollow Woods", "the Greenmantle", "Fernvale", "the Elderwood", "Mossbrook Forest", "Wren's Wood", "the Ashgrove", "Bramblebank", "the Wildwood", "Hartwood Chase"],
+  meadow: ["the Golden Downs", "Thistle Plains", "Brookfield Vale", "the Clover Heath", "Larkspur Fields", "Windmere Meadows", "the Barley Reaches", "Primrose Lea", "the Sunlit Wolds", "Kestrel Downs"],
+  beach: ["the Shell Coast", "Gull's Rest Shore", "the Saltwind Strand", "the Amber Shallows", "Driftwood Bay", "the Pearl Coast"],
 };
 /** Distinctive lands win a province's name over the common ones. */
 const NAME_WEIGHT: Readonly<Record<string, number>> = { meadow: 1, forest: 1, beach: 1, snow: 1.6, peak: 1.4, desert: 1.8, badlands: 2, swamp: 2.4, darkwood: 2.2 };
@@ -386,8 +449,8 @@ const NAME_GROUP: Readonly<Record<Biome, string>> = {
 const SEEDS: readonly ProvinceSeed[] = (() => {
   const out: ProvinceSeed[] = [];
   const used = new Map<string, number>();
-  const cw = (CONTINENT.tx1 - CONTINENT.tx0 + 1) / 4, ch = (CONTINENT.ty1 - CONTINENT.ty0 + 1) / 4;
-  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+  const cw = (CONTINENT.tx1 - CONTINENT.tx0 + 1) / GRID, ch = (CONTINENT.ty1 - CONTINENT.ty0 + 1) / GRID;
+  for (let j = 0; j < GRID; j++) for (let i = 0; i < GRID; i++) {
     // try a few jittered spots in the cell; the first on open land wins
     for (let k = 0; k < 8; k++) {
       const tx = Math.round(CONTINENT.tx0 + cw * (i + 0.2 + hash(i, j, 541 + k) * 0.6));
@@ -403,7 +466,10 @@ const SEEDS: readonly ProvinceSeed[] = (() => {
       const names = PROVINCE_NAMES[group];
       const n = used.get(group) ?? 0;
       used.set(group, n + 1);
-      const name = names[n % names.length] + (n >= names.length ? ` ${["East", "West", "North", "South"][n % 4]}` : "");
+      // when a group's names run out, they come round again as the Upper / Far … lands
+      const base = names[n % names.length];
+      const lap = Math.floor(n / names.length);
+      const name = lap === 0 ? base : `the ${["Upper", "Far", "Lower", "Outer", "Old", "High", "Deep", "Wild"][(lap - 1) % 8]} ${base.replace(/^the /, "")}`;
       out.push({ key: `prov_${name.toLowerCase().replace(/^the /, "").replace(/[^a-z]+/g, "_")}_${i}${j}`, name, tx, ty });
       break;
     }

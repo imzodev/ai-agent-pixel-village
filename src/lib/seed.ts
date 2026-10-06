@@ -31,6 +31,7 @@ import { REGION_NODES } from "./regions";
 import { NPC_DEFS } from "./npcDefs";
 import { LEGACY_NPC_KEYS } from "./npcKeys";
 import { forageSpots } from "./forage";
+import { resiteTreasureMaps } from "./treasureServer";
 import { BOSS_KIND } from "./progression";
 
 export const ITEM_DEFS = [
@@ -531,6 +532,9 @@ async function syncWildlifeLayout() {
     for (let i = 0; i < rows.length; i += 200) await db.insert(resourceNodes).values(rows.slice(i, i + 200));
     // Enemies respawn from the current zones; a risen world boss stays.
     await db.delete(enemies).where(ne(enemies.kind, BOSS_KIND));
+    // Treasure maps whose X ended up in the sea get a new spot.
+    const resited = await resiteTreasureMaps();
+    if (resited) console.log(`[seed] moved ${resited} treasure maps off ground that's no longer open`);
     for (const def of ANIMAL_DEFS) {
       // Re-zone to the centre and drop any scheduled move: it was planned
       // from the old position, so clients would replay it from there.
