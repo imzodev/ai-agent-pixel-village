@@ -63,9 +63,12 @@ export type CombatState = {
   strikes: Map<number, Strike & { timer: ReturnType<typeof setTimeout> | null; /** Last chip of damage dealt during the wind-up. */ chipAt?: number }>;
   /** An enemy can't start another attack before this (ms). */
   busyUntil: Map<number, number>;
-  /** Aggressive enemies, re-read about once a second. */
-  rows: CombatEnemy[];
+  /** Aggressive enemies by id: read in full every resync (30 s), kept
+   *  current in between from spawns, the beat's moves, dashes and kills. */
+  rows: Map<number, CombatEnemy>;
   rowsAt: number;
+  /** When an enemy about to strike was last confirmed alive in the DB. */
+  verifiedAt: Map<number, number>;
   nextId: number;
   /** Each player's recent rolls (start times; the latest sets the cooldown). */
   rolls: Map<number, number[]>;

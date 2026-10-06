@@ -149,6 +149,14 @@ message; enemies tickd still creates (encounters, zone respawns) are picked up
 once a beat. A new enemy can't attack or chase for `SPAWN_GRACE_MS` after it was
 sent. tickd despawns wild enemies nobody has been near for `WILD_DESPAWN_MS`.
 
+The WS server's combat clock (and wolf hunts) work from an **in-memory cache**
+of aggressive enemies (`combat.rows`), not per-second reads: a full read every
+`WS_RESYNC_MS` as a safety net, kept current in between by its own spawns
+(`rememberEnemies`), the beat's moves (`applyEnemyMoves`), its dashes and kills
+from the attack API (`forgetEnemy`). An enemy about to strike is confirmed alive
+at most every 2 s (`verifyAlive`), so one tickd removed can't attack as a ghost.
+Don't add per-tick DB reads there.
+
 ## NPC minds (Jev)
 
 NPCs listed in `MIND_NPCS` (default `village_marigold`; e.g.

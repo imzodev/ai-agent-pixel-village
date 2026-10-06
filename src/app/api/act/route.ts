@@ -5,7 +5,7 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel, removeItem } from "@/lib/game";
-import { broadcastChunkReload, getLivePlayerPosition, interruptStrike, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
+import { broadcastChunkReload, forgetEnemy, getLivePlayerPosition, interruptStrike, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
 import { chopTree } from "@/lib/treesServer";
@@ -256,6 +256,7 @@ export async function POST(req: Request) {
       let encounterResolved: number | null = null;
       // Only the request that removes the row gets the kill.
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
+      if (killed.length > 0) forgetEnemy(e.id); // it stops fighting at once
       const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
       if (killed.length > 0 && boss) {
         const winners = bossRewardees(after.damage ?? {}, after.maxHp);

@@ -106,7 +106,7 @@ const wsUpgradeTimestamps = new Map<string, number[]>();
 // the same connections, live positions and dirty queue.
 const SHARED_STATE_KEY = "__grove_ws_shared__";
 
-const newCombat = (): CombatState => ({ strikes: new Map(), busyUntil: new Map(), rows: [], rowsAt: 0, nextId: 0, rolls: new Map(), timer: null });
+const newCombat = (): CombatState => ({ strikes: new Map(), busyUntil: new Map(), rows: new Map(), rowsAt: 0, verifiedAt: new Map(), nextId: 0, rolls: new Map(), timer: null });
 
 function getSharedState(): WsSharedState {
   const g = globalThis as unknown as Record<string, WsSharedState | undefined>;
@@ -119,6 +119,7 @@ function getSharedState(): WsSharedState {
   s.guards ??= new Map();
   s.bikes ??= new Map();
   s.combat ??= newCombat();
+  if (!(s.combat.rows instanceof Map)) Object.assign(s.combat, { rows: new Map(), rowsAt: 0, verifiedAt: new Map() }); // an older hot-reloaded shape
   return s;
 }
 
@@ -675,6 +676,7 @@ async function onBeat(boundary: number): Promise<void> {
   }
   try {
     const moves = await fetchMovesStartingAt(startAt);
+    applyEnemyMoves(moves);
     if (moves.length > 0) broadcastMoves(startAt, moves);
   } catch (err) {
     log.error({ err }, "beat move broadcast failed");
@@ -707,6 +709,7 @@ export function broadcastChunkReload(chunks: ChunkRef[]): void {
 }
 
 const HUNTER_KINDS = Object.entries(ENEMY_KINDS).filter(([, k]) => k.hunts).map(([key]) => key);
+const HUNTERS = new Set(HUNTER_KINDS);
 
 /**
  * Hunting enemies run at connected players who come close. Runs here, not
@@ -715,7 +718,9 @@ const HUNTER_KINDS = Object.entries(ENEMY_KINDS).filter(([, k]) => k.hunts).map(
 async function enemyHunts(startAt: number): Promise<void> {
   const players = [...connections.values()].filter((c) => c.ws.readyState === c.ws.OPEN).map((c) => ({ x: c.homePx, y: c.homePy }));
   if (players.length === 0 || HUNTER_KINDS.length === 0) return;
-  const rows = await db.select().from(enemies).where(inArray(enemies.kind, HUNTER_KINDS));
+  // From the combat cache (every hunter is aggressive): no read per beat.
+  if (combat.rowsAt === 0) await reloadCombatRows(Date.now());
+  const rows = [...combat.rows.values()].filter((e) => HUNTERS.has(e.kind));
   const writes = [];
   const now = Date.now();
   for (const e of rows) {
@@ -735,8 +740,11 @@ async function enemyHunts(startAt: number): Promise<void> {
 const COMBAT_TICK_MS = 200;
 /** An aggressive enemy fights players within this distance. */
 const ENGAGE_PX = 8 * 16;
-/** Aggressive enemies are re-read this often (kills happen in the API routes). */
-const COMBAT_ROWS_MS = 1000;
+/** Aggressive enemies are read in full this often, as a safety net (they're
+ *  kept current in between: see rememberEnemies / applyEnemyMoves / forgetEnemy). */
+const COMBAT_ROWS_MS = WS_RESYNC_MS;
+/** An enemy about to strike is confirmed alive at most this often. */
+const VERIFY_MS = 2000;
 /** The kinds that fight (only their rows are read each second). */
 const AGGRESSIVE_KINDS = Object.keys(ENEMY_KINDS).filter((k) => isAggressive(k));
 /** No attack shape reaches further than this from its origin (the boss's sweep). */
@@ -808,6 +816,7 @@ async function scanSpawns(now: number): Promise<void> {
   if (last.getTime() !== spawnScan.cursor.getTime()) spawnScan.atCursor = new Set();
   for (const e of rows) if (e.spawnedAt.getTime() === last.getTime()) spawnScan.atCursor.add(e.id);
   spawnScan.cursor = last;
+  rememberEnemies(rows);
   const fresh = rows.filter((e) => !spawnScan.announced.has(e.id));
   for (const e of fresh) spawnScan.announced.set(e.id, now);
   announce(fresh, now);
@@ -884,6 +893,7 @@ async function populateAhead(from: ChunkXY | null, to: ChunkXY): Promise<void> {
   if (!rows.length) return;
   const made = await db.insert(enemies).values(rows).returning();
   wildCount.n += made.length;
+  rememberEnemies(made);
   for (const e of made) spawnScan.announced.set(e.id, now);
   announce(made, now);
 }
@@ -898,6 +908,48 @@ function seenLongEnough(e: { id: number; spawnedAt: Date }, now: number): boolea
   return sent === undefined || now - sent >= SPAWN_GRACE_MS;
 }
 
+// ── The combat cache ─────────────────────────────────────────────────────
+const AGGRESSIVE = new Set(AGGRESSIVE_KINDS);
+
+async function reloadCombatRows(now: number): Promise<void> {
+  const rows = await db.select().from(enemies).where(inArray(enemies.kind, AGGRESSIVE_KINDS));
+  combat.rows = new Map(rows.map((r) => [r.id, r]));
+  combat.rowsAt = now;
+  for (const id of combat.verifiedAt.keys()) if (!combat.rows.has(id)) combat.verifiedAt.delete(id);
+  for (const id of combat.busyUntil.keys()) if (!combat.rows.has(id)) combat.busyUntil.delete(id);
+}
+
+/** New enemies (placed here, or found by the beat scan) join the cache. */
+function rememberEnemies(rows: readonly (typeof enemies.$inferSelect)[]): void {
+  for (const r of rows) if (AGGRESSIVE.has(r.kind)) combat.rows.set(r.id, r);
+}
+
+/** The beat's moves keep cached positions current (no re-read needed). */
+function applyEnemyMoves(moves: readonly ScheduledMove[]): void {
+  for (const m of moves) {
+    if (m.kind !== "enemy") continue;
+    const row = combat.rows.get(m.id);
+    if (row) Object.assign(row, { x: m.x, y: m.y, movePath: m.move.path, moveStartAt: m.move.startAt, moveSpeed: m.move.speed, moveAfter: m.move.after ?? null });
+  }
+}
+
+/** An enemy died (the attack API, same process): it stops fighting at once. */
+export function forgetEnemy(id: number): void {
+  combat.rows.delete(id);
+  combat.busyUntil.delete(id);
+  combat.verifiedAt.delete(id);
+}
+
+async function verifyAlive(ids: readonly number[], now: number): Promise<void> {
+  const due = ids.filter((id) => now - (combat.verifiedAt.get(id) ?? 0) >= VERIFY_MS);
+  if (!due.length) return;
+  const alive = new Set((await db.select({ id: enemies.id }).from(enemies).where(inArray(enemies.id, due))).map((r) => r.id));
+  for (const id of due) {
+    if (alive.has(id)) combat.verifiedAt.set(id, now);
+    else forgetEnemy(id);
+  }
+}
+
 /**
  * The combat clock: aggressive enemies near players pick an attack they can
  * reach, telegraph it to everyone nearby at once, and it lands at `hitAt`.
@@ -907,21 +959,26 @@ async function combatTick(): Promise<void> {
   const players = openPlayers();
   const now = Date.now();
   if (!players.length) return;
-  if (now - combat.rowsAt > COMBAT_ROWS_MS) {
-    combat.rows = await db.select().from(enemies).where(inArray(enemies.kind, AGGRESSIVE_KINDS));
-    combat.rowsAt = now;
-  }
+  if (now - combat.rowsAt > COMBAT_ROWS_MS) await reloadCombatRows(now);
   // Players bucketed by area: each enemy only looks at the cells around it.
   const grid = buildGrid(players, (c) => ({ x: c.homePx, y: c.homePy }), ENGAGE_PX);
   await chipStrikes(grid, now);
   const planned: Strike[] = [];
   const dashes: MoveWrite[] = [];
-  for (const e of combat.rows) {
+  // Who could attack now (near a player, not busy, seen long enough)…
+  const engaged = [];
+  for (const e of combat.rows.values()) {
     if ((combat.busyUntil.get(e.id) ?? 0) > now) continue;
     if (!seenLongEnough(e, now)) continue; // not on screen yet
     const at = rowPositionAt(e, now);
     const near = nearby(grid, at.x, at.y, ENGAGE_PX).map((c) => ({ c, d: Math.hypot(c.homePx - at.x, c.homePy - at.y) })).filter((x) => x.d <= ENGAGE_PX).sort((a, b) => a.d - b.d);
-    if (!near.length) continue;
+    if (near.length) engaged.push({ e, at, near });
+  }
+  // …still alive? (an enemy removed by tickd — an ended encounter — mustn't
+  // telegraph as a ghost). Only engaged ones are checked, at most every VERIFY_MS.
+  await verifyAlive(engaged.map((x) => x.e.id), now);
+  for (const { e, at, near } of engaged) {
+    if (!combat.rows.has(e.id)) continue;
     const moves = usableMoves(e.kind, near[0].d);
     if (!moves.length) continue;
     const move = moves[Math.floor(Math.random() * moves.length)];
@@ -962,7 +1019,7 @@ async function chipStrikes(grid: SpatialGrid<Connection>, now: number): Promise<
   for (const s of combat.strikes.values()) {
     if (s.from || now >= s.releaseAt || now - (s.chipAt ?? s.windupAt) < CHIP_EVERY_MS) continue;
     s.chipAt = now;
-    const row = combat.rows.find((r) => r.id === s.enemyId);
+    const row = combat.rows.get(s.enemyId);
     if (!row) continue;
     const name = row.title ?? enemyKind(row.kind).name;
     for (const c of nearby(grid, s.origin.x, s.origin.y, STRIKE_REACH_PX)) {
@@ -1029,7 +1086,7 @@ export function interruptStrike(enemyId: number): boolean {
       // Called off: it stays where it stood.
       const stay = buildMoveWrite(enemyId, [s.dash.path[0], s.dash.path[0]], now, DASH_SPEED);
       void writeMoves("enemy", [stay]).catch(() => {});
-      const row = combat.rows.find((r) => r.id === enemyId);
+      const row = combat.rows.get(enemyId);
       if (row) Object.assign(row, { x: stay.x, y: stay.y, movePath: stay.move.path, moveStartAt: now, moveSpeed: DASH_SPEED, moveAfter: null });
     }
   }
