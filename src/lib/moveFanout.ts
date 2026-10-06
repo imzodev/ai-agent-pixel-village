@@ -3,7 +3,7 @@
 // gets back one payload per spatial bucket to send to every member.
 
 import { tileCenter } from "./motion";
-import type { FanoutBucket, FanoutPeer, ScheduledMove } from "@/types/motion";
+import type { FanoutBucket, FanoutPeer, PointFanoutBucket, ScheduledMove } from "@/types/motion";
 
 /** True when a move's origin or destination lies inside the box. */
 function moveInBox(m: ScheduledMove, xMin: number, xMax: number, yMin: number, yMax: number): boolean {
@@ -25,6 +25,27 @@ export function planMoveFanout<P extends FanoutPeer>(
   bucketPx: number,
   radiusPx: number,
 ): FanoutBucket<P>[] {
+  return planFanout(peers, moves, bucketPx, radiusPx, moveInBox).map((b) => ({ peers: b.peers, moves: b.items }));
+}
+
+/** The same fan-out for things at a point (new spawns): each goes to the
+ *  buckets within `radiusPx` of it. */
+export function planPointFanout<P extends FanoutPeer, T extends { x: number; y: number }>(
+  peers: Iterable<P>,
+  items: readonly T[],
+  bucketPx: number,
+  radiusPx: number,
+): PointFanoutBucket<P, T>[] {
+  return planFanout(peers, items, bucketPx, radiusPx, (t, xMin, xMax, yMin, yMax) => t.x >= xMin && t.x < xMax && t.y >= yMin && t.y < yMax);
+}
+
+function planFanout<P extends FanoutPeer, T>(
+  peers: Iterable<P>,
+  items: readonly T[],
+  bucketPx: number,
+  radiusPx: number,
+  inBox: (t: T, xMin: number, xMax: number, yMin: number, yMax: number) => boolean,
+): PointFanoutBucket<P, T>[] {
   const buckets = new Map<string, { bx: number; by: number; peers: P[] }>();
   for (const p of peers) {
     if (p.backedUp) continue;
@@ -35,13 +56,13 @@ export function planMoveFanout<P extends FanoutPeer>(
     if (!b) buckets.set(key, (b = { bx, by, peers: [] }));
     b.peers.push(p);
   }
-  const out: FanoutBucket<P>[] = [];
+  const out: PointFanoutBucket<P, T>[] = [];
   const span = bucketPx + 2 * radiusPx;
   for (const b of buckets.values()) {
     const xMin = b.bx * bucketPx - radiusPx;
     const yMin = b.by * bucketPx - radiusPx;
-    const near = moves.filter((m) => moveInBox(m, xMin, xMin + span, yMin, yMin + span));
-    if (near.length > 0) out.push({ peers: b.peers, moves: near });
+    const near = items.filter((t) => inBox(t, xMin, xMin + span, yMin, yMin + span));
+    if (near.length > 0) out.push({ peers: b.peers, items: near });
   }
   return out;
 }

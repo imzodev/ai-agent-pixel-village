@@ -27,9 +27,23 @@ export function wildPackSize(tier: number, rand = Math.random): number {
   const [min, max] = tier >= 4 ? [2, 5] : tier >= 3 ? [2, 4] : [1, 3];
   return min + Math.floor(rand() * (max - min + 1));
 }
-/** The chance per beat that a player's surroundings top up, and how many packs at most. */
-export const WILD_SPAWN_CHANCE = 0.85;
-export const WILD_PACKS_PER_BEAT = 3;
+/** The land ahead of a moving player is populated this many chunks out
+ *  (always off their screen: the camera shows at most 1.5 chunks each way). */
+export const POPULATE_AHEAD_CHUNKS = 3;
+/** A chunk gets a new pack at most this often, for everyone: a cleared camp stays cleared a while. */
+export const REPOPULATE_MS = 3 * 60_000;
+/** Players this many chunks from a chunk count toward its crowd. */
+export const CROWD_CHUNKS = 4;
+/**
+ * The chance a chunk holds a pack, by danger tier. Matches wildTarget's
+ * density for a solo player: wildTarget(t) enemies around a player
+ * (~11 chunks) over the tier's average pack size.
+ */
+export function chunkPackChance(tier: number): number {
+  return tier <= 1 ? 0.44 : tier === 2 ? 0.6 : tier === 3 ? 0.53 : 0.56;
+}
+/** More players around, more enemies: +50% per extra player, at most ×3. */
+export const crowdFactor = (players: number): number => Math.min(3, 1 + 0.5 * Math.max(0, players - 1));
 /** A hard ceiling on wild enemies in the whole world (protects the database). */
 export const WILD_MAX_TOTAL = 8000;
 

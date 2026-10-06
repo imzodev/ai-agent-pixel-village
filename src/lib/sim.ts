@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems } from "@/db/schema";
+import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks } from "@/db/schema";
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
@@ -32,7 +32,7 @@ import { runRandomEvents } from "./events";
 import type { Point } from "@/types/world";
 import { syncFelledTrees } from "./treesServer";
 import { biomeAt, inHeartland, tierAt } from "./continent";
-import { WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_MAX_TOTAL, WILD_PACKS_PER_BEAT, WILD_RADIUS_PX, WILD_SPAWN_CHANCE, WILD_SPAWN_MAX_PX, WILD_SPAWN_MIN_PX, wildKindFor, wildPackSize, wildTarget } from "./wildlife";
+import { REPOPULATE_MS, WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX } from "./wildlife";
 import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
 import { bakeBatches } from "./bakeryServer";
 import { thinkMinds } from "./mind/mindServer";
@@ -450,44 +450,16 @@ async function tickWild(rows: (typeof enemies.$inferSelect)[], now: Date, night:
   // Random encounters around travelling players (src/lib/encounters.ts).
   await tickEncounters(online, now, night).catch((err) => console.warn("[tick] encounters failed:", err instanceof Error ? err.message : err));
 
-  const live = buildGrid(wild.filter(({ e }) => !staleSet.has(e.id)).map(({ p }) => p), (p) => p, WILD_RADIUS_PX);
-  let total = wild.length - stale.length;
-  const spawns: (typeof enemies.$inferInsert)[] = [];
-  for (const o of online) {
-    const here = tileOf(o.x, o.y);
-    if (inHeartland(here.tx, here.ty)) continue;
-    const target = wildTarget(tierAt(here.tx, here.ty));
-    if (Math.random() > WILD_SPAWN_CHANCE) continue;
-    // Top up with packs: a few of one kind standing together, out of sight.
-    for (let pack = 0; pack < WILD_PACKS_PER_BEAT && total < WILD_MAX_TOTAL; pack++) {
-      if (countWithin(live, o.x, o.y, WILD_RADIUS_PX, (p) => p) >= target) break;
-      for (let k = 0; k < 6; k++) {
-        const ang = Math.random() * Math.PI * 2, d = WILD_SPAWN_MIN_PX + Math.random() * (WILD_SPAWN_MAX_PX - WILD_SPAWN_MIN_PX);
-        const t = tileOf(o.x + Math.cos(ang) * d, o.y + Math.sin(ang) * d);
-        if (inHeartland(t.tx, t.ty)) continue;
-        const at = tileCenter(t);
-        if (!(await isWalkableServer(at.x, at.y))) continue;
-        const tier = tierAt(t.tx, t.ty);
-        const kind = wildKindFor(biomeAt(t.tx, t.ty), tier, night);
-        if (!kind) break;
-        const hp = enemyHpAt(kind, tier);
-        const n = wildPackSize(tier);
-        for (let m = 0; m < n; m++) {
-          // Pack mates stand a few tiles from the first.
-          const mt = m === 0 ? t : { tx: t.tx + Math.round((Math.random() - 0.5) * 6), ty: t.ty + Math.round((Math.random() - 0.5) * 6) };
-          const mp = tileCenter(mt);
-          if (m > 0 && (inHeartland(mt.tx, mt.ty) || !(await isWalkableServer(mp.x, mp.y)))) continue;
-          spawns.push({ kind, x: mp.x, y: mp.y, targetX: mp.x, targetY: mp.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now });
-          addToGrid(live, mp, mp);
-          total++;
-        }
-        break;
-      }
-    }
+  // New packs are placed by the WS server in the land ahead of moving
+  // players (src/lib/wildPopulation.ts), so they're there before anyone
+  // sees the spot. Here: forget fill records nobody can use any more.
+  if (nowMs - lastWildChunkPrune > 3600_000) {
+    lastWildChunkPrune = nowMs;
+    await db.delete(wildChunks).where(lt(wildChunks.populatedAt, new Date(nowMs - 2 * REPOPULATE_MS)));
   }
-  // One write for the whole beat's spawns.
-  for (let i = 0; i < spawns.length; i += 500) await db.insert(enemies).values(spawns.slice(i, i + 500));
 }
+let lastWildChunkPrune = 0;
+
 
 /** Things happened while nobody was watching. Write a few plausible entries. */
 async function unattendedEvents(elapsedSec: number) {

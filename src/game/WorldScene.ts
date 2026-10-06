@@ -545,6 +545,7 @@ export class WorldScene extends Phaser.Scene {
           const around = this.player ? chunkAtPixel(this.player.sprite.x, this.player.sprite.y) : this.lastPlayerChunk ?? { cx: 0, cy: 0 };
           for (const c of chunks) void reloadChunk(this, c.cx, c.cy, around);
         },
+        onSpawns: (enemies) => this.applySpawns(enemies),
         onEnemyAct: ({ id, x, y }) => {
           if (!this.alive()) return;
           this.playEnemyAttack(id, x, y);
@@ -627,6 +628,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------- networking ----------
+  /** True once the first enemies were drawn (later arrivals fade in). */
+  private enemiesShown = false;
+
+  private syncEnemies(list: readonly EnemySnapshot[]): void {
+    this.syncCritters(this.enemies, list.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move, name: e.title ? `★ ${e.title}` : undefined, big: !!e.title })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, title: e.name, distance: this.distTo(e.x, e.y) }));
+    this.enemiesShown = true;
+  }
+
+  /** New enemies between resyncs: add them to what the snapshot holds and draw them now. */
+  private applySpawns(spawned: readonly EnemySnapshot[]): void {
+    if (!this.alive() || !this.snapshot || !spawned.length) return;
+    const ids = new Set(spawned.map((e) => e.id));
+    this.snapshot = { ...this.snapshot, enemies: [...this.snapshot.enemies.filter((e) => !ids.has(e.id)), ...spawned] };
+    this.syncEnemies(this.snapshot.enemies);
+  }
+
   private applySnapshot(s: Snapshot) {
     // A snapshot can arrive after the scene was shut down (WS message in
     // flight during teardown). `this.add`, `this.tweens` and the tilemaps
@@ -716,8 +733,7 @@ export class WorldScene extends Phaser.Scene {
     this.syncChars(this.npcs, s.npcs, 46, "#fff2b3", (n) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) }), (n) => (n.sponsor ? `★ ${n.sponsor.businessName}` : n.kind === "remote" ? "◇ agent" : n.role));
     // animals
     this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name, move: a.move })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
-    // enemies
-    this.syncCritters(this.enemies, s.enemies.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move, name: e.title ? `★ ${e.title}` : undefined, big: !!e.title })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, title: e.name, distance: this.distTo(e.x, e.y) }));
+    this.syncEnemies(s.enemies);
     // ground items
     const seenItems = new Set<number>();
     for (const it of s.groundItems) {
@@ -924,6 +940,11 @@ export class WorldScene extends Phaser.Scene {
         }
         if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: a.big ? "10px" : "9px", color: a.big ? "#ffcf5a" : "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(a.big ? 1 : 0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
+        // An enemy that shows up while you're here fades in rather than popping.
+        if (map === this.enemies && this.enemiesShown) {
+          const parts = [sprite, ent.shadow, ent.label].filter((o): o is NonNullable<typeof o> => !!o);
+          for (const o of parts) { const to = o.alpha; o.setAlpha(0); this.tweens.add({ targets: o, alpha: to, duration: 400 }); }
+        }
         map.set(a.id, ent);
       }
       ent.tx = a.x; ent.ty = a.y; ent.state = a.state; ent.hp = a.hp; ent.maxHp = a.maxHp;

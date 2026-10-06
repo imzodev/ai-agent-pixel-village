@@ -136,6 +136,19 @@ so they come out as long straight legs.
   `GET /api/nav/route?from=tx,ty&to=tx,ty`, `POST /api/nav/trip { npcKey, place, learn? }`,
   `GET /api/nav/places?npcKey=…`. `scripts/route-preview.ts` draws a route on the map.
 
+## Wild enemies (where they come from)
+
+Wild packs are placed by the WS server, not tickd, in the land **ahead of
+moving players** (`src/lib/wildPopulation.ts`): on a chunk crossing, the chunks
+`POPULATE_AHEAD_CHUNKS` (3) out in the direction of travel get their pack
+(the whole ring on arrival or travel), always off the mover's screen. A chunk is
+claimed atomically in `wild_chunks`, so it's filled once for everyone and at
+most every `REPOPULATE_MS` (3 min). Pack chance and size grow with players
+nearby (`crowdFactor`). New rows go straight to nearby clients as a `spawns`
+message; enemies tickd still creates (encounters, zone respawns) are picked up
+once a beat. A new enemy can't attack or chase for `SPAWN_GRACE_MS` after it was
+sent. tickd despawns wild enemies nobody has been near for `WILD_DESPAWN_MS`.
+
 ## NPC minds (Jev)
 
 NPCs listed in `MIND_NPCS` (default `village_marigold`; e.g.

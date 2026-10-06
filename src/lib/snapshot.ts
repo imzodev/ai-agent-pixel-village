@@ -46,7 +46,7 @@ import { lotsInBox } from "@/lib/lots";
 import { breadTables } from "@/lib/bakeryServer";
 import { shopDisplays } from "@/lib/shopDisplayServer";
 import { SHOP_DISPLAYS } from "@/lib/shopDisplay";
-import type { WorldSnapshot } from "@/lib/protocol";
+import type { EnemySnapshot, WorldSnapshot } from "@/lib/protocol";
 import type {
   PlayerRow,
   RawSnapshot,
@@ -450,16 +450,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
     lots: raw.lots,
     breadTables: raw.breadTables,
     displays: raw.displays,
-    enemies: raw.enemies.map((e) => ({
-      id: e.id,
-      kind: e.kind,
-      x: e.x,
-      y: e.y,
-      move: moveOfRow(e),
-      hp: e.hp,
-      maxHp: e.maxHp,
-      title: e.title ?? null,
-    })),
+    enemies: raw.enemies.map(enemySnapshotOf),
     chat: raw.chat.map((c) => ({
       id: c.id,
       speakerType: c.speakerType,
@@ -639,4 +630,9 @@ export async function getSnapshot(
   }
   const shared = await getSharedSnapshot(playerX, playerY, opts);
   return await withMe(shared, meId);
+}
+
+/** An enemy row as clients see it (snapshots and the WS server's `spawns`). */
+export function enemySnapshotOf(e: typeof enemies.$inferSelect): EnemySnapshot {
+  return { id: e.id, kind: e.kind, x: e.x, y: e.y, move: moveOfRow(e), hp: e.hp, maxHp: e.maxHp, title: e.title ?? null };
 }

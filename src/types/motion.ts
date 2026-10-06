@@ -108,6 +108,8 @@ export type FanoutPeer = { x: number; y: number; backedUp: boolean };
 
 /** One serialise-once group: every peer gets the same `moves` payload. */
 export type FanoutBucket<P> = { peers: P[]; moves: ScheduledMove[] };
+/** One bucket's share of positioned items (planPointFanout). */
+export type PointFanoutBucket<P, T> = { peers: P[]; items: T[] };
 
 /** Outcome of holding an NPC in place (`holdNpc`). */
 export type HoldResult = {

@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   index,
   varchar,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import type {
   Appearance,
@@ -459,7 +460,7 @@ export const enemies = pgTable("enemies", {
   bountyId: integer("bounty_id"),
   /** Attackers of a random encounter (src/lib/encounters.ts). */
   encounterId: integer("encounter_id"),
-}, (t) => [index("enemies_move_start_idx").on(t.moveStartAt)]);
+}, (t) => [index("enemies_move_start_idx").on(t.moveStartAt), index("enemies_spawned_at_idx").on(t.spawnedAt)]);
 
 export const webhookLogs = pgTable("webhook_logs", {
   id: serial("id").primaryKey(),
@@ -963,3 +964,15 @@ export const onlinePlayersView = pgMaterializedView("online_players", {
 }).existing();
 
 export const _drizzleHelpers = { uniqueIndex };
+
+/** Wild land filled with a pack (src/lib/wildPopulation.ts): one row per chunk,
+ *  claimed atomically so a chunk is filled once for everyone per REPOPULATE_MS. */
+export const wildChunks = pgTable(
+  "wild_chunks",
+  {
+    cx: integer("cx").notNull(),
+    cy: integer("cy").notNull(),
+    populatedAt: timestamp("populated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.cx, t.cy] })],
+);

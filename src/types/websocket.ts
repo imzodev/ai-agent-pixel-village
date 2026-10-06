@@ -4,6 +4,7 @@
 // The client-side types only reference `WorldSnapshot`/`Facing`, so the
 // `ws` import for the server-side `Connection` is type-only and erased at
 // build time; nothing here pulls Node code into the browser bundle.
+import type { EnemySnapshot } from "@/lib/protocol";
 
 import type { CombatState, StatusEffect, Strike } from "@/types/combat";
 import type { WebSocket } from "ws";
@@ -65,6 +66,8 @@ export type StreamHandlers = {
   onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string; from?: { x: number; y: number }; status?: StatusEffect }) => void;
   /** Chunks whose terrain changed (felled / regrown trees): re-read them. */
   onChunkReload?: (data: { chunks: { cx: number; cy: number }[] }) => void;
+  /** Enemies that just appeared nearby (between resyncs). */
+  onSpawns?: (enemies: EnemySnapshot[]) => void;
   /** An enemy struck at the player at (x, y) (plays its attack animation). */
   onEnemyAct?: (data: { id: number; x: number; y: number }) => void;
   /** You were knocked out and woke at (x, y). */

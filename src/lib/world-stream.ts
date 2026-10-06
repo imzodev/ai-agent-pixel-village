@@ -24,11 +24,11 @@ import type http from "node:http";
 import type { Duplex } from "node:stream";
 import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
-import { and, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, enemies, inventory, sessions, users } from "@/db/schema";
-import { chunkAtWorldPx } from "@/lib/chunkCollision";
-import { getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
+import { characters, enemies, inventory, sessions, users, wildChunks, worldState } from "@/db/schema";
+import { CHUNK_TILE_H, CHUNK_TILE_W, chunkAtWorldPx } from "@/lib/chunkCollision";
+import { enemySnapshotOf, getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
 import { WORLD_CHANGE_CHANNEL } from "@/lib/sim";
@@ -38,10 +38,14 @@ import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
 import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
 import { beatIndex, nextBeatAt, rowPositionAt, tileCenter, tileOf } from "@/lib/motion";
-import { ENEMY_KINDS, enemyDmgAt, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
-import { tierAt } from "@/lib/continent";
+import { ENEMY_KINDS, enemyDmgAt, enemyHpAt, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
+import { biomeAt, inHeartland, tierAt } from "@/lib/continent";
 import { damagePlayer, perksOfMany } from "@/lib/combat";
-import { planMoveFanout } from "@/lib/moveFanout";
+import { chunksAhead, packFor } from "@/lib/wildPopulation";
+import type { ChunkXY } from "@/types/wildlife";
+import { CROWD_CHUNKS, REPOPULATE_MS, WILD_MAX_TOTAL } from "@/lib/wildlife";
+import { gameHour } from "@/lib/worldmap";
+import { planMoveFanout, planPointFanout } from "@/lib/moveFanout";
 import { fetchMovesStartingAt, writeMoves } from "@/lib/moveStore";
 import { planHunt } from "@/lib/hunt";
 import { postponeRegrowth, syncFelledTrees } from "@/lib/treesServer";
@@ -178,6 +182,7 @@ export function placePlayer(playerId: number, x: number, y: number): void {
     c.homeCx = cx;
     c.homeCy = cy;
     c.mounted = false;
+    populateSoon(null, { cx, cy }); // travelled: fill the ring around the new spot
   }
 }
 const SHARD_ID = localShardId();
@@ -412,6 +417,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   });
 
   connections.set(conn.playerId, conn);
+  populateSoon(null, { cx: conn.homeCx, cy: conn.homeCy }); // arrived: fill the ring around them
   metrics.wsConnections.inc({ shard: SHARD_ID });
   metrics.wsConnectionsTotal.inc({ shard: SHARD_ID });
 
@@ -491,6 +497,7 @@ if (msg.type === "roll") {
     conn.homePy = at.y;
     conn.homeFacing = facing;
     if (changedChunk) {
+      populateSoon({ cx: conn.homeCx, cy: conn.homeCy }, { cx, cy });
       conn.homeCx = cx;
       conn.homeCy = cy;
       // Crossing a chunk edge may move us into (or out of) another
@@ -511,6 +518,7 @@ if (msg.type === "heartbeat" && Number.isFinite(msg.x) && Number.isFinite(msg.y)
     conn.homePy = at.y;
     conn.homeFacing = facing;
     if (cx !== conn.homeCx || cy !== conn.homeCy) {
+      populateSoon({ cx: conn.homeCx, cy: conn.homeCy }, { cx, cy });
       conn.homeCx = cx;
       conn.homeCy = cy;
     }
@@ -647,7 +655,17 @@ async function onBeat(boundary: number): Promise<void> {
   } catch (err) {
     log.error({ err }, "tree sync failed");
   }
-  if (connections.size === 0) return;
+  if (connections.size === 0) {
+    // Nobody to tell: whoever connects next gets them in their snapshot.
+    spawnScan.cursor = new Date();
+    spawnScan.atCursor = new Set();
+    return;
+  }
+  try {
+    await scanSpawns(Date.now());
+  } catch (err) {
+    log.error({ err }, "spawn scan failed");
+  }
   try {
     // Hunters (wolves) replace their wander with a chase before the
     // beat's moves go out, so the broadcast below already carries it.
@@ -699,7 +717,9 @@ async function enemyHunts(startAt: number): Promise<void> {
   if (players.length === 0 || HUNTER_KINDS.length === 0) return;
   const rows = await db.select().from(enemies).where(inArray(enemies.kind, HUNTER_KINDS));
   const writes = [];
+  const now = Date.now();
   for (const e of rows) {
+    if (!seenLongEnough(e, now)) continue; // not on screen yet: no chase
     // Zone hunters keep to their zone; wild ones to ~10 tiles of home.
     const box = enemyZoneAt(e.x, e.y)?.rect
       ?? (e.wild && e.targetX != null && e.targetY != null ? { x: e.targetX - 160, y: e.targetY - 160, w: 320, h: 320 } : null);
@@ -757,6 +777,127 @@ async function dashMove(from: { x: number; y: number }, dir: Facing, tiles: numb
   return end.tx === start.tx && end.ty === start.ty ? null : { path: [start, end], startAt, speed: DASH_SPEED };
 }
 
+// ── New enemies ──────────────────────────────────────────────────────────
+// Wild packs and encounters are inserted by tickd. Once a second the WS
+// server reads just the rows newer than its cursor (indexed, usually none)
+// and sends them — a few hundred bytes — to the players near them, instead
+// of waiting for the 30 s resync. One query a second whatever the number of
+// players; no snapshot is rebuilt.
+/** A new enemy neither attacks nor chases for this long after it was sent,
+ *  so it's on screen before it acts. */
+const SPAWN_GRACE_MS = 1200;
+const spawnScan = {
+  at: 0,
+  /** Everything spawned up to here has been sent (or came with a snapshot). */
+  cursor: new Date(),
+  /** Ids already read at exactly `cursor` (a beat's spawns share a timestamp). */
+  atCursor: new Set<number>(),
+  /** When each recent spawn was sent; pruned after a minute. */
+  announced: new Map<number, number>(),
+};
+
+/** Once a beat: enemies tickd created (encounters, zone respawns) since the
+ *  last look. Packs this server placed itself were sent when written. */
+async function scanSpawns(now: number): Promise<void> {
+  spawnScan.at = now;
+  const rows = (await db.select().from(enemies).where(gte(enemies.spawnedAt, spawnScan.cursor)).orderBy(asc(enemies.spawnedAt)).limit(500))
+    .filter((e) => !spawnScan.atCursor.has(e.id));
+  for (const [id, at] of spawnScan.announced) if (now - at > 60_000) spawnScan.announced.delete(id);
+  if (!rows.length) return;
+  const last = rows[rows.length - 1].spawnedAt;
+  if (last.getTime() !== spawnScan.cursor.getTime()) spawnScan.atCursor = new Set();
+  for (const e of rows) if (e.spawnedAt.getTime() === last.getTime()) spawnScan.atCursor.add(e.id);
+  spawnScan.cursor = last;
+  const fresh = rows.filter((e) => !spawnScan.announced.has(e.id));
+  for (const e of fresh) spawnScan.announced.set(e.id, now);
+  announce(fresh, now);
+}
+
+/** Send new enemies to the players near them (one payload per area). */
+function announce(rows: readonly (typeof enemies.$inferSelect)[], now: number): void {
+  if (!rows.length) return;
+  const peers = [];
+  for (const conn of connections.values()) {
+    if (conn.ws.readyState !== conn.ws.OPEN) continue;
+    peers.push({ x: conn.homePx, y: conn.homePy, backedUp: isBackedUp(conn), conn });
+  }
+  // Fanned out by where each one stands now; sent as clients store them
+  // (x/y is the move's destination, the client follows the move).
+  const items = rows.map((e) => ({ ...rowPositionAt(e, now), snap: enemySnapshotOf(e) }));
+  for (const bucket of planPointFanout(peers, items, BUCKET_PX, PROXIMITY_RADIUS_PX)) {
+    const msg = JSON.stringify({ type: "spawns", enemies: bucket.items.map((i) => i.snap) });
+    for (const { conn } of bucket.peers) {
+      try { conn.ws.send(msg); } catch { /* the next resync heals it */ }
+    }
+  }
+}
+
+// ── The land ahead ───────────────────────────────────────────────────────
+// As a player crosses into a new chunk, the chunks 3 out in the direction
+// they're heading get their packs (src/lib/wildPopulation.ts), so enemies
+// are already standing there when they arrive. Claimed in wild_chunks so a
+// chunk is filled once for everyone (across processes) per REPOPULATE_MS.
+// Standing still costs nothing.
+const clock = { at: 0, epochStart: 0, dayLengthMinutes: 24 };
+async function isNightNow(now: number): Promise<boolean> {
+  if (now - clock.at > 10 * 60_000) {
+    const [w] = await db.select({ epochStart: worldState.epochStart, dayLengthMinutes: worldState.dayLengthMinutes }).from(worldState).where(eq(worldState.id, 1));
+    if (w) Object.assign(clock, { at: now, epochStart: w.epochStart.getTime(), dayLengthMinutes: w.dayLengthMinutes });
+  }
+  const hour = gameHour(clock.epochStart, clock.dayLengthMinutes, now);
+  return hour < 6 || hour >= 21;
+}
+
+/** A chunk that could hold wild enemies at all (not the heartland, not sea). */
+function wildChunk(c: ChunkXY): boolean {
+  const tx = c.cx * CHUNK_TILE_W + 12, ty = -c.cy * CHUNK_TILE_H + 7;
+  return !inHeartland(tx, ty) && biomeAt(tx, ty) !== "ocean";
+}
+
+/** How many wild enemies the world holds (read at most once a minute, only while populating). */
+const wildCount = { at: 0, n: 0 };
+
+async function populateAhead(from: ChunkXY | null, to: ChunkXY): Promise<void> {
+  const want = chunksAhead(from, to).filter(wildChunk);
+  if (!want.length) return;
+  const now = Date.now(), at = new Date(now);
+  if (now - wildCount.at > 60_000) {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(enemies).where(eq(enemies.wild, true));
+    Object.assign(wildCount, { at: now, n: r?.n ?? 0 });
+  }
+  if (wildCount.n >= WILD_MAX_TOTAL) return; // the world is full
+  const claimed = await db.insert(wildChunks).values(want.map((c) => ({ ...c, populatedAt: at })))
+    .onConflictDoUpdate({ target: [wildChunks.cx, wildChunks.cy], set: { populatedAt: at }, setWhere: lt(wildChunks.populatedAt, new Date(now - REPOPULATE_MS)) })
+    .returning({ cx: wildChunks.cx, cy: wildChunks.cy });
+  if (!claimed.length) return;
+  const night = await isNightNow(now);
+  const players = openPlayers();
+  const rows: (typeof enemies.$inferInsert)[] = [];
+  for (const c of claimed) {
+    const crowd = players.filter((p) => Math.max(Math.abs(p.homeCx - c.cx), Math.abs(p.homeCy - c.cy)) <= CROWD_CHUNKS);
+    const pack = await packFor(c, now, night, Math.max(1, crowd.length), crowd.map((p) => ({ x: p.homePx, y: p.homePy })), isWalkableServer);
+    for (const m of pack) {
+      const hp = enemyHpAt(m.kind, tierAt(Math.floor(m.x / 16), Math.floor(m.y / 16)));
+      rows.push({ kind: m.kind, x: m.x, y: m.y, targetX: m.x, targetY: m.y, hp, maxHp: hp, spawnedAt: at, wild: true, nearAt: at });
+    }
+  }
+  if (!rows.length) return;
+  const made = await db.insert(enemies).values(rows).returning();
+  wildCount.n += made.length;
+  for (const e of made) spawnScan.announced.set(e.id, now);
+  announce(made, now);
+}
+function populateSoon(from: ChunkXY | null, to: ChunkXY): void {
+  void populateAhead(from, to).catch((err) => log.error({ err }, "populate ahead failed"));
+}
+
+/** Has this enemy been on players' screens long enough to act? */
+function seenLongEnough(e: { id: number; spawnedAt: Date }, now: number): boolean {
+  if (e.spawnedAt.getTime() > spawnScan.cursor.getTime() || (e.spawnedAt.getTime() === spawnScan.cursor.getTime() && !spawnScan.atCursor.has(e.id))) return false; // not sent yet
+  const sent = spawnScan.announced.get(e.id);
+  return sent === undefined || now - sent >= SPAWN_GRACE_MS;
+}
+
 /**
  * The combat clock: aggressive enemies near players pick an attack they can
  * reach, telegraph it to everyone nearby at once, and it lands at `hitAt`.
@@ -764,8 +905,8 @@ async function dashMove(from: { x: number; y: number }, dir: Facing, tiles: numb
  */
 async function combatTick(): Promise<void> {
   const players = openPlayers();
-  if (!players.length) return;
   const now = Date.now();
+  if (!players.length) return;
   if (now - combat.rowsAt > COMBAT_ROWS_MS) {
     combat.rows = await db.select().from(enemies).where(inArray(enemies.kind, AGGRESSIVE_KINDS));
     combat.rowsAt = now;
@@ -777,6 +918,7 @@ async function combatTick(): Promise<void> {
   const dashes: MoveWrite[] = [];
   for (const e of combat.rows) {
     if ((combat.busyUntil.get(e.id) ?? 0) > now) continue;
+    if (!seenLongEnough(e, now)) continue; // not on screen yet
     const at = rowPositionAt(e, now);
     const near = nearby(grid, at.x, at.y, ENGAGE_PX).map((c) => ({ c, d: Math.hypot(c.homePx - at.x, c.homePy - at.y) })).filter((x) => x.d <= ENGAGE_PX).sort((a, b) => a.d - b.d);
     if (!near.length) continue;
