@@ -188,6 +188,8 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "Inn", file: "Inn.png" },
   { name: "Bakery", file: "Bakery.png" },
   { name: "RanchLot", file: "RanchLot.png" },
+  { name: "VineyardLot", file: "VineyardLot.png" },
+  { name: "WorkshopLot", file: "WorkshopLot.png" },
   { name: "Waystone", file: "Waystone.png" },
 ];
 
