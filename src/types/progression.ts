@@ -6,8 +6,9 @@ export type EnemyDrop = { itemKey: string; chance: number; qty: number };
 
 export type EnemyKindDef = {
   name: string;
-  /** 1 = near town (passive), 2+ = attacks players next to it, boss = world boss. */
-  tier: 1 | 2 | 3 | "boss";
+  /** 1 = near town (passive), 2+ = attacks players next to it (5–8: the far
+   *  lands of the bigger continent), boss = world boss. */
+  tier: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | "boss";
   hp: number;
   /** XP for the kill (the boss shares its own reward). */
   xp: number;
@@ -18,6 +19,8 @@ export type EnemyKindDef = {
   nightOnly?: boolean;
   /** Runs at players who come close, instead of only biting at arm's length. */
   hunts?: boolean;
+  /** Pack size [min, max] in the wilds, when not the tier's usual (big beasts walk alone). */
+  pack?: readonly [number, number];
 };
 
 /** A wild area where enemies spawn, with the kinds that live there. */

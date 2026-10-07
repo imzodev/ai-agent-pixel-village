@@ -28,11 +28,16 @@ export const WEAPON_LAYERS: Record<string, { front: string; behind: string; tint
   stone_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#a4a6ae" },
   thorn_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#7aa548" },
   wisp_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#a98cf0" },
+  // The far lands' blades (src/lib/recipes.ts).
+  steel_sword: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#cfd8e4" },
+  wyvernbone_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#ecdcb8" },
+  elder_blade: { front: "/lpc/weapon_dagger.png", behind: "/lpc/weapon_dagger_behind.png", tint: "#6ab858" },
   axe: { front: "/lpc/weapon_axe.png", behind: "/lpc/weapon_axe_behind.png" },
   // Bows (src/lib/progression.ts BOWS): carried while walking, drawn when shooting.
   short_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png" },
   recurve_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png", tint: "#8a4a2c" },
   great_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png", tint: "#d8a838" },
+  runed_bow: { front: "/lpc/weapon_bow.png", behind: "/lpc/weapon_bow_behind.png", tint: "#8a6ad8" },
 };
 export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs", "afro", "buzzcut", "bedhead", "cowlick"];
 export const SKIN_TONES = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#a86a3d", "#7a4a2a", "#5a3a22"];

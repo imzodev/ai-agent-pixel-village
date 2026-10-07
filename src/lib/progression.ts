@@ -22,6 +22,15 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
   frostwolf: { name: "Frost Wolf", tier: 3, hp: 30, xp: 34, damage: 4, hunts: true, drops: [{ itemKey: "frost_pelt", chance: 0.7, qty: 1 }] },
   shade: { name: "Darkwood Shade", tier: 3, hp: 28, xp: 32, damage: 4, drops: [{ itemKey: "shade_essence", chance: 0.6, qty: 1 }] },
   wisp: { name: "Shade Wisp", tier: 3, hp: 30, xp: 40, damage: 4, nightOnly: true, drops: [{ itemKey: "wisp_essence", chance: 0.75, qty: 1 }] },
+  // The far lands (danger tiers 5–8 of the bigger continent; scripts/draw-far-foes.mjs).
+  dune_stalker: { name: "Dune Stalker", tier: 5, hp: 24, xp: 60, damage: 4, hunts: true, drops: [{ itemKey: "stalker_scale", chance: 0.75, qty: 1 }] },
+  bog_hag: { name: "Bog Hag", tier: 5, hp: 22, xp: 64, damage: 4, pack: [1, 2], drops: [{ itemKey: "hag_charm", chance: 0.6, qty: 1 }, { itemKey: "herb", chance: 0.5, qty: 2 }] },
+  ice_troll: { name: "Ice Troll", tier: 6, hp: 40, xp: 90, damage: 5, pack: [1, 2], drops: [{ itemKey: "troll_hide", chance: 0.75, qty: 1 }] },
+  gloam_stag: { name: "Gloam Stag", tier: 6, hp: 32, xp: 80, damage: 5, pack: [2, 3], drops: [{ itemKey: "gloam_antler", chance: 0.7, qty: 1 }] },
+  basalt_golem: { name: "Basalt Golem", tier: 7, hp: 52, xp: 120, damage: 6, pack: [1, 1], drops: [{ itemKey: "basalt_core", chance: 0.8, qty: 1 }, { itemKey: "stone", chance: 1, qty: 4 }] },
+  wyvern: { name: "Wyvern", tier: 7, hp: 38, xp: 110, damage: 6, hunts: true, pack: [1, 2], drops: [{ itemKey: "wyvern_bone", chance: 0.75, qty: 1 }] },
+  rime_wraith: { name: "Rime Wraith", tier: 8, hp: 34, xp: 130, damage: 6, nightOnly: true, pack: [1, 3], drops: [{ itemKey: "rime_essence", chance: 0.7, qty: 1 }] },
+  elder_treant: { name: "Elder Treant", tier: 8, hp: 60, xp: 160, damage: 7, pack: [1, 1], drops: [{ itemKey: "elder_heartwood", chance: 0.8, qty: 1 }, { itemKey: "wood", chance: 1, qty: 6 }] },
   // World boss: rewards are shared by everyone who fought it (BOSS_REWARD).
   rootking: { name: "Old Rootking", tier: "boss", hp: 600, xp: 300, damage: 5, drops: [] },
 };
@@ -137,6 +146,10 @@ export const WEAPONS: Record<string, WeaponDef> = {
   thorn_blade: { damage: 6 },
   wisp_blade: { damage: 9 },
   sunken_cutlass: { damage: 12 },
+  // Bjorn forges these from the far lands' trophies (src/lib/recipes.ts).
+  steel_sword: { damage: 16 },
+  wyvernbone_blade: { damage: 21 },
+  elder_blade: { damage: 27 },
   axe: { damage: 0, chopBonus: 0 },
   sharp_axe: { damage: 0, chopBonus: 1 },
 };
@@ -146,6 +159,7 @@ export const BOWS: Readonly<Record<string, BowDef>> = {
   short_bow: { damage: 2, rangePx: 7 * 16 },
   recurve_bow: { damage: 5, rangePx: 8 * 16 },
   great_bow: { damage: 9, rangePx: 10 * 16 },
+  runed_bow: { damage: 14, rangePx: 11 * 16 },
 };
 export const ARROW_ITEM = "arrow";
 /** The least time between two shots (the draw takes this long). */
@@ -161,12 +175,14 @@ export function bowOf(equipped: readonly string[]): BowDef & { key: string } | n
 /**
  * The land sets the danger: an enemy's HP and damage grow with the danger
  * tier where it lives (src/lib/continent.ts tierAt), and so does its XP.
- * Index = tier (1–4). The world boss keeps its own numbers.
+ * Index = tier (1–8). The world boss keeps its own numbers.
  */
-export const TIER_HP_MULT = [1, 1, 2, 4, 6] as const;
-export const TIER_DMG_MULT = [1, 1, 2, 3, 4.5] as const;
-export const TIER_XP_MULT = [1, 1, 1.5, 2.5, 3.5] as const;
-const tierIdx = (tier: number) => Math.max(1, Math.min(4, Math.round(tier)));
+export const TIER_HP_MULT = [1, 1, 2, 4, 6, 7.5, 9, 11, 13] as const;
+export const TIER_DMG_MULT = [1, 1, 2, 3, 4.5, 5.5, 6.5, 7.5, 8.5] as const;
+export const TIER_XP_MULT = [1, 1, 1.5, 2.5, 3.5, 4.5, 5.5, 7, 8.5] as const;
+/** The deadliest danger tier (the far corners of the continent). */
+export const MAX_TIER = 8;
+const tierIdx = (tier: number) => Math.max(1, Math.min(MAX_TIER, Math.round(tier)));
 /** An enemy's HP where it spawns. */
 export const enemyHpAt = (kind: string, tier: number): number =>
   enemyKind(kind).tier === "boss" ? enemyKind(kind).hp : Math.round(enemyKind(kind).hp * TIER_HP_MULT[tierIdx(tier)]);
@@ -237,8 +253,10 @@ export const LEVEL_UNLOCKS: LevelUnlock[] = [
   { level: 5, text: "Pumpkin seeds · Thorn Blade & Sharp Axe recipes · a perk" },
   { level: 8, text: "Wisp Blade recipe" },
   { level: 10, text: "A second land lot · a perk" },
-  { level: 15, text: "A perk" },
-  { level: 20, text: "A perk" },
+  { level: 15, text: "Steel Sword recipe (far-land trophies) · a perk" },
+  { level: 20, text: "Runed Bow recipe · a perk" },
+  { level: 25, text: "Wyvernbone Blade recipe · a perk" },
+  { level: 32, text: "Elder Blade recipe" },
 ];
 
 /** Unlocks gained going from level `from` (exclusive) to `to` (inclusive). */

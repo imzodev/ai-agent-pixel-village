@@ -330,6 +330,102 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { walk: "hover" },
   },
+  dune_stalker: {
+    // Enemy (tier 5, deserts). scripts/draw-far-foes.mjs.
+    url: "/assets/animals/dune_stalker.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1, originX: 0.5, originY: 0.88, labelHeight: 18,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 12, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 12, loop: false },
+    },
+    stateActions: { walk: "idle", hunt: "idle" },
+  },
+  bog_hag: {
+    // Enemy (tier 5, swamps): casts hexes. scripts/draw-far-foes.mjs.
+    url: "/assets/animals/bog_hag.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1, originX: 0.5, originY: 0.92, labelHeight: 28,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 6, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 8, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  ice_troll: {
+    // Enemy (tier 6, snow). scripts/draw-far-foes.mjs (48 px).
+    url: "/assets/animals/ice_troll.png",
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.1, originX: 0.5, originY: 0.97, labelHeight: 44,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 6, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 8, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  gloam_stag: {
+    // Enemy (tier 6, darkwood). scripts/draw-far-foes.mjs (48 px).
+    url: "/assets/animals/gloam_stag.png",
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1, originX: 0.5, originY: 0.97, labelHeight: 44,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 10, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 10, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  basalt_golem: {
+    // Enemy (tier 7, peaks and mesas). scripts/draw-far-foes.mjs (48 px).
+    url: "/assets/animals/basalt_golem.png",
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.15, originX: 0.5, originY: 0.97, labelHeight: 46,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 5, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 7, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  wyvern: {
+    // Enemy (tier 7, badlands; flies, draws its own shadow). scripts/draw-far-foes.mjs (48 px).
+    url: "/assets/animals/wyvern.png",
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.1, originX: 0.5, originY: 0.94, labelHeight: 40,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 10, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 10, loop: false },
+    },
+    stateActions: { walk: "idle", hunt: "idle" },
+  },
+  rime_wraith: {
+    // Enemy (tier 8, snowpeaks at night; hovers, own shadow). scripts/draw-far-foes.mjs.
+    url: "/assets/animals/rime_wraith.png",
+    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.1, originX: 0.5, originY: 0.95, labelHeight: 28,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 6, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 8, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
+  elder_treant: {
+    // Enemy (tier 8, deep forest). scripts/draw-far-foes.mjs (48 px).
+    url: "/assets/animals/elder_treant.png",
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.3, originX: 0.5, originY: 0.97, labelHeight: 46,
+    actions: {
+      walk: { block: 0, frames: 4, frameRate: 4, loop: true },
+      idle: { block: 1, frames: 4, frameRate: 4, loop: true },
+      attack: { block: 2, frames: 4, frameRate: 7, loop: false },
+    },
+    stateActions: { walk: "idle" },
+  },
   rootking: {
     // World boss. Original art drawn by scripts/draw-rootking.mjs: 64×64
     // frames, the same front view in every row (it stands its ground).

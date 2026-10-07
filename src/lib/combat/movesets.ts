@@ -24,6 +24,39 @@ export const MOVESETS: Readonly<Record<string, readonly MoveDef[]>> = {
   wisp: [{ name: "wisp bolt", shape: { type: "circle", r: 16 }, trigger: 150, windupMs: 650, cooldownMs: 2000, dmgMult: 1, projectile: 240, atTarget: true }],
   thornling: [{ name: "thorn burst", shape: { type: "circle", r: 40 }, trigger: 38, windupMs: 800, cooldownMs: 2400, dmgMult: 1.2 }],
   bat: [{ name: "swoop", shape: { type: "line", length: 3 * T, width: 14 }, trigger: 50, windupMs: 450, cooldownMs: 1600, dmgMult: 1, dash: 3 }],
+  // The far lands (tiers 5–8).
+  dune_stalker: [
+    { name: "pounce", shape: { type: "line", length: 5 * T, width: 18 }, trigger: 85, windupMs: 600, cooldownMs: 2000, dmgMult: 1.1, dash: 5 },
+    { name: "venom bite", shape: { type: "cone", r: 34, half: 0.6 }, trigger: 32, windupMs: 450, cooldownMs: 1500, dmgMult: 0.9, status: { kind: "poison", ms: 3000 } },
+  ],
+  bog_hag: [
+    { name: "hex bolt", shape: { type: "circle", r: 18 }, trigger: 160, windupMs: 800, cooldownMs: 2400, dmgMult: 1, projectile: 200, atTarget: true, status: { kind: "slow", ms: 2500 } },
+    { name: "rot cloud", shape: { type: "circle", r: 44 }, trigger: 40, windupMs: 900, cooldownMs: 3000, dmgMult: 1.2, status: { kind: "poison", ms: 3000 } },
+  ],
+  ice_troll: [
+    { name: "club smash", shape: { type: "cone", r: 52, half: 0.8 }, trigger: 46, windupMs: 1000, cooldownMs: 2600, dmgMult: 1.6 },
+    { name: "frost stomp", shape: { type: "circle", r: 60 }, trigger: 50, windupMs: 1300, cooldownMs: 4200, dmgMult: 1.3, status: { kind: "slow", ms: 2500 } },
+  ],
+  gloam_stag: [
+    { name: "antler charge", shape: { type: "line", length: 8 * T, width: 24 }, trigger: 120, windupMs: 900, cooldownMs: 3200, dmgMult: 1.5, dash: 8 },
+    { name: "kick", shape: { type: "cone", r: 32, half: 0.7 }, trigger: 30, windupMs: 450, cooldownMs: 1500, dmgMult: 1 },
+  ],
+  basalt_golem: [
+    { name: "magma slam", shape: { type: "circle", r: 72 }, trigger: 60, windupMs: 1400, cooldownMs: 3800, dmgMult: 1.8 },
+    { name: "hurled rock", shape: { type: "circle", r: 22 }, trigger: 170, windupMs: 1100, cooldownMs: 3000, dmgMult: 1.2, projectile: 180, atTarget: true },
+  ],
+  wyvern: [
+    { name: "fire breath", shape: { type: "cone", r: 80, half: 0.45 }, trigger: 72, windupMs: 900, cooldownMs: 3000, dmgMult: 1.4 },
+    { name: "dive", shape: { type: "line", length: 6 * T, width: 20 }, trigger: 100, windupMs: 700, cooldownMs: 2400, dmgMult: 1.2, dash: 6 },
+  ],
+  rime_wraith: [
+    { name: "rime bolt", shape: { type: "circle", r: 18 }, trigger: 170, windupMs: 650, cooldownMs: 1900, dmgMult: 1, projectile: 260, atTarget: true, status: { kind: "slow", ms: 2500 } },
+    { name: "grave chill", shape: { type: "circle", r: 40 }, trigger: 36, windupMs: 700, cooldownMs: 2200, dmgMult: 1.3 },
+  ],
+  elder_treant: [
+    { name: "root snare", shape: { type: "circle", r: 26 }, trigger: 190, windupMs: 1100, cooldownMs: 2800, dmgMult: 1.1, atTarget: true, status: { kind: "slow", ms: 3000 } },
+    { name: "branch sweep", shape: { type: "cone", r: 76, half: 0.8 }, trigger: 66, windupMs: 1000, cooldownMs: 2800, dmgMult: 1.6 },
+  ],
   rootking: [
     { name: "root spikes", shape: { type: "circle", r: 24 }, trigger: 180, windupMs: 1100, cooldownMs: 3000, dmgMult: 1.2, atTarget: true },
     { name: "sweep", shape: { type: "cone", r: 120, half: 0.7 }, trigger: 120, windupMs: 900, cooldownMs: 2600, dmgMult: 1.5 },

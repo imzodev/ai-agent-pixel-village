@@ -97,6 +97,10 @@ const WANTED_B: Readonly<Record<string, readonly string[]>> = {
   boar: ["Bonecrusher", "Tuskgrim", "Mudsnout"], scorpion: ["Sandclaw", "Stingtail", "Dunebiter"],
   lurker: ["Mudmaw", "Bogmouth", "Fenbelly"], shade: ["Gloomhide", "Hollowsoul", "Duskwhisper"],
   thornling: ["Thornback", "Brambleheart", "Briarjaw"],
+  dune_stalker: ["Sandfang", "Duneskulk", "Sunscale"], bog_hag: ["Mother Mire", "Grandmother Rot", "the Fen Crone"],
+  ice_troll: ["Glacierfist", "Rimebelly", "Snowcrusher"], gloam_stag: ["Nightcrown", "Duskantler", "Gloomhart"],
+  basalt_golem: ["Cinderheart", "Slagback", "Magmafist"], wyvern: ["Emberwing", "Ashtalon", "Scorchscale"],
+  rime_wraith: ["Hollowfrost", "the Pale Widow", "Wintersigh"], elder_treant: ["Oldroot", "Mossbeard", "Grandfather Oak"],
 };
 export function wantedName(rand: () => number, kind = "wolf"): string {
   const b = WANTED_B[kind] ?? WANTED_B.wolf;

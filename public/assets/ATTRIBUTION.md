@@ -81,3 +81,8 @@ Original art made for this project by `scripts/draw-furniture.mjs` (every
 furniture piece, front view, 32×32) and `scripts/draw-workshop-lot.mjs` (the
 carpenter's yard); the stations are drawn in `src/game/workshopProps.ts`. Not
 derived from any third-party asset.
+
+## Far-land enemies (`animals/{dune_stalker,bog_hag,ice_troll,gloam_stag,basalt_golem,wyvern,rime_wraith,elder_treant}.png`)
+
+Original art made for this project by `scripts/draw-far-foes.mjs`. Not derived
+from any third-party asset.

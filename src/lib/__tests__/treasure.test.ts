@@ -58,9 +58,11 @@ describe("treasure", () => {
     expect(t[3].gems).toBeGreaterThan(0);
     for (const l of t) expect(l.items.length).toBe(1);
   });
-  it("the legendary cache beats any chest, with a unique blade", () => {
+  it("the legendary cache beats any chest, with the best blade of the near lands", () => {
     expect(LEGENDARY_LOOT.coins).toBeGreaterThan(lootFor(4, () => 0.99).coins);
-    expect(WEAPONS[LEGENDARY_LOOT.items[0].itemKey].damage).toBeGreaterThan(Math.max(...Object.entries(WEAPONS).filter(([k]) => k !== "sunken_cutlass").map(([, w]) => w.damage)));
+    // Bjorn's far-land blades (forged from tier 5–8 trophies) are meant to outclass it.
+    const farLand = new Set(["steel_sword", "wyvernbone_blade", "elder_blade"]);
+    expect(WEAPONS[LEGENDARY_LOOT.items[0].itemKey].damage).toBeGreaterThan(Math.max(...Object.entries(WEAPONS).filter(([k]) => k !== "sunken_cutlass" && !farLand.has(k)).map(([, w]) => w.damage)));
   });
   it("a bought map doesn't pay back its price in coins (no money loop)", () => {
     let total = 0, n = 0;

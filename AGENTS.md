@@ -149,6 +149,17 @@ message; enemies tickd still creates (encounters, zone respawns) are picked up
 once a beat. A new enemy can't attack or chase for `SPAWN_GRACE_MS` after it was
 sent. tickd despawns wild enemies nobody has been near for `WILD_DESPAWN_MS`.
 
+**Danger tiers** run 1–8 (`tierAt`: one per 330 tiles from the village, +1 on
+peaks, mesas, darkwood and swamps; the heartland stays ≤ 2), scaling HP, damage
+and XP (`TIER_*_MULT`). Tiers 5–8 have their own foes (`dune_stalker`, `bog_hag`,
+`ice_troll`, `gloam_stag`, `basalt_golem`, `wyvern`, `rime_wraith`,
+`elder_treant`; art by `scripts/draw-far-foes.mjs`). `wildKindFor` only picks
+kinds within three tiers below to one above the land's, and a kind's `pack`
+overrides the tier's pack size. A new enemy kind needs: `ENEMY_KINDS`,
+`MOVESETS`, `ANIMAL_SPRITES`, `BIOME_KINDS`, the collection icon, bounty names
+and its drop items (`farLands.test.ts` checks all of it). Bjorn forges the
+far-land gear (steel sword → wyvernbone blade → elder blade, runed bow).
+
 The WS server's combat clock (and wolf hunts) work from an **in-memory cache**
 of aggressive enemies (`combat.rows`), not per-second reads: a full read every
 `WS_RESYNC_MS` as a safety net, kept current in between by its own spawns

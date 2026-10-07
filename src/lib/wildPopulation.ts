@@ -62,7 +62,7 @@ export async function packFor(
   if (rand() >= Math.min(0.9, chunkPackChance(tier) * crowd)) return [];
   const kind = wildKindFor(biomeAt(mid.tx, mid.ty), tier, night, rand);
   if (!kind) return [];
-  const base = wildPackSize(tier, rand);
+  const base = wildPackSize(tier, rand, kind);
   const n = base + Math.floor(((crowd - 1) * base) / 2);
   const out: PackMember[] = [];
   // The pack stands together around a spot inside the chunk.

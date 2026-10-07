@@ -412,16 +412,19 @@ export function continentAt(tx: number, ty: number): TerrainCell {
 // ── Danger ───────────────────────────────────────────────────────────────
 /** The village plaza: danger grows with distance from here. */
 const HOME = { tx: 32, ty: 21 };
-/** Danger tier 1 (safe) … 4 (deadly) at world tile (x, y): distance from
- *  the village, plus one for peaks, darkwood and swamp. */
+/** Tiles of distance per danger tier. */
+const TIER_EVERY = 330;
+/** Danger tier 1 (safe) … 8 (the deadly far corners) at world tile (x, y):
+ *  distance from the village, plus one for peaks, darkwood and swamp. The
+ *  first four rings cover the old continent; the far lands go on to 8. */
 export function tierAt(x: number, y: number): number {
   const d = Math.hypot(x - HOME.tx, (y - HOME.ty) * 1.6);
-  let t = 1 + Math.floor(d / 260);
+  let t = 1 + Math.floor(d / TIER_EVERY);
   if (!inHeartland(x, y)) {
     const b = biomeAt(x, y);
     if (b === "peak" || b === "snowpeak" || b === "mesa" || b === "darkwood" || b === "swamp") t += 1;
   } else t = Math.min(t, 2);
-  return Math.max(1, Math.min(4, t));
+  return Math.max(1, Math.min(8, t));
 }
 
 // ── Provinces ────────────────────────────────────────────────────────────

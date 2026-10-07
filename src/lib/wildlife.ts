@@ -22,9 +22,11 @@ export const WILD_DESPAWN_MS = 5 * 60_000;
  * population — a crowd doesn't multiply the beasts.
  */
 export const wildTarget = (tier: number): number => 6 + 4 * tier;
-/** Each spawn is a pack of the same kind: 1–3 near home, 2–4 further out, 2–5 in the far wilds. */
-export function wildPackSize(tier: number, rand = Math.random): number {
-  const [min, max] = tier >= 4 ? [2, 5] : tier >= 3 ? [2, 4] : [1, 3];
+/** Each spawn is a pack of the same kind: 1–3 near home, 2–4 further out, 2–5 in the far wilds
+ *  (a kind's own `pack` wins: big beasts walk alone). */
+export function wildPackSize(tier: number, rand = Math.random, kind?: string): number {
+  const own = kind ? enemyKind(kind).pack : undefined;
+  const [min, max] = own ?? (tier >= 4 ? [2, 5] : tier >= 3 ? [2, 4] : [1, 3]);
   return min + Math.floor(rand() * (max - min + 1));
 }
 /** The land ahead of a moving player is populated this many chunks out
@@ -50,25 +52,34 @@ export const WILD_MAX_TOTAL = 8000;
 /** Which kinds live in a biome (heavier weight = more common). */
 const BIOME_KINDS: Readonly<Record<Biome, Readonly<Record<string, number>>>> = {
   ocean: {},
-  beach: { slime: 3, boar: 1 },
-  meadow: { slime: 3, wolf: 2, boar: 2 },
-  forest: { wolf: 3, boar: 2, thornling: 2, slime: 1 },
-  darkwood: { shade: 3, wolf: 1, thornling: 1 },
-  swamp: { lurker: 3, slime: 2 },
-  desert: { scorpion: 4, bat: 1 },
-  badlands: { scorpion: 3, boar: 1 },
-  snow: { frostwolf: 4, bat: 1 },
-  peak: { bat: 2, boar: 1 },
-  snowpeak: { frostwolf: 2 },
-  mesa: { scorpion: 2 },
+  beach: { slime: 3, boar: 1, dune_stalker: 1, wyvern: 1 },
+  meadow: { slime: 3, wolf: 2, boar: 2, gloam_stag: 1, wyvern: 1 },
+  forest: { wolf: 3, boar: 2, thornling: 2, slime: 1, gloam_stag: 2, elder_treant: 1 },
+  darkwood: { shade: 3, wolf: 1, thornling: 1, gloam_stag: 3, elder_treant: 2 },
+  swamp: { lurker: 3, slime: 2, bog_hag: 3, elder_treant: 1 },
+  desert: { scorpion: 4, bat: 1, dune_stalker: 4, wyvern: 1 },
+  badlands: { scorpion: 3, boar: 1, dune_stalker: 2, wyvern: 3 },
+  snow: { frostwolf: 4, bat: 1, ice_troll: 3, rime_wraith: 2 },
+  peak: { bat: 2, boar: 1, basalt_golem: 3, wyvern: 1 },
+  snowpeak: { frostwolf: 2, ice_troll: 2, rime_wraith: 3 },
+  mesa: { scorpion: 2, basalt_golem: 3, wyvern: 2 },
 };
 
-/** A wild kind for this biome and tier (weighted), or null if none fits. */
+/** A wild kind for this biome and tier (weighted), or null if none fits.
+ *  Kinds within three tiers below to one above: the far lands keep their
+ *  own beasts, not slimes. If none fits that window, the toughest the biome has. */
 export function wildKindFor(biome: Biome, tier: number, night: boolean, rand = Math.random): string | null {
-  const opts = Object.entries(BIOME_KINDS[biome]).filter(([k]) => {
+  const all = Object.entries(BIOME_KINDS[biome]).filter(([k]) => {
     const d = enemyKind(k);
-    return d.tier !== "boss" && d.tier <= tier + 1 && (night || !d.nightOnly);
+    return d.tier !== "boss" && (night || !d.nightOnly);
   });
+  const tierOf = (k: string) => enemyKind(k).tier as number;
+  let opts = all.filter(([k]) => tierOf(k) <= tier + 1 && tierOf(k) >= tier - 3);
+  if (!opts.length) {
+    const fit = all.filter(([k]) => tierOf(k) <= tier + 1);
+    const top = Math.max(...fit.map(([k]) => tierOf(k)));
+    opts = fit.filter(([k]) => tierOf(k) === top);
+  }
   const total = opts.reduce((s, [, w]) => s + w, 0);
   if (total === 0) return null;
   let r = rand() * total;
