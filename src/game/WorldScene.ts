@@ -18,7 +18,7 @@ import type { AtmosphereState, LightSource } from "@/types/lighting";
 import { FURNITURE_TEXTURE, makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
-import { chimneySources, stampBuildings, stampLights } from "./buildingStamps";
+import { chimneySources, resetStampVisuals, stampBuildings, stampLights, syncStampVisuals } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
 import { WorldStream } from "./worldStream";
 import {
@@ -237,6 +237,7 @@ export class WorldScene extends Phaser.Scene {
     // Free module-global chunk/rendering state owned by this scene so a
     // recreated scene never reuses dead tilemaps.
     resetChunkState();
+    resetStampVisuals();
   };
 
   // True while it is safe to create/modify game objects. Guards every async
@@ -272,6 +273,7 @@ export class WorldScene extends Phaser.Scene {
     // chunk maps are module-global and would otherwise hold tilemaps owned
     // by the dead scene (StrictMode remount / HMR), which crash on reuse.
     resetChunkState();
+    resetStampVisuals();
     makeAllTextures(this);
     // The lpc_crops image is loaded in preload; add per-crop frame regions
     // (wheat_field, …) so node rendering can pick the right one via a frame
@@ -315,6 +317,7 @@ export class WorldScene extends Phaser.Scene {
         }
         setLightGroup("stamps", stampLights(stamped));
         this.pendingSmoke = chimneySources(stamped);
+        syncStampVisuals(this, this.lastPlayerChunk); // only the ones near the player are drawn
       }
     } catch {
       /* manifest unavailable — decor-only world */
@@ -1397,6 +1400,7 @@ export class WorldScene extends Phaser.Scene {
     this.announceRegion();
     void ensureChunks(this, cur);
     releaseOutside(this, cur);
+    syncStampVisuals(this, cur);
     // No recenter: the player-follow owns the framing on chunk crossings.
     recenterCamera(this, cur, false);
   }

@@ -9,7 +9,9 @@
 import type { LightSource } from "@/types/lighting";
 import type Phaser from "phaser";
 import type { GardenPlot } from "@/types/garden";
+import type { StampSlot } from "@/types/stamps";
 import {
+  CHUNK_TILE_H,
   CHUNK_TILE_PX,
   CHUNK_TILE_W,
   blockStampTiles,
@@ -97,36 +99,87 @@ function registerStampCollision(scene: Phaser.Scene, key: string, ox: number, oy
   blockStampTiles(ox, oy, CHUNK_TILE_W, [...blocked]);
 }
 
-// Stamp every manifest building: render its static layers at the manifest's
-// world position, lift + instantiate its Y-sort tiles, and register its
-// collision tiles. Returns the stamped buildings with derived doors.
+// Stamp every manifest building. The DATA (collision, door, zone, garden
+// plots — and from them lights and smoke) is set up for the whole world at
+// once: templates load once per FILE (a few dozen designs, not one per
+// building) and that part is cheap. The VISUALS (static tile layers and
+// Y-sorted sprites, the expensive part) are made only for buildings near the
+// player and freed when they're far (syncStampVisuals), so the cost stays
+// flat however many towns and lots the world holds.
 export async function stampBuildings(
   scene: Phaser.Scene,
   manifest: BuildingManifest,
 ): Promise<StampedBuilding[]> {
-  const out: StampedBuilding[] = [];
-  for (const entry of manifest.buildings) {
-    const key = `stamp_${entry.key}`;
-    await loadTemplate(scene, key, entry.file);
+  const files = [...new Set(manifest.buildings.map((e) => e.file))];
+  await Promise.all(files.map(async (file) => {
+    const key = templateKey(file);
+    await loadTemplate(scene, key, file);
     dropPlainGrass(scene, key);
-    const result = parseStamp(scene, key);
-    if (!result) continue;
-    const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = result;
-    const tilesets = registerReferencedTilesets(tilemap);
-    const origin = tileOrigin(entry.tx, entry.ty);
-    createStaticLayers(tilemap, tilesets, origin, key, undefined, STAMP_DEPTH_OFFSET);
-    const sortedSprites: Phaser.GameObjects.Image[] = [];
-    instantiateSortedSprites(scene, tilesets, sortedTiles, anchorGrid, anchorByObjectId, origin, sortedSprites);
-    registerStampCollision(scene, key, origin.x, origin.y);
+  }));
+  const out: StampedBuilding[] = [];
+  stampSlots.length = 0;
+  for (const entry of manifest.buildings) {
+    const key = templateKey(entry.file);
     const cached = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
+    if (!cached) continue;
+    const origin = tileOrigin(entry.tx, entry.ty);
+    registerStampCollision(scene, key, origin.x, origin.y);
     out.push({
       entry,
       origin,
       ...deriveDoorAndZone(scene, key, origin),
       garden: gardenPlotsAt(entry.tx, entry.ty, cached?.data ?? cached),
     });
+    stampSlots.push({ entry, key, origin, cx: Math.floor((entry.tx + 12) / CHUNK_TILE_W), cy: -Math.floor((entry.ty + 7) / CHUNK_TILE_H), visual: null });
   }
   return out;
+}
+
+const templateKey = (file: string) => `stamp_tpl_${file}`;
+
+const stampSlots: StampSlot[] = [];
+/** Visuals are made within this many chunks of the player… */
+const STAMP_SHOW_CHUNKS = 3;
+/** …and freed beyond this (a gap, so walking along an edge doesn't churn). */
+const STAMP_HIDE_CHUNKS = 4;
+
+/** Make the visuals of buildings near chunk (cx, cy), free the far ones. */
+export function syncStampVisuals(scene: Phaser.Scene, { cx, cy }: { cx: number; cy: number }): void {
+  for (const slot of stampSlots) {
+    const d = Math.max(Math.abs(slot.cx - cx), Math.abs(slot.cy - cy));
+    if (slot.visual && (d > STAMP_HIDE_CHUNKS || slot.visual.tilemap.scene !== scene)) {
+      destroyVisual(slot);
+    } else if (!slot.visual && d <= STAMP_SHOW_CHUNKS) {
+      buildVisual(scene, slot);
+    }
+  }
+}
+
+function buildVisual(scene: Phaser.Scene, slot: StampSlot): void {
+  const result = parseStamp(scene, slot.key);
+  if (!result) return;
+  const { tilemap, sortedTiles, anchorGrid, anchorByObjectId } = result;
+  const tilesets = registerReferencedTilesets(tilemap);
+  const layers = new Map<string, Phaser.Tilemaps.TilemapLayer | Phaser.Tilemaps.TilemapGPULayer>();
+  createStaticLayers(tilemap, tilesets, slot.origin, `stamp_${slot.entry.key}`, layers, STAMP_DEPTH_OFFSET);
+  const sprites: Phaser.GameObjects.Image[] = [];
+  instantiateSortedSprites(scene, tilesets, sortedTiles, anchorGrid, anchorByObjectId, slot.origin, sprites);
+  slot.visual = { tilemap, layers, sprites };
+}
+
+function destroyVisual(slot: StampSlot): void {
+  const v = slot.visual;
+  if (!v) return;
+  for (const layer of v.layers.values()) layer.destroy();
+  for (const sprite of v.sprites) sprite.destroy();
+  v.tilemap.destroy();
+  slot.visual = null;
+}
+
+/** Drop every building's visuals (the scene is going away). */
+export function resetStampVisuals(): void {
+  for (const slot of stampSlots) slot.visual = null; // their scene destroyed them
+  stampSlots.length = 0;
 }
 
 // Cache key (entry.key) → parsed tilemap + lifted tiles, or null when the
