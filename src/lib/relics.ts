@@ -26,7 +26,7 @@ export const RELIC_SETS: readonly RelicSetDef[] = [
     reward: { coins: 300, title: "Fossil Hunter" },
   },
   {
-    key: "cards", name: "Wayfarer Cards", icon: "🃏", blurb: "A dropped playing card — one inside every town, and a few far out in the wilds.",
+    key: "cards", name: "Wayfarer Cards", icon: "🃏", blurb: "A dropped playing card — in towns across the land, and a few far out in the wilds.",
     names: ["The Wanderer", "The Lantern", "The Fox", "The Tower", "The Moon", "The Smith", "The River", "The Crown", "The Hermit", "The Star"],
     reward: { coins: 300, title: "Card Sharp" },
   },

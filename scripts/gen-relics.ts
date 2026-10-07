@@ -4,7 +4,7 @@
 //   npx tsx --env-file=.env --tsconfig tsconfig.json scripts/gen-relics.ts
 //
 // Writes src/lib/relicsData.json. Old coins lie a step off the roads,
-// fossils in the dry lands, wayfarer cards in each town (and a few at far
+// fossils in the dry lands, wayfarer cards in seven towns (and a few at far
 // wild edges), rune carvings in snow, darkwood and swamp. Each set is spread
 // far apart, and every spot is open, walkable ground.
 
@@ -105,7 +105,9 @@ async function main() {
     cards: [],
     carvings: await spread(scan(["snow", "darkwood", "swamp"], 2, 3), 10),
   };
-  const towns = await onePerTown();
+  // Seven cards in towns spread across the continent (there are more towns
+  // than cards now), three far out in the wilds.
+  const towns = await spread(await onePerTown(), 7);
   where.cards = [...towns, ...(await spread(scan(["meadow", "forest", "snow", "desert", "swamp", "darkwood", "badlands", "beach"], 3, 2), 10 - towns.length, towns))];
 
   const data: RelicsData = { relics: [] };

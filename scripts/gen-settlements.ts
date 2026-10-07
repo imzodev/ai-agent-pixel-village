@@ -7,11 +7,17 @@
 // the `st_*` entries of public/buildings/buildings.json (each town's
 // square, inn, waystone and houses, laid out like Hollowmere's). Every
 // system — terrain, collision, NPCs, shops, inns, the map — reads those
-// two files. Re-run after changing the continent or the town layout.
+// two files.
+//
+// Towns already in settlementsData.json are PINNED: same key, square,
+// people and road (players' reputation, bounties and NPC memories hang off
+// them; the continent keeps their land open). New towns are added around
+// them up to TOWN_COUNT, spread over the continent, each with a road to the
+// nearest road already built. Set REGEN_ALL=1 to throw the old ones away.
 
 import fs from "node:fs";
 import path from "node:path";
-import { CONTINENT, biomeAt, elevation, inHeartland, terrainProbe } from "../src/lib/continent";
+import { CONTINENT, biomeAt, elevation, inHeartland, terrainProbe, tierAt } from "../src/lib/continent";
 import { terrainAt, ROAD } from "../src/lib/regions";
 import { TOWN_LAYOUT, townBox } from "../src/lib/settlements";
 import { blockedFromChunk } from "../src/lib/chunkCollision";
@@ -57,26 +63,34 @@ const heartDistance = (tx: number, ty: number) => {
   return best;
 };
 
-function pickSites(): { family: TownFamily; sq: { tx: number; ty: number } }[] {
+/** How many towns the continent holds (pinned ones included). */
+const TOWN_COUNT = 20;
+
+/** New sites, spread out from the pinned towns and each other, cycling through the families. */
+function pickSites(pinned: readonly { family: TownFamily; sq: { tx: number; ty: number } }[], count: number): { family: TownFamily; sq: { tx: number; ty: number } }[] {
   const cands: { family: TownFamily; sq: { tx: number; ty: number } }[] = [];
-  for (let ty = CONTINENT.ty0 + 30; ty <= CONTINENT.ty1 - 40; ty += 9) for (let tx = CONTINENT.tx0 + 60; tx <= CONTINENT.tx1 - 80; tx += 12) {
+  for (let ty = CONTINENT.ty0 + 30; ty <= CONTINENT.ty1 - 40; ty += 15) for (let tx = CONTINENT.tx0 + 60; tx <= CONTINENT.tx1 - 80; tx += 20) {
     const sq = { tx, ty };
     const family = familyAt(sq);
     if (family && siteOk(sq, family) && heartDistance(tx + 12, ty + 7) > 110) cands.push({ family, sq });
   }
-  const chosen: { family: TownFamily; sq: { tx: number; ty: number } }[] = [];
-  for (const family of ORDER) {
+  const chosen = [...pinned];
+  const out: typeof chosen = [];
+  // Families take turns (the rarest land first), so every kind of town recurs.
+  for (let round = 0; out.length < count && round < 10; round++) for (const family of ORDER) {
+    if (out.length >= count) break;
     let best: (typeof cands)[number] | null = null, bestScore = -Infinity;
     for (const c of cands) {
       if (c.family !== family) continue;
       const spread = Math.min(heartDistance(c.sq.tx, c.sq.ty) * 0.6, ...chosen.map((o) => Math.hypot(o.sq.tx - c.sq.tx, (o.sq.ty - c.sq.ty) * 1.4)));
-      const score = Math.min(spread, 260) - heartDistance(c.sq.tx, c.sq.ty) * 0.25 + hash(c.sq.tx, c.sq.ty, 601) * 10; // spread out, but not at the very edge
+      if (spread < 220) continue; // towns stay a good ride apart
+      const score = Math.min(spread, 520) - heartDistance(c.sq.tx, c.sq.ty) * 0.08 + hash(c.sq.tx, c.sq.ty, 601) * 10;
       if (score > bestScore) { bestScore = score; best = c; }
     }
-    if (best) chosen.push(best);
-    else console.warn(`no site for a ${family} town`);
+    if (best) { chosen.push(best); out.push(best); }
   }
-  return chosen;
+  if (out.length < count) console.warn(`only ${out.length} new town sites (wanted ${count})`);
+  return out;
 }
 
 // ── Names and people ─────────────────────────────────────────────────────
@@ -96,13 +110,22 @@ const FLAVOUR: Record<TownFamily, string> = {
   darkwood: "a quiet hamlet in the shadow of the darkwood",
   hills: "a cheerful farming town among rolling green hills",
 };
-const DANGER: Record<TownFamily, string> = {
+const DANGER_NEAR: Record<TownFamily, string> = {
   port: "the crabs on the shore and the storms off the sea",
   desert: "the sand scorpions that come out of the dunes",
   snow: "the frost wolves that hunt down from the peaks",
   swamp: "the bog lurkers in the pools",
   darkwood: "the shades that drift between the trees",
   hills: "the wolves and boars in the woods",
+};
+/** What a town in the far lands (tier 5+) fears instead. */
+const DANGER_FAR: Record<TownFamily, string> = {
+  port: "the wyverns that dive on the boats",
+  desert: "the dune stalkers that hunt by the wells at dusk",
+  snow: "the ice trolls in the passes and the wraiths that walk at night",
+  swamp: "the bog hags and their hexes",
+  darkwood: "the gloam stags and the old walking trees",
+  hills: "the wyverns over the fields and the stags in the woods",
 };
 const FIRST = ["Ada", "Bram", "Cora", "Dell", "Edda", "Finn", "Gus", "Hana", "Ines", "Jory", "Kit", "Lena", "Milo", "Nell", "Otto", "Pia", "Quin", "Rosa", "Sven", "Tess", "Ulla", "Vic", "Wade", "Yara"];
 const SKIN = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#8d5524", "#ffdbac"];
@@ -121,6 +144,7 @@ function appearance(seed: number, salt: number): Appearance {
 }
 
 function people(t: TownDef, seed: number): SettlementNpcDef[] {
+  const DANGER = tierAt(t.sq.tx + 12, t.sq.ty + 7) >= 5 ? DANGER_FAR : DANGER_NEAR;
   // First names are unique within a town: the key is <town>_<name>.
   const used = new Set<string>();
   const names = [1, 2, 3, 4, 5].map((k) => {
@@ -173,18 +197,41 @@ function cost(tx: number, ty: number): number {
   if (c.lower) return Infinity; // cliffs, rocks, props
   return c.upper?.startsWith("path_") ? 0.6 : 1;
 }
+/** A binary min-heap of [cost, gx, gy] (the road search's open set). */
+class MinHeap {
+  private a: [number, number, number][] = [];
+  get size() { return this.a.length; }
+  push(d: number, x: number, y: number) {
+    const a = this.a; a.push([d, x, y]);
+    for (let i = a.length - 1; i > 0;) { const p = (i - 1) >> 1; if (a[p][0] <= a[i][0]) break; [a[p], a[i]] = [a[i], a[p]]; i = p; }
+  }
+  pop(): [number, number, number] {
+    const a = this.a, top = a[0], last = a.pop()!;
+    if (a.length) {
+      a[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < a.length && a[l][0] < a[m][0]) m = l;
+        if (r < a.length && a[r][0] < a[m][0]) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]]; i = m;
+      }
+    }
+    return top;
+  }
+}
+
 /** Cheapest coarse path from `start` to any goal cell; returns tiles. */
 function route(start: { tx: number; ty: number }, goal: (gx: number, gy: number) => boolean): [number, number][] | null {
   const key = (gx: number, gy: number) => `${gx},${gy}`;
   const sx = Math.round(start.tx / G), sy = Math.round(start.ty / G);
   const dist = new Map<string, number>([[key(sx, sy), 0]]);
   const prev = new Map<string, string>();
-  const open: [number, number, number][] = [[0, sx, sy]];
+  const open = new MinHeap();
+  open.push(0, sx, sy);
   const done = new Set<string>();
-  while (open.length) {
-    let bi = 0;
-    for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
-    const [d, gx, gy] = open.splice(bi, 1)[0];
+  while (open.size) {
+    const [d, gx, gy] = open.pop();
     const k = key(gx, gy);
     if (done.has(k)) continue;
     done.add(k);
@@ -194,7 +241,7 @@ function route(start: { tx: number; ty: number }, goal: (gx: number, gy: number)
       while (cur) { const [x, y] = cur.split(",").map(Number); out.push([x * G, y * G]); cur = prev.get(cur); }
       return out.reverse();
     }
-    if (done.size > 60000) return null;
+    if (done.size > 600_000) return null;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = gx + dx, ny = gy + dy, nk = key(nx, ny);
       if (done.has(nk)) continue;
@@ -202,7 +249,7 @@ function route(start: { tx: number; ty: number }, goal: (gx: number, gy: number)
       for (let s = 1; s <= G; s++) c += cost(gx * G + dx * s, gy * G + dy * s);
       if (!Number.isFinite(c)) continue;
       const nd = d + c + (dx !== 0 ? 0.05 : 0); // a faint preference for north–south runs
-      if (nd < (dist.get(nk) ?? Infinity)) { dist.set(nk, nd); prev.set(nk, k); open.push([nd, nx, ny]); }
+      if (nd < (dist.get(nk) ?? Infinity)) { dist.set(nk, nd); prev.set(nk, k); open.push(nd, nx, ny); }
     }
   }
   return null;
@@ -220,35 +267,49 @@ function expand(coarse: [number, number][]): [number, number][] {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
-const sites = pickSites();
-const usedNames = new Set<string>();
-const towns: TownDef[] = sites.map(({ family, sq }, i) => {
+const dataPath = path.join(ROOT, "src/lib/settlementsData.json");
+const old: SettlementsData = process.env.REGEN_ALL === "1" || !fs.existsSync(dataPath) ? { towns: [], roads: [], npcs: [] } : JSON.parse(fs.readFileSync(dataPath, "utf8"));
+const pinned = old.towns;
+const sites = pickSites(pinned, TOWN_COUNT - pinned.length);
+const usedNames = new Set<string>(pinned.map((t) => t.name));
+const fresh: TownDef[] = sites.map(({ family, sq }) => {
   const [a, b] = SYLLABLES[family];
   let name = "";
   for (let k = 0; name === "" || usedNames.has(name); k++) name = pick(a, sq.tx, sq.ty, 620 + k) + pick(b, sq.ty, sq.tx, 630 + k);
   usedNames.add(name);
   return { key: name.toLowerCase(), name, family, sq, box: townBox(sq) };
-  void i;
 });
+const towns: TownDef[] = [...pinned, ...fresh];
 
+// Roads: the pinned ones stay; each new town (nearest the network first)
+// joins the King's Road or the nearest road already laid.
 const roadCells = new Set<string>();
-const roads: [number, number][][] = [];
+const roads: [number, number][][] = [...old.roads];
+for (const road of old.roads) for (const [x, y] of road) if (x % G === 0 && y % G === 0) roadCells.add(`${x / G},${y / G}`);
 const onKingsRoad = (gx: number, gy: number) => gy * G >= ROAD.ty0 && gy * G <= ROAD.ty1 && gx * G >= ROAD.tx0 && gx * G <= ROAD.tx1;
-for (const t of [...towns].sort((p, q) => heartDistance(p.sq.tx, p.sq.ty) - heartDistance(q.sq.tx, q.sq.ty))) {
-  // leave from whichever end of the main street faces the King's Road
-  const west = Math.abs(t.box.tx0 - (-400)) < Math.abs(t.box.tx1 - (-400));
+const toNetwork = (t: TownDef) => Math.min(heartDistance(t.sq.tx, t.sq.ty), ...roads.flatMap((r) => r.filter((_, i) => i % 20 === 0).map(([x, y]) => Math.hypot(x - t.sq.tx, y - t.sq.ty))));
+const pending = [...fresh];
+while (pending.length) {
+  pending.sort((p, q) => toNetwork(p) - toNetwork(q));
+  const t = pending.shift()!;
+  // leave from whichever end of the main street faces the nearest road
+  const near = roads.flatMap((r) => r.filter((_, i) => i % 20 === 0)).sort((p, q) => Math.hypot(p[0] - t.sq.tx, p[1] - t.sq.ty) - Math.hypot(q[0] - t.sq.tx, q[1] - t.sq.ty))[0];
+  const aimX = near && Math.hypot(near[0] - t.sq.tx, near[1] - t.sq.ty) < heartDistance(t.sq.tx, t.sq.ty) ? near[0] : -400;
+  const west = Math.abs(t.box.tx0 - aimX) < Math.abs(t.box.tx1 - aimX);
   const start = { tx: west ? t.box.tx0 : t.box.tx1, ty: t.sq.ty + 6 };
   const inTown = (gx: number, gy: number) => gx * G >= t.box.tx0 && gx * G <= t.box.tx1 && gy * G >= t.box.ty0 && gy * G <= t.box.ty1;
+  const t0 = Date.now();
   const coarse = route(start, (gx, gy) => !inTown(gx, gy) && (onKingsRoad(gx, gy) || roadCells.has(`${gx},${gy}`)));
   if (!coarse) { console.warn(`no road for ${t.name}`); continue; }
   for (const [x, y] of coarse) roadCells.add(`${x / G},${y / G}`);
   roads.push(expand(coarse));
-  console.log(`${t.name.padEnd(14)} ${t.family.padEnd(8)} square (${t.sq.tx}, ${t.sq.ty}), road ${coarse.length * G} tiles`);
+  console.log(`${t.name.padEnd(14)} ${t.family.padEnd(8)} square (${t.sq.tx}, ${t.sq.ty}), tier ${tierAt(t.sq.tx, t.sq.ty)}, road ${coarse.length * G} tiles (${Date.now() - t0} ms)`);
 }
 
-const npcs = towns.flatMap((t, i) => people(t, 9000 + i * 17));
+// People: the pinned towns keep theirs exactly; new towns get five each.
+const npcs = [...old.npcs, ...fresh.flatMap((t, i) => people(t, 9000 + (pinned.length + i) * 17))];
 const data: SettlementsData = { towns, roads, npcs };
-fs.writeFileSync(path.join(ROOT, "src/lib/settlementsData.json"), JSON.stringify(data) + "\n");
+fs.writeFileSync(dataPath, JSON.stringify(data) + "\n");
 
 // Buildings: drop the old st_* entries, add each town's.
 const manifestPath = path.join(ROOT, "public/buildings/buildings.json");

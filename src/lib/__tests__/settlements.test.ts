@@ -13,9 +13,10 @@ import { REP_TIERS, discounted, repTier, townOfNpc } from "@/lib/reputation";
 const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")).buildings as { key: string; kind: string }[];
 
 describe("towns", () => {
-  it("six towns of different kinds, in the wilds, apart from each other", () => {
-    expect(TOWNS).toHaveLength(6);
+  it("twenty towns of every kind, in the wilds, apart from each other", () => {
+    expect(TOWNS).toHaveLength(20);
     expect(new Set(TOWNS.map((t) => t.family)).size).toBe(6);
+    expect(new Set(TOWNS.map((t) => t.key)).size).toBe(20);
     for (const t of TOWNS) {
       expect(inHeartland(t.sq.tx, t.sq.ty), t.name).toBe(false);
       for (const o of TOWNS) if (o !== t) expect(Math.hypot(o.sq.tx - t.sq.tx, o.sq.ty - t.sq.ty), `${t.name}–${o.name}`).toBeGreaterThan(100);
@@ -37,7 +38,7 @@ describe("towns", () => {
     }
   });
   it("each road leaves a town and reaches the King's Road or another road", () => {
-    expect(ROADS).toHaveLength(6);
+    expect(ROADS).toHaveLength(20); // one per town
     const roadTiles = new Set(ROADS.flatMap((r) => r.map(([x, y]) => `${x},${y}`)));
     for (const r of ROADS) {
       const [ex, ey] = r[r.length - 1];

@@ -65,6 +65,17 @@ Renaming a key: add `old: "new"` to `LEGACY_NPC_KEYS` (`src/lib/npcKeys.ts`).
 On boot, `renameLegacyNpcKeys` moves the row, the Folk page entries and
 "talk to" daily quests. Never reuse an old key as a new one.
 
+## Towns
+
+The continent's towns come from `scripts/gen-settlements.ts`
+(→ `src/lib/settlementsData.json` + the `st_*` buildings). Towns already in that
+file are **pinned**: same key, square, people and road, since reputation, bounties
+and NPC memories hang off them. A re-run only adds towns up to `TOWN_COUNT` (20),
+each with a road to the nearest road already built. `REGEN_ALL=1` starts over
+(don't, on a live world). The continent keeps every town and road on open land
+(`townDist` / `ROAD_KEEP` in continent.ts). Re-run `scripts/gen-relics.ts`
+afterwards.
+
 ## Database
 
 Schema changes go through `npm run db:push` (drizzle-kit, from
