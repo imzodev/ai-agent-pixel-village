@@ -66,6 +66,8 @@ export type StreamHandlers = {
   onHurt?: (data: { amount: number; hp: number; maxHp: number; by: string; from?: { x: number; y: number }; status?: StatusEffect }) => void;
   /** Chunks whose terrain changed (felled / regrown trees): re-read them. */
   onChunkReload?: (data: { chunks: { cx: number; cy: number }[] }) => void;
+  /** Homestead lot rows opened: stamp the new lots. */
+  onLotsOpened?: () => void;
   /** Enemies that just appeared nearby (between resyncs). */
   onSpawns?: (enemies: EnemySnapshot[]) => void;
   /** An enemy struck at the player at (x, y) (plays its attack animation). */

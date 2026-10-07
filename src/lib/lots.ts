@@ -9,6 +9,8 @@
 //   - releasing (or 14 days without logging in) frees the lot and clears
 //     the garden.
 
+import { maybeOpenRows } from "./lotRowsServer";
+import type { BuildingManifestEntry } from "./buildingManifest";
 import { and, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, characters, lots, resourceNodes } from "@/db/schema";
@@ -29,35 +31,7 @@ export const LOT_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
 export async function syncLotsFromManifest(): Promise<void> {
   const manifest = await getBuildingsManifest();
   const keep = new Set<string>();
-  for (const entry of manifest.buildings) {
-    // Home lots come from reservable houses; land lots are fenced fields;
-    // ranch lots are the pens south of the fields.
-    const kind: LotKind | null = entry.kind === "land" ? "land" : entry.kind === "ranch" ? "ranch" : entry.kind === "vineyard" ? "vineyard" : entry.kind === "workshop" ? "workshop" : entry.kind === "home" && entry.reservable !== false ? "home" : null;
-    if (!kind) continue;
-    const template = await getTemplate(entry);
-    const fp = footprintOf(template);
-    // Parcel = footprint (house, or a land lot's front fence) grown to include its garden cells.
-    let [x0, y0, x1, y1] = [fp.x, fp.y, fp.x + fp.tw - 1, fp.y + fp.th - 1];
-    for (const c of gardenCellsOf(template)) {
-      x0 = Math.min(x0, c.dx); y0 = Math.min(y0, c.dy);
-      x1 = Math.max(x1, c.dx + 1); y1 = Math.max(y1, c.dy);
-    }
-    const values = {
-      key: entry.key,
-      kind,
-      buildingKey: entry.key,
-      tx: entry.tx + x0,
-      ty: entry.ty + y0,
-      tw: x1 - x0 + 1,
-      th: y1 - y0 + 1,
-      price: Math.max(0, Math.floor(entry.price ?? 0)),
-    };
-    keep.add(entry.key);
-    await db.insert(lots).values(values).onConflictDoUpdate({
-      target: lots.key,
-      set: { kind: values.kind, buildingKey: values.buildingKey, tx: values.tx, ty: values.ty, tw: values.tw, th: values.th, price: values.price },
-    });
-  }
+  for (const entry of manifest.buildings) if (await upsertLotRow(entry)) keep.add(entry.key);
   for (const row of await db.select({ id: lots.id, key: lots.key, kind: lots.kind }).from(lots)) {
     if (!keep.has(row.key)) {
       await db.delete(resourceNodes).where(eq(resourceNodes.lotId, row.id));
@@ -124,6 +98,17 @@ export async function homeLotOf(characterId: number) {
  * Everything happens in one transaction so two players can't both get it.
  */
 export async function acquireLot(characterId: number, key: string): Promise<GardenResult> {
+  const r = await acquireLotTx(characterId, key);
+  // Once it's committed: if this kind's open lots are now full enough, the
+  // next homestead row opens for everyone (src/lib/lotRowsServer.ts).
+  if (r.ok) {
+    const [lot] = await db.select({ kind: lots.kind }).from(lots).where(eq(lots.key, key));
+    if (lot && lot.kind !== "home") void maybeOpenRows([lot.kind]).catch((err) => console.warn("[lots] opening rows failed:", err instanceof Error ? err.message : err));
+  }
+  return r;
+}
+
+function acquireLotTx(characterId: number, key: string): Promise<GardenResult> {
   return db.transaction(async (tx) => {
     const [lot] = await tx.select().from(lots).where(eq(lots.key, key)).for("update");
     if (!lot) return { ok: false, error: "There's nothing to claim here." };
@@ -195,4 +180,35 @@ export async function releaseInactiveLots(now = Date.now()): Promise<number> {
     .where(and(isNotNull(lots.ownerId), lt(characters.lastSeenAt, cutoff)));
   for (const { id } of stale) await clearLot(id);
   return stale.length;
+}
+
+/** Create or update the `lots` row of a manifest entry; false when it isn't a lot. */
+export async function upsertLotRow(entry: BuildingManifestEntry): Promise<boolean> {
+  // Home lots come from reservable houses; land lots are fenced fields;
+  // ranch lots are the pens south of the fields.
+  const kind: LotKind | null = entry.kind === "land" ? "land" : entry.kind === "ranch" ? "ranch" : entry.kind === "vineyard" ? "vineyard" : entry.kind === "workshop" ? "workshop" : entry.kind === "home" && entry.reservable !== false ? "home" : null;
+  if (!kind) return false;
+  const template = await getTemplate(entry);
+  const fp = footprintOf(template);
+  // Parcel = footprint (house, or a land lot's front fence) grown to include its garden cells.
+  let [x0, y0, x1, y1] = [fp.x, fp.y, fp.x + fp.tw - 1, fp.y + fp.th - 1];
+  for (const c of gardenCellsOf(template)) {
+    x0 = Math.min(x0, c.dx); y0 = Math.min(y0, c.dy);
+    x1 = Math.max(x1, c.dx + 1); y1 = Math.max(y1, c.dy);
+  }
+  const values = {
+    key: entry.key,
+    kind,
+    buildingKey: entry.key,
+    tx: entry.tx + x0,
+    ty: entry.ty + y0,
+    tw: x1 - x0 + 1,
+    th: y1 - y0 + 1,
+    price: Math.max(0, Math.floor(entry.price ?? 0)),
+  };
+  await db.insert(lots).values(values).onConflictDoUpdate({
+    target: lots.key,
+    set: { kind: values.kind, buildingKey: values.buildingKey, tx: values.tx, ty: values.ty, tw: values.tw, th: values.th, price: values.price },
+  });
+  return true;
 }

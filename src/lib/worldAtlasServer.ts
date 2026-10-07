@@ -18,7 +18,8 @@ import { characterMapSeen, characterWaystones, lots } from "@/db/schema";
 import { PLACES } from "./regions";
 import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
-import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { getAllBuildingsManifest, getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { openRows, openRowsSig } from "./lotRowsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
 import { mapOverview, tileFromOverview } from "./mapOverview";
 import { MAP_BOUNDS, MAP_MAX_ZOOM, MAP_TILE_CHUNKS, MAP_TILE_H, MAP_TILE_W, chunkInBounds, mapTileInBounds, mapTileRect, seenMasks } from "./worldAtlas";
@@ -116,7 +117,7 @@ async function renderBase(mx: number, my: number): Promise<Buffer> {
  *  so no chunk is generated however far out the map is zoomed. Null while
  *  the overview is still being built. */
 async function renderZoom(z: number, mx: number, my: number): Promise<Buffer | null> {
-  const o = mapOverview(CACHE_DIR, await mapVersion());
+  const o = mapOverview(CACHE_DIR, await tilesVersion());
   return o ? tileFromOverview(o, mapTileRect(z, mx, my), z, MAP_TILE_W, MAP_TILE_H) : null;
 }
 
@@ -126,7 +127,7 @@ let versionMemo: Promise<string> | null = null;
 export function mapVersion(): Promise<string> {
   versionMemo ??= (async () => {
     const h = crypto.createHash("sha1").update(String(RENDER_VERSION));
-    h.update(JSON.stringify((await getBuildingsManifest()).buildings));
+    h.update(JSON.stringify((await getAllBuildingsManifest()).buildings)); // every planned lot: stable as rows open
     // the terrain generators themselves: a world change re-renders the map
     for (const f of ["src/lib/regions.ts", "src/lib/continent.ts", "src/lib/settlements.ts", "src/lib/settlementsData.json", "src/lib/terrain/noise.ts", "src/lib/terrain/wildsTiles.json"]) {
       try { h.update(fs.readFileSync(path.join(process.cwd(), f))); } catch { /* not shipped: fine */ }
@@ -138,10 +139,21 @@ export function mapVersion(): Promise<string> {
   return versionMemo;
 }
 
+/**
+ * The version of the map's PICTURES: the map version plus the homestead
+ * rows open now, so tiles re-render when new lots appear. (Route caches key
+ * on mapVersion alone and don't rebuild for that.)
+ */
+export async function tilesVersion(): Promise<string> {
+  await openRows();
+  const sig = openRowsSig();
+  return sig ? `${await mapVersion()}-${crypto.createHash("sha1").update(sig).digest("hex").slice(0, 8)}` : mapVersion();
+}
+
 const raw = new Map<string, Promise<Buffer>>(); // in-memory RGBA of zoom-0 tiles (bounded below)
 const RAW_CAP = 400;
-function tileRaw(mx: number, my: number): Promise<Buffer> {
-  const key = `${mx}/${my}`;
+async function tileRaw(mx: number, my: number): Promise<Buffer> {
+  const key = `${await tilesVersion()}/${mx}/${my}`;
   let p = raw.get(key);
   if (p) { raw.delete(key); raw.set(key, p); return p; }
   p = renderBase(mx, my);
@@ -178,7 +190,7 @@ const EMPTY = sharp({ create: { width: MAP_TILE_W, height: MAP_TILE_H, channels:
  *  the overview it's cut from is still being built (try again shortly). */
 export async function mapTilePng(z: number, mx: number, my: number): Promise<Buffer | null> {
   if (!Number.isInteger(z) || z < 0 || z > MAP_MAX_ZOOM || !Number.isInteger(mx) || !Number.isInteger(my) || !mapTileInBounds(z, mx, my)) return EMPTY;
-  const file = path.join(CACHE_DIR, await mapVersion(), String(z), `${mx}_${my}.png`);
+  const file = path.join(CACHE_DIR, await tilesVersion(), String(z), `${mx}_${my}.png`);
   try {
     return await fs.promises.readFile(file);
   } catch { /* not rendered yet */ }
@@ -254,5 +266,5 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     y: (r.label ? r.label.ty : r.key === "caverns" ? (r.ty0 + r.ty1) / 2 : -2) * 16,
   }));
   regions.push({ name: "The Village", x: 32 * 16, y: 12 * 16 });
-  return { version: await mapVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions };
+  return { version: await tilesVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions };
 }

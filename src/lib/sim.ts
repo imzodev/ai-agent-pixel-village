@@ -38,6 +38,8 @@ import { bakeBatches } from "./bakeryServer";
 import { thinkMinds } from "./mind/mindServer";
 import { tickRanches } from "./ranchServer";
 import { tickCommissions } from "./commissionsServer";
+import { maybeOpenRows } from "./lotRowsServer";
+let lastRowCheck = 0;
 import { stageMs } from "./vineyard";
 import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
@@ -144,6 +146,11 @@ export async function tickWorld(): Promise<number | null> {
   await thinkMinds(nowMs).catch((err) => console.warn("[tick] minds failed:", err instanceof Error ? err.message : err));
   await tickRanches(nowMs).catch((err) => console.warn("[tick] ranch feeders failed:", err instanceof Error ? err.message : err));
   await tickCommissions(nowMs).catch((err) => console.warn("[tick] commissions failed:", err instanceof Error ? err.message : err));
+  if (nowMs - lastRowCheck > 3600_000) {
+    // Homestead rows: a safety net for the check each claim makes.
+    lastRowCheck = nowMs;
+    await maybeOpenRows().catch((err) => console.warn("[tick] lot rows failed:", err instanceof Error ? err.message : err));
+  }
   await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);
   return animalMoves + npcMoves + enemyMoves;

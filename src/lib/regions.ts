@@ -19,8 +19,9 @@ import type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 import { FOREST_TILES } from "./forest";
 import { hash, noise } from "./terrain/noise";
 import { isFelled, setFelledTrees } from "./terrain/felled";
-import { PROVINCES, continentAt, continentTreeAt, inHeartland, provinceAt, riverCenter } from "./continent";
+import { PROVINCES, continentAt, continentTreeAt, inHeartland, inHomesteads, provinceAt, riverCenter } from "./continent";
 import { TOWN_REGIONS, nearRoad, roadTile, roadV, townAt } from "./settlements";
+import { onLane } from "./lotDistricts";
 
 export type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 
@@ -212,6 +213,7 @@ function wobble(t: number, salt: number, max: number, step: number): number {
 
 function inMountain(tx: number, ty: number): boolean {
   if (ty < BARRIER_TY0 || ty > BARRIER_TY1) return false;
+  if (inHomesteads(tx, ty)) return false; // the range ends in a cliff onto the homesteads' meadow
   const west = MOUNTAIN.tx0 + wobble(ty, 11, 3, 4);
   const east = MOUNTAIN.tx1 - wobble(ty, 12, 3, 4);
   if (tx < west || tx > east) return false;
@@ -276,6 +278,7 @@ function caveProp(tx: number, ty: number): string | null {
  *  edges, short paths to every door, and the back lanes. */
 function pathV(vx: number, vy: number): boolean {
   if (roadV(vx, vy)) return true; // roads out to the continent's towns
+  if (onLane(vx, vy)) return true; // the homesteads' lanes (src/lib/lotDistricts.ts)
   if (vx >= ROAD.tx0 && vx <= ROAD.tx1 + 1) {
     if (vy >= 6 && vy <= 9) return true;
     // The road widens gently here and there (a row more on either side).
@@ -351,6 +354,7 @@ function forestV(vx: number, vy: number): boolean {
   if (!even(vx) || !even(vy)) return false;
   if (isFelled(vx, vy)) return false;
   if (nearRoad(vx, vy, 1)) return false;
+  if (inHomesteads(vx, vy) || inHomesteads(vx - 1, vy - 1)) return false; // the homesteads are open land
   if (townTree(vx, vy)) return true;
   if (vx < STRIP.tx0 || vx > -50 || vy < BARRIER_TY0 || vy > BARRIER_TY1) return false;
   if (vx >= -578 && vx <= -383) return false; // Greyspine
@@ -404,9 +408,10 @@ function underSquare(tx: number, ty: number): boolean {
   return TOWN_SQUARES.some((q) => tx >= q.tx + 1 && tx <= q.tx + 22 && ty >= q.ty && ty <= q.ty + 14);
 }
 const underCaveMouth = (tx: number, ty: number) => inBox(CAVE_MOUTH_AREA, tx, ty);
-/** The ranch row (public/buildings/buildings.json `ranch_*`): pens stay
- *  free of rocks and bushes so animals and players can move about. */
-const RANCH_ROW = { tx0: -120, tx1: 143, ty0: 75, ty1: 89 };
+/** The village farm rows (land, ranch and vineyard lots; public/buildings/buildings.json):
+ *  yards stay free of rocks and bushes so animals and players can move about
+ *  (the lot art draws over them, so they'd be invisible obstacles). */
+const FARM_ROWS = { tx0: -120, tx1: 143, ty0: 60, ty1: 104 };
 
 // ── Terrain ──────────────────────────────────────────────────────────────
 
@@ -581,7 +586,8 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     else if (h < 0.12) cell.upper = "pebbles";
     return cell;
   }
-  if (!town && h < 0.012 && !inBox(RANCH_ROW, tx, ty) && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
+  // (none in the farm rows or the homesteads: lots stand there, and their yards must be clear)
+  if (!town && h < 0.012 && !inBox(FARM_ROWS, tx, ty) && !inHomesteads(tx, ty) && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
     cell.lower = ["bush", "bush", "boulder", "stump", "rock_small"][Math.floor(hash(tx, ty, 54) * 5)];
     return cell;
   }

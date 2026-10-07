@@ -19,10 +19,12 @@ describe("the vineyard lot", () => {
     expect(cells.filter((c) => vineyardSlot(c) === "tree")).toHaveLength(2);
   });
   it("11 lots in a row south of the ranches", () => {
-    const v = manifest.buildings.filter((b) => b.kind === "vineyard");
+    // The first row (more open later in the homesteads: lotDistricts.test.ts).
+    const first = (kind: string) => manifest.buildings.filter((b) => b.kind === kind && (b as { row?: string }).row === `${kind}_0`);
+    const v = first("vineyard");
     expect(v).toHaveLength(11);
     for (const b of v) { expect(b.ty).toBe(90); expect(b.file).toBe("/buildings/vineyard_lot.json"); }
-    const ranches = manifest.buildings.filter((b) => b.kind === "ranch");
+    const ranches = first("ranch");
     expect(Math.max(...ranches.map((r) => r.ty)) + 15).toBeLessThanOrEqual(90); // no overlap with the ranch row
   });
 });

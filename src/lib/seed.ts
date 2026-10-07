@@ -22,7 +22,7 @@ import {
 } from "@/db/schema";
 import { TILE, WILD_ZONES, tilePoint, tileRect } from "./worldmap";
 import { isWalkableServer } from "./chunkCollisionServer";
-import { getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { getBuildingsManifest, getTemplate, upsertBuildingRow } from "./buildingsServer";
 import { doorWorldPx, footprintOf } from "./buildingManifest";
 import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
@@ -586,25 +586,7 @@ async function syncBuildingsFromManifest() {
   buildingsSynced = true;
   try {
     const manifest = await getBuildingsManifest();
-    for (const entry of manifest.buildings) {
-      if (entry.kind === "scenery") continue; // stamped art only (town squares): no building row
-      const template = await getTemplate(entry);
-      const fp = footprintOf(template);
-      const values = {
-        key: entry.key,
-        name: entry.name,
-        kind: entry.kind,
-        description: entry.description ?? "",
-        color: entry.color ?? "#d9a066",
-        tx: entry.tx,
-        ty: entry.ty,
-        tw: fp.tw,
-        th: fp.th,
-        menu: entry.menu ?? [],
-        reservable: entry.reservable ?? true,
-      };
-      await db.insert(buildings).values(values).onConflictDoUpdate({ target: buildings.key, set: values });
-    }
+    for (const entry of manifest.buildings) await upsertBuildingRow(entry);
     const keep = new Set(manifest.buildings.filter((b) => b.kind !== "scenery").map((b) => b.key));
     const rows = await db.select().from(buildings);
     for (const row of rows) {

@@ -976,3 +976,11 @@ export const wildChunks = pgTable(
   },
   (t) => [primaryKey({ columns: [t.cx, t.cy] })],
 );
+
+/** Homestead lot rows that have opened (src/lib/lotRowsServer.ts). Row 0 of
+ *  each kind (the original lots) is always open and never listed. */
+export const lotRows = pgTable("lot_rows", {
+  row: text("row").primaryKey(),
+  kind: text("kind").notNull(),
+  openedAt: timestamp("opened_at").defaultNow().notNull(),
+});

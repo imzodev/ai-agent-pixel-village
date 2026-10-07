@@ -12,7 +12,7 @@ import { terrainAt } from "../src/lib/regions";
 import { ensureFelledLoaded } from "../src/lib/treesServer";
 import { fullTilesets } from "../src/lib/chunkGen";
 import { WILDS_FIRSTGID, wildsGid } from "../src/lib/terrain/wilds";
-import { CACHE_DIR, mapVersion, paint, tilesetColors } from "../src/lib/worldAtlasServer";
+import { CACHE_DIR, paint, tilesVersion, tilesetColors } from "../src/lib/worldAtlasServer";
 import { getBuildingsManifest, getTemplate } from "../src/lib/buildingsServer";
 import { overviewFile, overviewFrame } from "../src/lib/mapOverview";
 
@@ -20,7 +20,7 @@ type MapSource = Parameters<typeof paint>[0];
 
 async function main() {
   const t0 = Date.now();
-  const version = await mapVersion();
+  const version = await tilesVersion(); // the open homestead rows are drawn too
   const file = overviewFile(CACHE_DIR, version);
   if (fs.existsSync(file)) { console.log(`[overview] ${version} already built`); return; }
   await ensureFelledLoaded().catch(() => {});

@@ -148,6 +148,8 @@ export class WorldStream {
         this.opts.handlers.onHurt?.({ amount: msg.amount, hp: msg.hp, maxHp: msg.maxHp, by: msg.by, from: msg.from, status: msg.status });
       } else if (msg.type === "chunkReload") {
         this.opts.handlers.onChunkReload?.({ chunks: msg.chunks });
+      } else if (msg.type === "lotsOpened") {
+        this.opts.handlers.onLotsOpened?.();
       } else if (msg.type === "spawns") {
         this.opts.handlers.onSpawns?.(msg.enemies);
       } else if (msg.type === "enemyAct") {

@@ -25,10 +25,19 @@ const WAVE = 2;
  *  towns, and the village with its fields and ranches. Edges sit on the
  *  tree lattice's parity (odd west/north, even east/south), so no tree is
  *  split between the two generators. */
+/** The homesteads (src/lib/lotDistricts.ts): open land south of Hollowmere
+ *  and of the village farms, for rows of lots opened as players fill them. */
+export const HOMESTEADS: readonly TileBox[] = [
+  { tx0: -449, tx1: -126, ty0: 37, ty1: 92 },
+  { tx0: -449, tx1: 150, ty0: 93, ty1: 296 },
+];
 export const HEARTLAND: readonly TileBox[] = [
   { tx0: -809, tx1: 150, ty0: -21, ty1: 36 },
   { tx0: -125, tx1: 150, ty0: -31, ty1: 92 },
+  ...HOMESTEADS,
 ];
+export const inHomesteads = (tx: number, ty: number): boolean =>
+  HOMESTEADS.some((b) => tx >= b.tx0 && tx <= b.tx1 && ty >= b.ty0 && ty <= b.ty1);
 /** Near the heartland the land eases into plain forest and meadow. */
 const SEAM = 16;
 const SEA = 0.3;

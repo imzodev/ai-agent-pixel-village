@@ -99,7 +99,8 @@ function registerStampCollision(scene: Phaser.Scene, key: string, ox: number, oy
   blockStampTiles(ox, oy, CHUNK_TILE_W, [...blocked]);
 }
 
-// Stamp every manifest building. The DATA (collision, door, zone, garden
+// Stamp the manifest's buildings (only those not stamped yet: when homestead
+// lot rows open, calling it again adds the new lots). Returns the new ones. The DATA (collision, door, zone, garden
 // plots — and from them lights and smoke) is set up for the whole world at
 // once: templates load once per FILE (a few dozen designs, not one per
 // building) and that part is cheap. The VISUALS (static tile layers and
@@ -117,8 +118,8 @@ export async function stampBuildings(
     dropPlainGrass(scene, key);
   }));
   const out: StampedBuilding[] = [];
-  stampSlots.length = 0;
   for (const entry of manifest.buildings) {
+    if (stampSlots.some((s) => s.entry.key === entry.key)) continue; // stamped already (rows opening add the rest)
     const key = templateKey(entry.file);
     const cached = scene.sys.cache.tilemap.get(key) as { data?: unknown } | undefined;
     if (!cached) continue;

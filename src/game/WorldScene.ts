@@ -18,7 +18,7 @@ import type { AtmosphereState, LightSource } from "@/types/lighting";
 import { FURNITURE_TEXTURE, makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
-import { chimneySources, resetStampVisuals, stampBuildings, stampLights, syncStampVisuals } from "./buildingStamps";
+import { chimneySources, resetStampVisuals, stampBuildings, stampLights, syncStampVisuals, type StampedBuilding } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
 import { WorldStream } from "./worldStream";
 import {
@@ -303,22 +303,7 @@ export class WorldScene extends Phaser.Scene {
     // Stamp interactive buildings from the manifest (best-effort: a missing
     // or broken manifest leaves the world decor-only).
     try {
-      const res = await fetch("/buildings/buildings.json");
-      if (!this.alive()) return;
-      if (res.ok) {
-        const manifest = (await res.json()) as BuildingManifest;
-        if (!this.alive()) return;
-        const stamped = await stampBuildings(this, manifest);
-        if (!this.alive()) return;
-        for (const s of stamped) {
-          if (s.door) this.buildingDoors.set(s.entry.key, s.door);
-          this.buildingZonesRects.set(s.entry.key, s.zone);
-          for (const p of s.garden) this.addPlotZone(s.entry.key, p);
-        }
-        setLightGroup("stamps", stampLights(stamped));
-        this.pendingSmoke = chimneySources(stamped);
-        syncStampVisuals(this, this.lastPlayerChunk); // only the ones near the player are drawn
-      }
+      await this.stampWorldBuildings();
     } catch {
       /* manifest unavailable — decor-only world */
     }
@@ -549,6 +534,7 @@ export class WorldScene extends Phaser.Scene {
           for (const c of chunks) void reloadChunk(this, c.cx, c.cy, around);
         },
         onSpawns: (enemies) => this.applySpawns(enemies),
+        onLotsOpened: () => { if (this.alive()) void this.stampWorldBuildings().catch(() => {}); },
         onEnemyAct: ({ id, x, y }) => {
           if (!this.alive()) return;
           this.playEnemyAttack(id, x, y);
@@ -633,6 +619,30 @@ export class WorldScene extends Phaser.Scene {
   // ---------- networking ----------
   /** True once the first enemies were drawn (later arrivals fade in). */
   private enemiesShown = false;
+
+  /** Every building stamped so far (lights and smoke are worked out from all of them). */
+  private stampedAll: StampedBuilding[] = [];
+
+  /** Fetch the buildings in the world and stamp the ones not stamped yet: all
+   *  of them at start, the new lots when homestead rows open (`lotsOpened`). */
+  private async stampWorldBuildings(): Promise<void> {
+    const res = await fetch("/api/buildings", { cache: "no-store" });
+    if (!this.alive() || !res.ok) return;
+    const manifest = (await res.json()) as BuildingManifest;
+    if (!this.alive()) return;
+    const fresh = await stampBuildings(this, manifest);
+    if (!this.alive()) return;
+    for (const s of fresh) {
+      if (s.door) this.buildingDoors.set(s.entry.key, s.door);
+      this.buildingZonesRects.set(s.entry.key, s.zone);
+      for (const p of s.garden) this.addPlotZone(s.entry.key, p);
+    }
+    this.stampedAll = [...this.stampedAll, ...fresh];
+    setLightGroup("stamps", stampLights(this.stampedAll));
+    this.pendingSmoke = chimneySources(this.stampedAll);
+    this.ambience?.setSmokeSources(this.pendingSmoke);
+    syncStampVisuals(this, this.lastPlayerChunk ?? { cx: 0, cy: 0 }); // only the ones near the player are drawn
+  }
 
   private syncEnemies(list: readonly EnemySnapshot[]): void {
     this.syncCritters(this.enemies, list.map((e) => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, facing: "right", state: "walk", hp: e.hp, maxHp: e.maxHp, move: e.move, name: e.title ? `★ ${e.title}` : undefined, big: !!e.title })), 26, (e) => ({ type: "enemy", id: e.id, kind: e.kind, hp: e.hp, maxHp: e.maxHp, title: e.name, distance: this.distTo(e.x, e.y) }));

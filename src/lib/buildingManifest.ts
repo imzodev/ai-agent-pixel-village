@@ -25,6 +25,8 @@ export type BuildingManifestEntry = {
   price?: number;
   /** Portals (kind "portal"): the building key you arrive at when you enter. */
   portalTo?: string;
+  /** Lots: the row they open with ("<kind>_<n>"; row 0 is always open). See src/lib/lotRows.ts. */
+  row?: string;
   /** World tile (16px grid) of the template's top-left corner. */
   tx: number;
   ty: number;

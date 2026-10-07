@@ -14,23 +14,26 @@ describe("heartland", () => {
     // Recorded from the terrain before the continent existed, leaving out
     // tiles near the roads out to the continent's towns (they cut through
     // on purpose). If the road, its towns, the village or the fields change
-    // on purpose, re-record it.
+    // on purpose, re-record it. (Re-recorded when the homesteads came: the
+    // Greyspine now ends in a cliff onto them at ty 34–36, and the farm rows'
+    // yards lost their stray bushes and rocks.)
     const h = crypto.createHash("sha1");
     const seen = new Set<string>();
-    for (const b of HEARTLAND) for (let ty = b.ty0; ty <= b.ty1; ty++) for (let tx = b.tx0; tx <= b.tx1; tx += 3) {
+    // The original heartland (the homesteads added later are left out).
+    for (const b of HEARTLAND.slice(0, 2)) for (let ty = b.ty0; ty <= b.ty1; ty++) for (let tx = b.tx0; tx <= b.tx1; tx += 3) {
       const k = `${tx},${ty}`;
       if (seen.has(k) || nearRoad(tx, ty, 4)) continue;
       seen.add(k);
       h.update(k + JSON.stringify(terrainAt(tx, ty)));
     }
-    expect(h.digest("hex")).toBe("b0ac93fe39223a48f9ea36d7bc7dc76294f3f1dc");
+    expect(h.digest("hex")).toBe("87c47ab2b7c1c926d521082b9291bdc48016a9e9");
   });
   it("edges follow the tree lattice (odd west/north, even east/south)", () => {
     for (const b of HEARTLAND) {
       expect(Math.abs(b.tx0 % 2)).toBe(1);
       expect(Math.abs(b.ty0 % 2)).toBe(1);
-      expect(b.tx1 % 2).toBe(0);
-      expect(b.ty1 % 2).toBe(0);
+      expect(Math.abs(b.tx1 % 2)).toBe(0);
+      expect(Math.abs(b.ty1 % 2)).toBe(0);
     }
     expect(inHeartland(0, 7)).toBe(true);
     expect(inHeartland(-300, -200)).toBe(false);

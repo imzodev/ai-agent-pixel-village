@@ -76,6 +76,25 @@ each with a road to the nearest road already built. `REGEN_ALL=1` starts over
 (`townDist` / `ROAD_KEEP` in continent.ts). Re-run `scripts/gen-relics.ts`
 afterwards.
 
+## Homesteads (lot rows that open as they fill)
+
+Beyond the original lots, rows of lots are **planned** in the homesteads
+(`HOMESTEADS` in continent.ts, part of the heartland: open land, no wild enemies)
+south of Hollowmere (workshops) and of the village farms (land, ranches,
+vineyards): `src/lib/lotDistricts.ts`, written into the manifest by
+`scripts/gen-lot-districts.ts`. Every lot has a `row` (`<kind>_<n>`; row 0 = the
+original lots, always open). Open rows are listed in `lot_rows`; when 80% of a
+kind's open lots are owned (`src/lib/lotRows.ts`), its next row opens for everyone
+(`lotRowsServer.ts`: on each claim, and hourly in tickd).
+
+- **`getBuildingsManifest()` returns only what's in the world** (closed rows left
+  out); `getAllBuildingsManifest()` is the whole file, used for `mapVersion`, so
+  route caches don't rebuild when rows open. Map pictures use `tilesVersion()`.
+- Processes re-read open rows at most once a minute; the WS server then sends
+  `lotsOpened` (clients re-fetch `/api/buildings` and stamp the new lots), pushes
+  anyone off new fences, and refreshes snapshots.
+- Admin: `GET/POST /api/lots/rows { kind }` lists rows / opens a kind's next row.
+
 ## Database
 
 Schema changes go through `npm run db:push` (drizzle-kit, from

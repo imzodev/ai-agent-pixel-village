@@ -10,8 +10,9 @@ import { SHOWROOM_SPOTS } from "@/game/workshopProps";
 import { WORKSHOP_ROW, treeAt } from "@/lib/regions";
 import { findBuyer } from "@/lib/trade";
 
-const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: { key: string; kind: string; tx: number; ty: number }[] };
-const shops = manifest.buildings.filter((b) => b.kind === "workshop");
+const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: { key: string; kind: string; tx: number; ty: number; row?: string }[] };
+// The first row (the homesteads plan more rows that open later: lotDistricts.test.ts).
+const shops = manifest.buildings.filter((b) => b.kind === "workshop" && b.row === "workshop_0");
 
 describe("workshop lots", () => {
   it("4 lots on the road south of Hollowmere, apart and clear of trees", () => {

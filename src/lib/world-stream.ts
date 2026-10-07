@@ -46,6 +46,8 @@ import type { ChunkXY } from "@/types/wildlife";
 import { CROWD_CHUNKS, REPOPULATE_MS, WILD_MAX_TOTAL } from "@/lib/wildlife";
 import { gameHour } from "@/lib/worldmap";
 import { planMoveFanout, planPointFanout } from "@/lib/moveFanout";
+import { stampBuildingCollisions } from "@/lib/buildingStampsServer";
+import { openRowsVersion } from "@/lib/lotRowsServer";
 import { fetchMovesStartingAt, writeMoves } from "@/lib/moveStore";
 import { planHunt } from "@/lib/hunt";
 import { postponeRegrowth, syncFelledTrees } from "@/lib/treesServer";
@@ -668,6 +670,11 @@ async function onBeat(boundary: number): Promise<void> {
     log.error({ err }, "spawn scan failed");
   }
   try {
+    await checkLotRows();
+  } catch (err) {
+    log.error({ err }, "lot rows check failed");
+  }
+  try {
     // Hunters (wolves) replace their wander with a chase before the
     // beat's moves go out, so the broadcast below already carries it.
     await enemyHunts(startAt);
@@ -899,6 +906,30 @@ async function populateAhead(from: ChunkXY | null, to: ChunkXY): Promise<void> {
 }
 function populateSoon(from: ChunkXY | null, to: ChunkXY): void {
   void populateAhead(from, to).catch((err) => log.error({ err }, "populate ahead failed"));
+}
+
+// ── Homestead rows opening ────────────────────────────────────────────────
+let lotRowsSeen = -1;
+/** When new lot rows have opened (here or in another process): clients stamp
+ *  them, snapshots carry the new lots, and anyone standing where a new fence
+ *  now stands is moved to open ground. */
+async function checkLotRows(): Promise<void> {
+  await stampBuildingCollisions(); // re-reads open rows (at most once a minute) and adds the new walls
+  const v = openRowsVersion();
+  if (lotRowsSeen === -1) { lotRowsSeen = v; return; }
+  if (v === lotRowsSeen) return;
+  lotRowsSeen = v;
+  const msg = JSON.stringify({ type: "lotsOpened" });
+  for (const conn of connections.values()) {
+    if (conn.ws.readyState !== conn.ws.OPEN) continue;
+    try { conn.ws.send(msg); } catch { /* the next resync heals it */ }
+    if (!(await isWalkableServer(conn.homePx, conn.homePy))) {
+      const at = await nearestOpenGround(conn.homePx, conn.homePy);
+      placePlayer(conn.playerId, at.x, at.y);
+      try { conn.ws.send(JSON.stringify({ type: "correct", x: at.x, y: at.y })); } catch { /* closed */ }
+    }
+  }
+  markWorldDirty(); // everyone's snapshot: the new lots are claimable
 }
 
 /** Has this enemy been on players' screens long enough to act? */

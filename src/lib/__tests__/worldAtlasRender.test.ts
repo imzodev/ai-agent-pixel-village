@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 
 vi.mock("@/db", () => ({ db: {} })); // the renderer never touches the DB
+// No homestead rows open beyond the first (no DB here).
+vi.mock("@/lib/lotRowsServer", () => ({ openRows: async () => new Set(), openRowsVersion: () => 0, openRowsSig: () => "" }));
 
 import { mapTilePng } from "@/lib/worldAtlasServer";
 import { MAP_TILE_H, MAP_TILE_W } from "@/lib/worldAtlas";
