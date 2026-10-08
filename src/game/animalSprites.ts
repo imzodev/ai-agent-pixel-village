@@ -279,8 +279,8 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     // Enemy (tier 2, deserts and badlands). scripts/draw-scorpion.mjs:
     // block 0 = scuttle, 1 = idle (stinger sways), 2 = strike.
     url: "/assets/animals/scorpion.png",
-    frameWidth: 32, frameHeight: 32, columns: 4, dirRows: ["up", "left", "down", "right"],
-    scale: 0.9, originX: 0.5, originY: 0.85, labelHeight: 20,
+    frameWidth: 48, frameHeight: 48, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 0.65, originX: 0.5, originY: 0.88, labelHeight: 23,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 12, loop: true },
       idle: { block: 1, frames: 4, frameRate: 4, loop: true },
