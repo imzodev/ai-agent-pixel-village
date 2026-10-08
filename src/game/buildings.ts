@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import { TILE } from "@/lib/worldmap";
+import { gameFont } from "./gameFont";
 
 export type BuildingView = {
   key: string;
@@ -99,7 +100,7 @@ function drawSign(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fillRect(x, y, w, h);
   ctx.fillStyle = fg;
   const fontPx = Math.max(7, Math.min(10, Math.floor(h * 0.65)));
-  ctx.font = `bold ${fontPx}px monospace`;
+  ctx.font = `bold ${fontPx}px ${gameFont()}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const text = label.length > 22 ? label.slice(0, 21) + "…" : label;
@@ -171,7 +172,7 @@ export function makeBuildingTexture(scene: Phaser.Scene, b: BuildingView): strin
       ctx.fillStyle = "#fff3cd";
       ctx.fillRect(W - 56, H - 18, 50, 14);
       ctx.fillStyle = "#7a4a2a";
-      ctx.font = "bold 8px monospace";
+      ctx.font = `bold 8px ${gameFont()}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("FOR RENT", W - 31, H - 11);

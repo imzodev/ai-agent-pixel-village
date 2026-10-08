@@ -150,9 +150,9 @@ export default function ShopPage() {
   return (
     <div style={{ minHeight: "100dvh", background: "#1a2238", color: "#fff", padding: "max(env(safe-area-inset-top),16px) max(env(safe-area-inset-right),16px) max(env(safe-area-inset-bottom),80px) max(env(safe-area-inset-left),16px)" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <a href="/" style={{ color: "#ffd166", textDecoration: "none", fontFamily: "monospace" }}>← back</a>
-        <h1 style={{ fontFamily: "monospace", fontSize: 20, margin: 0 }}>Shop</h1>
-        <div style={{ display: "flex", gap: 10, fontFamily: "monospace", fontSize: 14 }}>
+        <a href="/" style={{ color: "#ffd166", textDecoration: "none", fontFamily: "inherit" }}>← back</a>
+        <h1 style={{ fontFamily: "inherit", fontSize: 20, margin: 0 }}>Shop</h1>
+        <div style={{ display: "flex", gap: 10, fontFamily: "inherit", fontSize: 14 }}>
           <span title="coins">🪙 {view?.balance.coins ?? 0}</span>
           <span title="gems">💎 {view?.balance.gems ?? 0}</span>
         </div>
@@ -187,8 +187,8 @@ export default function ShopPage() {
                       ? <PreviewCanvas app={meAppearance} eq={previewEq} />
                       : <div style={{ fontSize: 28 }}>{slotIcon(r.slot)}</div>}
                   </div>
-                  <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 600 }}>{r.name}</div>
-                  <div style={{ fontFamily: "monospace", fontSize: 11, color: "#9aa", marginBottom: 8 }}>{r.slot} · {r.rarity}</div>
+                  <div style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 600 }}>{r.name}</div>
+                  <div style={{ fontFamily: "inherit", fontSize: 11, color: "#9aa", marginBottom: 8 }}>{r.slot} · {r.rarity}</div>
                   {row.equipped ? (
                     <>
                       <Badge color="#7ee787">equipped</Badge>
@@ -217,8 +217,8 @@ export default function ShopPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
           {packs.map((p) => (
             <div key={p.key} style={{ background: "#0e1830", border: "2px solid #6b8cff", borderRadius: 10, padding: 16 }}>
-              <div style={{ fontFamily: "monospace", fontSize: 28, marginBottom: 4 }}>💎 {p.gems}</div>
-              <div style={{ fontFamily: "monospace", color: "#9aa", marginBottom: 12 }}>${(p.priceCents / 100).toFixed(2)}</div>
+              <div style={{ fontFamily: "inherit", fontSize: 28, marginBottom: 4 }}>💎 {p.gems}</div>
+              <div style={{ fontFamily: "inherit", color: "#9aa", marginBottom: 12 }}>${(p.priceCents / 100).toFixed(2)}</div>
               <button disabled={busy === p.key} onClick={() => buyGems(p.key)} style={btnPrimary}>
                 {busy === p.key ? "…" : "Buy"}
               </button>
@@ -230,7 +230,7 @@ export default function ShopPage() {
   );
 }
 
-const btnPrimary: React.CSSProperties = { width: "100%", padding: "8px 12px", background: "#6b8cff", color: "#fff", border: 0, borderRadius: 6, fontFamily: "monospace", cursor: "pointer" };
+const btnPrimary: React.CSSProperties = { width: "100%", padding: "8px 12px", background: "#6b8cff", color: "#fff", border: 0, borderRadius: 6, fontFamily: "inherit", cursor: "pointer" };
 const btnDisabled: React.CSSProperties = { ...btnPrimary, background: "#3a3f55", cursor: "not-allowed" };
 
 function rarityColor(r: CosmeticRarity): string {
@@ -249,7 +249,7 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
       color: "#fff",
       border: "1px solid #6b8cff",
       borderRadius: 6,
-      fontFamily: "monospace",
+      fontFamily: "inherit",
       cursor: "pointer",
     }}>{children}</button>
   );
@@ -263,7 +263,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       color: "#fff",
       border: "1px solid #3a4775",
       borderRadius: 999,
-      fontFamily: "monospace",
+      fontFamily: "inherit",
       fontSize: 12,
       cursor: "pointer",
     }}>{children}</button>
@@ -272,7 +272,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function Badge({ color, children }: { color: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "inline-block", padding: "4px 10px", background: color, color: "#000", borderRadius: 6, fontFamily: "monospace", fontSize: 12, fontWeight: 600 }}>
+    <div style={{ display: "inline-block", padding: "4px 10px", background: color, color: "#000", borderRadius: 6, fontFamily: "inherit", fontSize: 12, fontWeight: 600 }}>
       {children}
     </div>
   );

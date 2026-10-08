@@ -62,6 +62,7 @@ import { ORCHARD_PROP_SPOTS } from "./orchardProps";
 import { FURNITURE_CELLS } from "./furnitureArt";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
+import { gameFont } from "./gameFont";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
@@ -846,7 +847,7 @@ export class WorldScene extends Phaser.Scene {
   private makeChar(x: number, y: number, name: string, app: Appearance, speed: number, labelColor: string, eq?: EquippedCosmetics, weapon?: string): CharEnt {
     const sprite = this.add.sprite(x, y, "ph_char").setOrigin(0.5, 0.9);
     sprite.setInteractive({ useHandCursor: true });
-    const label = this.add.text(x, y - 52, name, { fontFamily: "monospace", fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
+    const label = this.add.text(x, y - 52, name, { fontFamily: gameFont(), fontSize: "11px", color: labelColor, stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
     const ent: CharEnt = { sprite, label, tx: x, ty: y, facing: "down", speed, texKey: null, appKey: appearanceKey(app, eq, weapon), equipped: eq, weapon, app };
     ent.shadow = this.add.image(x, y, "fx_shadow").setScale(0.9, 0.9).setDepth(DEPTH_CHAR_BASE + y - 1);
     void this.ensureCharTexture(ent, app, eq, weapon);
@@ -909,7 +910,7 @@ export class WorldScene extends Phaser.Scene {
         ent.sprite.on("pointerdown", () => { if (this.modalOpen) return; const s = sel(p); s.distance = this.distTo(created.sprite.x, created.sprite.y); this.select(s); });
         if (badge) {
           const txt = badge(p);
-          ent.badge = this.add.text(p.x, p.y - 62, txt, { fontFamily: "monospace", fontSize: "9px", color: txt.startsWith("★") ? "#ffd166" : "#cfe8cf", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
+          ent.badge = this.add.text(p.x, p.y - 62, txt, { fontFamily: gameFont(), fontSize: "9px", color: txt.startsWith("★") ? "#ffd166" : "#cfe8cf", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3);
         }
         map.set(p.id, ent);
       } else if (ent.equipped !== eq) {
@@ -955,7 +956,7 @@ export class WorldScene extends Phaser.Scene {
           const w = def ? def.frameWidth * def.scale * 0.55 : sprite.width * 0.7;
           ent.shadow = this.add.image(a.x, a.y, "fx_shadow").setScale(w / 24, Math.max(0.7, w / 30)).setDepth(DEPTH_CHAR_BASE + a.y - 1);
         }
-        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: "monospace", fontSize: a.big ? "10px" : "9px", color: a.big ? "#ffcf5a" : "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(a.big ? 1 : 0.85);
+        if (a.name) ent.label = this.add.text(a.x, a.y - top - 2, a.name, { fontFamily: gameFont(), fontSize: a.big ? "10px" : "9px", color: a.big ? "#ffcf5a" : "#e8f5e9", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3).setAlpha(a.big ? 1 : 0.85);
         if (a.maxHp > 1) ent.hpBar = this.add.graphics().setDepth(DEPTH_CHAR_BASE + a.y + 1);
         // An enemy that shows up while you're here fades in rather than popping.
         if (map === this.enemies && this.enemiesShown) {
@@ -980,7 +981,7 @@ export class WorldScene extends Phaser.Scene {
 
   private showBubble(ent: CharEnt, text: string) {
     ent.bubble?.c.destroy();
-    const t = this.add.text(0, 0, text, { fontFamily: "monospace", fontSize: "10px", color: "#222", wordWrap: { width: 130 }, align: "center" }).setOrigin(0.5, 1).setResolution(3);
+    const t = this.add.text(0, 0, text, { fontFamily: gameFont(), fontSize: "10px", color: "#222", wordWrap: { width: 130 }, align: "center" }).setOrigin(0.5, 1).setResolution(3);
     const bg = this.add.rectangle(0, 2, t.width + 10, t.height + 8, 0xffffff, 0.95).setOrigin(0.5, 1).setStrokeStyle(1, 0x555555);
     const tail = this.add.triangle(0, 6, 0, 0, 8, 0, 4, 5, 0xffffff).setOrigin(0.5, 0);
     const c = this.add.container(ent.sprite.x, ent.sprite.y - 66, [bg, tail, t]).setDepth(DEPTH_BUBBLE);
@@ -1749,7 +1750,7 @@ export class WorldScene extends Phaser.Scene {
     e.title = title;
     e.titleText?.destroy();
     e.titleText = title
-      ? this.add.text(e.sprite.x, e.sprite.y - 59, `« ${title} »`, { fontFamily: "monospace", fontSize: "9px", color: "#ffd166", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3)
+      ? this.add.text(e.sprite.x, e.sprite.y - 59, `« ${title} »`, { fontFamily: gameFont(), fontSize: "9px", color: "#ffd166", stroke: "#1a1a1a", strokeThickness: 3 }).setOrigin(0.5, 1).setResolution(3)
       : undefined;
   }
 
@@ -1757,7 +1758,7 @@ export class WorldScene extends Phaser.Scene {
   private showEmote(e: CharEnt, text: string, ms = 1400) {
     e.emote?.t.destroy();
     const t = this.add.text(e.sprite.x, e.sprite.y - 64, text, {
-      fontFamily: "monospace", fontSize: "11px", color: "#2a2a2a", backgroundColor: "#fffdf4", padding: { x: 3, y: 1 },
+      fontFamily: gameFont(), fontSize: "11px", color: "#2a2a2a", backgroundColor: "#fffdf4", padding: { x: 3, y: 1 },
       stroke: "#fffdf4", strokeThickness: 1,
     }).setOrigin(0.5, 1).setResolution(3);
     e.emote = { t, until: this.time.now + ms };
@@ -1779,7 +1780,7 @@ export class WorldScene extends Phaser.Scene {
     if (!p || !p.sprite.active) return;
     p.sprite.setTint(0xff6060);
     this.time.delayedCall(180, () => { if (p.sprite.active) p.sprite.clearTint(); });
-    const t = this.add.text(p.sprite.x, p.sprite.y - 44, `−${amount}`, { fontFamily: "monospace", fontSize: "12px", color: "#ff5a5a", stroke: "#1a1a1a", strokeThickness: 3 })
+    const t = this.add.text(p.sprite.x, p.sprite.y - 44, `−${amount}`, { fontFamily: gameFont(), fontSize: "12px", color: "#ff5a5a", stroke: "#1a1a1a", strokeThickness: 3 })
       .setOrigin(0.5, 1).setResolution(3).setDepth(DEPTH_CHAR_BASE + p.sprite.y + 10);
     this.tweens.add({ targets: t, y: t.y - 18, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
@@ -1891,7 +1892,7 @@ export class WorldScene extends Phaser.Scene {
     e.label?.setPosition(e.sprite.x, e.sprite.y - e.top - 4);
     e.hpBar?.setPosition(e.sprite.x, e.sprite.y);
     if (e.state === "sleep") {
-      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.top - 10, "z", { fontFamily: "monospace", fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(DEPTH_CHAR_BASE + e.sprite.y + 1);
+      if (!e.zz) e.zz = this.add.text(e.sprite.x + 8, e.sprite.y - e.top - 10, "z", { fontFamily: gameFont(), fontSize: "10px", color: "#ffffff", stroke: "#000", strokeThickness: 2 }).setResolution(3).setDepth(DEPTH_CHAR_BASE + e.sprite.y + 1);
       e.zz.setPosition(e.sprite.x + 8, e.sprite.y - e.top - 8 - Math.abs(Math.sin(time / 500)) * 4);
     } else if (e.zz) { e.zz.destroy(); e.zz = undefined; }
   }

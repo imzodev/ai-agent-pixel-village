@@ -81,7 +81,7 @@ export default function GameCanvas() {
           border: 2px solid rgba(255, 255, 255, 0.55);
           background: rgba(20, 28, 50, 0.45);
           color: white;
-          font-family: monospace;
+          font-family: var(--font-ui), system-ui, sans-serif;
           font-size: 18px;
           font-weight: 700;
           backdrop-filter: blur(2px);

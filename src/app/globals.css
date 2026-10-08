@@ -1,20 +1,24 @@
 @import "tailwindcss";
 
+/* One readable sans everywhere; the pages that say font-mono get it too. */
+@theme inline {
+  --font-sans: var(--font-ui), system-ui, sans-serif;
+  --font-mono: var(--font-ui), system-ui, sans-serif;
+}
+
 .inp {
   width: 100%;
   border: 2px solid rgba(120, 53, 15, 0.4);
   border-radius: 0.5rem;
   background: #fff;
   padding: 0.3rem 0.5rem;
-  font-family: ui-monospace, monospace;
-  font-size: 13px;
+  font-family: inherit;
+  font-size: 14px;
 }
 
 /* ── Handheld-RPG UI ─────────────────────────────────────────────────── */
 .font-pixel {
-  /* Digits come from VT323 (unicode-range 0–9); everything else is Pixelify. */
-  font-family: var(--font-digits), var(--font-pixel), ui-monospace, monospace;
-  letter-spacing: 0.01em;
+  font-family: var(--font-ui), system-ui, sans-serif;
 }
 /* Framed text-box panel: dark border, light inner rim, warm parchment. */
 .pixel-panel {

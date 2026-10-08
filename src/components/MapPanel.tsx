@@ -11,6 +11,7 @@ import type { MapCamera, MapFog, MapMarkers, MapWaystone } from "@/types/map";
 import type { BountyView } from "@/types/bounty";
 import type { EncounterView } from "@/types/encounter";
 import { boardPoint } from "@/lib/bounties";
+import { gameFont } from "@/game/gameFont";
 import { mapMemory, tileImage } from "@/game/mapTiles";
 import { MAX_TILE_ZOOM, OPEN_LEVEL, ZOOM_LEVELS, clampCamera, maxLevelFor, tileZoomFor } from "@/lib/mapZoom";
 
@@ -176,7 +177,7 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
     g.textAlign = "center";
     g.textBaseline = "middle";
     const label = (text: string, x: number, y: number, size: number, color: string) => {
-      g.font = `bold ${size}px var(--font-pixel), monospace`;
+      g.font = `bold ${size}px ${gameFont()}`;
       g.lineWidth = 3;
       g.strokeStyle = "rgba(0,0,0,0.85)";
       g.strokeText(text, x, y);
