@@ -227,13 +227,13 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     // Enemy (tier 2). Original art drawn by scripts/draw-boar.mjs: block 0
     // = trot, block 1 = idle rooting with a tail flick.
     url: "/assets/animals/boar.png",
-    frameWidth: 32,
-    frameHeight: 32,
+    frameWidth: 48,
+    frameHeight: 48,
     columns: 4,
     dirRows: ["up", "left", "down", "right"],
-    scale: 0.9,
+    scale: 0.6, // 48 px frames, drawn at the size the 32 px boar was (0.9)
     originX: 0.5,
-    originY: 0.9, // hooves at y≈28 of 32
+    originY: 0.9, // hooves at y≈43 of 48
     labelHeight: 22,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 9, loop: true },
