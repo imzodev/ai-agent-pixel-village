@@ -87,6 +87,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
       owner: lot.ownerId != null ? { id: lot.ownerId, name: ownerName ?? "someone" } : null,
       price: lot.price,
       forSale: lot.forSale,
+      ...(lot.ownerId != null ? { bounds: { tx: lot.tx, ty: lot.ty, tw: lot.tw, th: lot.th } } : {}),
       ...(lot.ownerId != null && door ? { banner: { ...resolveBanner(lot.ownerId, lot.bannerColor, lot.bannerEmblem), x: door.x, y: door.y } } : {}),
       ...(look && entry ? { ranch: { props: look.props, ox: entry.tx * 16, oy: entry.ty * 16, ...(look.display.length ? { display: look.display } : {}) } } : {}),
     };

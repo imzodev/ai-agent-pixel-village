@@ -19,6 +19,7 @@ import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
 import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
+import { TEND_RANGE_PX, insideLot } from "@/lib/lotReach";
 import FurnitureSprite from "./FurnitureSprite";
 import { plantablesFor, plotHint } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
@@ -279,6 +280,12 @@ export default function Hud() {
     else { showGain([{ itemKey, qty: 1 }]); notify(r.notices); void refreshMe(); }
   };
   const myId = me?.me?.id ?? null;
+  /** Standing inside one of your own lots with `target` in the same lot: every plot there is in reach. */
+  const inMyLot = (target: { x: number; y: number }): boolean => {
+    const self = selfPos ?? snap?.me;
+    if (!self || !snap) return false;
+    return snap.lots.some((l) => l.owner?.id === myId && !!l.bounds && insideLot(l.bounds, self.x, self.y) && insideLot(l.bounds, target.x, target.y));
+  };
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
   const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
@@ -557,7 +564,7 @@ export default function Hud() {
         const crop = snap.nodes.find((n) => n.id === s.id);
         if (crop?.ownerId != null) {
           // Garden crop: harvest when ripe (owner), otherwise water it.
-          if (d > 90) { walk(); break; }
+          if (d > TEND_RANGE_PX && !(crop.ownerId === myId && inMyLot(pos))) { walk(); break; }
           if (crop.stage >= crop.stages - 1) {
             if (crop.ownerId === myId) void garden({ action: "harvest", nodeId: s.id });
             else toast("It's ready — but it isn't yours to harvest.", "info");
@@ -602,7 +609,7 @@ export default function Hud() {
         void act({ action: "chop_tree", vx: s.vx, vy: s.vy }).then((r) => { if ((r as { felled?: boolean }).felled) setSel(null); });
         break;
       case "plot":
-        if (d > 90) { walk(); break; }
+        if (d > TEND_RANGE_PX && !inMyLot(pos)) { walk(); break; }
         {
           const fit = plantablesFor(snap?.lots.find((l) => l.key === s.lotKey)?.kind, seedsInBag, GARDEN_CROPS)[0];
           if (fit) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: fit.itemKey });
@@ -882,7 +889,7 @@ export default function Hud() {
             const stageMs = CROP_KINDS[crop.kind]?.regrowthMs ?? 0;
             const left = ripe ? 0 : mins + Math.round(((crop.stages - 2 - crop.stage) * stageMs) / 60_000);
             const status = ripe ? "Ready to harvest!" : `Stage ${crop.stage}/${crop.stages - 1} · ready in ~${left} min${crop.watered ? " · 💧" : ""}`;
-            if (sel.distance > 90) return <><span className="text-[11px] text-stone-600">{status}</span><WalkBtn snap={snap} sel={sel} /></>;
+            if (sel.distance > TEND_RANGE_PX && !(crop.ownerId === myId && inMyLot(crop))) return <><span className="text-[11px] text-stone-600">{status}</span><WalkBtn snap={snap} sel={sel} /></>;
             return (
               <>
                 <span className="text-[11px] text-stone-600">{status}</span>
@@ -895,7 +902,7 @@ export default function Hud() {
             const lot = snap?.lots.find((l) => l.key === sel.lotKey);
             if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "home" ? "An empty garden plot. Move into the house to plant here." : `Empty plot. Claim this lot at its gate to plant here. ${plotHint(lot?.kind)}`}</span>;
             if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
-            if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
+            if (sel.distance > TEND_RANGE_PX && !inMyLot(sel)) return <WalkBtn snap={snap} sel={sel} />;
             const fits = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
             if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "home" ? "No seeds — the shopkeeper sells them." : `Nothing to plant. ${plotHint(lot.kind)}`}</span>;
             return fits.map((i) => (
