@@ -4,6 +4,7 @@
 // and src/lib/garden.ts; the winery reuses ranch growth (ranchUpgrades.ts).
 
 import type { GardenCell, GardenCropDef, LotKind, VineyardSlot } from "@/types/garden";
+import { ORCHARD_FRUITS } from "./orchard";
 
 /** Garden cells left of this template column are vine plots, the rest trees. */
 export const VINE_MAX_DX = 12;
@@ -43,4 +44,19 @@ export function stageMs(cfg: { stages: number; regrowthMs: number; perennial?: {
 /** After harvesting a perennial: back to mature, ripening again. */
 export function afterPerennialHarvest(stages: number, p: { fruitMs: number; mature: number }, now: number): { stage: number; nextAdvanceAt: number } {
   return { stage: p.mature, nextAdvanceAt: now + fruitStepMs(stages, p) };
+}
+
+/**
+ * What grows in an empty plot of this kind of lot and where to get it, for the
+ * plot's panel and the quick-plant toast (players are never told otherwise).
+ */
+export function plotHint(lotKind: LotKind | undefined): string {
+  switch (lotKind) {
+    case "vineyard":
+      return "Vineyard: grapevines grow on the trellises (left of the path), apple trees on the orchard side (right). Pip sells grape cuttings and apple saplings.";
+    case "orchard":
+      return `Orchard: fruit trees only (${ORCHARD_FRUITS.map((f) => f.name.toLowerCase()).join(", ")}, apple). Pip sells apple saplings; the other saplings come from towns whose land suits them.`;
+    default:
+      return "Field: vegetables grow here. The shopkeeper sells seeds.";
+  }
 }

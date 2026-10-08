@@ -19,7 +19,7 @@ import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
 import FurnitureSprite from "./FurnitureSprite";
-import { plantablesFor } from "@/lib/vineyard";
+import { plantablesFor, plotHint } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
@@ -603,7 +603,7 @@ export default function Hud() {
         {
           const fit = plantablesFor(snap?.lots.find((l) => l.key === s.lotKey)?.kind, seedsInBag, GARDEN_CROPS)[0];
           if (fit) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: fit.itemKey });
-          else toast("Nothing to plant here. Pip sells seeds, cuttings and saplings.", "info");
+          else toast(`Nothing to plant here. ${plotHint(snap?.lots.find((l) => l.key === s.lotKey)?.kind)}`, "info");
         }
         break;
       case "animal":
@@ -890,11 +890,11 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "plot" && (() => {
             const lot = snap?.lots.find((l) => l.key === sel.lotKey);
-            if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "land" ? "Empty farmland. Claim this lot at its gate to plant here." : "An empty garden plot. Move into the house to plant here."}</span>;
+            if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "home" ? "An empty garden plot. Move into the house to plant here." : `Empty plot. Claim this lot at its gate to plant here. ${plotHint(lot?.kind)}`}</span>;
             if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
             const fits = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
-            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "vineyard" ? "No cuttings or saplings — Pip sells them." : lot.kind === "orchard" ? "No saplings — the towns whose land suits them sell them." : "No seeds — the shopkeeper sells them."}</span>;
+            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "home" ? "No seeds — the shopkeeper sells them." : `Nothing to plant. ${plotHint(lot.kind)}`}</span>;
             return fits.map((i) => (
               <Btn key={i.itemKey} on={() => void garden({ action: "plant", lotKey: sel.lotKey, plot: sel.plot, seedKey: i.itemKey })}>
                 🌱 Plant {i.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} ×{i.qty}

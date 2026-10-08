@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CROP_KINDS, GARDEN_CROPS, NODE_SHEETS } from "@/lib/crops";
-import { afterPerennialHarvest, fruitStepMs, plantRule, plantablesFor, stageMs, vineyardSlot } from "@/lib/vineyard";
+import { afterPerennialHarvest, fruitStepMs, plantRule, plantablesFor, plotHint, stageMs, vineyardSlot } from "@/lib/vineyard";
 import { BUILD_STEPS, MACHINE_RECIPES } from "@/lib/ranchUpgrades";
 import { PROFILES } from "@/lib/mind/profiles";
 import { SHOP_STOCK } from "@/lib/trade";
@@ -94,5 +94,13 @@ describe("the winery", () => {
     expect(b.crafts.bake_pies.uses.apple).toBeGreaterThan(0);
     expect(b.orders.apple && b.orders.jam).toBeTruthy();
     expect(SHOP_STOCK.village_marigold.some((t) => t.itemKey === "apple_pie")).toBe(true);
+  });
+});
+
+describe("plot hints", () => {
+  it("tell a vineyard from an orchard and name what grows and who sells it", () => {
+    expect(plotHint("vineyard")).toMatch(/trellises.*apple.*Pip/);
+    expect(plotHint("orchard")).toMatch(/lemon.*banana.*apple.*towns/);
+    expect(plotHint("land")).toMatch(/vegetables/);
   });
 });
