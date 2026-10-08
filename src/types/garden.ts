@@ -36,6 +36,8 @@ export type LotSnapshot = {
   banner?: LotBanner & { x: number; y: number };
   /** Owned lots: the parcel, so the client knows when you are inside it (src/lib/lotReach.ts). */
   bounds?: LotBounds;
+  /** Owned lots: the cheers its owner has received in all (src/lib/cheers.ts). */
+  cheers?: number;
 };
 
 /** One plantable cell of a garden, in template tile units. */

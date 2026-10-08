@@ -271,7 +271,7 @@ export default function Hud() {
   };
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
   const setBanner = (key: string, color: number, emblem: number) => post("/api/lots", { action: "banner", key, color, emblem });
-  const lotAction = (action: "acquire" | "release", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
+  const lotAction = (action: "acquire" | "release" | "cheer", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string) => {
@@ -964,7 +964,7 @@ export default function Hud() {
                 <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>{confirming ? L.confirm : L.giveUp}</Btn>
               </>;
             }
-            if (lot.owner) return <span className="text-[11px] text-stone-600">{L.icon} {L.of} {lot.owner.name}</span>;
+            if (lot.owner) return <><span className="text-[11px] text-stone-600">{L.icon} {L.of} {lot.owner.name}</span><Btn on={() => void lotAction("cheer", lot.key)} subtle>👏 Cheer</Btn></>;
             return <Btn on={() => void lotAction("acquire", lot.key)}>{L.icon} {lot.price > 0 ? `${L.buy} · ${lot.price}🪙` : L.claim}</Btn>;
           })()}
           {sel.type === "building" && sel.reservable && !sel.hasSponsor && <Link href={`/sponsor?building=${sel.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white hover:bg-orange-400">🏪 Reserve for your business</Link>}

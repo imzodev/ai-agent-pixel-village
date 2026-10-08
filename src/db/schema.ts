@@ -93,6 +93,8 @@ export const characters = pgTable(
     tutorialProgress: integer("tutorial_progress").notNull().default(0),
     /** Nameplate title the player picked (from achievements / book pages). */
     title: text("title"),
+    /** Cheers other players have given this player's lots (src/lib/cheers.ts); shown on their lot signs. */
+    cheersReceived: integer("cheers_received").notNull().default(0),
   },
   (t) => [index("characters_last_seen_idx").on(t.lastSeenAt)],
 );
@@ -432,6 +434,20 @@ export const lots = pgTable(
   // Not unique: high-level players may own a second land lot (the limit
   // lives in acquireLot, see landLotLimit in src/lib/progression.ts).
   (t) => [index("lots_owner_kind_idx").on(t.ownerId, t.kind)],
+);
+
+/** One cheer: `cheererId` cheered `ownerId`'s lot on `day` (UTC). One per cheerer per owner per day. */
+export const lotCheers = pgTable(
+  "lot_cheers",
+  {
+    id: serial("id").primaryKey(),
+    ownerId: integer("owner_id").notNull(),
+    cheererId: integer("cheerer_id").notNull(),
+    lotKey: text("lot_key").notNull(),
+    day: text("day").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("lot_cheers_owner_cheerer_day_idx").on(t.ownerId, t.cheererId, t.day)],
 );
 
 export const enemies = pgTable("enemies", {

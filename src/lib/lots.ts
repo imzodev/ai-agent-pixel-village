@@ -13,10 +13,12 @@ import { maybeOpenRows } from "./lotRowsServer";
 import type { BuildingManifestEntry } from "./buildingManifest";
 import { and, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, characters, lots, resourceNodes } from "@/db/schema";
+import { animals, characters, lotCheers, lots, resourceNodes } from "@/db/schema";
 import { footprintOf, gardenCellsOf, gardenPlotsAt } from "./buildingManifest";
 import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { cheerDay } from "./cheers";
 import { isBanner, resolveBanner } from "./lotBanner";
+import { insideLot } from "./lotReach";
 import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/garden";
 import { landLotLimit } from "./progression";
 import { clearRanch, ranchLooks, returnShowroom } from "./ranchServer";
@@ -59,7 +61,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
   const [x0, x1] = [Math.floor(box.xMin / T), Math.ceil(box.xMax / T)];
   const [y0, y1] = [Math.floor(box.yMin / T), Math.ceil(box.yMax / T)];
   const rows = await db
-    .select({ lot: lots, ownerName: characters.name })
+    .select({ lot: lots, ownerName: characters.name, cheers: characters.cheersReceived })
     .from(lots)
     .leftJoin(characters, eq(characters.id, lots.ownerId))
     .where(and(
@@ -75,7 +77,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
     const d = lot.ownerId != null && lot.buildingKey ? await getBuildingDoor(lot.buildingKey) : null;
     if (d) doors.set(lot.key, d);
   }
-  return rows.map(({ lot, ownerName }) => {
+  return rows.map(({ lot, ownerName, cheers }) => {
     const look = looks.get(lot.key);
     const door = doors.get(lot.key);
     const shown = !!look && (look.props.length > 0 || look.display.length > 0);
@@ -87,7 +89,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
       owner: lot.ownerId != null ? { id: lot.ownerId, name: ownerName ?? "someone" } : null,
       price: lot.price,
       forSale: lot.forSale,
-      ...(lot.ownerId != null ? { bounds: { tx: lot.tx, ty: lot.ty, tw: lot.tw, th: lot.th } } : {}),
+      ...(lot.ownerId != null ? { bounds: { tx: lot.tx, ty: lot.ty, tw: lot.tw, th: lot.th }, cheers: cheers ?? 0 } : {}),
       ...(lot.ownerId != null && door ? { banner: { ...resolveBanner(lot.ownerId, lot.bannerColor, lot.bannerEmblem), x: door.x, y: door.y } } : {}),
       ...(look && entry ? { ranch: { props: look.props, ox: entry.tx * 16, oy: entry.ty * 16, ...(look.display.length ? { display: look.display } : {}) } } : {}),
     };
@@ -193,6 +195,32 @@ export async function setLotBanner(characterId: number, key: string, color: numb
   if (!mine) return { ok: false, error: "That isn't yours." };
   const done = await db.update(lots).set({ bannerColor: color, bannerEmblem: emblem }).where(eq(lots.ownerId, characterId)).returning({ id: lots.id });
   return { ok: true, message: done.length > 1 ? `Your banner is up on all ${done.length} of your lots.` : "Your banner is up." };
+}
+
+/**
+ * Cheer someone's lot: you must be standing in it, it must be someone else's, and
+ * each owner takes one cheer from you per UTC day. Their total (on all their lot
+ * signs) goes up by one. `pos` is where the cheerer stands, in world px.
+ */
+export async function cheerLot(characterId: number, key: string, pos: { x: number; y: number }, now = Date.now()): Promise<GardenResult & { ownerId?: number; ownerName?: string }> {
+  const [row] = await db
+    .select({ lot: lots, ownerName: characters.name })
+    .from(lots)
+    .leftJoin(characters, eq(characters.id, lots.ownerId))
+    .where(eq(lots.key, key));
+  const lot = row?.lot;
+  if (!lot || lot.ownerId == null) return { ok: false, error: "There's nobody to cheer here." };
+  if (lot.ownerId === characterId) return { ok: false, error: "Cheer someone else's place. Yours already looks great." };
+  if (!insideLot(lot, pos.x, pos.y)) return { ok: false, error: "Step into their lot to cheer it." };
+  const ownerName = row.ownerName ?? "someone";
+  const done = await db.transaction(async (tx) => {
+    const inserted = await tx.insert(lotCheers).values({ ownerId: lot.ownerId!, cheererId: characterId, lotKey: key, day: cheerDay(now) }).onConflictDoNothing().returning({ id: lotCheers.id });
+    if (inserted.length === 0) return false;
+    await tx.update(characters).set({ cheersReceived: sql`${characters.cheersReceived} + 1` }).where(eq(characters.id, lot.ownerId!));
+    return true;
+  });
+  if (!done) return { ok: false, error: `You've already cheered ${ownerName} today. Come back tomorrow!` };
+  return { ok: true, message: `You cheered ${ownerName}'s place! 👏`, ownerId: lot.ownerId, ownerName };
 }
 
 /** Manifest keys of the buildings of every lot a character owns (to refresh them for onlookers). */

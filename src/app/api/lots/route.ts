@@ -1,7 +1,7 @@
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
-import { acquireLot, buildingKeysOfOwner, releaseLot, setLotBanner } from "@/lib/lots";
+import { acquireLot, buildingKeysOfOwner, cheerLot, releaseLot, setLotBanner } from "@/lib/lots";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /** How close to the door (a land lot's gate) you must be to acquire it. */
 const DOOR_RANGE_PX = 160;
 
-/** Lot actions: acquire | release | banner. Body: { action, key } (banner also { color, emblem }). */
+/** Lot actions: acquire | release | banner | cheer. Body: { action, key } (banner also { color, emblem }). */
 export async function POST(req: Request) {
   try {
     const me = await requireCharacter();
@@ -35,6 +35,17 @@ export async function POST(req: Request) {
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
       if (door) markWorldDirty(door.x, door.y);
       return Response.json(r);
+    }
+    if (action === "cheer") {
+      const r = await cheerLot(me.id, key, getLivePlayerPosition(me.id) ?? me);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      await logEvent("home", `${me.name} cheered ${r.ownerName}'s place!`, "character", me.id, door?.x, door?.y);
+      // The owner's total is on every one of their signs, so refresh them all.
+      for (const bk of await buildingKeysOfOwner(r.ownerId!)) {
+        const d = await getBuildingDoor(bk);
+        if (d) markWorldDirty(d.x, d.y);
+      }
+      return Response.json({ ok: true, message: r.message });
     }
     if (action === "banner") {
       const r = await setLotBanner(me.id, key, Number(body.color), Number(body.emblem));
