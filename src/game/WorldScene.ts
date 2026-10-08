@@ -18,6 +18,7 @@ import type { AtmosphereState, LightSource } from "@/types/lighting";
 import { FURNITURE_TEXTURE, makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
 import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
+import { prefetchMapAround } from "./mapTiles";
 import { chimneySources, resetStampVisuals, stampBuildings, stampLights, syncStampVisuals, type StampedBuilding } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
 import { WorldStream } from "./worldStream";
@@ -1411,6 +1412,7 @@ export class WorldScene extends Phaser.Scene {
     void ensureChunks(this, cur);
     releaseOutside(this, cur);
     syncStampVisuals(this, cur);
+    prefetchMapAround(this.player.sprite.x, this.player.sprite.y); // so M opens on tiles already here
     // No recenter: the player-follow owns the framing on chunk crossings.
     recenterCamera(this, cur, false);
   }

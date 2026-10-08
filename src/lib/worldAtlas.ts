@@ -14,7 +14,7 @@ export type { MapBounds, MapLot, MapMarkers, MapPlace, MapRegionLabel, MapWaysto
 export const MAP_TILE_CHUNKS = 8;
 export const MAP_TILE_W = MAP_TILE_CHUNKS * CHUNK_TILE_W; // 192 px
 export const MAP_TILE_H = MAP_TILE_CHUNKS * CHUNK_TILE_H; // 120 px
-export const MAP_MAX_ZOOM = 5;
+export const MAP_MAX_ZOOM = 3; // the panel never zooms out further (src/lib/mapZoom.ts MAX_TILE_ZOOM)
 /** Chunks per side of a fog block (one 64-bit mask). */
 export const SEEN_BLOCK = 8;
 

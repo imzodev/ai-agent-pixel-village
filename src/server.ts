@@ -16,6 +16,7 @@
 
 import { createServer } from "node:http";
 import next from "next";
+import { startMapWork } from "@/lib/worldAtlasServer";
 import { attachWsServer, closeAllWs, startPubSubBridge, stopPubSubBridge, startPeriodicRefresh, stopPeriodicRefresh } from "@/lib/world-stream";
 import { initRedis } from "@/lib/redis";
 import { setDraining } from "@/lib/lifecycle";
@@ -71,6 +72,8 @@ async function main(): Promise<void> {
 
   server.listen(PORT, () => {
     log.info({ port: PORT, wsPath: "/ws" }, "ready");
+    // The world map: drop old versions' pictures, pre-draw around the towns (low priority, background workers).
+    void startMapWork().catch((err) => log.warn({ err }, "map pre-draw failed"));
   });
 }
 

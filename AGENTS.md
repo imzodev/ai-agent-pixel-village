@@ -95,6 +95,24 @@ kind's open lots are owned (`src/lib/lotRows.ts`), its next row opens for everyo
   anyone off new fences, and refreshes snapshots.
 - Admin: `GET/POST /api/lots/rows { kind }` lists rows / opens a kind's next row.
 
+## World map pictures
+
+The map (M) is drawn by **background workers**, never the game server:
+`src/lib/mapRenderPool.ts` runs at most 2 `scripts/map-tile-worker.ts`
+processes at the lowest CPU priority; `src/lib/mapRender.ts` draws. The server
+(`mapTilePng`) serves a tile from disk, or queues it and answers "still drawing"
+(the panel retries). Zoomed-out tiles are cut from the overview, which is built in
+256 × 160-tile blocks (`src/lib/mapOverview.ts`): terrain only, keyed by
+`mapVersion`; buildings are painted on when a tile is cut. At start the server
+deletes old versions under `.cache/map` and **draws the whole map ahead of time**
+(zoom 0–3, ~640 pictures, nearest the towns first; `scripts/build-map.ts` does it
+at deploy). When homestead rows open, the new tiles folder hard-links every
+picture the new lots don't touch (`rows.json` per folder). The panel
+(`src/lib/mapZoom.ts`) has fixed zoom levels that show each picture zoom at its
+real size, can't zoom out past "the continent fits", and keeps the map on
+screen; it draws fog as one image, never requests tiles entirely under your fog,
+and the game prefetches the tiles around you while you play (`src/game/mapTiles.ts`).
+
 ## Database
 
 Schema changes go through `npm run db:push` (drizzle-kit, from

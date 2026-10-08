@@ -16,8 +16,8 @@ import type { Region, TerrainCell, TileBox } from "@/types/regions";
 
 export type { Biome, GroundKind } from "@/types/continent";
 
-/** The continent (tiles, inclusive): chunks cx −117…41, cy −80…80. Ocean beyond. */
-export const CONTINENT: TileBox = { tx0: -2800, tx1: 999, ty0: -1200, ty1: 1199 };
+import { CONTINENT } from "./continentBox";
+export { CONTINENT };
 /** Feature size: the noise wavelengths grew with the world (×2 for a 10×
  *  larger area), so lands, seas and biomes are proportionally bigger. */
 const WAVE = 2;

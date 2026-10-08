@@ -21,7 +21,9 @@ import { readAuthored, restyleAuthored } from "./villageRestyle";
 import { getAllBuildingsManifest, getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { openRows, openRowsSig } from "./lotRowsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
-import { mapOverview, tileFromOverview } from "./mapOverview";
+import { nearestFirst, tileFile, tilesAt, tileTouches } from "./mapOverview";
+import { requestMapJob } from "./mapRenderPool";
+import { TOWNS } from "./settlements";
 import { MAP_BOUNDS, MAP_MAX_ZOOM, MAP_TILE_CHUNKS, MAP_TILE_H, MAP_TILE_W, chunkInBounds, mapTileInBounds, mapTileRect, seenMasks } from "./worldAtlas";
 import type { MapMarkers, MapPlace, MapSourceJson, MapWaystone, SeenBlock, TilesetColors } from "@/types/map";
 
@@ -96,7 +98,7 @@ async function chunkSource(cx: number, cy: number): Promise<MapSourceJson> {
 }
 
 /** A zoom-0 tile: 8×8 chunks, then the building stamps over them. */
-async function renderBase(mx: number, my: number): Promise<Buffer> {
+export async function renderBase(mx: number, my: number): Promise<Buffer> {
   const W = MAP_TILE_W, H = MAP_TILE_H;
   const px = Buffer.alloc(W * H * 4);
   const r = mapTileRect(0, mx, my);
@@ -111,14 +113,6 @@ async function renderBase(mx: number, my: number): Promise<Buffer> {
     await paint((await getTemplate(entry)) as MapSourceJson, px, W, H, entry.tx - r.tx, entry.ty - r.ty, 24);
   }
   return px;
-}
-
-/** Zoom z ≥ 1: cut from the whole-world overview (src/lib/mapOverview.ts),
- *  so no chunk is generated however far out the map is zoomed. Null while
- *  the overview is still being built. */
-async function renderZoom(z: number, mx: number, my: number): Promise<Buffer | null> {
-  const o = mapOverview(CACHE_DIR, await tilesVersion());
-  return o ? tileFromOverview(o, mapTileRect(z, mx, my), z, MAP_TILE_W, MAP_TILE_H) : null;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────
@@ -150,26 +144,21 @@ export async function tilesVersion(): Promise<string> {
   return sig ? `${await mapVersion()}-${crypto.createHash("sha1").update(sig).digest("hex").slice(0, 8)}` : mapVersion();
 }
 
-const raw = new Map<string, Promise<Buffer>>(); // in-memory RGBA of zoom-0 tiles (bounded below)
-const RAW_CAP = 400;
-async function tileRaw(mx: number, my: number): Promise<Buffer> {
-  const key = `${await tilesVersion()}/${mx}/${my}`;
-  let p = raw.get(key);
-  if (p) { raw.delete(key); raw.set(key, p); return p; }
-  p = renderBase(mx, my);
-  raw.set(key, p);
-  p.catch(() => raw.delete(key));
-  if (raw.size > RAW_CAP) raw.delete(raw.keys().next().value!);
-  return p;
+/** Have zoom-0 tile (mx, my) drawn (a background worker does it) and read it. */
+async function baseTileRaw(mx: number, my: number): Promise<Buffer> {
+  const mapV = await mapVersion(), tilesV = await tilesVersion();
+  const file = tileFile(CACHE_DIR, tilesV, 0, mx, my);
+  if (!fs.existsSync(file)) await requestMapJob({ kind: "tile", key: `t/${tilesV}/0/${mx}/${my}`, mapV, tilesV, z: 0, mx, my });
+  return sharp(file).ensureAlpha().raw().toBuffer();
 }
 
-/** The zoom-0 map (1 px per tile, RGBA) of `w`×`h` tiles from (tx0, ty0). */
+/** The zoom-0 map (1 px per tile, RGBA) of `w`×`h` tiles from (tx0, ty0) (treasure sketches). */
 export async function mapPatchRaw(tx0: number, ty0: number, w: number, h: number): Promise<Buffer> {
   const out = Buffer.alloc(w * h * 4);
   for (let my = Math.floor(ty0 / MAP_TILE_H); my <= Math.floor((ty0 + h - 1) / MAP_TILE_H); my++) {
     for (let mx = Math.floor(tx0 / MAP_TILE_W); mx <= Math.floor((tx0 + w - 1) / MAP_TILE_W); mx++) {
       if (!mapTileInBounds(0, mx, my)) continue;
-      const src = await tileRaw(mx, my);
+      const src = await baseTileRaw(mx, my);
       for (let y = 0; y < h; y++) {
         const sy = ty0 + y - my * MAP_TILE_H;
         if (sy < 0 || sy >= MAP_TILE_H) continue;
@@ -185,20 +174,104 @@ export async function mapPatchRaw(tx0: number, ty0: number, w: number, h: number
 }
 
 const EMPTY = sharp({ create: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+/** How long a tile request waits for a background worker before answering "still drawing". */
+const WAIT_MS = 400;
 
-/** The PNG of map tile (z, mx, my): from disk if rendered before; null while
- *  the overview it's cut from is still being built (try again shortly). */
+/**
+ * The PNG of map tile (z, mx, my), from disk. If it isn't drawn yet, a
+ * background worker is asked to (the game server never draws), and null
+ * means "still drawing: ask again shortly".
+ */
 export async function mapTilePng(z: number, mx: number, my: number): Promise<Buffer | null> {
   if (!Number.isInteger(z) || z < 0 || z > MAP_MAX_ZOOM || !Number.isInteger(mx) || !Number.isInteger(my) || !mapTileInBounds(z, mx, my)) return EMPTY;
-  const file = path.join(CACHE_DIR, await tilesVersion(), String(z), `${mx}_${my}.png`);
+  const tilesV = await tilesVersion();
+  await ensureTilesDir(tilesV); // new rows opened: the untouched pictures carry over first
+  const file = tileFile(CACHE_DIR, tilesV, z, mx, my);
   try {
     return await fs.promises.readFile(file);
-  } catch { /* not rendered yet */ }
-  const px = z === 0 ? await tileRaw(mx, my) : await renderZoom(z, mx, my);
-  if (!px) return null;
-  const png = await sharp(px, { raw: { width: MAP_TILE_W, height: MAP_TILE_H, channels: 4 } }).png().toBuffer();
-  await fs.promises.mkdir(path.dirname(file), { recursive: true }).then(() => fs.promises.writeFile(file, png)).catch(() => {});
-  return png;
+  } catch { /* not drawn yet */ }
+  const job = requestMapJob({ kind: "tile", key: `t/${tilesV}/${z}/${mx}/${my}`, mapV: await mapVersion(), tilesV, z, mx, my });
+  await Promise.race([job, new Promise((r) => setTimeout(r, WAIT_MS))]);
+  return fs.promises.readFile(file).catch(() => null);
+}
+
+/** Where people are (the map is drawn nearest these first): the village and every town. */
+const busySpots = () => [{ tx: 32, ty: 21 }, ...TOWNS.map((t) => ({ tx: t.sq.tx + 12, ty: t.sq.ty + 7 }))];
+
+/**
+ * Queue the whole map at low priority (background workers, spare CPU only):
+ * zoom 1 up to the top first (cut from the overview blocks), then zoom 0,
+ * each nearest the village and towns first. Pictures already on disk are
+ * skipped, so it's free once the map is drawn. ~640 pictures for this world.
+ */
+async function queueWholeMap(): Promise<number> {
+  const mapV = await mapVersion(), tilesV = await tilesVersion();
+  let n = 0;
+  for (const z of [...Array.from({ length: MAP_MAX_ZOOM }, (_, i) => i + 1), 0]) {
+    for (const t of nearestFirst(tilesAt(z), busySpots())) {
+      if (fs.existsSync(tileFile(CACHE_DIR, tilesV, t.z, t.mx, t.my))) continue;
+      void requestMapJob({ kind: "tile", key: `t/${tilesV}/${t.z}/${t.mx}/${t.my}`, mapV, tilesV, z: t.z, mx: t.mx, my: t.my }, true);
+      n++;
+    }
+  }
+  return n;
+}
+
+/**
+ * When homestead rows open, the tiles version changes. Its folder starts
+ * from the previous version's pictures: every tile that doesn't overlap the
+ * newly opened lots is hard-linked over (free), so only the few tiles
+ * around the new lots are drawn again. Each folder lists its open rows.
+ */
+let tilesReadyFor: string | null = null;
+let tilesReadying: Promise<void> | null = null;
+async function ensureTilesDir(tilesV: string): Promise<void> {
+  if (tilesReadyFor === tilesV) return;
+  tilesReadying ??= carryOver(tilesV).finally(() => { tilesReadyFor = tilesV; tilesReadying = null; void queueWholeMap().catch(() => {}); });
+  await tilesReadying;
+}
+
+async function carryOver(tilesV: string): Promise<void> {
+  const dir = path.join(CACHE_DIR, tilesV), rowsFile = path.join(dir, "rows.json");
+  if (fs.existsSync(rowsFile)) return;
+  const open = [...(await openRows())].sort();
+  const mapV = await mapVersion();
+  // the previous pictures: a folder of this map version whose rows are all still open
+  let prev: { dir: string; rows: string[] } | null = null;
+  for (const d of await fs.promises.readdir(CACHE_DIR).catch(() => [] as string[])) {
+    if (d === tilesV || !d.startsWith(mapV)) continue;
+    const rows = JSON.parse(await fs.promises.readFile(path.join(CACHE_DIR, d, "rows.json"), "utf8").catch(() => "null")) as string[] | null;
+    if (rows && rows.every((r) => open.includes(r)) && (!prev || rows.length > prev.rows.length)) prev = { dir: path.join(CACHE_DIR, d), rows };
+  }
+  if (prev) {
+    const fresh = new Set(open.filter((r) => !prev!.rows.includes(r)));
+    const lotsNew = (await getAllBuildingsManifest()).buildings.filter((e) => e.row && fresh.has(e.row)).map((e) => ({ tx: e.tx, ty: e.ty, tw: 24, th: 15 }));
+    for (let z = 0; z <= MAP_MAX_ZOOM; z++) {
+      const from = path.join(prev.dir, String(z));
+      for (const f of await fs.promises.readdir(from).catch(() => [] as string[])) {
+        const m = /^(-?\d+)_(-?\d+)\.png$/.exec(f);
+        if (!m || tileTouches(z, Number(m[1]), Number(m[2]), lotsNew)) continue;
+        const to = path.join(dir, String(z), f);
+        await fs.promises.mkdir(path.dirname(to), { recursive: true });
+        await fs.promises.link(path.join(from, f), to).catch(() => fs.promises.copyFile(path.join(from, f), to).catch(() => {}));
+      }
+    }
+  }
+  await fs.promises.mkdir(dir, { recursive: true });
+  await fs.promises.writeFile(rowsFile, JSON.stringify(open));
+}
+
+/**
+ * At server start: forget old versions' pictures (keeping the current map
+ * and tiles versions), and draw the whole map ahead of time in the
+ * background, so the map (M) opens drawn everywhere.
+ */
+export async function startMapWork(): Promise<void> {
+  const keep = new Set([await mapVersion(), await tilesVersion()]);
+  for (const d of await fs.promises.readdir(CACHE_DIR).catch(() => [] as string[])) {
+    if (!keep.has(d)) await fs.promises.rm(path.join(CACHE_DIR, d), { recursive: true, force: true }).catch(() => {});
+  }
+  await ensureTilesDir(await tilesVersion()); // also queues the whole map
 }
 
 // ── Fog of war ───────────────────────────────────────────────────────────

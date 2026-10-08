@@ -41,3 +41,16 @@ export type MapSourceJson = {
 
 /** The map viewer's camera: world-px centre and screen px per world tile. */
 export type MapCamera = { x: number; y: number; scale: number };
+
+/** The map panel's fog of war (MapPanel buildFog): an image with 1 px per
+ *  chunk, and quick "explored?" lookups. */
+export type MapFog = {
+  canvas: HTMLCanvasElement;
+  /** Is any chunk of this world-tile rectangle explored? */
+  anySeenIn: (r: { tx: number; ty: number; tw: number; th: number }) => boolean;
+  /** Is the chunk at world pixel (x, y) explored? */
+  seenAtPx: (x: number, y: number) => boolean;
+};
+
+/** A box of world tiles (the map's bounds for zoom and panning). */
+export type MapTileBox = { tx0: number; ty0: number; tx1: number; ty1: number };
