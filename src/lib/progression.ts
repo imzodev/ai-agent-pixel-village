@@ -31,6 +31,11 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
   wyvern: { name: "Wyvern", tier: 7, hp: 38, xp: 110, damage: 6, hunts: true, pack: [1, 2], drops: [{ itemKey: "wyvern_bone", chance: 0.75, qty: 1 }] },
   rime_wraith: { name: "Rime Wraith", tier: 8, hp: 34, xp: 130, damage: 6, nightOnly: true, pack: [1, 3], drops: [{ itemKey: "rime_essence", chance: 0.7, qty: 1 }] },
   elder_treant: { name: "Elder Treant", tier: 8, hp: 60, xp: 160, damage: 7, pack: [1, 1], drops: [{ itemKey: "elder_heartwood", chance: 0.8, qty: 1 }, { itemKey: "wood", chance: 1, qty: 6 }] },
+  // Lair bosses of the far lands (src/lib/lairs.ts: lairs, respawn, rewards; scripts/draw-lair-bosses.mjs).
+  sand_wyrm: { name: "Sand Wyrm", tier: "boss", hp: 1200, xp: 600, damage: 26, drops: [] },
+  frost_giant: { name: "Frost Giant", tier: "boss", hp: 1800, xp: 900, damage: 34, drops: [] },
+  fire_drake: { name: "Fire Drake", tier: "boss", hp: 2400, xp: 1200, damage: 42, drops: [] },
+  the_hollow: { name: "the Hollow", tier: "boss", hp: 3200, xp: 1600, damage: 50, drops: [] },
   // World boss: rewards are shared by everyone who fought it (BOSS_REWARD).
   rootking: { name: "Old Rootking", tier: "boss", hp: 600, xp: 300, damage: 5, drops: [] },
 };
@@ -78,6 +83,9 @@ export function nextBossWindow(now: number, schedule = "6@18", force = false): {
 export function bossRewardees(damage: Record<string, number>, maxHp: number): number[] {
   return Object.entries(damage).filter(([, d]) => d >= maxHp * BOSS_SHARE_MIN).map(([id]) => Number(id));
 }
+
+/** A boss (the world boss or a lair boss): stands its ground, its reward is shared. */
+export const isBossKind = (kind: string): boolean => ENEMY_KINDS[kind]?.tier === "boss";
 
 /** Enemy kind config; unknown (legacy) kinds behave like a slime. */
 export function enemyKind(kind: string): EnemyKindDef {
@@ -150,6 +158,10 @@ export const WEAPONS: Record<string, WeaponDef> = {
   steel_sword: { damage: 16 },
   wyvernbone_blade: { damage: 21 },
   elder_blade: { damage: 27 },
+  // The lair bosses' unique blades (src/lib/lairs.ts).
+  glacier_blade: { damage: 31 },
+  drakefire_blade: { damage: 35 },
+  hollow_edge: { damage: 40 },
   axe: { damage: 0, chopBonus: 0 },
   sharp_axe: { damage: 0, chopBonus: 1 },
 };
@@ -160,6 +172,7 @@ export const BOWS: Readonly<Record<string, BowDef>> = {
   recurve_bow: { damage: 5, rangePx: 8 * 16 },
   great_bow: { damage: 9, rangePx: 10 * 16 },
   runed_bow: { damage: 14, rangePx: 11 * 16 },
+  dunecaller_bow: { damage: 18, rangePx: 12 * 16 }, // the Sand Wyrm's (src/lib/lairs.ts)
 };
 export const ARROW_ITEM = "arrow";
 /** The least time between two shots (the draw takes this long). */

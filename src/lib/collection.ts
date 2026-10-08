@@ -25,7 +25,8 @@ const CROP_LOOK: Record<string, { name: string; icon: string }> = {
   radish: { name: "Radish", icon: "🔴" }, carrot: { name: "Carrot", icon: "🥕" }, tomato: { name: "Tomato", icon: "🍅" }, pumpkin: { name: "Pumpkin", icon: "🎃" },
 };
 const ENEMY_ICON: Record<string, string> = { slime: "🟢", bat: "🦇", thornling: "🌵", boar: "🐗", wolf: "🐺", scorpion: "🦂", lurker: "🐸", frostwolf: "🐺", shade: "🟣", wisp: "👻", rootking: "🌳",
-  dune_stalker: "🦎", bog_hag: "🧙", ice_troll: "🧊", gloam_stag: "🦌", basalt_golem: "🗿", wyvern: "🐉", rime_wraith: "👻", elder_treant: "🌲" };
+  dune_stalker: "🦎", bog_hag: "🧙", ice_troll: "🧊", gloam_stag: "🦌", basalt_golem: "🗿", wyvern: "🐉", rime_wraith: "👻", elder_treant: "🌲",
+  sand_wyrm: "🐛", frost_giant: "🧊", fire_drake: "🐉", the_hollow: "👁️" };
 const REGION_ICON: Record<string, string> = { meadow: "🌼", whisperwood: "🌲", hollowmere: "🏘️", greyspine: "⛰️", silverrun: "🌊", brightwater: "⚓", caverns: "💎" };
 
 /** All pages; the folk page lists the given NPCs. */

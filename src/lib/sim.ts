@@ -1,10 +1,11 @@
 import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks } from "@/db/schema";
+import { animals, bossLairs, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks } from "@/db/schema";
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
-import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyHpAt, enemyKind, inDarkZone, pickEnemyKind } from "./progression";
+import { LAIR_BOSSES, lairReady, lairSpot } from "./lairs";
+import { BOSS_KIND, BOSS_SPOT, ENEMY_KINDS, ENEMY_ZONES, GREEN_THUMB_MULT, bossWindowStart, enemyHpAt, enemyKind, inDarkZone, isBossKind, pickEnemyKind } from "./progression";
 import { perksOfMany } from "./combat";
 import { isWalkableServer } from "./chunkCollisionServer";
 import {
@@ -214,6 +215,22 @@ async function tickBoss(rows: (typeof enemies.$inferSelect)[], now: Date): Promi
   await logEvent("boss", "🌳 The Old Rootking has awoken in the north woods! Gather your friends and drive it back.", "enemy", row.id, BOSS_SPOT.x, BOSS_SPOT.y);
 }
 
+/**
+ * Lair bosses (src/lib/lairs.ts): each is in its lair unless someone beat it
+ * less than LAIR_RESPAWN_MS ago. Raised here; the attack API records a defeat.
+ */
+async function tickLairs(rows: (typeof enemies.$inferSelect)[], now: Date): Promise<void> {
+  const fallen = new Map((await db.select().from(bossLairs)).map((l) => [l.kind, l.defeatedAt?.getTime() ?? null]));
+  for (const b of LAIR_BOSSES) {
+    if (rows.some((e) => e.kind === b.kind)) continue;
+    const spot = lairSpot(b.kind);
+    if (!spot || !lairReady(fallen.get(b.kind) ?? null, now.getTime())) continue;
+    const at = { x: spot.tx * 16 + 8, y: spot.ty * 16 + 8 };
+    const [row] = await db.insert(enemies).values({ kind: b.kind, x: at.x, y: at.y, targetX: at.x, targetY: at.y, hp: b.hp, maxHp: b.hp, spawnedAt: now, damage: {} }).returning({ id: enemies.id });
+    await logEvent("boss", `${b.icon} ${b.name[0].toUpperCase()}${b.name.slice(1)} stirs in ${b.lair}.`, "enemy", row.id, at.x, at.y);
+  }
+}
+
 async function tickAnimals(beat: TickBeat, elapsedSec: number, night: boolean, now: Date): Promise<number> {
   const rows = await db.select().from(animals);
   const writes: MoveWrite[] = [];
@@ -403,7 +420,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
   }
   const writes: MoveWrite[] = [];
   for (const e of rows) {
-    if (e.kind === BOSS_KIND) continue; // the boss stands its ground
+    if (isBossKind(e.kind)) continue; // bosses stand their ground
     if (!isDue("enemy", e.id, beat.index, ENEMY_MOVE_INTERVAL_MS)) continue;
     if (busyAt(e, beat.startAt)) continue;
     // Wild enemies roam around where they appeared (home = targetX/Y).
@@ -417,7 +434,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
   // Refill each zone toward its target, one spawn per zone per beat at most.
   for (const zone of ENEMY_ZONES) {
     const z = zone.rect;
-    const count = rows.filter((e) => e.kind in ENEMY_KINDS && e.kind !== BOSS_KIND && e.x >= z.x && e.x < z.x + z.w && e.y >= z.y && e.y < z.y + z.h).length;
+    const count = rows.filter((e) => e.kind in ENEMY_KINDS && !isBossKind(e.kind) && e.x >= z.x && e.x < z.x + z.w && e.y >= z.y && e.y < z.y + z.h).length;
     if (count >= (zone.target ?? ZONE_TARGET_ENEMIES) || Math.random() >= 0.35) continue;
     const kind = pickEnemyKind(zone, night);
     if (!kind) continue;
@@ -430,6 +447,7 @@ async function tickEnemies(beat: TickBeat, now: Date, night: boolean): Promise<n
   // Bounty boards: lapsed bounties down, new ones up (every ~30 s).
   if (beat.index % 6 === 0) await refreshBounties(now).catch((err) => console.warn("[tick] bounty refresh failed:", err instanceof Error ? err.message : err));
   await tickBoss(rows, now);
+  await tickLairs(rows, now).catch((err) => console.warn("[tick] lairs failed:", err instanceof Error ? err.message : err));
   return writes.length;
 }
 

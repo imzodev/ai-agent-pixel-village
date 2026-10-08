@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql, notInArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "@/db";
 import {
@@ -34,6 +34,7 @@ import { forageSpots } from "./forage";
 import { ORCHARD_FRUITS, ORCHARD_PRODUCTS } from "./orchard";
 import { resiteTreasureMaps } from "./treasureServer";
 import { BOSS_KIND } from "./progression";
+import { LAIR_BOSSES } from "./lairs";
 
 export const ITEM_DEFS = [
   { key: "herb", name: "Wild Herb", kind: "material", icon: "🌿", description: "Fragrant and slightly minty.", value: 2 },
@@ -98,6 +99,15 @@ export const ITEM_DEFS = [
   { key: "steel_sword", name: "Steel Sword", kind: "tool", icon: "🗡️", description: "+16 attack. Bjorn's best steel, scale-wrapped.", value: 160, equippable: true },
   { key: "runed_bow", name: "Runed Bow", kind: "tool", icon: "🏹", description: "Antler-tipped and troll-strung. Long reach, heavy arrows.", value: 220, equippable: true },
   { key: "wyvernbone_blade", name: "Wyvernbone Blade", kind: "tool", icon: "🗡️", description: "+21 attack. Light as a feather, hot as a forge.", value: 320, equippable: true },
+  // Lair bosses' trophies and unique weapons (src/lib/lairs.ts).
+  { key: "wyrm_fang", name: "Wyrm Fang", kind: "material", icon: "🦷", description: "From the Sand Wyrm of the Glass Pit. Proof you faced it.", value: 120 },
+  { key: "giant_heart", name: "Giant's Heart", kind: "material", icon: "💠", description: "A Frost Giant's heart of living ice, from the Rime Hall.", value: 180 },
+  { key: "drake_horn", name: "Drake Horn", kind: "material", icon: "🦴", description: "Still warm. From the Fire Drake of the Cinder Roost.", value: 240 },
+  { key: "hollow_eye", name: "Hollow Eye", kind: "material", icon: "🟢", description: "It glows, and it watches. From the Hollow Grove.", value: 320 },
+  { key: "dunecaller_bow", name: "Dunecaller Bow", kind: "tool", icon: "🏹", description: "The Sand Wyrm's own sinew. The longest reach of any bow.", value: 600, equippable: true },
+  { key: "glacier_blade", name: "Glacier Blade", kind: "tool", icon: "🗡️", description: "+31 attack. Carved from the Frost Giant's crown.", value: 700, equippable: true },
+  { key: "drakefire_blade", name: "Drakefire Blade", kind: "tool", icon: "🗡️", description: "+35 attack. Forged in the Fire Drake's own breath.", value: 900, equippable: true },
+  { key: "hollow_edge", name: "Hollow Edge", kind: "tool", icon: "🗡️", description: "+40 attack. Whatever it was, it isn't any more.", value: 1200, equippable: true },
   { key: "elder_blade", name: "Elder Blade", kind: "tool", icon: "🗡️", description: "+27 attack. Heartwood and rime, for the end of the world.", value: 520, equippable: true },
   { key: "rootking_heartwood", name: "Rootking Heartwood", kind: "trophy", icon: "🌳", description: "Still warm. Proof you fought the Old Rootking.", value: 40 },
   { key: "slime_gel", name: "Slime Gel", kind: "material", icon: "🟢", description: "Wobbly.", value: 2 },
@@ -551,7 +561,7 @@ async function syncWildlifeLayout() {
     });
     for (let i = 0; i < rows.length; i += 200) await db.insert(resourceNodes).values(rows.slice(i, i + 200));
     // Enemies respawn from the current zones; a risen world boss stays.
-    await db.delete(enemies).where(ne(enemies.kind, BOSS_KIND));
+    await db.delete(enemies).where(notInArray(enemies.kind, [BOSS_KIND, ...LAIR_BOSSES.map((b) => b.kind)])); // bosses stay
     // Treasure maps whose X ended up in the sea get a new spot.
     const resited = await resiteTreasureMaps();
     if (resited) console.log(`[seed] moved ${resited} treasure maps off ground that's no longer open`);

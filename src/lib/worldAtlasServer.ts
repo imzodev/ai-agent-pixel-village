@@ -23,6 +23,7 @@ import { openRows, openRowsSig } from "./lotRowsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
 import { nearestFirst, tileFile, tilesAt, tileTouches } from "./mapOverview";
 import { requestMapJob } from "./mapRenderPool";
+import { LAIR_SPOTS, lairBoss } from "./lairs";
 import { TOWNS } from "./settlements";
 import { MAP_BOUNDS, MAP_MAX_ZOOM, MAP_TILE_CHUNKS, MAP_TILE_H, MAP_TILE_W, chunkInBounds, mapTileInBounds, mapTileRect, seenMasks } from "./worldAtlas";
 import type { MapMarkers, MapPlace, MapSourceJson, MapWaystone, SeenBlock, TilesetColors } from "@/types/map";
@@ -324,6 +325,8 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     const d = await getBuildingDoor(e.key);
     if (d) places.push({ kind, name: e.name, x: d.x, y: d.y });
   }
+  // Lair bosses' lairs (src/lib/lairs.ts), shown once you've explored them.
+  for (const s of LAIR_SPOTS) { const b = lairBoss(s.kind); if (b) places.push({ kind: "lair", name: `${b.lair[0].toUpperCase()}${b.lair.slice(1)} (${b.name})`, x: s.tx * 16 + 8, y: s.ty * 16 + 8 }); }
   const myLots = [];
   for (const l of mine) {
     if (!l.buildingKey) continue;

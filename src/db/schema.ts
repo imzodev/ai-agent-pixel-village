@@ -984,3 +984,9 @@ export const lotRows = pgTable("lot_rows", {
   kind: text("kind").notNull(),
   openedAt: timestamp("opened_at").defaultNow().notNull(),
 });
+
+/** When each lair boss (src/lib/lairs.ts) last fell; it returns LAIR_RESPAWN_MS later. */
+export const bossLairs = pgTable("boss_lairs", {
+  kind: text("kind").primaryKey(),
+  defeatedAt: timestamp("defeated_at"),
+});

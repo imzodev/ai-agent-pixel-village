@@ -1,10 +1,11 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, buildings, characters, enemies, forageClaims, groundItems, inventory, resourceNodes, worldChat } from "@/db/schema";
+import { animals, buildings, characters, enemies, forageClaims, groundItems, inventory, resourceNodes, worldChat, bossLairs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { getCropKind } from "@/lib/crops";
 import { addItem, logEvent, progressMissions, recalcLevel, removeItem } from "@/lib/game";
+import { getsUnique, lairBoss } from "@/lib/lairs";
 import { broadcastChunkReload, forgetEnemy, getLivePlayerPosition, interruptStrike, livePlayersNear, markWorldDirty, placePlayer } from "@/lib/world-stream";
 import { progressHunts, wantedSlain } from "@/lib/bountiesServer";
 import { WANTED_XP_MULT } from "@/lib/bounties";
@@ -14,7 +15,7 @@ import { TREE_REACH_PX, trunkPoint } from "@/lib/trees";
 import { getBuildingDoor, getBuildingsManifest } from "@/lib/buildingsServer";
 import { rowPositionAt } from "@/lib/motion";
 import { rollForageSeed } from "@/lib/gardenRules";
-import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, bowOf, chopBonus, enemyHit, enemyKind, enemyXpAt, isAggressive, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
+import { ARROW_ITEM, AXE_ITEMS, BOSS_KIND, BOSS_REWARD, SHOT_COOLDOWN_MS, bossRewardees, isBossKind, bowOf, chopBonus, enemyHit, enemyKind, enemyXpAt, isAggressive, playerDamage, rollDrops, weaponBonus } from "@/lib/progression";
 import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { arrivalPoint } from "@/lib/chunkCollisionServer";
 import { tierAt } from "@/lib/continent";
@@ -233,7 +234,7 @@ export async function POST(req: Request) {
       // reels, and the blow lands harder.
       const staggered = interruptStrike(e.id);
       const dmg = Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1));
-      const boss = e.kind === BOSS_KIND;
+      const boss = isBossKind(e.kind); // the world boss or a lair boss: damage tallied, reward shared
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).
       // The boss also tallies each fighter's damage for the shared reward.
@@ -258,7 +259,32 @@ export async function POST(req: Request) {
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];
       if (killed.length > 0) forgetEnemy(e.id); // it stops fighting at once
       const hp = killed.length > 0 ? 0 : Math.max(1, after.hp);
-      if (killed.length > 0 && boss) {
+      const lair = lairBoss(e.kind);
+      if (killed.length > 0 && lair) {
+        // A lair boss: everyone who dealt a fair share earns XP, coins and its
+        // trophy, with a chance at its unique weapon; it returns in 2 hours.
+        const winners = bossRewardees(after.damage ?? {}, after.maxHp);
+        const uniques: number[] = [];
+        for (const id of winners) {
+          await db.update(characters).set({ xp: sql`${characters.xp} + ${lair.xp}`, coins: sql`${characters.coins} + ${lair.coins}` }).where(eq(characters.id, id));
+          await addItem(id, lair.trophy, 1);
+          if (getsUnique(lair, Math.random())) { await addItem(id, lair.unique, 1); uniques.push(id); }
+          await recalcLevel(id);
+          await recordCollection(id, "enemy", e.kind);
+        }
+        await db.insert(bossLairs).values({ kind: e.kind, defeatedAt: new Date() }).onConflictDoUpdate({ target: bossLairs.kind, set: { defeatedAt: new Date() } });
+        const Name = `${lair.name[0].toUpperCase()}${lair.name.slice(1)}`;
+        if (winners.includes(me.id)) {
+          gained.push({ itemKey: lair.trophy, qty: 1 });
+          if (uniques.includes(me.id)) gained.push({ itemKey: lair.unique, qty: 1 });
+        }
+        message = winners.includes(me.id)
+          ? `${lair.icon} ${Name} falls! +${lair.xp} XP, +${lair.coins} coins and its trophy${uniques.includes(me.id) ? " — and its legendary weapon!" : "."}`
+          : `${lair.icon} ${Name} falls! Deal more damage next time to share the reward.`;
+        await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
+        daily(me.id, "defeat", { enemyKind: e.kind });
+        await logEvent("boss_defeated", `${lair.icon} ${Name} of ${lair.lair} was slain by ${winners.length} adventurer${winners.length === 1 ? "" : "s"}! ${me.name} struck the final blow. It will return.`, "character", me.id, e.x, e.y);
+      } else if (killed.length > 0 && e.kind === BOSS_KIND) {
         const winners = bossRewardees(after.damage ?? {}, after.maxHp);
         for (const id of winners) {
           await db.update(characters).set({ xp: sql`${characters.xp} + ${BOSS_REWARD.xp}`, coins: sql`${characters.coins} + ${BOSS_REWARD.coins}` }).where(eq(characters.id, id));

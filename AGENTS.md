@@ -208,6 +208,14 @@ overrides the tier's pack size. A new enemy kind needs: `ENEMY_KINDS`,
 and its drop items (`farLands.test.ts` checks all of it). Bjorn forges the
 far-land gear (steel sword → wyvernbone blade → elder blade, runed bow).
 
+**Lair bosses** (`src/lib/lairs.ts`): one per far tier (Sand Wyrm 5, Frost Giant 6,
+Fire Drake 7, the Hollow 8), each in a lair placed by `scripts/gen-lairs.ts`
+(→ `lairsData.json`; the continent keeps a clearing around each). tickd raises a
+boss unless it fell less than `LAIR_RESPAWN_MS` (2 h) ago (`boss_lairs`); everyone
+who dealt `BOSS_SHARE_MIN` of its HP earns XP, coins, its trophy and a chance at its
+unique weapon. Bosses (`tier: "boss"`, `isBossKind`) stand their ground and never
+spawn wild. Lairs show on the map (☠️) once explored.
+
 The WS server's combat clock (and wolf hunts) work from an **in-memory cache**
 of aggressive enemies (`combat.rows`), not per-second reads: a full read every
 `WS_RESYNC_MS` as a safety net, kept current in between by its own spawns

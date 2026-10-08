@@ -53,7 +53,7 @@ function buildFog(seen: ReadonlySet<string>, extra: ReadonlySet<string>): MapFog
   };
 }
 
-const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️" } as const;
+const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️", lair: "☠️" } as const;
 const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔", vineyard: "🍇", workshop: "🪚", orchard: "🍑" } as const;
 
 export default function MapPanel({ me, guide, bounties = [], encounters = [], extraSeen, travelMode, onClose, onMessage }: {

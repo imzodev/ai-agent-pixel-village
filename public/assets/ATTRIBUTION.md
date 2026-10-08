@@ -94,3 +94,8 @@ from any third-party asset.
 
 Original art made for this project by `scripts/draw-orchard-lot.mjs`. Not
 derived from any third-party asset.
+
+## Lair bosses (`animals/{sand_wyrm,frost_giant,fire_drake,the_hollow}.png`)
+
+Original art made for this project by `scripts/draw-lair-bosses.mjs`. Not
+derived from any third-party asset.

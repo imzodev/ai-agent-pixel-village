@@ -1,0 +1,22 @@
+[
+ {
+  "kind": "sand_wyrm",
+  "tx": -1174,
+  "ty": 366
+ },
+ {
+  "kind": "frost_giant",
+  "tx": 14,
+  "ty": -1110
+ },
+ {
+  "kind": "fire_drake",
+  "tx": -1966,
+  "ty": 690
+ },
+ {
+  "kind": "the_hollow",
+  "tx": -1846,
+  "ty": -498
+ }
+]

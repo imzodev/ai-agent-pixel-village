@@ -426,6 +426,38 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     },
     stateActions: { walk: "idle" },
   },
+  sand_wyrm: {
+    // Lair boss (the Glass Pit; src/lib/lairs.ts). scripts/draw-lair-bosses.mjs: 64×64, the same front view in every row.
+    url: "/assets/animals/sand_wyrm.png",
+    frameWidth: 64, frameHeight: 64, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.5, originX: 0.5, originY: 0.97, labelHeight: 60,
+    actions: { walk: { block: 0, frames: 4, frameRate: 4, loop: true } },
+    stateActions: {},
+  },
+  frost_giant: {
+    // Lair boss (the Rime Hall; src/lib/lairs.ts). scripts/draw-lair-bosses.mjs: 64×64, the same front view in every row.
+    url: "/assets/animals/frost_giant.png",
+    frameWidth: 64, frameHeight: 64, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.5, originX: 0.5, originY: 0.97, labelHeight: 60,
+    actions: { walk: { block: 0, frames: 4, frameRate: 4, loop: true } },
+    stateActions: {},
+  },
+  fire_drake: {
+    // Lair boss (the Cinder Roost; src/lib/lairs.ts). scripts/draw-lair-bosses.mjs: 64×64, the same front view in every row.
+    url: "/assets/animals/fire_drake.png",
+    frameWidth: 64, frameHeight: 64, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.5, originX: 0.5, originY: 0.97, labelHeight: 60,
+    actions: { walk: { block: 0, frames: 4, frameRate: 4, loop: true } },
+    stateActions: {},
+  },
+  the_hollow: {
+    // Lair boss (the Hollow Grove; src/lib/lairs.ts). scripts/draw-lair-bosses.mjs: 64×64, the same front view in every row.
+    url: "/assets/animals/the_hollow.png",
+    frameWidth: 64, frameHeight: 64, columns: 4, dirRows: ["up", "left", "down", "right"],
+    scale: 1.5, originX: 0.5, originY: 0.97, labelHeight: 60,
+    actions: { walk: { block: 0, frames: 4, frameRate: 4, loop: true } },
+    stateActions: {},
+  },
   rootking: {
     // World boss. Original art drawn by scripts/draw-rootking.mjs: 64×64
     // frames, the same front view in every row (it stands its ground).

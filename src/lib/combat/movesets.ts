@@ -57,6 +57,27 @@ export const MOVESETS: Readonly<Record<string, readonly MoveDef[]>> = {
     { name: "root snare", shape: { type: "circle", r: 26 }, trigger: 190, windupMs: 1100, cooldownMs: 2800, dmgMult: 1.1, atTarget: true, status: { kind: "slow", ms: 3000 } },
     { name: "branch sweep", shape: { type: "cone", r: 76, half: 0.8 }, trigger: 66, windupMs: 1000, cooldownMs: 2800, dmgMult: 1.6 },
   ],
+  // Lair bosses (src/lib/lairs.ts): three attacks each, all telegraphed and dodgeable.
+  sand_wyrm: [
+    { name: "burrowing charge", shape: { type: "line", length: 9 * T, width: 30 }, trigger: 140, windupMs: 1100, cooldownMs: 3600, dmgMult: 1.4, dash: 9 },
+    { name: "sand spit", shape: { type: "circle", r: 30 }, trigger: 200, windupMs: 900, cooldownMs: 2600, dmgMult: 1, projectile: 200, atTarget: true, status: { kind: "slow", ms: 2500 } },
+    { name: "sand storm", shape: { type: "circle", r: 90 }, trigger: 70, windupMs: 1500, cooldownMs: 5000, dmgMult: 1.2 },
+  ],
+  frost_giant: [
+    { name: "ground pound", shape: { type: "circle", r: 100 }, trigger: 80, windupMs: 1400, cooldownMs: 4500, dmgMult: 1.5, status: { kind: "slow", ms: 3000 } },
+    { name: "ice boulder", shape: { type: "circle", r: 34 }, trigger: 220, windupMs: 1200, cooldownMs: 3000, dmgMult: 1.2, projectile: 170, atTarget: true },
+    { name: "freezing breath", shape: { type: "cone", r: 110, half: 0.5 }, trigger: 100, windupMs: 1000, cooldownMs: 3200, dmgMult: 1, status: { kind: "slow", ms: 3500 } },
+  ],
+  fire_drake: [
+    { name: "fire breath", shape: { type: "cone", r: 130, half: 0.55 }, trigger: 120, windupMs: 1100, cooldownMs: 3400, dmgMult: 1.4 },
+    { name: "wing gust", shape: { type: "circle", r: 80 }, trigger: 70, windupMs: 900, cooldownMs: 3000, dmgMult: 1 },
+    { name: "dive", shape: { type: "line", length: 10 * T, width: 34 }, trigger: 170, windupMs: 1200, cooldownMs: 4200, dmgMult: 1.6, dash: 10 },
+  ],
+  the_hollow: [
+    { name: "grasping roots", shape: { type: "circle", r: 30 }, trigger: 230, windupMs: 1000, cooldownMs: 2400, dmgMult: 1.1, atTarget: true, status: { kind: "slow", ms: 3000 } },
+    { name: "reaping sweep", shape: { type: "cone", r: 120, half: 0.8 }, trigger: 110, windupMs: 1000, cooldownMs: 3000, dmgMult: 1.4 },
+    { name: "wave of dread", shape: { type: "circle", r: 120 }, trigger: 100, windupMs: 1600, cooldownMs: 5200, dmgMult: 1.6, status: { kind: "poison", ms: 3000 } },
+  ],
   rootking: [
     { name: "root spikes", shape: { type: "circle", r: 24 }, trigger: 180, windupMs: 1100, cooldownMs: 3000, dmgMult: 1.2, atTarget: true },
     { name: "sweep", shape: { type: "cone", r: 120, half: 0.7 }, trigger: 120, windupMs: 900, cooldownMs: 2600, dmgMult: 1.5 },

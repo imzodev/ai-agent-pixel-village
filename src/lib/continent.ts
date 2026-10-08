@@ -9,6 +9,7 @@
 
 import { fbm, hash, noise } from "./terrain/noise";
 import { memoXY } from "./terrain/memo";
+import { LAIR_CLEARING, LAIR_SPOTS } from "./lairs";
 import { isFelled } from "./terrain/felled";
 import { ROADS, TOWNS, nearRoad, roadTile, roadV, townAt, townDecorAt, townPathV } from "./settlements";
 import type { Biome, GroundKind, ProvinceSeed } from "@/types/continent";
@@ -52,6 +53,9 @@ const WEST_PASS_EVERY = 320;
 const GREAT_LAKE = { x: -1500, y: 520, rx: 150, ry: 95 };
 /** The Old Rootking's clearing (BOSS_SPOT, src/lib/progression.ts) stays open. */
 const BOSS_TILE = { tx: 36, ty: -45 };
+/** Open ground around the Rootking's clearing and every lair (src/lib/lairs.ts): room to fight. */
+const CLEARINGS: readonly { tx: number; ty: number; r: number }[] = [{ ...BOSS_TILE, r: 8 }, ...LAIR_SPOTS.map((s) => ({ tx: s.tx, ty: s.ty, r: LAIR_CLEARING }))];
+const inClearing = (x: number, y: number, extra = 0): boolean => CLEARINGS.some((c) => Math.hypot(x - c.tx, y - c.ty) < c.r + extra);
 
 export const inHeartland = (tx: number, ty: number): boolean =>
   HEARTLAND.some((b) => tx >= b.tx0 && tx <= b.tx1 && ty >= b.ty0 && ty <= b.ty1);
@@ -175,7 +179,7 @@ function riverV(vx: number, vy: number): boolean {
 }
 /** Water before towns are cleared (the town generator reads this). */
 function rawWaterV(vx: number, vy: number): boolean {
-  if (Math.hypot(vx - BOSS_TILE.tx, vy - BOSS_TILE.ty) < 8) return false;
+  if (inClearing(vx, vy)) return false;
   const e = elevation(vx, vy);
   if (e < SEA) return true;
   if (riverV(vx, vy)) return true;
@@ -234,7 +238,7 @@ function forestRaw(vx: number, vy: number): boolean {
   const b = biomeAt(vx, vy);
   const density = TREE_DENSITY[b];
   if (!density) return false;
-  if (Math.hypot(vx - BOSS_TILE.tx, vy - BOSS_TILE.ty) < 9) return false;
+  if (inClearing(vx, vy, 1)) return false;
   if (density > 0.15 && onTrail(vx, vy)) return false;
   // clearings break up the woods
   const clear = b === "forest" || b === "darkwood" ? noise(vx, vy, 18, 521) < 0.3 : false;
@@ -372,7 +376,7 @@ export function continentAt(tx: number, ty: number): TerrainCell {
   if (isFelled(tx, ty)) return { ...cell, upper: "stump" };
   const tm = mask(tallV, tx, ty);
   if (tm) return { ...cell, upper: `tall_${tm}` };
-  if (Math.hypot(tx - BOSS_TILE.tx, ty - BOSS_TILE.ty) < 8) return cell;
+  if (inClearing(tx, ty)) return cell;
 
   // Decor and props by biome.
   const b = biomeAt(tx, ty);

@@ -70,7 +70,7 @@ const DEPTH_MARKER = DEPTH_CHAR_BASE - 10_000; // ground click marker, under cha
 const DEPTH_LIGHT = DEPTH_CANOPY + 10;         // lantern / door glows over canopy
 const DEPTH_WEATHER = DEPTH_CANOPY + 20;
 // Creatures whose art already includes a ground shadow (they fly / float).
-const FLYERS = new Set(["bat", "wisp", "rootking", "wyvern", "rime_wraith"]);
+const FLYERS = new Set(["bat", "wisp", "rootking", "wyvern", "rime_wraith", "sand_wyrm", "frost_giant", "fire_drake", "the_hollow"]); // (draw their own shadow)
 const DEPTH_NIGHT = DEPTH_CANOPY + 30;
 const DEPTH_FOG = DEPTH_CANOPY + 31;
 const DEPTH_BUBBLE = DEPTH_CANOPY + 40;        // chat bubbles always readable

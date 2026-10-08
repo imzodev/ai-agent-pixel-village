@@ -11,7 +11,7 @@ export type SeenBlock = { bx: number; by: number; mask: string };
 export type MapWaystone = { key: string; name: string; x: number; y: number; attuned: boolean };
 
 /** A notable place on the map (world px). */
-export type MapPlace = { kind: "inn" | "forge" | "cave"; name: string; x: number; y: number };
+export type MapPlace = { kind: "inn" | "forge" | "cave" | "lair"; name: string; x: number; y: number };
 
 /** One of your own lots (world px). */
 export type MapLot = { kind: "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard"; name: string; x: number; y: number };
