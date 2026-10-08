@@ -1,7 +1,7 @@
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
-import { acquireLot, releaseLot } from "@/lib/lots";
+import { acquireLot, releaseLot, setLotBanner } from "@/lib/lots";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /** How close to the door (a land lot's gate) you must be to acquire it. */
 const DOOR_RANGE_PX = 160;
 
-/** Lot actions: acquire | release. Body: { action, key }. */
+/** Lot actions: acquire | release | banner. Body: { action, key } (banner also { color, emblem }). */
 export async function POST(req: Request) {
   try {
     const me = await requireCharacter();
@@ -32,6 +32,12 @@ export async function POST(req: Request) {
     }
     if (action === "release") {
       const r = await releaseLot(me.id, key);
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      if (door) markWorldDirty(door.x, door.y);
+      return Response.json(r);
+    }
+    if (action === "banner") {
+      const r = await setLotBanner(me.id, key, Number(body.color), Number(body.emblem));
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
       if (door) markWorldDirty(door.x, door.y);
       return Response.json(r);

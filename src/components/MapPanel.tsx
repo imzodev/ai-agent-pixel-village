@@ -12,6 +12,7 @@ import type { BountyView } from "@/types/bounty";
 import type { EncounterView } from "@/types/encounter";
 import { boardPoint } from "@/lib/bounties";
 import { gameFont } from "@/game/gameFont";
+import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
 import { mapMemory, tileImage } from "@/game/mapTiles";
 import { MAX_TILE_ZOOM, OPEN_LEVEL, ZOOM_LEVELS, clampCamera, maxLevelFor, tileZoomFor } from "@/lib/mapZoom";
 
@@ -187,7 +188,17 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
     if (scale >= 0.2) for (const r of markers.regions) if (seenAt(r.x, r.y)) label(r.name, sx(r.x), sy(r.y), scale >= 1 ? 15 : 12, "#ffe7a8");
     g.font = `${scale >= 1 ? 16 : 12}px serif`;
     for (const p of markers.places) if (seenAt(p.x, p.y)) g.fillText(PLACE_ICON[p.kind], sx(p.x), sy(p.y) - 6);
-    for (const l of markers.lots) g.fillText(LOT_ICON[l.kind], sx(l.x), sy(l.y) - 6);
+    for (const l of markers.lots) {
+      // Yours, in your banner colour and emblem, so you can pick them out at a glance.
+      const x = sx(l.x), y = sy(l.y) - 6, r = scale >= 1 ? 11 : 9;
+      g.fillStyle = LOT_COLORS[l.banner.color].hex;
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 2; g.strokeStyle = "#fffdf4"; g.stroke();
+      g.fillStyle = "#000";
+      g.font = `${scale >= 1 ? 13 : 11}px serif`;
+      g.fillText(LOT_EMBLEMS[l.banner.emblem].icon, x, y);
+      g.font = `${scale >= 1 ? 16 : 12}px serif`;
+    }
     for (const w of markers.waystones) {
       if (!w.attuned && !seenAt(w.x, w.y)) continue;
       const x = sx(w.x), y = sy(w.y) - 8, s = w === hover ? 8 : 6;

@@ -19,6 +19,7 @@ import { PLACES } from "./regions";
 import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
 import { getAllBuildingsManifest, getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { resolveBanner } from "./lotBanner";
 import { openRows, openRowsSig } from "./lotRowsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
 import { nearestFirst, tileFile, tilesAt, tileTouches } from "./mapOverview";
@@ -313,7 +314,7 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
   const manifest = (await getBuildingsManifest()).buildings;
   const [attuned, mine, stones] = await Promise.all([
     db.select({ key: characterWaystones.key }).from(characterWaystones).where(eq(characterWaystones.characterId, characterId)),
-    db.select({ kind: lots.kind, buildingKey: lots.buildingKey }).from(lots).where(eq(lots.ownerId, characterId)),
+    db.select({ kind: lots.kind, buildingKey: lots.buildingKey, bannerColor: lots.bannerColor, bannerEmblem: lots.bannerEmblem }).from(lots).where(eq(lots.ownerId, characterId)),
     waystoneList(),
   ]);
   const have = new Set(attuned.map((a) => a.key));
@@ -332,7 +333,7 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     if (!l.buildingKey) continue;
     const d = await getBuildingDoor(l.buildingKey);
     const e = manifest.find((b) => b.key === l.buildingKey);
-    if (d) myLots.push({ kind: l.kind, name: e?.name ?? l.buildingKey, x: d.x, y: d.y });
+    if (d) myLots.push({ kind: l.kind, name: e?.name ?? l.buildingKey, x: d.x, y: d.y, banner: resolveBanner(characterId, l.bannerColor, l.bannerEmblem) });
   }
   // Heartland names sit just above the King's Road, the caverns at their
   // middle, provinces at their seed points.

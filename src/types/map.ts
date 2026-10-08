@@ -1,6 +1,8 @@
 // The world map (src/lib/worldAtlas.ts): map tiles, fog of war, markers,
 // waystones. Types only.
 
+import type { LotBanner } from "./garden";
+
 /** The part of the world (in chunks) the map renders; outside is blank. */
 export type MapBounds = { cx0: number; cx1: number; cy0: number; cy1: number };
 
@@ -14,7 +16,7 @@ export type MapWaystone = { key: string; name: string; x: number; y: number; att
 export type MapPlace = { kind: "inn" | "forge" | "cave" | "lair"; name: string; x: number; y: number };
 
 /** One of your own lots (world px). */
-export type MapLot = { kind: "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard"; name: string; x: number; y: number };
+export type MapLot = { kind: "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard"; name: string; x: number; y: number; banner: LotBanner };
 
 /** A region name and where to print it (world px). */
 export type MapRegionLabel = { name: string; x: number; y: number };

@@ -63,6 +63,7 @@ import { FURNITURE_CELLS } from "./furnitureArt";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import { gameFont } from "./gameFont";
+import { buildLotBanner, lotBannerSignature } from "./lotBanners";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
@@ -155,6 +156,8 @@ export class WorldScene extends Phaser.Scene {
   private breadLoaves = new Map<string, Phaser.GameObjects.Image[]>();
   /** What's been built on each ranch lot, by building. */
   private ranchProps = new Map<string, Map<string, Phaser.GameObjects.Image>>();
+  /** Banner and name sign of each owned lot, with what it was drawn from. */
+  private lotBanners = new Map<string, { sig: string; obj: Phaser.GameObjects.Container }>();
   /** The goods on each shop display, per item. */
   private displayPieces = new Map<string, Map<string, Phaser.GameObjects.Image[]>>();
   /** Relics we've already pointed out ("something glints nearby"). */
@@ -671,6 +674,7 @@ export class WorldScene extends Phaser.Scene {
     this.syncBreadTables(s.breadTables ?? []);
     this.syncDisplays(s.displays ?? []);
     this.syncRanchProps(s.lots ?? []);
+    this.syncLotBanners(s.lots ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
@@ -1090,6 +1094,22 @@ export class WorldScene extends Phaser.Scene {
       const tex = tableTexture(t.itemKey);
       imgs.forEach((img, i) => { if (img.texture.key !== tex) img.setTexture(tex); img.setVisible(i < t.left); });
     }
+  }
+
+  /** Each owned lot's banner and name sign (src/game/lotBanners.ts): drawn when
+   *  it appears or changes, removed when the lot is given up or leaves view. */
+  private syncLotBanners(lots: readonly LotSnapshot[]): void {
+    const live = new Set<string>();
+    for (const lot of lots) {
+      const sig = lotBannerSignature(lot, lot.owner?.id === this.meId);
+      if (!sig) continue;
+      live.add(lot.key);
+      const have = this.lotBanners.get(lot.key);
+      if (have?.sig === sig) continue;
+      have?.obj.destroy();
+      this.lotBanners.set(lot.key, { sig, obj: buildLotBanner(this, lot, lot.owner?.id === this.meId) });
+    }
+    for (const [key, b] of this.lotBanners) if (!live.has(key)) { b.obj.destroy(); this.lotBanners.delete(key); }
   }
 
   /** Buildings on ranch lots (silo, mill, hives…; src/game/ranchProps.ts),

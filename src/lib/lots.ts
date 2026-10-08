@@ -15,7 +15,8 @@ import { and, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, characters, lots, resourceNodes } from "@/db/schema";
 import { footprintOf, gardenCellsOf, gardenPlotsAt } from "./buildingManifest";
-import { getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { isBanner, resolveBanner } from "./lotBanner";
 import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/garden";
 import { landLotLimit } from "./progression";
 import { clearRanch, ranchLooks, returnShowroom } from "./ranchServer";
@@ -69,8 +70,14 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
   const ranchKeys = rows.filter((r) => (r.lot.kind === "ranch" || r.lot.kind === "vineyard" || r.lot.kind === "workshop" || r.lot.kind === "orchard") && r.lot.ownerId != null).map((r) => r.lot.key);
   const looks = await ranchLooks(ranchKeys);
   const manifest = looks.size ? (await getBuildingsManifest()).buildings : [];
+  const doors = new Map<string, { x: number; y: number }>();
+  for (const { lot } of rows) {
+    const d = lot.ownerId != null && lot.buildingKey ? await getBuildingDoor(lot.buildingKey) : null;
+    if (d) doors.set(lot.key, d);
+  }
   return rows.map(({ lot, ownerName }) => {
     const look = looks.get(lot.key);
+    const door = doors.get(lot.key);
     const shown = !!look && (look.props.length > 0 || look.display.length > 0);
     const entry = shown ? manifest.find((b) => b.key === lot.buildingKey) : undefined;
     return {
@@ -80,6 +87,7 @@ export async function lotsInBox(box: { xMin: number; xMax: number; yMin: number;
       owner: lot.ownerId != null ? { id: lot.ownerId, name: ownerName ?? "someone" } : null,
       price: lot.price,
       forSale: lot.forSale,
+      ...(lot.ownerId != null && door ? { banner: { ...resolveBanner(lot.ownerId, lot.bannerColor, lot.bannerEmblem), x: door.x, y: door.y } } : {}),
       ...(look && entry ? { ranch: { props: look.props, ox: entry.tx * 16, oy: entry.ty * 16, ...(look.display.length ? { display: look.display } : {}) } } : {}),
     };
   });
@@ -171,7 +179,15 @@ async function clearLot(lotId: number): Promise<void> {
     if (lot.ownerId != null) await returnShowroom(lot.key, lot.ownerId); // a workshop's pieces on show go home with you
     await clearRanch(lot.key); // its buildings and workshop go with it (src/lib/ranchServer.ts)
   }
-  await db.update(lots).set({ ownerId: null, acquiredAt: null, forSale: false }).where(eq(lots.id, lotId));
+  await db.update(lots).set({ ownerId: null, acquiredAt: null, forSale: false, bannerColor: null, bannerEmblem: null }).where(eq(lots.id, lotId));
+}
+
+/** Pick the banner an owner's lot flies. Owner only; indices are checked against the palette. */
+export async function setLotBanner(characterId: number, key: string, color: number, emblem: number): Promise<GardenResult> {
+  if (!isBanner(color, emblem)) return { ok: false, error: "That isn't a banner you can fly." };
+  const done = await db.update(lots).set({ bannerColor: color, bannerEmblem: emblem }).where(and(eq(lots.key, key), eq(lots.ownerId, characterId))).returning({ id: lots.id });
+  if (done.length === 0) return { ok: false, error: "That isn't yours." };
+  return { ok: true, message: "Your banner is up." };
 }
 
 /** Free lots whose owners haven't been seen for LOT_INACTIVE_RELEASE_MS. */

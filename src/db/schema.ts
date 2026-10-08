@@ -425,6 +425,9 @@ export const lots = pgTable(
     /** Coins to acquire it; 0 = free to move in. */
     price: integer("price").notNull().default(0),
     forSale: boolean("for_sale").notNull().default(false),
+    /** The owner's banner (indices into LOT_COLORS / LOT_EMBLEMS, src/lib/lotBanner.ts); null = the default for the owner. */
+    bannerColor: integer("banner_color"),
+    bannerEmblem: integer("banner_emblem"),
   },
   // Not unique: high-level players may own a second land lot (the limit
   // lives in acquireLot, see landLotLimit in src/lib/progression.ts).

@@ -18,6 +18,7 @@ import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
+import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
 import FurnitureSprite from "./FurnitureSprite";
 import { plantablesFor, plotHint } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
@@ -82,6 +83,7 @@ export default function Hud() {
   }, [rawSel, snap, selfPos]);
   // Lot key whose "move out / give up" is waiting for a second tap.
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
+  const [bannerFor, setBannerFor] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
@@ -267,6 +269,7 @@ export default function Hud() {
     return r;
   };
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
+  const setBanner = (key: string, color: number, emblem: number) => post("/api/lots", { action: "banner", key, color, emblem });
   const lotAction = (action: "acquire" | "release", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
@@ -937,6 +940,20 @@ export default function Hud() {
               const confirming = confirmRelease === lot.key;
               return <>
                 <span className="text-[11px] font-bold text-emerald-700">{L.icon} {L.yours}</span>
+                <Btn on={() => setBannerFor(bannerFor === lot.key ? null : lot.key)} subtle>🚩 Banner</Btn>
+                {bannerFor === lot.key && lot.banner && (
+                  <span className="flex w-full flex-wrap items-center gap-1">
+                    {LOT_COLORS.map((c, i) => (
+                      <button key={c.name} title={c.name} aria-label={c.name} onClick={() => void setBanner(lot.key, i, lot.banner!.emblem)}
+                        className={`h-5 w-5 rounded border-2 ${lot.banner!.color === i ? "border-stone-900" : "border-white/70"}`} style={{ background: c.hex }} />
+                    ))}
+                    <span className="mx-1 h-4 w-px bg-stone-400/60" />
+                    {LOT_EMBLEMS.map((m, i) => (
+                      <button key={m.key} title={m.name} aria-label={m.name} onClick={() => void setBanner(lot.key, lot.banner!.color, i)}
+                        className={`h-6 w-6 rounded border-2 text-sm leading-none ${lot.banner!.emblem === i ? "border-stone-900 bg-white" : "border-transparent bg-white/50"}`}>{m.icon}</button>
+                    ))}
+                  </span>
+                )}
                 <Btn on={() => (confirming ? void lotAction("release", lot.key) : setConfirmRelease(lot.key))} subtle>{confirming ? L.confirm : L.giveUp}</Btn>
               </>;
             }

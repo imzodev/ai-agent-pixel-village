@@ -13,6 +13,9 @@ export type LotKind = "home" | "land" | "ranch" | "vineyard" | "workshop" | "orc
 /** A vineyard plot: a trellis for a vine, or room for a fruit tree. */
 export type VineyardSlot = "vine" | "tree";
 
+/** A lot's banner: indices into LOT_COLORS and LOT_EMBLEMS (src/lib/lotBanner.ts). */
+export type LotBanner = { color: number; emblem: number };
+
 /** A lot as sent to clients. */
 export type LotSnapshot = {
   key: string;
@@ -26,6 +29,8 @@ export type LotSnapshot = {
   forSale: boolean;
   /** Ranch lots: the buildings to draw on it (src/lib/ranchUpgrades.ts). */
   ranch?: RanchLook;
+  /** Owned lots: the banner it flies and where (the door, world px). */
+  banner?: LotBanner & { x: number; y: number };
 };
 
 /** One plantable cell of a garden, in template tile units. */
