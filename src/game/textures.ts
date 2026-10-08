@@ -106,11 +106,12 @@ export function nodeFrameKey(kind: string, stage: number): string | null {
 }
 
 /** Where a node's sprite stands: its kind's ground line in the frame, or bottom centre. */
-export function nodeOrigin(kind: string): [number, number] {
+export function nodeOrigin(kind: string, stage = 0): [number, number] {
   const cfg = CROP_KINDS[kind];
-  const f = cfg?.frames[0];
-  if (!cfg || !f || cfg.baseY == null) return [0.5, 1];
-  return [(cfg.baseX ?? f.w / 2) / f.w, cfg.baseY / f.h];
+  const f = cfg?.frames[stage] ?? cfg?.frames[0];
+  if (!cfg || !f || (cfg.baseY == null && f.ay == null)) return [0.5, 1];
+  // a frame's own trunk wins (fruit trees whose fruiting art stands elsewhere in its cell)
+  return [(f.ax ?? cfg.baseX ?? f.w / 2) / f.w, (f.ay ?? cfg.baseY!) / f.h];
 }
 
 /** Texture a node's frames are cut from (see `nodeFrameKey`). */

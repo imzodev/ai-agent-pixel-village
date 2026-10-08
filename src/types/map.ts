@@ -14,7 +14,7 @@ export type MapWaystone = { key: string; name: string; x: number; y: number; att
 export type MapPlace = { kind: "inn" | "forge" | "cave"; name: string; x: number; y: number };
 
 /** One of your own lots (world px). */
-export type MapLot = { kind: "home" | "land" | "ranch" | "vineyard" | "workshop"; name: string; x: number; y: number };
+export type MapLot = { kind: "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard"; name: string; x: number; y: number };
 
 /** A region name and where to print it (world px). */
 export type MapRegionLabel = { name: string; x: number; y: number };

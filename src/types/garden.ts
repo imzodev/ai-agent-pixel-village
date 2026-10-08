@@ -8,7 +8,7 @@
 /** What kind of parcel a lot is. */
 import type { RanchLook } from "./ranchGrowth";
 
-export type LotKind = "home" | "land" | "ranch" | "vineyard" | "workshop";
+export type LotKind = "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard";
 
 /** A vineyard plot: a trellis for a vine, or room for a fruit tree. */
 export type VineyardSlot = "vine" | "tree";
@@ -60,3 +60,19 @@ export type GardenCropDef = {
 export type GardenResult =
   | { ok: true; message: string; gained?: { itemKey: string; qty: number }[]; x?: number; y?: number; notices?: string[] }
   | { ok: false; error: string };
+
+/** An orchard fruit (src/lib/orchard.ts): its tree, fruit, sapling and where saplings are sold. */
+export type OrchardFruit = {
+  tree: string;
+  fruit: string;
+  sapling: string;
+  name: string;
+  icon: string;
+  /** Fresh fruit value (shops pay about this). */
+  value: number;
+  saplingPrice: number;
+  /** Kinds of towns whose shops sell the sapling (the land suits it). */
+  families: readonly ("port" | "desert" | "snow" | "swamp" | "darkwood" | "hills")[];
+  /** Where the sapling comes from, in its description. */
+  origin: string;
+};

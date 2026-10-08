@@ -276,6 +276,18 @@ with ranches through `ranch_state`, `/api/ranch` and RanchPanel. Sprites:
 `src/game/vineyardProps.ts`. Perennials grow `regrowthMs` a stage up to
 `perennial.mature`, then ripen their fruit over `fruitMs` (`stageMs`).
 
+## Orchards
+
+Orchard lots (`kind: "orchard"`, template `scripts/draw-orchard-lot.mjs`, 6 tree
+plots) grow the LPC fruit trees beyond the apple: lemon, orange, peach, cherry,
+pear, plum, coconut, banana (`src/lib/orchard.ts` is the table items, saplings,
+shops and buyers are built from). The sheet draws growth per tree *shape* and
+fruit per variety, so each tree's frames come from different cells and carry
+their own trunk anchor (`CropRect.ax/ay`, measured; `nodeOrigin(kind, stage)`).
+Saplings are sold by the shops of towns whose land suits them (`families`); Pip
+sells only apples. The first homestead farm row is `orchard_0` (always open). The
+orchard's press and jam kitchen are farm growth with `lot: "orchard"`.
+
 ## Workshops (furniture)
 
 Carpenter's workshop lots (`kind: "workshop"`, 4 on the road south of

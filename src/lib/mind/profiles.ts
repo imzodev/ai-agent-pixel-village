@@ -13,21 +13,23 @@ export const BAKER: MindProfile = {
   trade: "the village baker",
   startStock: { flour: 12, egg: 6, honey: 4, milk: 0, bread: 4, honey_bun: 2 },
   startPurse: 40,
-  shelf: { bread: 4, honey_bun: 6, apple_pie: 9 },
+  shelf: { bread: 4, honey_bun: 6, apple_pie: 9, cherry_pie: 9, peach_pie: 9 },
   shelfFull: 12,
   minCraftGapMs: 10 * MIN,
   tableStaleMs: 20 * MIN,
   crafts: {
     bake_bread: { itemKey: "bread", uses: { flour: 4 }, makes: 12, toTable: 6, verb: "bake a batch of 12 loaves", line: "Fresh bread on the table, loves! One each, mind." },
     bake_pies: { itemKey: "apple_pie", uses: { apple: 3, flour: 2 }, makes: 6, toTable: 3, verb: "bake 6 apple pies", line: "Apple pies, from the vineyard's apples! One each, loves." },
+    bake_cherry_pies: { itemKey: "cherry_pie", uses: { cherry: 4, flour: 2 }, makes: 6, toTable: 3, verb: "bake 6 cherry pies", line: "Cherry pies, from the orchards' cherries! One each, loves." },
+    bake_peach_pies: { itemKey: "peach_pie", uses: { peach: 3, flour: 2 }, makes: 6, toTable: 3, verb: "bake 6 peach pies", line: "Peach pies, still bubbling! One each, loves." },
     bake_buns: { itemKey: "honey_bun", uses: { flour: 2, egg: 4, honey: 1 }, makes: 8, toTable: 4, verb: "bake a batch of 8 honey buns", line: "Honey buns, still warm! One each, loves." },
   },
   supplies: { flour: { supplierKey: "village_hollis", place: "Hollis's mill", price: 3, buy: 8, low: 5 } },
   asks: { egg: { qty: 6, pay: 2, low: 4 }, flour: { qty: 4, pay: 5, low: 5 }, honey: { qty: 2, pay: 7, low: 1 } },
   gift: { itemKey: "honey_bun", qty: 1 },
   // Players' farms supply her week by week (src/lib/ordersServer.ts).
-  orders: { egg: { qty: 12, pay: 2 }, flour: { qty: 6, pay: 5 }, milk: { qty: 4, pay: 4 }, honey: { qty: 3, pay: 6 }, apple: { qty: 8, pay: 3 }, jam: { qty: 2, pay: 11 } },
-  words: { flour: "bags of flour", egg: "eggs", honey: "jars of honey", milk: "jugs of milk", apple: "apples", jam: "jars of jam", bread: "loaves", honey_bun: "honey buns", apple_pie: "apple pies" },
+  orders: { egg: { qty: 12, pay: 2 }, flour: { qty: 6, pay: 5 }, milk: { qty: 4, pay: 4 }, honey: { qty: 3, pay: 6 }, apple: { qty: 8, pay: 3 }, jam: { qty: 2, pay: 11 }, cherry: { qty: 8, pay: 7 }, peach: { qty: 6, pay: 6 } },
+  words: { flour: "bags of flour", egg: "eggs", honey: "jars of honey", milk: "jugs of milk", apple: "apples", jam: "jars of jam", bread: "loaves", honey_bun: "honey buns", apple_pie: "apple pies", cherry: "cherries", peach: "peaches", cherry_pie: "cherry pies", peach_pie: "peach pies" },
 };
 
 /** Bjorn: forges axes and swords and fletches arrows for his shelf from the

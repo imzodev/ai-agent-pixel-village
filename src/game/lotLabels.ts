@@ -9,5 +9,6 @@ export const LOT_LABELS: Readonly<Record<LotKind, LotLabels>> = {
   land: { icon: "🌱", yours: "Your land", of: "Land of", buy: "Buy land", claim: "Claim land (free)", giveUp: "Give up", confirm: "Sure? Crops are cleared" },
   ranch: { icon: "🐔", yours: "Your ranch", of: "Ranch of", buy: "Buy ranch", claim: "Claim ranch (free)", giveUp: "Give up", confirm: "Sure? Animals leave" },
   vineyard: { icon: "🍇", yours: "Your vineyard", of: "Vineyard of", buy: "Buy vineyard", claim: "Claim vineyard (free)", giveUp: "Give up", confirm: "Sure? Vines are cleared" },
+  orchard: { icon: "🍑", yours: "Your orchard", of: "Orchard of", buy: "Buy orchard", claim: "Claim orchard (free)", giveUp: "Give up", confirm: "Sure? The trees are cleared" },
   workshop: { icon: "🪚", yours: "Your workshop", of: "Workshop of", buy: "Buy workshop", claim: "Claim workshop (free)", giveUp: "Give up", confirm: "Sure? Stations and the showroom are cleared" },
 };

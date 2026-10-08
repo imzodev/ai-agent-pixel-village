@@ -894,7 +894,7 @@ export default function Hud() {
             if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
             if (sel.distance > 90) return <WalkBtn snap={snap} sel={sel} />;
             const fits = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
-            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "vineyard" ? "No cuttings or saplings — Pip sells them." : "No seeds — the shopkeeper sells them."}</span>;
+            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "vineyard" ? "No cuttings or saplings — Pip sells them." : lot.kind === "orchard" ? "No saplings — the towns whose land suits them sell them." : "No seeds — the shopkeeper sells them."}</span>;
             return fits.map((i) => (
               <Btn key={i.itemKey} on={() => void garden({ action: "plant", lotKey: sel.lotKey, plot: sel.plot, seedKey: i.itemKey })}>
                 🌱 Plant {i.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} ×{i.qty}
@@ -1088,7 +1088,7 @@ export default function Hud() {
         <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
-          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
+          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop" || bInfo?.kind === "orchard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
           {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">

@@ -1,3 +1,4 @@
+import { ORCHARD_FRUITS, ORCHARD_PRODUCTS } from "@/lib/orchard";
 import type { Handler, Events } from "@/types/bus";
 import type { Snapshot } from "@/types/snapshot";
 import type { Selection } from "@/types/world";
@@ -34,4 +35,7 @@ export const ITEM_ICONS: Record<string, string> = {
   red_wine: "🍷", white_wine: "🥂", aged_red_wine: "🍷", aged_white_wine: "🥂", jam: "🫙", apple_pie: "🥧",
   plank: "🪵", stool: "🪑", cabinet: "🗄️", wardrobe: "🚪", rocking_chair: "🪑", armchair: "🛋️", sofa: "🛋️",
   polished_chair: "🪑", polished_table: "🟫", polished_cabinet: "🗄️", polished_wardrobe: "🚪",
-};
+};// The orchard's fruit, saplings and products (src/lib/orchard.ts).
+for (const f of ORCHARD_FRUITS) { ITEM_ICONS[f.fruit] = f.icon; ITEM_ICONS[f.sapling] = "🌱"; }
+for (const p of ORCHARD_PRODUCTS) ITEM_ICONS[p.key] = p.icon;
+

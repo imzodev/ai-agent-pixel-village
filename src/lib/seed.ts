@@ -31,6 +31,7 @@ import { REGION_NODES } from "./regions";
 import { NPC_DEFS } from "./npcDefs";
 import { LEGACY_NPC_KEYS } from "./npcKeys";
 import { forageSpots } from "./forage";
+import { ORCHARD_FRUITS, ORCHARD_PRODUCTS } from "./orchard";
 import { resiteTreasureMaps } from "./treasureServer";
 import { BOSS_KIND } from "./progression";
 
@@ -139,6 +140,12 @@ export const ITEM_DEFS = [
   { key: "red_grape", name: "Red Grapes", kind: "material", icon: "🍇", description: "Sweet and dark. Press them, or make wine.", value: 2 },
   { key: "white_grape", name: "White Grapes", kind: "material", icon: "🍇", description: "Pale gold and crisp. For white wine.", value: 2 },
   { key: "apple", name: "Apple", kind: "consumable", icon: "🍎", description: "Crunchy. Restores 4 HP. Marigold bakes them into pies.", value: 2 },
+  // Orchards (src/lib/orchard.ts): fruit, saplings from the towns that grow them, and what the fruit becomes.
+  ...ORCHARD_FRUITS.flatMap((f) => [
+    { key: f.fruit, name: f.name, kind: "consumable" as const, icon: f.icon, description: `Fresh from an orchard. Restores 4 HP.`, value: f.value },
+    { key: f.sapling, name: `${f.name} Sapling`, kind: "seed" as const, icon: "🌱", description: `Plant it in an orchard. Sold in ${f.origin}.`, value: Math.round(f.saplingPrice / 3) },
+  ]),
+  ...ORCHARD_PRODUCTS.map((p) => ({ key: p.key, name: p.name, kind: (p.heal ? "consumable" : "material") as "consumable" | "material", icon: p.icon, description: p.description, value: p.value })),
   { key: "grape_juice", name: "Grape Juice", kind: "consumable", icon: "🧃", description: "Fresh-pressed. Restores 6 HP.", value: 8 },
   { key: "cider", name: "Cider", kind: "material", icon: "🍺", description: "Pressed from your apples. The inns love it.", value: 10 },
   { key: "red_wine", name: "Red Wine", kind: "material", icon: "🍷", description: "A young red from your cellar.", value: 18 },

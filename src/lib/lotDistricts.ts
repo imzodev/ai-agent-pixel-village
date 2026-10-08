@@ -5,6 +5,10 @@
 // (src/lib/lotRows.ts). Pure: scripts/gen-lot-districts.ts writes the
 // planned lots into the manifest; the terrain draws the lanes.
 //
+// Orchards came later: the first farm row is their row 0 (always open), so
+// they exist from the start; the other farm rows rotate land, ranch,
+// vineyard and orchard.
+//
 // Lots stand on a 24-tile grid anchored at the road south of Hollowmere
 // (tx −352…−349, the gap the first workshops already leave): groups of five
 // lots with a 4-tile lane between groups, so every row's own road (each lot's
@@ -27,13 +31,14 @@ const G0 = group(-348), G1 = group(-224), G2 = group(-100), G3 = group(24);
 const UPPER_TY = [53, 68];
 /** Rows south of the farms: workshops on the Hollowmere side, farm kinds on the village side. */
 const LOWER_TY = Array.from({ length: 12 }, (_, r) => 105 + r * H);
-const FARM_KINDS: readonly DistrictLotKind[] = ["land", "ranch", "vineyard"];
+const FARM_KINDS: readonly DistrictLotKind[] = ["land", "ranch", "vineyard", "orchard"];
 
 /** Every planned homestead lot, in opening order within each kind. */
 export function plannedLots(): PlannedLot[] {
   const out: PlannedLot[] = [];
   let workshopRow = 1;
-  const farmRow: Record<string, number> = { land: 1, ranch: 1, vineyard: 1 };
+  // Orchards are new: their first row (0, always open) is the first farm row; the others rotate.
+  const farmRow: Record<string, number> = { land: 1, ranch: 1, vineyard: 1, orchard: 0 };
   for (const ty of UPPER_TY) {
     const row = `workshop_${workshopRow++}`;
     for (const tx of [...WEST, ...G0, ...G1.slice(0, 4)]) out.push({ kind: "workshop", row, tx, ty });
@@ -41,7 +46,7 @@ export function plannedLots(): PlannedLot[] {
   LOWER_TY.forEach((ty, r) => {
     const wrow = `workshop_${workshopRow++}`;
     for (const tx of [...WEST, ...G0]) out.push({ kind: "workshop", row: wrow, tx, ty });
-    const kind = FARM_KINDS[r % FARM_KINDS.length];
+    const kind = r === 0 ? "orchard" : FARM_KINDS[(r - 1) % FARM_KINDS.length];
     const frow = `${kind}_${farmRow[kind]++}`;
     for (const tx of [...G1, ...G2, ...G3]) out.push({ kind, row: frow, tx, ty });
   });

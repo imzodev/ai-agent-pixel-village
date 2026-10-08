@@ -66,8 +66,11 @@ upstream license chain.
   `lpc-fruit-trees.zip`), shipped with the game as its license requires,
   together with the link above. Changes to the sheet itself stay under
   CC-BY-SA 3.0 / GPL 3.0.
-- **Use**: the vineyard's apple trees (`src/lib/crops.ts` `apple_tree`, column 0
-  of the sheet: four growth stages, then three fruiting stages).
+- **Use**: the apple trees of vineyards and orchards (`src/lib/crops.ts`
+  `apple_tree`, column 0), and the orchards' lemon, orange, peach, cherry,
+  pear, plum, coconut and banana trees (`ORCHARD_CELLS` in the same file:
+  growth stages from the tree-shape columns, fruiting stages from each
+  variety's cells).
 - **Attribution required** when redistributing.
 
 ## Grapevines and vineyard (`trees/vines.png`, `VineyardLot.png`)
@@ -86,3 +89,8 @@ derived from any third-party asset.
 
 Original art made for this project by `scripts/draw-far-foes.mjs`. Not derived
 from any third-party asset.
+
+## Orchard lot (`OrchardLot.png`)
+
+Original art made for this project by `scripts/draw-orchard-lot.mjs`. Not
+derived from any third-party asset.

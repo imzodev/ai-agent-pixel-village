@@ -29,12 +29,12 @@ import type { RanchView } from "@/types/ranch";
 import type { GrowthLot } from "@/types/ranchGrowth";
 
 /** Which growth a lot kind uses (its steps and recipes). */
-const growthLotOf = (kind: string): GrowthLot => (kind === "vineyard" ? "vineyard" : kind === "workshop" ? "workshop" : "ranch");
+const growthLotOf = (kind: string): GrowthLot => (kind === "vineyard" ? "vineyard" : kind === "workshop" ? "workshop" : kind === "orchard" ? "orchard" : "ranch");
 
 export const dynamic = "force-dynamic";
 
 async function ranchOf(key: string) {
-  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), inArray(lots.kind, ["ranch", "vineyard", "workshop"])));
+  const [lot] = await db.select({ lot: lots, ownerName: characters.name }).from(lots).leftJoin(characters, eq(characters.id, lots.ownerId)).where(and(eq(lots.key, key), inArray(lots.kind, ["ranch", "vineyard", "workshop", "orchard"])));
   return lot ?? null;
 }
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
     if (r.lot.ownerId !== me.id) return Response.json({ error: "This isn't your ranch." }, { status: 403 });
     const door = await getBuildingDoor(key);
     const p = getLivePlayerPosition(me.id) ?? me;
-    if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: r.lot.kind === "vineyard" ? "Head over to your vineyard first." : "Head over to your ranch first." }, { status: 400 });
+    if (!door || Math.hypot(door.x - p.x, door.y - p.y) > RANCH_REACH_PX) return Response.json({ error: `Head over to your ${r.lot.kind} first.` }, { status: 400 });
     const now = Date.now();
     const herd = await db.select().from(animals).where(eq(animals.ranchKey, key));
     const kind = growthLotOf(r.lot.kind);

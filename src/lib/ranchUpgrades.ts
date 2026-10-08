@@ -56,6 +56,9 @@ export const BUILD_STEPS: readonly BuildStep[] = [
   { id: "cellar", lot: "vineyard", key: "cellar", level: 1, name: "Wine cellar", description: "Make red and white wine from your grapes (2 hours a bottle).", coins: 300, items: { stone: 20, wood: 15, fittings: 6 }, farmLevel: 2 },
   { id: "racks", lot: "vineyard", key: "racks", level: 1, name: "Cellar racks", description: "Age a bottle 4 hours into aged wine, worth three times as much.", coins: 250, items: { wood: 20, fittings: 8 }, farmLevel: 3, needs: "cellar" },
   { id: "jam", lot: "vineyard", key: "jam", level: 1, name: "Jam kitchen", description: "Cook fruit and honey into jam.", coins: 150, items: { stone: 10, fittings: 4 }, farmLevel: 2 },
+  // Orchards: a press and a jam kitchen for the orchard's fruit (src/lib/orchard.ts).
+  { id: "orchard_press", lot: "orchard", key: "fruit_press", level: 1, name: "Fruit press", description: "Press oranges, lemons, pears and apples into juice, lemonade and cider.", coins: 120, items: { wood: 10, fittings: 4 }, farmLevel: 1 },
+  { id: "orchard_jam", lot: "orchard", key: "jam", level: 1, name: "Jam kitchen", description: "Cook cherries, peaches and plums with honey into jam.", coins: 150, items: { stone: 10, fittings: 4 }, farmLevel: 2 },
   // Workshops: the carpenter's stations (the workbench comes with the lot).
   { id: "saw", lot: "workshop", key: "saw", level: 1, name: "Saw bench", description: "Saw logs into planks.", coins: 80, items: { stone: 10, fittings: 2 }, farmLevel: 1 },
   { id: "lathe", lot: "workshop", key: "lathe", level: 1, name: "Lathe", description: "Turn rocking chairs and wardrobes.", coins: 200, items: { plank: 20, fittings: 4 }, farmLevel: 2 },
@@ -77,6 +80,13 @@ export const MACHINE_RECIPES: readonly MachineRecipe[] = [
   { id: "age_red", lot: "vineyard", machine: "racks", inputs: { red_wine: 1 }, output: "aged_red_wine", qty: 1, ms: 240 * MIN, name: "Age a red wine" },
   { id: "age_white", lot: "vineyard", machine: "racks", inputs: { white_wine: 1 }, output: "aged_white_wine", qty: 1, ms: 240 * MIN, name: "Age a white wine" },
   { id: "jam_apple", lot: "vineyard", machine: "jam", inputs: { apple: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 apples and a honey into jam" },
+  { id: "o_press_orange", lot: "orchard", machine: "fruit_press", inputs: { orange: 3 }, output: "orange_juice", qty: 1, ms: 10 * MIN, name: "Press 3 oranges into juice" },
+  { id: "o_press_lemon", lot: "orchard", machine: "fruit_press", inputs: { lemon: 3, honey: 1 }, output: "lemonade", qty: 2, ms: 12 * MIN, name: "Make lemonade from 3 lemons and a honey" },
+  { id: "o_press_pear", lot: "orchard", machine: "fruit_press", inputs: { pear: 3 }, output: "pear_cider", qty: 1, ms: 15 * MIN, name: "Press 3 pears into pear cider" },
+  { id: "o_press_apple", lot: "orchard", machine: "fruit_press", inputs: { apple: 3 }, output: "cider", qty: 1, ms: 15 * MIN, name: "Press 3 apples into cider" },
+  { id: "o_jam_cherry", lot: "orchard", machine: "jam", inputs: { cherry: 4, honey: 1 }, output: "cherry_jam", qty: 2, ms: 20 * MIN, name: "Cook 4 cherries and a honey into jam" },
+  { id: "o_jam_peach", lot: "orchard", machine: "jam", inputs: { peach: 3, honey: 1 }, output: "peach_jam", qty: 2, ms: 20 * MIN, name: "Cook 3 peaches and a honey into jam" },
+  { id: "o_jam_plum", lot: "orchard", machine: "jam", inputs: { plum: 4, honey: 1 }, output: "plum_jam", qty: 2, ms: 20 * MIN, name: "Cook 4 plums and a honey into jam" },
   { id: "jam_grape", lot: "vineyard", machine: "jam", inputs: { red_grape: 4, honey: 1 }, output: "jam", qty: 2, ms: 20 * MIN, name: "Cook 4 red grapes and a honey into jam" },
   { id: "saw_planks", lot: "workshop", machine: "saw", inputs: { wood: 2 }, output: "plank", qty: 3, ms: 5 * MIN, name: "Saw 2 logs into 3 planks", xp: 1 },
   { id: "make_chair", lot: "workshop", machine: "workbench", inputs: { plank: 4 }, output: "chair", qty: 1, ms: 10 * MIN, name: "Make a chair (4 planks)", xp: 3 },

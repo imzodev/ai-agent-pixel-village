@@ -15,9 +15,13 @@ export function vineyardSlot(cell: Pick<GardenCell, "dx">): VineyardSlot {
 /** Can this crop be planted in this plot? null = yes, else why not. */
 export function plantRule(crop: GardenCropDef, lotKind: LotKind, slot: VineyardSlot | null, farmLevel: number): string | null {
   const lots = crop.lots ?? ["land", "home"];
-  if (!lots.includes(lotKind)) return lotKind === "vineyard" ? "Only vines and fruit trees grow in a vineyard." : "Plant that in a vineyard.";
+  if (!lots.includes(lotKind)) {
+    if (lotKind === "vineyard") return "Only vines and apple trees grow in a vineyard.";
+    if (lotKind === "orchard") return "Only fruit trees grow in an orchard.";
+    return lots.includes("orchard") ? "Plant that in an orchard." : "Plant that in a vineyard.";
+  }
   if (crop.slot && slot && crop.slot !== slot) return crop.slot === "vine" ? "Vines go on the trellises." : "Fruit trees go in the orchard, right of the path.";
-  if (crop.minFarmLevel && farmLevel < crop.minFarmLevel) return `Your vineyard needs to reach level ${crop.minFarmLevel} for that.`;
+  if (crop.minFarmLevel && farmLevel < crop.minFarmLevel) return `Your ${lotKind} needs to reach level ${crop.minFarmLevel} for that.`;
   return null;
 }
 

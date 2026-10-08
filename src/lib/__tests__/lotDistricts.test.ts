@@ -8,7 +8,7 @@ import { ROADS } from "@/lib/settlements";
 
 type Entry = { key: string; kind: string; tx: number; ty: number; row?: string };
 const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: Entry[] };
-const LOT_KINDS = ["land", "ranch", "vineyard", "workshop"];
+const LOT_KINDS = ["land", "ranch", "vineyard", "workshop", "orchard"];
 const lotsOf = (kind: string) => manifest.buildings.filter((b) => b.kind === kind);
 const overlap = (a: Entry, b: Entry) => a.tx < b.tx + 24 && b.tx < a.tx + 24 && a.ty < b.ty + 15 && b.ty < a.ty + 15;
 
@@ -19,10 +19,10 @@ describe("the homestead plan", () => {
       for (const x of LANE_TX) expect(l.tx + 23 < x || l.tx >= x + LANE_W, `${l.row} at ${l.tx} on the lane at ${x}`).toBe(true);
     }
   });
-  it("a row is one kind on one line; rows of a kind are numbered from 1", () => {
+  it("a row is one kind on one line; rows are numbered from 1 (orchards, newer, from 0)", () => {
     const rows = new Map<string, Set<string>>();
     for (const l of plannedLots()) rows.set(l.row, (rows.get(l.row) ?? new Set()).add(`${l.kind}@${l.ty}`));
-    for (const [row, s] of rows) { expect(s.size, row).toBe(1); expect(rowIndex(row)).toBeGreaterThanOrEqual(1); }
+    for (const [row, s] of rows) { expect(s.size, row).toBe(1); expect(rowIndex(row)).toBeGreaterThanOrEqual(row.startsWith("orchard_") ? 0 : 1); }
   });
   it("in the manifest: every lot has a row, keys are unique, nothing overlaps, no lot on a road", () => {
     const lots = manifest.buildings.filter((b) => LOT_KINDS.includes(b.kind));
@@ -32,9 +32,10 @@ describe("the homestead plan", () => {
     for (const p of planned) for (const o of manifest.buildings) if (o !== p) expect(overlap(p, o), `${p.key} × ${o.key}`).toBe(false);
     const road = new Set(ROADS.flatMap((r) => r.map(([x, y]) => `${x},${y}`)));
     for (const p of planned) for (let y = p.ty; y < p.ty + 15; y++) for (let x = p.tx; x < p.tx + 24; x++) expect(road.has(`${x},${y}`), `${p.key} on a road`).toBe(false);
-  });
-  it("holds about 8× today's lots", () => {
-    for (const k of ["land", "ranch", "vineyard"]) expect(lotsOf(k).length).toBeGreaterThanOrEqual(70);
+  }, 30_000);
+  it("holds about 5–8× today's lots of each kind, and orchards", () => {
+    for (const k of ["land", "ranch", "vineyard"]) expect(lotsOf(k).length).toBeGreaterThanOrEqual(50);
+    expect(lotsOf("orchard").length).toBeGreaterThanOrEqual(40);
     expect(lotsOf("workshop").length).toBeGreaterThanOrEqual(110);
   });
   it("lanes are paths through the district, not over the village farms", () => {

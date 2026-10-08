@@ -37,10 +37,13 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
   };
 
   if (!view) return <div className="mt-3 text-stone-500">The hens cluck as you open the gate…</div>;
-  const vineyard = view.kind === "vineyard", workshop = view.kind === "workshop";
-  const animalless = vineyard || workshop;
+  const vineyard = view.kind === "vineyard", workshop = view.kind === "workshop", orchard = view.kind === "orchard";
+  const animalless = vineyard || workshop || orchard;
   if (!view.mine && vineyard) {
     return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🍇 {view.owner.name}&apos;s vineyard.</> : <>This vineyard is free. Claim it at the gate to grow grapes and apples.</>}</div>;
+  }
+  if (!view.mine && orchard) {
+    return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🍑 {view.owner.name}&apos;s orchard.</> : <>This orchard is free. Claim it at the gate to grow fruit trees.</>}</div>;
   }
   if (!view.mine && workshop) {
     return <div className="mt-3 rounded bg-amber-50/90 p-2 text-sm">{view.owner ? <>🪚 {view.owner.name}&apos;s workshop. Their best pieces are on the porch.</> : <>This workshop is free. Claim it at the gate to make furniture.</>}</div>;
@@ -66,7 +69,7 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
           <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-300"><div className="h-full bg-emerald-500" style={{ width: `${g.nextAt ? Math.min(100, (100 * g.farmXp) / g.nextAt) : 100}%` }} /></div>
           <span className="text-stone-600">{g.nextAt ? `${g.farmXp}/${g.nextAt} XP` : "max"}</span>
           <span className="flex-1" />
-          {(workshop ? (["build", "workshop", "showroom"] as const) : vineyard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
+          {(workshop ? (["build", "workshop", "showroom"] as const) : vineyard || orchard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${(tab === t || (animalless && tab === "animals" && t === "build")) ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : t === "showroom" ? "🪑 Showroom" : workshop ? "🪚 Make" : "⚙️ Workshop"}</button>
           ))}
         </div>

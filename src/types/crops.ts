@@ -1,7 +1,13 @@
 // Resource-node (crop) kind configuration. Types only — the runtime data
 // lives in src/lib/crops.ts.
 
-export type CropRect = { x: number; y: number; w: number; h: number };
+export type CropRect = {
+  x: number; y: number; w: number; h: number;
+  /** Where this frame's trunk meets the ground (px in the frame), when it
+   *  differs from the kind's baseX/baseY (fruit trees whose fruiting art
+   *  stands elsewhere in its cell). */
+  ax?: number; ay?: number;
+};
 
 export type CropKindConfig = {
   /** Total visual stages. Stage 0 = picked/empty; (stages-1) = fully grown. */

@@ -1,6 +1,6 @@
 // The homestead lot districts (src/lib/lotDistricts.ts). Types only.
 
-export type DistrictLotKind = "land" | "ranch" | "vineyard" | "workshop";
+export type DistrictLotKind = "land" | "ranch" | "vineyard" | "workshop" | "orchard";
 
 /** One planned lot: where it stands and the row it opens with. */
 export type PlannedLot = {

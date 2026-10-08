@@ -16,9 +16,9 @@ import { nextRowToOpen } from "./lotRows";
 import { rowIndex, rowKind } from "./lotDistricts";
 
 const REFRESH_MS = 60_000;
-const LOT_KINDS = ["land", "ranch", "vineyard", "workshop"] as const;
-const LABEL: Record<string, string> = { land: "plots", ranch: "ranches", vineyard: "vineyards", workshop: "workshops" };
-const WHERE: Record<string, string> = { land: "south of the village farms", ranch: "south of the village farms", vineyard: "south of the village farms", workshop: "south of Hollowmere" };
+const LOT_KINDS = ["land", "ranch", "vineyard", "workshop", "orchard"] as const;
+const LABEL: Record<string, string> = { land: "plots", ranch: "ranches", vineyard: "vineyards", workshop: "workshops", orchard: "orchards" };
+const WHERE: Record<string, string> = { land: "south of the village farms", ranch: "south of the village farms", vineyard: "south of the village farms", workshop: "south of Hollowmere", orchard: "south of the village farms" };
 
 const g = globalThis as typeof globalThis & { __lotRows?: { open: Set<string>; at: number; version: number } };
 const state = (g.__lotRows ??= { open: new Set(), at: 0, version: 0 });

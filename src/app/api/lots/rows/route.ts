@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (!isAdmin(req)) return notFound();
   const body = await req.json().catch(() => ({}));
   const kind = String(body.kind ?? "");
-  if (!["land", "ranch", "vineyard", "workshop"].includes(kind)) return Response.json({ error: "kind: land, ranch, vineyard or workshop" }, { status: 400 });
+  if (!["land", "ranch", "vineyard", "workshop", "orchard"].includes(kind)) return Response.json({ error: "kind: land, ranch, vineyard, workshop or orchard" }, { status: 400 });
   const row = await forceOpenNextRow(kind);
   return row ? Response.json({ ok: true, opened: row }) : Response.json({ error: `No closed ${kind} row left.` }, { status: 400 });
 }

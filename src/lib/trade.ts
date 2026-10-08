@@ -8,6 +8,7 @@
 // That's it — the modal, route, NPC-conversation Sell offer, and the
 // in-character "I buy X" line pick it up automatically.
 import { FURNITURE_ITEMS, FURNITURE_VALUE } from "./furniture";
+import { ORCHARD_FRUITS } from "./orchard";
 import type { TradeConfig, TradeItem } from "./types";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { MERCHANT_STOCK, isMerchantKey } from "./encounters";
@@ -47,6 +48,7 @@ export const TRADES: TradeConfig = {
     { itemKey: "shade_essence", qty: 1, price: 8, line: "Shade essence from the darkwood? Eight coppers. It hums, doesn't it." },
   ],
   village_pip: [
+    ...ORCHARD_FRUITS.map((f) => ({ itemKey: f.fruit, qty: 1, price: f.value, line: `${f.name}s! ${f.value} coppers each — the village can't get enough.` })),
     ...FURNITURE_ITEMS.map((itemKey) => ({ itemKey, qty: 1, price: Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.0), line: `Good furniture always sells. I'll give you ${Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.0)} coppers for the ${itemKey.replace(/_/g, " ")}.` })),
     { itemKey: "cloth", qty: 1, price: 16, line: "Good cloth! Sixteen coppers — I'll sell it on to the tailors." },
     { itemKey: "fine_wool", qty: 1, price: 12, line: "Fine wool, twelve coppers. Softest I've seen." },
@@ -129,6 +131,8 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "bread", qty: 1, price: 4, line: "A loaf from the shelf, four coppers. Still warm, love." },
     { itemKey: "honey_bun", qty: 1, price: 6, line: "Honey bun, six coppers. Sticky fingers guaranteed." },
     { itemKey: "apple_pie", qty: 1, price: 9, line: "Apple pie, nine coppers. Your apples, my oven." },
+    { itemKey: "cherry_pie", qty: 1, price: 9, line: "Cherry pie, nine coppers. Mind the stones, love." },
+    { itemKey: "peach_pie", qty: 1, price: 9, line: "Peach pie, nine coppers. Summer in a dish." },
   ],
   village_pip: [
     { itemKey: "grape_cutting", qty: 1, price: 25, line: "A red grapevine cutting, twenty-five coppers. For a vineyard trellis." },
@@ -195,6 +199,9 @@ for (const n of SETTLEMENT_NPCS) {
       { itemKey: "cider", qty: 1, price: 14, line: "Cider, fourteen coppers." },
       { itemKey: "red_wine", qty: 1, price: 22, line: "Wine! Twenty-two coppers." },
       { itemKey: "aged_red_wine", qty: 1, price: 66, line: `An aged red, out here in ${town.name}? Sixty-six coppers.` },
+      { itemKey: "orange_juice", qty: 1, price: 12, line: "Orange juice, twelve coppers. The travellers love it." },
+      { itemKey: "lemonade", qty: 1, price: 14, line: "Lemonade! Fourteen coppers." },
+      { itemKey: "pear_cider", qty: 1, price: 16, line: "Pear cider, sixteen coppers. Goes down easy." },
       { itemKey: "milk", qty: 1, price: 5, line: "Milk for the kitchen — five coppers." },
       { itemKey: "egg", qty: 1, price: 2, line: "Eggs, two coppers each." },
     ];
@@ -208,11 +215,14 @@ for (const n of SETTLEMENT_NPCS) {
       { itemKey: "bicycle", qty: 1, price: 150, line: "A bicycle, a hundred and fifty coppers. Press V to ride." },
       { itemKey: "short_bow", qty: 1, price: 60, line: "A short bow, sixty coppers." },
       { itemKey: "arrow", qty: 10, price: 8, line: "Ten arrows, eight coppers." },
+      // saplings of the trees this land suits (src/lib/orchard.ts)
+      ...ORCHARD_FRUITS.filter((f) => f.families.includes(town.family)).map((f) => ({ itemKey: f.sapling, qty: 1, price: f.saplingPrice, line: `A ${f.name.toLowerCase()} sapling, ${f.saplingPrice} coppers. They grow well out here — plant it in an orchard.` })),
     ];
     TRADES[n.key] = [
       { itemKey: "stone", qty: 1, price: 1, line: "Stone, a copper each." },
       ...FURNITURE_ITEMS.map((itemKey) => ({ itemKey, qty: 1, price: Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.15), line: `Furniture's dear out in ${town.name}. ${Math.round((FURNITURE_VALUE[itemKey] ?? 8) * 1.15)} coppers.` })),
       ...REGIONAL_BUYS[town.family].map((b) => ({ ...b, qty: 1 })),
+      ...ORCHARD_FRUITS.map((f) => ({ itemKey: f.fruit, qty: 1, price: f.value, line: `${f.name}s, ${f.value} coppers each.` })),
     ];
   }
 }

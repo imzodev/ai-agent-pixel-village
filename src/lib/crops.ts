@@ -8,6 +8,8 @@
 // time; the action route and sim worker pull timing + yield from the
 // same record.
 
+import { ORCHARD_FRUITS } from "./orchard";
+import type { LotKind } from "@/types/garden";
 import type { CropKindConfig, CropRect } from "@/types/crops";
 import type { GardenCropDef } from "@/types/garden";
 
@@ -34,6 +36,26 @@ const vineFrames = (row: number): CropRect[] => [0, 1, 2, 3, 4].map((i) => ({ x:
 const FRUIT_CELL = { w: 96, h: 128 };
 const fruitTreeFrames = (col: number): CropRect[] =>
   [7, 3, 2, 1, 0, 18, 17, 16].map((row) => ({ x: col * FRUIT_CELL.w, y: row * FRUIT_CELL.h, ...FRUIT_CELL }));
+/**
+ * A fruit tree whose growth and fruit come from different cells: the sheet
+ * draws growth per tree shape and fruit per variety. Each cell is
+ * [column, row, trunk x, trunk y] (the trunk measured in that cell, so the
+ * tree never jumps when it starts to fruit): 5 growth stages, then 3 of
+ * fruit ripening.
+ */
+const treeFrames = (cells: readonly (readonly [number, number, number, number])[]): CropRect[] =>
+  cells.map(([c, r, ax, ay]) => ({ x: c * FRUIT_CELL.w, y: r * FRUIT_CELL.h, ...FRUIT_CELL, ax, ay }));
+/** The orchard's trees (src/lib/orchard.ts): which cells of the LPC sheet draw each. */
+const ORCHARD_CELLS: Readonly<Record<string, readonly (readonly [number, number, number, number])[]>> = {
+  lemon_tree:   [[1, 7, 46, 117], [1, 3, 46, 122], [1, 2, 46, 122], [1, 1, 46, 122], [1, 0, 46, 117], [5, 18, 46, 117], [5, 17, 46, 117], [5, 16, 46, 117]],
+  orange_tree:  [[1, 7, 46, 117], [1, 3, 46, 122], [1, 2, 46, 122], [1, 1, 46, 122], [1, 0, 46, 117], [8, 18, 46, 117], [8, 17, 46, 117], [8, 16, 46, 117]],
+  peach_tree:   [[2, 7, 48, 118], [2, 3, 48, 118], [2, 2, 48, 118], [2, 1, 48, 118], [2, 0, 48, 118], [1, 21, 48, 118], [1, 20, 48, 118], [1, 19, 48, 118]],
+  cherry_tree:  [[2, 7, 48, 118], [2, 3, 48, 118], [2, 2, 48, 118], [2, 1, 48, 118], [2, 0, 48, 118], [2, 19, 41, 114], [2, 20, 41, 114], [2, 21, 41, 114]], // blossom, then cherries
+  pear_tree:    [[4, 3, 48, 122], [4, 3, 48, 122], [4, 2, 47, 122], [4, 1, 47, 122], [4, 0, 47, 122], [3, 21, 47, 122], [3, 20, 47, 122], [3, 19, 47, 122]],
+  plum_tree:    [[7, 7, 47, 119], [7, 3, 47, 119], [7, 2, 47, 119], [7, 1, 47, 119], [7, 0, 47, 119], [8, 21, 47, 119], [8, 20, 47, 119], [8, 19, 47, 119]],
+  coconut_palm: [[0, 11, 47, 120], [0, 11, 47, 120], [0, 10, 48, 115], [0, 9, 48, 120], [0, 8, 48, 120], [2, 24, 48, 120], [2, 23, 48, 120], [2, 22, 48, 120]],
+  banana_palm:  [[1, 11, 64, 122], [1, 11, 64, 122], [1, 10, 53, 115], [1, 9, 54, 115], [1, 8, 54, 115], [3, 24, 54, 115], [3, 23, 54, 115], [3, 22, 54, 115]],
+};
 
 // 5-stage wheat progression harvested from public/assets/food/crops.png
 // (LPC crops by bluecarrot16 / Eddeland / Taylor / Kettering). The
@@ -103,6 +125,16 @@ export const CROP_KINDS: Record<string, CropKindConfig> = {
   white_vine: { stages: 5, regrowthMs: 75 * MIN,  yield: 4, frames: vineFrames(1), sheet: "vines", perennial: { fruitMs: 45 * MIN, mature: 3 } },
   // Grows 1 → 4 (2.5 h a stage), then its apples ripen over 3 stages (75 min in all).
   apple_tree: { stages: 8, regrowthMs: 150 * MIN, yield: 12, frames: fruitTreeFrames(0), sheet: "fruit_trees", perennial: { fruitMs: 75 * MIN, mature: 4 }, baseX: 45, baseY: 118 },
+  // The orchard's trees (src/lib/orchard.ts): 8 stages like the apple (grow 1 → 4, then ripen),
+  // at their own pace — citrus slow and plentiful, cherries quick and few.
+  lemon_tree:   { stages: 8, regrowthMs: 160 * MIN, yield: 14, frames: treeFrames(ORCHARD_CELLS.lemon_tree), sheet: "fruit_trees", perennial: { fruitMs: 90 * MIN, mature: 4 }, baseX: 46, baseY: 117 },
+  orange_tree:  { stages: 8, regrowthMs: 160 * MIN, yield: 14, frames: treeFrames(ORCHARD_CELLS.orange_tree), sheet: "fruit_trees", perennial: { fruitMs: 90 * MIN, mature: 4 }, baseX: 46, baseY: 117 },
+  peach_tree:   { stages: 8, regrowthMs: 140 * MIN, yield: 10, frames: treeFrames(ORCHARD_CELLS.peach_tree), sheet: "fruit_trees", perennial: { fruitMs: 70 * MIN, mature: 4 }, baseX: 48, baseY: 118 },
+  cherry_tree:  { stages: 8, regrowthMs: 130 * MIN, yield: 8, frames: treeFrames(ORCHARD_CELLS.cherry_tree), sheet: "fruit_trees", perennial: { fruitMs: 50 * MIN, mature: 4 }, baseX: 48, baseY: 118 },
+  pear_tree:    { stages: 8, regrowthMs: 150 * MIN, yield: 12, frames: treeFrames(ORCHARD_CELLS.pear_tree), sheet: "fruit_trees", perennial: { fruitMs: 80 * MIN, mature: 4 }, baseX: 47, baseY: 122 },
+  plum_tree:    { stages: 8, regrowthMs: 140 * MIN, yield: 10, frames: treeFrames(ORCHARD_CELLS.plum_tree), sheet: "fruit_trees", perennial: { fruitMs: 65 * MIN, mature: 4 }, baseX: 47, baseY: 119 },
+  coconut_palm: { stages: 8, regrowthMs: 180 * MIN, yield: 6, frames: treeFrames(ORCHARD_CELLS.coconut_palm), sheet: "fruit_trees", perennial: { fruitMs: 100 * MIN, mature: 4 }, baseX: 48, baseY: 120 },
+  banana_palm:  { stages: 8, regrowthMs: 150 * MIN, yield: 9, frames: treeFrames(ORCHARD_CELLS.banana_palm), sheet: "fruit_trees", perennial: { fruitMs: 75 * MIN, mature: 4 }, baseX: 54, baseY: 115 },
   oak_tree: {
     stages: 4,
     regrowthMs: 90_000,
@@ -122,7 +154,9 @@ export const GARDEN_CROPS: Record<string, GardenCropDef> = {
   // Vineyards only: perennials that fruit again and again.
   grape_cutting:       { kind: "red_vine",   seedKey: "grape_cutting",       produceKey: "red_grape",   lots: ["vineyard"], slot: "vine", minFarmLevel: 1 },
   white_grape_cutting: { kind: "white_vine", seedKey: "white_grape_cutting", produceKey: "white_grape", lots: ["vineyard"], slot: "vine", minFarmLevel: 2 },
-  apple_sapling:       { kind: "apple_tree", seedKey: "apple_sapling",       produceKey: "apple",       lots: ["vineyard"], slot: "tree", minFarmLevel: 1 },
+  apple_sapling:       { kind: "apple_tree", seedKey: "apple_sapling",       produceKey: "apple",       lots: ["vineyard", "orchard"], slot: "tree", minFarmLevel: 1 },
+  // The orchard's trees (src/lib/orchard.ts): saplings from the towns whose land suits them.
+  ...Object.fromEntries(ORCHARD_FRUITS.map((f) => [f.sapling, { kind: f.tree, seedKey: f.sapling, produceKey: f.fruit, lots: ["orchard"] as LotKind[], slot: "tree" as const, minFarmLevel: 1 }])),
 };
 
 /**

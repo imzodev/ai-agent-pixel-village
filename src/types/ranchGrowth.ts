@@ -8,7 +8,7 @@ export type RanchBuildKey =
   | "workbench" | "saw" | "lathe" | "upholstery" | "varnish";
 
 /** The kinds of lot that grow (ranches and vineyards share farm growth). */
-export type GrowthLot = "ranch" | "vineyard" | "workshop";
+export type GrowthLot = "ranch" | "vineyard" | "workshop" | "orchard";
 
 /** A machine that turns goods into better goods (hives make honey alone). */
 export type MachineKey =

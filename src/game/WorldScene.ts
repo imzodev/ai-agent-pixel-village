@@ -58,6 +58,7 @@ import type { RanchBuildKey } from "@/types/ranchGrowth";
 import { RANCH_PROP_SPOTS } from "./ranchProps";
 import { VINEYARD_PROP_SPOTS } from "./vineyardProps";
 import { SHOWROOM_SPOTS, WORKSHOP_PROP_SPOTS } from "./workshopProps";
+import { ORCHARD_PROP_SPOTS } from "./orchardProps";
 import { FURNITURE_CELLS } from "./furnitureArt";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
@@ -780,7 +781,7 @@ export class WorldScene extends Phaser.Scene {
         continue;
       }
       if (!img) {
-        img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(...nodeOrigin(n.kind)).setDepth(DEPTH_CHAR_BASE + n.y);
+        img = this.add.image(n.x, n.y, targetKey, frameKey ?? undefined).setOrigin(...nodeOrigin(n.kind, n.stage)).setDepth(DEPTH_CHAR_BASE + n.y);
         if (n.ownerId != null) {
           // Garden crop: the frame is 32×64 but plots are only 32 px apart,
           // so a full-frame hit area would swallow clicks meant for the plot
@@ -812,6 +813,8 @@ export class WorldScene extends Phaser.Scene {
         // Same texture, different state — just swap the frame.
         img.setFrame(frameKey);
       }
+      // A tree's trunk can stand elsewhere in its fruiting frames: keep it on its spot.
+      if (ownSheet) img.setOrigin(...nodeOrigin(n.kind, n.stage));
       // Garden crops show growth through their frames; wild regrowth fades.
       img.setAlpha(isReady || n.ownerId != null || ownSheet ? 1 : 0.55);
       this.showForage(img, n.kind, n.x, n.y);
@@ -1092,8 +1095,8 @@ export class WorldScene extends Phaser.Scene {
    *  added as they're built and cleared when the ranch is given up. */
   private syncRanchProps(lots: readonly LotSnapshot[]): void {
     for (const lot of lots) {
-      if (lot.kind !== "ranch" && lot.kind !== "vineyard" && lot.kind !== "workshop") continue;
-      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : lot.kind === "workshop" ? WORKSHOP_PROP_SPOTS : RANCH_PROP_SPOTS;
+      if (lot.kind !== "ranch" && lot.kind !== "vineyard" && lot.kind !== "workshop" && lot.kind !== "orchard") continue;
+      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : lot.kind === "workshop" ? WORKSHOP_PROP_SPOTS : lot.kind === "orchard" ? ORCHARD_PROP_SPOTS : RANCH_PROP_SPOTS;
       const have = this.ranchProps.get(lot.key) ?? new Map<string, Phaser.GameObjects.Image>();
       // What should stand there: built stations, and a workshop's pieces on show.
       const want = new Map<string, () => Phaser.GameObjects.Image>();

@@ -17,9 +17,13 @@ import { ROADS, townAt } from "../src/lib/settlements";
 const W = 24, H = 15;
 const file = path.join(process.cwd(), "public/buildings/buildings.json");
 const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
-const LOT_KINDS = new Set(["land", "ranch", "vineyard", "workshop"]);
-const TEMPLATE: Record<string, string> = { land: "/buildings/land_lot.json", ranch: "/buildings/ranch_lot.json", vineyard: "/buildings/vineyard_lot.json", workshop: "/buildings/workshop_lot.json" };
-const NAME: Record<string, string> = { land: "Homestead Plot", ranch: "Homestead Ranch", vineyard: "Homestead Vineyard", workshop: "Hollowmere Workshop" };
+const LOT_KINDS = new Set(["land", "ranch", "vineyard", "workshop", "orchard"]);
+const TEMPLATE: Record<string, string> = { land: "/buildings/land_lot.json", ranch: "/buildings/ranch_lot.json", vineyard: "/buildings/vineyard_lot.json", workshop: "/buildings/workshop_lot.json", orchard: "/buildings/orchard_lot.json" };
+const NAME: Record<string, string> = { land: "Homestead Plot", ranch: "Homestead Ranch", vineyard: "Homestead Vineyard", workshop: "Hollowmere Workshop", orchard: "Homestead Orchard" };
+/** For kinds with no original lot to copy a description and price from. */
+const NEW_KIND: Record<string, { description: string; price: number; color: string }> = {
+  orchard: { description: "A fenced orchard of six tree plots, and a yard for a fruit press and a jam kitchen.", price: 70, color: "#5a8a3a" },
+};
 
 // Keep everything but the old planned lots; the originals become row 0.
 manifest.buildings = manifest.buildings.filter((b: { key: string }) => !/_r\d+_\d+$/.test(b.key));
@@ -43,8 +47,8 @@ for (const lot of plannedLots()) {
   perRow.set(lot.row, n);
   manifest.buildings.push({
     key: `${lot.kind}_r${rowIndex(lot.row)}_${n}`, file: TEMPLATE[lot.kind], name: `${NAME[lot.kind]} ${rowIndex(lot.row)}-${n}`,
-    kind: lot.kind, description: base?.description ?? "", color: base?.color ?? "#a07850", menu: [], reservable: false,
-    price: base?.price ?? 0, row: lot.row, tx: lot.tx, ty: lot.ty,
+    kind: lot.kind, description: base?.description ?? NEW_KIND[lot.kind]?.description ?? "", color: base?.color ?? NEW_KIND[lot.kind]?.color ?? "#a07850", menu: [], reservable: false,
+    price: base?.price ?? NEW_KIND[lot.kind]?.price ?? 0, row: lot.row, tx: lot.tx, ty: lot.ty,
   });
   taken.push({ x0: lot.tx, y0: lot.ty, x1: lot.tx + W - 1, y1: lot.ty + H - 1 });
   added++;

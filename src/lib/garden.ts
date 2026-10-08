@@ -52,9 +52,10 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   const target = (await plotsOfLot(lot)).find((p) => p.plot === plot);
   if (!target) return { ok: false, error: "There's no plot there." };
   // Vines on trellises, trees in the orchard, vegetables in fields (src/lib/vineyard.ts).
-  const vineyard = lot.kind === "vineyard";
+  const vineyard = lot.kind === "vineyard", orchard = lot.kind === "orchard";
   const cell = vineyard ? (await lotCells(lot)).find((c) => c.plot === plot) : undefined;
-  const why = plantRule(crop, lot.kind, cell ? vineyardSlot(cell) : null, vineyard ? farmLevel((await loadGrowth(lot.key)).farmXp) : 1);
+  // an orchard's every plot is a tree plot
+  const why = plantRule(crop, lot.kind, orchard ? "tree" : cell ? vineyardSlot(cell) : null, vineyard || orchard ? farmLevel((await loadGrowth(lot.key)).farmXp) : 1);
   if (why) return { ok: false, error: why };
   if ((await countItem(characterId, seedKey)) < 1) return { ok: false, error: "You don't have any of those seeds." };
   // Green Thumb shortens every stage of the owner's crops.
@@ -126,7 +127,7 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   // A vineyard grows with every harvest.
   if (cfg.perennial && node.lotId != null) {
     const [lot] = await db.select({ key: lots.key, kind: lots.kind }).from(lots).where(eq(lots.id, node.lotId));
-    if (lot?.kind === "vineyard") await addFarmXp(lot.key, node.qty * XP_PER_GOOD);
+    if (lot?.kind === "vineyard" || lot?.kind === "orchard") await addFarmXp(lot.key, node.qty * XP_PER_GOOD);
   }
   await addItem(characterId, node.itemKey, node.qty);
   const gained = [{ itemKey: node.itemKey, qty: node.qty }];
