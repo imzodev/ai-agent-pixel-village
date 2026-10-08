@@ -1,13 +1,13 @@
-// How many things you can do with what's selected, and so what pressing E
-// does: with one option it acts at once (chopping, picking up, talking to a
-// townsperson stays one press); with several (a shopkeeper: talk, craft,
-// sell, buy…; a home: enter, move in…) the first E opens the action card to choose, and a second E
-// on the open card takes the first option (talk). Pure; the HUD wires it.
+// What pressing E does with what's selected. Chopping a tree acts at once;
+// everything else (a plant, an item, a townsperson, a home, a lot to cheer…)
+// first opens its action card, so you can pick any button, and a second E on
+// the open card takes the main action. Pure; the HUD wires it.
 
+import { CROP_KINDS } from "@/lib/crops";
 import { recipesForNpc } from "@/lib/recipes";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import type { Selection } from "@/types/world";
-import type { BagLine, EDecision, NpcOptions, OptionContext } from "@/types/selection";
+import type { BagLine, EDecision, NpcOptions } from "@/types/selection";
 
 /** An NPC's crafting, buying and selling options for a player with this bag. */
 export function npcOptions(npcKey: string, bag: readonly BagLine[]): NpcOptions {
@@ -19,35 +19,18 @@ export function npcOptions(npcKey: string, bag: readonly BagLine[]): NpcOptions 
   };
 }
 
-/** How many actions a selection offers: talking counts as one for an NPC,
- *  and a building counts each button the action card draws for it. "About"
- *  is information, not an action, so it never counts. */
-export function optionCount(sel: Selection, ctx: OptionContext): number {
-  if (sel.type === "building") return buildingOptionCount(sel, ctx);
-  if (sel.type !== "npc") return 1;
-  const key = ctx.npcs.find((n) => n.id === sel.id)?.key;
-  if (!key) return 1;
-  const o = npcOptions(key, ctx.bag);
-  return 1 + (o.recipes.length > 0 ? 1 : 0) + (o.sellable ? 1 : 0) + o.stock.length;
-}
-
-/** A building's actions: enter it (not bare land), its lot's buy / move in /
- *  move out (not when someone else owns it), and reserving it for a business. */
-function buildingOptionCount(sel: Extract<Selection, { type: "building" }>, ctx: OptionContext): number {
-  const enter = sel.key.startsWith("land_") ? 0 : 1;
-  const lot = ctx.lots.find((l) => l.buildingKey === sel.key);
-  const lotAction = lot && (!lot.owner || lot.owner.id === ctx.myId) ? 1 : 0;
-  const reserve = sel.reservable && !sel.hasSponsor ? 1 : 0;
-  return Math.max(1, enter + lotAction + reserve);
+/** Chopping a tree (terrain trees and wild axe-nodes): the one action that happens on the first E. */
+export function isChopTarget(sel: Selection): boolean {
+  return sel.type === "tree" || (sel.type === "node" && CROP_KINDS[sel.kind]?.needsAxe === true);
 }
 
 /**
  * What an E press does. Out of reach always "act"s (the action walks you
- * over); several options open the menu, unless it's already open for this
- * very target — then the second E takes the first option.
+ * over), and so does chopping; anything else opens the menu, unless it's
+ * already open for this very target: then the second E takes the main action.
  */
-export function eDecision(opts: { count: number; inReach: boolean; menuOpenForIt: boolean }): EDecision {
-  if (!opts.inReach || opts.count <= 1 || opts.menuOpenForIt) return "act";
+export function eDecision(opts: { inReach: boolean; instant: boolean; menuOpenForIt: boolean }): EDecision {
+  if (!opts.inReach || opts.instant || opts.menuOpenForIt) return "act";
   return "menu";
 }
 

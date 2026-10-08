@@ -26,7 +26,7 @@ import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
 import Notifications from "./Notifications";
-import { eDecision, npcOptions, optionCount, selectionKey } from "@/game/selectionOptions";
+import { eDecision, isChopTarget, npcOptions, selectionKey } from "@/game/selectionOptions";
 import { claimForage, setForageClaims } from "@/game/forageClaims";
 import { setBreadTaken, tookBread } from "@/game/breadTable";
 import { BREAD_REACH_PX } from "@/lib/bakery";
@@ -719,11 +719,10 @@ export default function Hud() {
         },
       }),
     ];
-    // E acts at once when there's one thing to do; with several (a
-    // shopkeeper) the first E just opens the card, a second E talks.
+    // Chopping a tree acts at once; everything else, the first E just opens
+    // the card (so any button can be picked) and a second E takes the main action.
     const offPrimary = bus.on("primaryAction", (s) => {
-      const count = optionCount(s, { npcs: snap?.npcs ?? [], bag: me?.inventory ?? [], lots: snap?.lots ?? [], myId });
-      if (eDecision({ count, inReach: s.distance <= 160, menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
+      if (eDecision({ inReach: s.distance <= 160, instant: isChopTarget(s), menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
     });
     return () => {
       for (const d of disposers) d();
