@@ -1,7 +1,7 @@
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
-import { acquireLot, releaseLot, setLotBanner } from "@/lib/lots";
+import { acquireLot, buildingKeysOfOwner, releaseLot, setLotBanner } from "@/lib/lots";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,11 @@ export async function POST(req: Request) {
     if (action === "banner") {
       const r = await setLotBanner(me.id, key, Number(body.color), Number(body.emblem));
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
-      if (door) markWorldDirty(door.x, door.y);
+      // The banner is on all their lots, so refresh each one for whoever is looking.
+      for (const bk of await buildingKeysOfOwner(me.id)) {
+        const d = await getBuildingDoor(bk);
+        if (d) markWorldDirty(d.x, d.y);
+      }
       return Response.json(r);
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });

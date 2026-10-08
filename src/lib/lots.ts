@@ -147,7 +147,10 @@ function acquireLotTx(characterId: number, key: string): Promise<GardenResult> {
         .returning({ id: characters.id });
       if (paid.length === 0) return { ok: false, error: `You need ${lot.price} coins.` };
     }
-    await tx.update(lots).set({ ownerId: characterId, acquiredAt: new Date(), forSale: false }).where(eq(lots.id, lot.id));
+    // It flies the banner the owner already picked for their other lots, if any.
+    const [flown] = await tx.select({ color: lots.bannerColor, emblem: lots.bannerEmblem }).from(lots)
+      .where(and(eq(lots.ownerId, characterId), isNotNull(lots.bannerColor), isNotNull(lots.bannerEmblem))).limit(1);
+    await tx.update(lots).set({ ownerId: characterId, acquiredAt: new Date(), forSale: false, bannerColor: flown?.color ?? null, bannerEmblem: flown?.emblem ?? null }).where(eq(lots.id, lot.id));
     if (land) return { ok: true, message: lot.price > 0 ? `The land is yours, for ${lot.price} coins. Happy planting!` : "The land is yours! Plant away." };
     if (ranch) return { ok: true, message: `The ranch is yours${lot.price > 0 ? `, for ${lot.price} coins` : ""}! Step through the gate to stock the coop and the barn.` };
     if (orchard) return { ok: true, message: `The orchard is yours${lot.price > 0 ? `, for ${lot.price} coins` : ""}! Saplings come from the towns whose land suits them: lemons and oranges from the desert, cherries and pears from the hills…` };
@@ -182,12 +185,19 @@ async function clearLot(lotId: number): Promise<void> {
   await db.update(lots).set({ ownerId: null, acquiredAt: null, forSale: false, bannerColor: null, bannerEmblem: null }).where(eq(lots.id, lotId));
 }
 
-/** Pick the banner an owner's lot flies. Owner only; indices are checked against the palette. */
+/** Pick the banner an owner flies: it applies to all their lots. Owner only; indices are checked against the palette. */
 export async function setLotBanner(characterId: number, key: string, color: number, emblem: number): Promise<GardenResult> {
   if (!isBanner(color, emblem)) return { ok: false, error: "That isn't a banner you can fly." };
-  const done = await db.update(lots).set({ bannerColor: color, bannerEmblem: emblem }).where(and(eq(lots.key, key), eq(lots.ownerId, characterId))).returning({ id: lots.id });
-  if (done.length === 0) return { ok: false, error: "That isn't yours." };
-  return { ok: true, message: "Your banner is up." };
+  const [mine] = await db.select({ id: lots.id }).from(lots).where(and(eq(lots.key, key), eq(lots.ownerId, characterId)));
+  if (!mine) return { ok: false, error: "That isn't yours." };
+  const done = await db.update(lots).set({ bannerColor: color, bannerEmblem: emblem }).where(eq(lots.ownerId, characterId)).returning({ id: lots.id });
+  return { ok: true, message: done.length > 1 ? `Your banner is up on all ${done.length} of your lots.` : "Your banner is up." };
+}
+
+/** Manifest keys of the buildings of every lot a character owns (to refresh them for onlookers). */
+export async function buildingKeysOfOwner(characterId: number): Promise<string[]> {
+  const rows = await db.select({ buildingKey: lots.buildingKey }).from(lots).where(eq(lots.ownerId, characterId));
+  return rows.flatMap((r) => (r.buildingKey ? [r.buildingKey] : []));
 }
 
 /** Free lots whose owners haven't been seen for LOT_INACTIVE_RELEASE_MS. */
