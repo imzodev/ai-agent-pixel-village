@@ -44,9 +44,13 @@ fi
 compgen -G "$BASE/shared/lpc/*.png" >/dev/null \
   || { log "no sprite sheets in $BASE/shared/lpc (see RUNBOOK: Deploying)"; exit 1; }
 ln -sfn "$BASE/shared/.env" "$rel/.env"
-ln -sfn "$BASE/shared/.cache" "$rel/.cache"
-mkdir -p "$rel/public/lpc"
-for f in "$BASE"/shared/lpc/*.png; do ln -sfn "$f" "$rel/public/lpc/"; done
+# Turbopack refuses symlinks that point outside the project, so during
+# `next build` the release holds real directories only: an empty .cache
+# (linked to shared/ after the build) and copies of the sprite sheets.
+[ -L "$rel/.cache" ] && rm "$rel/.cache"
+mkdir -p "$rel/.cache/map" "$rel/public/lpc"
+rm -f "$rel"/public/lpc/*.png
+cp -f "$BASE"/shared/lpc/*.png "$rel/public/lpc/"
 
 cd "$rel"
 
@@ -55,6 +59,8 @@ log "installing dependencies"
 pnpm install --frozen-lockfile
 log "building"
 pnpm build
+rm -rf "$rel/.cache"
+ln -sfn "$BASE/shared/.cache" "$rel/.cache"
 
 # 4. Database: the drift fix, then push. drizzle-kit can't prompt without a
 #    terminal, and `timeout` stops it if it waits anyway. Never answer
