@@ -1,4 +1,5 @@
 import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloon";
+import type { ShoppingRule } from "@/types/businessAgent";
 import {
   bigint,
   pgMaterializedView,
@@ -1015,3 +1016,66 @@ export const bossLairs = pgTable("boss_lairs", {
   kind: text("kind").primaryKey(),
   defeatedAt: timestamp("defeated_at"),
 });
+
+// ---------- Business agents (src/lib/mind/businessServer.ts) ----------
+
+/** How a sponsor's agent behaves: its pitch, where it patrols, what it buys and its budget. */
+export const agentProfiles = pgTable("agent_profiles", {
+  npcId: integer("npc_id").primaryKey(),
+  sponsorId: integer("sponsor_id").notNull(),
+  /** builtin: the server thinks for it. external: an agent API controller is in charge (see controllerUntil). */
+  mode: text("mode").notNull().default("builtin"),
+  enabled: boolean("enabled").notNull().default(true),
+  pitchLines: jsonb("pitch_lines").$type<string[]>().notNull().default([]),
+  /** Place keys (see src/lib/nav/places.ts) it walks between. */
+  patrol: jsonb("patrol").$type<string[]>().notNull().default([]),
+  shopping: jsonb("shopping").$type<ShoppingRule[]>().notNull().default([]),
+  budgetCoins: integer("budget_coins").notNull().default(0),
+  budgetPeriod: text("budget_period").notNull().default("day"), // day | week
+  periodStart: timestamp("period_start").defaultNow().notNull(),
+  /** Epoch ms until which an external controller owns this agent (0/null = none). */
+  controllerUntil: bigint("controller_until", { mode: "number" }),
+  pitchCooldownMin: integer("pitch_cooldown_min").notNull().default(360),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Every coin an agent gets or spends, so the budget can be audited. */
+export const agentLedger = pgTable(
+  "agent_ledger",
+  {
+    id: serial("id").primaryKey(),
+    npcId: integer("npc_id").notNull(),
+    sponsorId: integer("sponsor_id").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+    kind: text("kind").notNull(), // grant | purchase
+    coins: integer("coins").notNull(), // + granted, - spent
+    itemKey: text("item_key"),
+    qty: integer("qty"),
+    counterparty: text("counterparty"), // e.g. "npc:village_marigold"
+    note: text("note").notNull().default(""),
+  },
+  (t) => [index("agent_ledger_npc_at_idx").on(t.npcId, t.at)],
+);
+
+/** Pitches a business agent made to players (cooldowns and caps read this). */
+export const pitchLog = pgTable(
+  "pitch_log",
+  {
+    id: serial("id").primaryKey(),
+    npcId: integer("npc_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("pitch_log_npc_at_idx").on(t.npcId, t.at), index("pitch_log_char_at_idx").on(t.characterId, t.at)],
+);
+
+/** Players who don't want business agents pitching them (per sponsor, or all when sponsorId is 0). */
+export const agentOptouts = pgTable(
+  "agent_optouts",
+  {
+    characterId: integer("character_id").notNull(),
+    sponsorId: integer("sponsor_id").notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("agent_optouts_char_idx").on(t.characterId)],
+);

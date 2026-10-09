@@ -27,7 +27,7 @@ import { MOODS, REQUEST_TTL_MS, URGENCY, count, feasibleActions, regardTier, req
 import { profileFor } from "./profiles";
 import type { MindDecision, MindIntent, MindMemory, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
 
-type NpcRow = typeof npcs.$inferSelect;
+export type NpcRow = typeof npcs.$inferSelect;
 type MindRow = typeof npcMinds.$inferSelect;
 
 /** Below this Jev confidence the scripted policy decides instead. */
@@ -161,7 +161,7 @@ async function nearbyPlayers(npcId: number, pos: { x: number; y: number }, now: 
 }
 
 /** Say a line out loud (LLM, short; canned when there's no provider). */
-async function say(npc: NpcRow, doing: string, canned: string): Promise<string> {
+export async function say(npc: NpcRow, doing: string, canned: string): Promise<string> {
   const r = await Promise.race([
     chatWithFallback([
       { role: "system", content: `You are ${npc.name}, ${npc.role}, in a cozy pixel village. Persona: ${npc.persona}\nMood: ${npc.mood}. Write ONE short line (at most 18 words) you say out loud right now, in character. No quotes, no narration, no emoji.` },
@@ -173,7 +173,7 @@ async function say(npc: NpcRow, doing: string, canned: string): Promise<string> 
   return text && text.length <= 160 ? text : canned;
 }
 
-async function speak(npc: NpcRow, text: string, at: { x: number; y: number }, event: string): Promise<void> {
+export async function speak(npc: NpcRow, text: string, at: { x: number; y: number }, event: string): Promise<void> {
   await db.insert(worldChat).values({ speakerType: "npc", speakerId: npc.id, text: text.slice(0, 140) });
   await logEvent("mind", event, "npc", npc.id, at.x, at.y);
 }

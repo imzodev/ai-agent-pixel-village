@@ -37,6 +37,7 @@ import { REPOPULATE_MS, WILD_DESPAWN_MS, WILD_LEASH_TILES, WILD_RADIUS_PX } from
 import { addToGrid, buildGrid, countWithin } from "./spatialGrid";
 import { bakeBatches } from "./bakeryServer";
 import { thinkMinds } from "./mind/mindServer";
+import { thinkBusinessAgents } from "./mind/businessServer";
 import { tickRanches } from "./ranchServer";
 import { tickCommissions } from "./commissionsServer";
 import { maybeOpenRows } from "./lotRowsServer";
@@ -145,6 +146,7 @@ export async function tickWorld(): Promise<number | null> {
   if (beat.index % HP_REGEN_EVERY_BEATS === 0) await regenHp(now);
   await bakeBatches(nowMs).catch((err) => console.warn("[tick] baking failed:", err instanceof Error ? err.message : err));
   await thinkMinds(nowMs).catch((err) => console.warn("[tick] minds failed:", err instanceof Error ? err.message : err));
+  await thinkBusinessAgents(nowMs).catch((err) => console.warn("[tick] business agents failed:", err instanceof Error ? err.message : err));
   await tickRanches(nowMs).catch((err) => console.warn("[tick] ranch feeders failed:", err instanceof Error ? err.message : err));
   await tickCommissions(nowMs).catch((err) => console.warn("[tick] commissions failed:", err instanceof Error ? err.message : err));
   if (nowMs - lastRowCheck > 3600_000) {

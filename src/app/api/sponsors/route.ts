@@ -8,6 +8,10 @@ import { ensureSeeded } from "@/lib/seed";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
 import { attachExternalController, issueAgentKey } from "@/lib/agentApi";
+import { allPlaces } from "@/lib/nav/places";
+import { SHOP_STOCK } from "@/lib/trade";
+import { validateSettings } from "@/lib/businessConfig";
+import { businessSummary, saveSettings } from "@/lib/mind/businessServer";
 
 export const dynamic = "force-dynamic";
 
@@ -190,6 +194,7 @@ export async function GET(req: Request) {
       missions: ms,
       billing: { rentCents: sp.rentCents, leadFeeCents: sp.leadFeeCents, leadFeesCents: fees, totalCents: sp.rentCents + fees, plan: PLANS[sp.plan]?.label ?? sp.plan },
       paymentsConfigured: !!s,
+      business: await businessSummary(sp.id),
     });
   } catch (e) {
     return handleApiError(e);
@@ -202,13 +207,19 @@ export async function PATCH(req: Request) {
     const b = await req.json().catch(() => ({}));
     const [sp] = await db.select().from(sponsors).where(eq(sponsors.ownerToken, String(b.token ?? "")));
     if (!sp) return Response.json({ error: "Invalid token" }, { status: 404 });
+    const settings = validateSettings(b, {
+      placeKeys: new Set((await allPlaces()).map((p) => p.key)),
+      itemKeys: new Set(Object.values(SHOP_STOCK).flat().map((i) => i.itemKey)),
+      budgetCapPerDay: Number(process.env.AGENT_BUDGET_MAX_DAILY ?? 200),
+    });
+    if (!settings.ok) return Response.json({ error: settings.error }, { status: 400 });
     const patch: Partial<typeof sponsors.$inferInsert> = {};
     for (const k of ["pitch", "persona", "tagline", "discountCode", "discountText", "website"] as const) {
       if (typeof b[k] === "string") patch[k] = b[k].trim().slice(0, 600);
     }
     if (typeof b.brandColor === "string") patch.brandColor = hex(b.brandColor, sp.brandColor);
     if (b.status === "cancelled") patch.status = "cancelled";
-    await db.update(sponsors).set(patch).where(eq(sponsors.id, sp.id));
+    if (Object.keys(patch).length) await db.update(sponsors).set(patch).where(eq(sponsors.id, sp.id));
     // Only the live agent of this sponsor is changed (not retired ones).
     const [home] = await db.select().from(npcs).where(and(eq(npcs.sponsorId, sp.id), eq(npcs.active, true))).orderBy(desc(npcs.id));
     const npcPatch: Partial<typeof npcs.$inferInsert> = {};
@@ -236,6 +247,7 @@ export async function PATCH(req: Request) {
       const s = stripe();
       if (s && sp.stripeSubscriptionId) await s.subscriptions.cancel(sp.stripeSubscriptionId).catch(() => null);
     }
+    if (home && Object.keys(settings.value).length) await saveSettings(home.id, sp.id, settings.value);
     // Secrets are returned once, only when they were just created or rotated.
     return Response.json({
       ok: true,

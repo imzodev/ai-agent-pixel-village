@@ -8,7 +8,7 @@ export type NpcStock = Record<string, number>;
 export type MindMemory = { at: number; text: string };
 
 /** What the NPC is in the middle of: an errand to buy an item, or heading home. */
-export type MindIntent = "" | "going_home" | `errand:${string}`;
+export type MindIntent = "" | "going_home" | `errand:${string}` | `patrol:${string}` | `shop:${string}`;
 
 /** An action the NPC can take right now: Jev sees `key` + `description`. */
 export type MindOption = { key: string; description: string };

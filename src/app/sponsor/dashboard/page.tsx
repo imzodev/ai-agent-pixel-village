@@ -11,7 +11,24 @@ type Dash = {
   missions: { id: number; title: string }[];
   billing: { rentCents: number; leadFeeCents: number; leadFeesCents: number; totalCents: number; plan: string };
   paymentsConfigured: boolean;
+  business: {
+    settings: { pitchLines: string[]; patrol: string[]; shopping: { itemKey: string; maxPrice: number; perPeriod: number }[]; budgetCoins: number; budgetPeriod: "day" | "week"; pitchCooldownMin: number; enabled: boolean; mode: string };
+    purse: number;
+    pantry: Record<string, number>;
+    lastDecision: { source: string; action: string; at: number } | null;
+    pitchesLast24h: number;
+    ledger: { at: number; kind: string; coins: number; itemKey: string | null; counterparty: string | null; note: string }[];
+  } | null;
 };
+
+type BizForm = { enabled: boolean; pitchLines: string; patrol: string; shopping: string; budgetCoins: string; budgetPeriod: "day" | "week"; pitchCooldownMin: string };
+
+// "bread 6 2" per line: item, max price, purchases per period.
+const shoppingToText = (rules: { itemKey: string; maxPrice: number; perPeriod: number }[]) => rules.map((r) => `${r.itemKey} ${r.maxPrice} ${r.perPeriod}`).join("\n");
+const textToShopping = (t: string) => t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+  const [itemKey, maxPrice, perPeriod] = l.split(/\s+/);
+  return { itemKey, maxPrice: Number(maxPrice), perPeriod: Number(perPeriod) };
+});
 
 export default function DashboardPage() {
   return <Suspense fallback={null}><Dashboard /></Suspense>;
@@ -25,6 +42,7 @@ function Dashboard() {
   const [newSecrets, setNewSecrets] = useState<{ apiKey: string | null; webhookSecret: string | null } | null>(null);
   const [edit, setEdit] = useState<{ pitch: string; persona: string; discountCode: string; discountText: string; tagline: string; webhookUrl: string; agentName: string } | null>(null);
   const [saved, setSaved] = useState("");
+  const [biz, setBiz] = useState<BizForm | null>(null);
 
   const load = useCallback(async (t: string) => {
     if (!t) return;
@@ -33,6 +51,15 @@ function Dashboard() {
     const j = await res.json();
     if (!res.ok) { setErr(j.error ?? "Not found"); return; }
     setD(j); setErr("");
+    setBiz((cur) => cur ?? (j.business ? {
+      enabled: j.business.settings.enabled,
+      pitchLines: j.business.settings.pitchLines.join("\n"),
+      patrol: j.business.settings.patrol.join(", "),
+      shopping: shoppingToText(j.business.settings.shopping),
+      budgetCoins: String(j.business.settings.budgetCoins),
+      budgetPeriod: j.business.settings.budgetPeriod,
+      pitchCooldownMin: String(j.business.settings.pitchCooldownMin),
+    } : null));
     setEdit({ pitch: j.sponsor.pitch, persona: j.sponsor.persona, discountCode: j.sponsor.discountCode, discountText: j.sponsor.discountText, tagline: j.sponsor.tagline, webhookUrl: j.agent?.webhookUrl ?? "", agentName: j.agent?.name ?? j.sponsor.agentName });
     try { localStorage.setItem("grove_sponsor_token", t); } catch { /* ignore */ }
   }, [params]);
@@ -125,6 +152,35 @@ function Dashboard() {
                     </div>
                   )}
                   <button onClick={() => save()} className="w-full rounded-lg bg-orange-500 px-3 py-2 font-bold text-white">Save & update agent</button>
+                  {biz && (
+                    <div className="mt-4 space-y-2 rounded-lg border-2 border-emerald-700/40 bg-emerald-50 p-3">
+                      <div className="font-bold text-emerald-900">Business agent</div>
+                      <div className="text-[11px] text-stone-600">It walks its patrol, pitches your business to nearby players, and buys from the village with its budget. It never farms, fights or collects coins.</div>
+                      {d.business ? (
+                        <div className="text-[11px] text-stone-700">Purse: <b>{d.business.purse}</b> coins left this period · pitches in the last 24 h: <b>{d.business.pitchesLast24h}</b> · last decision: {d.business.lastDecision ? `${d.business.lastDecision.action} (${d.business.lastDecision.source})` : "none yet"}</div>
+                      ) : null}
+                      <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={biz.enabled} onChange={(e) => setBiz({ ...biz, enabled: e.target.checked })} /> Agent is active</label>
+                      <F label="Pitch lines (one per line, up to 5)"><textarea value={biz.pitchLines} onChange={(e) => setBiz({ ...biz, pitchLines: e.target.value })} rows={3} className="inp" /></F>
+                      <F label="Patrol places (comma-separated place keys, up to 6)"><input value={biz.patrol} onChange={(e) => setBiz({ ...biz, patrol: e.target.value })} placeholder="building:bakery, town:ashford" className="inp" /></F>
+                      <F label="Shopping list (one per line: item max-price purchases-per-period)"><textarea value={biz.shopping} onChange={(e) => setBiz({ ...biz, shopping: e.target.value })} rows={3} placeholder={"bread 6 2\nhoney_bun 6 1"} className="inp" /></F>
+                      <div className="grid grid-cols-3 gap-2">
+                        <F label="Budget (coins)"><input type="number" value={biz.budgetCoins} onChange={(e) => setBiz({ ...biz, budgetCoins: e.target.value })} className="inp" /></F>
+                        <F label="Per"><select value={biz.budgetPeriod} onChange={(e) => setBiz({ ...biz, budgetPeriod: e.target.value as "day" | "week" })} className="inp"><option value="day">day</option><option value="week">week</option></select></F>
+                        <F label="Pitch cooldown (min)"><input type="number" value={biz.pitchCooldownMin} onChange={(e) => setBiz({ ...biz, pitchCooldownMin: e.target.value })} className="inp" /></F>
+                      </div>
+                      <div className="text-[11px] text-stone-500">The first budget is added to the purse right away; later budget changes can only lower it, and the budget resets each period.</div>
+                      <button onClick={() => void save({
+                        business: true,
+                        enabled: biz.enabled,
+                        pitchLines: biz.pitchLines.split("\n").map((l) => l.trim()).filter(Boolean),
+                        patrol: biz.patrol.split(",").map((p) => p.trim()).filter(Boolean),
+                        shopping: textToShopping(biz.shopping),
+                        budgetCoins: Number(biz.budgetCoins),
+                        budgetPeriod: biz.budgetPeriod,
+                        pitchCooldownMin: Number(biz.pitchCooldownMin),
+                      })} className="w-full rounded-lg bg-emerald-700 px-3 py-2 font-bold text-white">Save agent behaviour</button>
+                    </div>
+                  )}
                   {saved && <div className="text-emerald-700">{saved}</div>}
                 </div>
               )}
