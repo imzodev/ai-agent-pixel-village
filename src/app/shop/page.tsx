@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { COSMETIC_RARITIES, COSMETIC_SLOTS, type CosmeticRarity, type CosmeticSlot } from "@/types/cosmetic";
 import type { Appearance } from "@/db/schema";
 import type { EquippedCosmetics } from "@/types/cosmetic";
@@ -37,12 +38,12 @@ export default function ShopPage() {
   const [meAppearance, setMeAppearance] = useState<Appearance | null>(null);
   const [meEquipped, setMeEquipped] = useState<EquippedCosmetics | undefined>(undefined);
 
-  const reload = async () => {
-    const [s, p, meRes] = await Promise.all([
-      fetch("/api/shop").then((r) => r.json()),
-      fetch("/api/gems").then((r) => r.json()),
-      fetch("/api/me").then((r) => r.json()).catch(() => null),
-    ]);
+  const fetchShop = () => Promise.all([
+    fetch("/api/shop").then((r) => r.json()),
+    fetch("/api/gems").then((r) => r.json()),
+    fetch("/api/me").then((r) => r.json()).catch(() => null),
+  ]);
+  const applyShop = ([s, p, meRes]: Awaited<ReturnType<typeof fetchShop>>) => {
     setView(s);
     setPacks(p.packs);
     if (meRes?.me) {
@@ -52,9 +53,10 @@ export default function ShopPage() {
       setMeEquipped(Object.keys(eq).length > 0 ? eq : undefined);
     }
   };
+  const reload = () => fetchShop().then(applyShop);
 
   useEffect(() => {
-    void reload();
+    void fetchShop().then(applyShop);
     const params = new URLSearchParams(window.location.search);
     if (params.get("purchase") === "ok") {
       // refresh after Stripe / sandbox redirect
@@ -150,7 +152,7 @@ export default function ShopPage() {
   return (
     <div style={{ minHeight: "100dvh", background: "#1a2238", color: "#fff", padding: "max(env(safe-area-inset-top),16px) max(env(safe-area-inset-right),16px) max(env(safe-area-inset-bottom),80px) max(env(safe-area-inset-left),16px)" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <a href="/" style={{ color: "#ffd166", textDecoration: "none", fontFamily: "inherit" }}>← back</a>
+        <Link href="/" style={{ color: "#ffd166", textDecoration: "none", fontFamily: "inherit" }}>← back</Link>
         <h1 style={{ fontFamily: "inherit", fontSize: 20, margin: 0 }}>Shop</h1>
         <div style={{ display: "flex", gap: 10, fontFamily: "inherit", fontSize: 14 }}>
           <span title="coins">🪙 {view?.balance.coins ?? 0}</span>

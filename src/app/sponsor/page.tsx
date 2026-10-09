@@ -16,19 +16,21 @@ function SponsorInner() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => { fetch("/api/sponsors").then((r) => r.json()).then(setInfo); }, []);
-  useEffect(() => { if (info && !f.buildingKey) { const first = info.buildings.find((b) => !b.taken); if (first) setF((x) => ({ ...x, buildingKey: first.key })); } }, [info, f.buildingKey]);
+  // Until the user picks a building, the first free one is shown (and submitted).
+  const firstFreeKey = info?.buildings.find((b) => !b.taken)?.key ?? "";
+  const buildingKey = f.buildingKey || firstFreeKey;
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr("");
-    const res = await fetch("/api/sponsors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f) });
+    const res = await fetch("/api/sponsors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...f, buildingKey }) });
     const j = await res.json();
     if (!res.ok) { setErr(j.error ?? "Failed"); setBusy(false); return; }
     if (j.checkoutUrl) location.href = j.checkoutUrl;
     else location.href = `/sponsor/dashboard?token=${j.ownerToken}&welcome=1`;
   };
 
-  const chosen = info?.buildings.find((b) => b.key === f.buildingKey);
+  const chosen = info?.buildings.find((b) => b.key === buildingKey);
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-5xl">
@@ -63,7 +65,7 @@ function SponsorInner() {
           <form onSubmit={submit} className="space-y-3 rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-xl">
             <div className="text-lg font-bold text-amber-900">Move in</div>
             <label className="block text-[11px] font-bold uppercase text-amber-800">Building
-              <select value={f.buildingKey} onChange={set("buildingKey")} className="mt-1 w-full rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 font-mono text-sm">
+              <select value={buildingKey} onChange={set("buildingKey")} className="mt-1 w-full rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5 font-mono text-sm">
                 {info?.buildings.map((b) => <option key={b.key} value={b.key} disabled={b.taken}>{b.name} {b.taken ? `— taken by ${b.tenant}` : "— available"}</option>)}
               </select>
             </label>

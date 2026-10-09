@@ -8,7 +8,7 @@ const NAMES = ["Fennel", "Juniper", "Bramble", "Sorrel", "Tansy", "Rowan", "Clov
 
 export default function SignupPage() {
   const [a, setA] = useState<Appearance>({ body: "female", skin: "#f1c9a5", hair: "bob", hairColor: "#5a3a1a", shirtColor: "#4a7c59", pantsColor: "#3a3a4a" });
-  const [name, setName] = useState(NAMES[Math.floor(Math.random() * NAMES.length)]);
+  const [name, setName] = useState(() => NAMES[Math.floor(Math.random() * NAMES.length)]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");

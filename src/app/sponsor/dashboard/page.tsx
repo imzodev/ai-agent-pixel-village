@@ -44,12 +44,16 @@ function Dashboard() {
   const [saved, setSaved] = useState("");
   const [biz, setBiz] = useState<BizForm | null>(null);
 
-  const load = useCallback(async (t: string) => {
-    if (!t) return;
+  // Fetch and apply are split so the mount effect can hand its response to
+  // applyDash instead of setting state itself.
+  const fetchDash = useCallback((t: string) => {
     const sid = params.get("session_id");
-    const res = await fetch(`/api/sponsors?token=${encodeURIComponent(t)}${sid ? `&session_id=${sid}` : ""}`);
-    const j = await res.json();
-    if (!res.ok) { setErr(j.error ?? "Not found"); return; }
+    return fetch(`/api/sponsors?token=${encodeURIComponent(t)}${sid ? `&session_id=${sid}` : ""}`)
+      .then(async (res) => ({ ok: res.ok, j: await res.json() }));
+  }, [params]);
+
+  const applyDash = useCallback((t: string, { ok, j }: Awaited<ReturnType<typeof fetchDash>>) => {
+    if (!ok) { setErr(j.error ?? "Not found"); return; }
     setD(j); setErr("");
     setBiz((cur) => cur ?? (j.business ? {
       enabled: j.business.settings.enabled,
@@ -62,12 +66,17 @@ function Dashboard() {
     } : null));
     setEdit({ pitch: j.sponsor.pitch, persona: j.sponsor.persona, discountCode: j.sponsor.discountCode, discountText: j.sponsor.discountText, tagline: j.sponsor.tagline, webhookUrl: j.agent?.webhookUrl ?? "", agentName: j.agent?.name ?? j.sponsor.agentName });
     try { localStorage.setItem("grove_sponsor_token", t); } catch { /* ignore */ }
-  }, [params]);
+  }, []);
+
+  const load = useCallback(async (t: string) => {
+    if (!t) return;
+    applyDash(t, await fetchDash(t));
+  }, [applyDash, fetchDash]);
 
   useEffect(() => {
     const t = params.get("token") || (typeof window !== "undefined" ? localStorage.getItem("grove_sponsor_token") ?? "" : "");
-    if (t) { setToken(t); void load(t); }
-  }, [params, load]);
+    if (t) void fetchDash(t).then((x) => { setToken(t); applyDash(t, x); });
+  }, [params, fetchDash, applyDash]);
   useEffect(() => { if (!token) return; const i = setInterval(() => void load(token), 8000); return () => clearInterval(i); }, [token, load]);
 
   const save = async (extra: Record<string, unknown> = {}) => {

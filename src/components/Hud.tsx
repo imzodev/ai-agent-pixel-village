@@ -162,10 +162,10 @@ export default function Hud() {
         if (target) setPanel((p) => (p === target ? null : target));
       }),
     ];
-    void refreshMe();
+    void api<Me>("/api/me").then(setMe);
     return () => u.forEach((f) => f());
   }, [toast, refreshMe]);
-  useEffect(() => { if (snap?.me && !me?.me) void refreshMe(); }, [snap?.me, me?.me, refreshMe]);
+  useEffect(() => { if (snap?.me && !me?.me) void api<Me>("/api/me").then(setMe); }, [snap?.me, me?.me]);
   // HP from a `hurt` push: snapshots can lag a few seconds behind, so the
   // pushed value wins for a short while.
   const [hpLive, setHpLive] = useState<{ hp: number; maxHp: number } | null>(null);
@@ -225,14 +225,15 @@ export default function Hud() {
   // Both positions must be live: the player's from the sprite (`snap.me`
   // can be a full resync old) and the NPC's from its scheduled move (row
   // x/y is where the move ENDS, not where the NPC is).
-  useEffect(() => {
-    if (!talk || !snap) return;
+  // Checked during render (not in an effect), so the close happens on the same pass.
+  if (talk && snap) {
     const n = snap.npcs.find((x) => x.id === talk.npcId);
     const self = selfPos ?? snap.me;
-    if (!n || !self) return;
-    const p = livePos(n);
-    if (Math.hypot(p.x - self.x, p.y - self.y) > 160) setTalk(null);
-  }, [snap, talk, selfPos]);
+    if (n && self) {
+      const p = livePos(n);
+      if (Math.hypot(p.x - self.x, p.y - self.y) > 160) setTalk(null);
+    }
+  }
   // While the dialog is open, keep the NPC holding still (the server
   // stops scheduling its moves until the hold lapses after we close).
   const talkNpcId = talk?.npcId;
@@ -247,9 +248,7 @@ export default function Hud() {
   }, [talk, reading]);
   // The selected entity vanished (someone picked the item up, it despawned):
   // drop the stale card instead of showing it forever.
-  useEffect(() => {
-    if (rawSel && snap && !entityPos(snap, rawSel)) setSel(null);
-  }, [snap, rawSel]);
+  if (rawSel && snap && !entityPos(snap, rawSel)) setSel(null);
 
   const showGain = (items: { itemKey: string; qty: number; label?: string }[]) => bus.emit("gained", items);
 
@@ -1319,7 +1318,7 @@ function CraftModal({ craft, me, performCraft, onClose }: {
         <div className="flex items-start gap-3">
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">📜 Craft with {craft.npcName}</div>
-            {craft.recipes[0]?.line && <div className="mt-1 text-[12px] italic text-stone-600">"{craft.recipes[0].line}"</div>}
+            {craft.recipes[0]?.line && <div className="mt-1 text-[12px] italic text-stone-600">&ldquo;{craft.recipes[0].line}&rdquo;</div>}
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
@@ -1342,7 +1341,9 @@ function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null
   const needLevel = recipe.requires?.level ?? 0;
   const locked = (me?.me?.level ?? 1) < needLevel;
   const max = locked ? 0 : Math.max(0, maxCraftable(recipe, bag));
-  useEffect(() => { setQty((q) => Math.min(Math.max(1, q), Math.max(1, max))); }, [max]);
+  // Keep the quantity within what can be crafted now.
+  const clampedQty = Math.min(Math.max(1, qty), Math.max(1, max));
+  if (clampedQty !== qty) setQty(clampedQty);
   const canMake = max >= 1;
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
@@ -1458,7 +1459,7 @@ function TradeModal({ trade, performTrade, onClose }: {
         <div className="flex items-start gap-3">
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">💰 Trade with {trade.npcName}</div>
-            {trade.rows.length > 0 && <div className="mt-1 text-[12px] italic text-stone-600">"{trade.rows[0].trade.line}"</div>}
+            {trade.rows.length > 0 && <div className="mt-1 text-[12px] italic text-stone-600">&ldquo;{trade.rows[0].trade.line}&rdquo;</div>}
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
@@ -1484,7 +1485,9 @@ function TradeRow({ row, busy, onSell, firstQtyRef }: {
 }) {
   const [qty, setQty] = useState(1);
   const total = qty * row.trade.price;
-  useEffect(() => { setQty((q) => Math.min(Math.max(1, q), row.have)); }, [row.have]);
+  // Keep the quantity within what the player holds now.
+  const clampedQty = Math.min(Math.max(1, qty), row.have);
+  if (clampedQty !== qty) setQty(clampedQty);
   return (
     <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
       <span className="text-xl">{ITEM_ICONS[row.trade.itemKey] ?? "📦"}</span>
@@ -1581,11 +1584,9 @@ function DailyQuestsPanel() {
   };
   type Streak = { current: number; longest: number; lastCompletedOn: string | null };
   const [data, setData] = useState<{ quests: Quest[]; streak: Streak | null } | null>(null);
-  const load = async () => {
-    const r = await fetch("/api/quests/today");
-    if (r.ok) setData(await r.json());
-  };
-  useEffect(() => { void load(); }, []);
+  const fetchQuests = () => fetch("/api/quests/today").then(async (r) => (r.ok ? r.json() : null));
+  const applyQuests = (d: Awaited<ReturnType<typeof fetchQuests>>) => { if (d) setData(d); };
+  useEffect(() => { void fetchQuests().then(applyQuests); }, []);
   if (!data) return <div className="text-stone-500">loading…</div>;
   const targetOf = (q: Quest) => {
     const r = q.requirement as Record<string, unknown>;
@@ -1594,7 +1595,7 @@ function DailyQuestsPanel() {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <div className="text-sm font-bold text-amber-900">Today's quests</div>
+        <div className="text-sm font-bold text-amber-900">Today&rsquo;s quests</div>
         {data.streak && <div className="rounded-full bg-orange-200 px-2 py-0.5 text-[10px] font-bold text-orange-900">🔥 {data.streak.current}-day streak</div>}
       </div>
       {data.quests.map((q) => {
@@ -1628,11 +1629,10 @@ function FriendsPanel() {
   type Incoming = { id: number; fromUserId: number; from: { username: string; characterName: string | null } | null };
   type Friend = { username: string; characterName: string; status: "online" | "away" | "offline" };
   const [data, setData] = useState<{ incoming: Incoming[]; friends: Friend[] } | null>(null);
-  const load = async () => {
-    const r = await fetch("/api/friends");
-    if (r.ok) setData(await r.json());
-  };
-  useEffect(() => { void load(); const i = setInterval(load, 15_000); return () => clearInterval(i); }, []);
+  const fetchFriends = () => fetch("/api/friends").then(async (r) => (r.ok ? r.json() : null));
+  const applyFriends = (d: Awaited<ReturnType<typeof fetchFriends>>) => { if (d) setData(d); };
+  const load = () => fetchFriends().then(applyFriends);
+  useEffect(() => { void fetchFriends().then(applyFriends); const i = setInterval(load, 15_000); return () => clearInterval(i); }, []);
   const respond = async (id: number, decision: "accept" | "decline") => {
     await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: decision, requestId: id }) });
     await load();
