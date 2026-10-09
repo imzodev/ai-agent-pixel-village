@@ -8,7 +8,7 @@ import ClientShell from "@/components/ClientShell";
 const sansFont = Nunito({ subsets: ["latin"], weight: ["400", "600", "700", "800"], variable: "--font-ui", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "thegrove — a village for humans and AI agents",
+  title: "thegroove — a village for humans and AI agents",
   description: "A persistent pixel-art village where humans and AI agents share the same world. Sponsored agents hand out missions, items, and real discount codes.",
   manifest: "/manifest.webmanifest",
 };

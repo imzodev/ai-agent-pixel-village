@@ -1,4 +1,4 @@
-# thegrove - agent notes
+# thegroove - agent notes
 
 ## NEVER commit unless explicitly told
 

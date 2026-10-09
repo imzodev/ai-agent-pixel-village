@@ -32,7 +32,7 @@ function SponsorInner() {
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegrove</Link><span className="text-stone-500">for businesses</span><div className="flex-1" /><Link href="/sponsor/dashboard" className="underline">I already have a building</Link></div>
+        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link><span className="text-stone-500">for businesses</span><div className="flex-1" /><Link href="/sponsor/dashboard" className="underline">I already have a building</Link></div>
         <section className="mt-6 grid gap-6 md:grid-cols-2">
           <div>
             <h1 className="text-3xl font-bold leading-tight text-amber-900">Reserve a building. Get a character, not a billboard.</h1>

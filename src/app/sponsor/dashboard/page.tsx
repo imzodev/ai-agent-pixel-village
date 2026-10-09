@@ -51,7 +51,7 @@ function Dashboard() {
     return (
       <main className="min-h-dvh bg-stone-100 p-4 font-mono">
         <div className="mx-auto max-w-md rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4">
-          <Link href="/" className="font-bold text-amber-900">🌳 thegrove</Link>
+          <Link href="/" className="font-bold text-amber-900">🌳 thegroove</Link>
           <div className="mt-2 text-lg font-bold">Sponsor dashboard</div>
           <p className="text-stone-600">Paste the owner token you received when you reserved your building.</p>
           <form onSubmit={(e) => { e.preventDefault(); void load(token); }} className="mt-2 flex gap-1"><input value={token} onChange={(e) => setToken(e.target.value)} className="flex-1 rounded-lg border-2 border-amber-900/40 px-2 py-1.5" placeholder="owner token" /><button className="rounded-lg bg-orange-500 px-3 font-bold text-white">Open</button></form>
@@ -67,7 +67,7 @@ function Dashboard() {
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-5xl">
-        <div className="flex flex-wrap items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegrove</Link><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: s.brandColor }}>{s.businessName}</span><span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${s.status === "active" ? "bg-emerald-200 text-emerald-900" : s.status === "pending" ? "bg-yellow-200 text-yellow-900" : "bg-stone-300"}`}>{s.status}</span><div className="flex-1" /><Link href="/" className="rounded-lg bg-emerald-600 px-3 py-1 font-bold text-white">See your building live →</Link></div>
+        <div className="flex flex-wrap items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: s.brandColor }}>{s.businessName}</span><span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase ${s.status === "active" ? "bg-emerald-200 text-emerald-900" : s.status === "pending" ? "bg-yellow-200 text-yellow-900" : "bg-stone-300"}`}>{s.status}</span><div className="flex-1" /><Link href="/" className="rounded-lg bg-emerald-600 px-3 py-1 font-bold text-white">See your building live →</Link></div>
         {params.get("welcome") && <div className="mt-3 rounded-lg bg-emerald-100 px-3 py-2 text-emerald-900">🎉 Your sign is up on <b>{d.building?.name}</b> and <b>{d.agent?.name}</b> is standing outside. Bookmark this page — your owner token is in the URL.</div>}
         {s.status === "pending" && <div className="mt-3 rounded-lg bg-yellow-100 px-3 py-2 text-yellow-900">Waiting for payment confirmation. Your agent is in the world but won&apos;t pitch or hand out codes until the subscription is active.</div>}
 

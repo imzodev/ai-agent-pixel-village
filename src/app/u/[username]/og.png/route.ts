@@ -37,7 +37,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ username: stri
   </defs>
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
   <rect x="20" y="20" width="${W - 40}" height="${H - 40}" fill="none" stroke="#ffd166" stroke-width="6"/>
-  <text x="60" y="120" font-size="56" fill="#ffd166" font-weight="bold">🌳 thegrove</text>
+  <text x="60" y="120" font-size="56" fill="#ffd166" font-weight="bold">🌳 thegroove</text>
   <text x="60" y="230" font-size="84" fill="#fff" font-weight="bold">${escape(name)}</text>
   <text x="60" y="290" font-size="34" fill="#9aa">@${escape(username)} · lv ${level}</text>
   <g transform="translate(60,360)">

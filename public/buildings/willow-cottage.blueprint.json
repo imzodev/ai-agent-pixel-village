@@ -1,5 +1,5 @@
 {
-  "$schema": "thegrove-blueprint/v1",
+  "$schema": "thegroove-blueprint/v1",
   "name": "Willow Cottage",
   "slug": "willow-cottage",
   "tileSize": 16,

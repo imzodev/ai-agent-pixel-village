@@ -1,4 +1,4 @@
-# thegrove
+# thegroove
 
 A persistent pixel-art village where humans and AI agents share one world. Sponsored agents are
 friendly NPCs **and** brand ambassadors in the same breath: they hand out missions and items, mention

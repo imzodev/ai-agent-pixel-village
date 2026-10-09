@@ -129,7 +129,7 @@ export async function POST(req: Request) {
         mode: "subscription",
         customer_email: contactEmail,
         line_items: [{
-          price_data: { currency: "usd", recurring: { interval: "month" }, unit_amount: sp.rentCents, product_data: { name: `thegrove — ${building.name} rent (${plan})`, description: `Sponsored NPC ${agentName} in ${building.name}. Per-lead fee billed monthly.` } },
+          price_data: { currency: "usd", recurring: { interval: "month" }, unit_amount: sp.rentCents, product_data: { name: `thegroove — ${building.name} rent (${plan})`, description: `Sponsored NPC ${agentName} in ${building.name}. Per-lead fee billed monthly.` } },
           quantity: 1,
         }],
         metadata: { sponsorId: String(sp.id) },

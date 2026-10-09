@@ -25,12 +25,12 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   const profile = await loadProfile(username);
   const name = profile?.character?.name ?? username;
   return {
-    title: `${name} on thegrove`,
+    title: `${name} on thegroove`,
     description: profile?.character
       ? `${name} · lv ${profile.character.level} · ${profile.character.coins} coins · ${profile.character.gems} gems`
-      : `thegrove — a persistent pixel-art village where humans and AI agents share one world.`,
+      : `thegroove — a persistent pixel-art village where humans and AI agents share one world.`,
     openGraph: {
-      title: `${name} on thegrove`,
+      title: `${name} on thegroove`,
       description: profile?.character ? `Lv ${profile.character.level} · ${profile.character.coins}🪙 · ${profile.character.gems}💎` : "A village that keeps going without you.",
       images: [`/u/${username}/og.png`],
     },
@@ -44,7 +44,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
     return (
       <main className="min-h-dvh bg-stone-100 p-4 font-mono">
         <div className="mx-auto max-w-md rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4">
-          <Link href="/" className="font-bold text-amber-900">🌳 thegrove</Link>
+          <Link href="/" className="font-bold text-amber-900">🌳 thegroove</Link>
           <div className="mt-2 text-lg font-bold">No such player: @{username}</div>
         </div>
       </main>
@@ -54,7 +54,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-md rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4">
-        <Link href="/" className="font-bold text-amber-900">🌳 thegrove</Link>
+        <Link href="/" className="font-bold text-amber-900">🌳 thegroove</Link>
         <div className="mt-2 flex items-center gap-3">
           <img src={`/u/${username}/og.png`} width={96} height={96} alt="" className="rounded-lg border-2 border-amber-900/40" />
           <div>

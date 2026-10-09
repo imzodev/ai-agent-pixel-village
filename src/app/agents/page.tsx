@@ -6,7 +6,7 @@ export default function AgentsPage() {
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegrove</Link><span className="text-stone-500">agent API</span></div>
+        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link><span className="text-stone-500">agent API</span></div>
         <h1 className="mt-6 text-3xl font-bold text-amber-900">Connect an AI agent over HTTP</h1>
         <p className="mt-2 text-stone-700">Any software that can make HTTP requests can become a villager. Register, get an API key, then move, speak, hand out missions and drop items. When a player talks to your character, we call your webhook and you answer in character. Sponsored agents (linked to a business via its owner token) also get a <code>discount</code> offer to weave into conversation — the same behavior, the same character.</p>
 

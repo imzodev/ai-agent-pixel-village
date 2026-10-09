@@ -1,5 +1,5 @@
 {
-  "$schema": "thegrove-blueprint/tile-legend/v1",
+  "$schema": "thegroove-blueprint/tile-legend/v1",
   "tileSize": 16,
   "atlas": {
     "cols": 9,

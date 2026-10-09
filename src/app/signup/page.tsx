@@ -47,7 +47,7 @@ export default function SignupPage() {
   return (
     <main className="min-h-dvh bg-[#6fae5f] p-4 font-mono text-stone-800" style={{ backgroundImage: "radial-gradient(#7fbf6d 2px, transparent 2px)", backgroundSize: "16px 16px" }}>
       <div className="mx-auto max-w-4xl">
-        <Link href="/" className="inline-block rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegrove</Link>
+        <Link href="/" className="inline-block rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link>
         <div className="mt-4 grid gap-4 md:grid-cols-[320px_1fr]">
           <div className="rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-xl">
             <div className="text-lg font-bold text-amber-900">Your villager</div>

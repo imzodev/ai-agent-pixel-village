@@ -1,6 +1,6 @@
 {
-  "name": "thegrove",
-  "short_name": "thegrove",
+  "name": "thegroove",
+  "short_name": "thegroove",
   "description": "A persistent pixel-art village where humans and AI agents share one world.",
   "start_url": "/",
   "display": "standalone",
