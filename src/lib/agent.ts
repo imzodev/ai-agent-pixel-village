@@ -1,27 +1,15 @@
 import type { characters, npcs, sponsors } from "@/db/schema";
+import { webhookLogs } from "@/db/schema";
+import { db } from "@/db";
 import { getActiveProvider, chatWithFallback, type ChatMessage } from "@/lib/llm";
 import type { Offer } from "@/lib/types";
+import type { AgentWebhookConversation, BrainInput, BrainOutput } from "@/types/agent";
+import { AGENT_LIMITS, WEBHOOK_BREAKER } from "@/lib/agentLimits";
+import { assertPublicWebhookUrl } from "@/lib/safeUrl";
+import { signWebhook } from "@/lib/webhookSign";
 
 export type { Offer } from "@/lib/types";
-
-export type BrainInput = {
-  npc: typeof npcs.$inferSelect;
-  sponsor: typeof sponsors.$inferSelect | null;
-  character: typeof characters.$inferSelect;
-  message: string;
-  history: { role: string; text: string }[];
-  offers: Offer[];
-  hour: number;
-  weather: string;
-  /** Skip the LLM and scripted brain entirely (e.g. remote agent). */
-  skipLocalBrain?: boolean;
-  /** Force the scripted path (e.g. rate-limited). */
-  forceScripted?: boolean;
-  /** An NPC with a mind: how it feels about this player and what it's up to. */
-  mindNote?: string | null;
-};
-
-export type BrainOutput = { text: string; offerIds: string[]; source: "scripted" | "llm" | "remote" };
+export type { BrainInput, BrainOutput } from "@/types/agent";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -183,24 +171,95 @@ function parseBrainJson(raw: string, input: BrainInput, source: BrainOutput["sou
 }
 
 // ---------- Remote agent (HTTP webhook) ----------
+// Each call is signed (x-thegroove-signature), made to a re-checked public
+// address, redirects are refused, the reply is size-capped, and a webhook that
+// keeps failing is paused by a circuit breaker. Every call is logged.
+const breaker = new Map<number, { fails: number[]; openUntil: number }>();
+
+function breakerOpen(npcId: number): boolean {
+  const b = breaker.get(npcId);
+  return !!b && b.openUntil > Date.now();
+}
+
+function breakerNote(npcId: number, ok: boolean) {
+  const now = Date.now();
+  const b = breaker.get(npcId) ?? { fails: [], openUntil: 0 };
+  if (ok) {
+    b.fails = [];
+    b.openUntil = 0;
+  } else {
+    b.fails = [...b.fails.filter((t) => t > now - WEBHOOK_BREAKER.windowMs), now];
+    if (b.fails.length >= WEBHOOK_BREAKER.failures) {
+      b.openUntil = now + WEBHOOK_BREAKER.pauseMs;
+      b.fails = [];
+    }
+  }
+  breaker.set(npcId, b);
+}
+
+async function readCapped(res: Response, max: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      throw new Error("webhook reply too large");
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
+}
+
 async function remoteReply(input: BrainInput): Promise<BrainOutput | null> {
   const { npc } = input;
-  const res = await fetch(npc.webhookUrl!, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-grove-agent-key": npc.apiKey ?? "" },
-    body: JSON.stringify({
-      type: "conversation",
-      npc: { id: npc.id, key: npc.key, name: npc.name, role: npc.role, persona: npc.persona },
-      sponsor: input.sponsor ? { businessName: input.sponsor.businessName, pitch: input.sponsor.pitch, discountCode: input.sponsor.discountCode } : null,
-      player: { id: input.character.id, name: input.character.name, level: input.character.level },
-      message: input.message,
-      history: input.history.slice(-10),
-      offers: input.offers.map(({ id, type, label, line }) => ({ id, type, label, line })),
-      world: { hour: input.hour, weather: input.weather },
-    }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) return null;
-  const raw = await res.text();
-  return parseBrainJson(raw, input, "remote");
+  if (breakerOpen(npc.id)) return null;
+  const payload: AgentWebhookConversation = {
+    type: "conversation",
+    npc: { id: npc.id, key: npc.key, name: npc.name, role: npc.role, persona: npc.persona },
+    sponsor: input.sponsor ? { businessName: input.sponsor.businessName, pitch: input.sponsor.pitch, discountCode: input.sponsor.discountCode } : null,
+    player: { id: input.character.id, name: input.character.name, level: input.character.level },
+    message: input.message,
+    history: input.history.slice(-10),
+    offers: input.offers.map(({ id, type, label, line }) => ({ id, type, label, line })),
+    world: { hour: input.hour, weather: input.weather },
+  };
+  const body = JSON.stringify(payload);
+  const ts = Date.now();
+  const headers: Record<string, string> = { "content-type": "application/json", "x-thegroove-timestamp": String(ts) };
+  if (npc.webhookSecret) headers["x-thegroove-signature"] = signWebhook(npc.webhookSecret, ts, body);
+  // Legacy agents registered before signing still get their key echoed back.
+  if (npc.apiKey) headers["x-grove-agent-key"] = npc.apiKey;
+
+  let ok = false;
+  let detail = "";
+  try {
+    await assertPublicWebhookUrl(npc.webhookUrl!);
+    const res = await fetch(npc.webhookUrl!, {
+      method: "POST",
+      headers,
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(AGENT_LIMITS.webhookTimeoutMs),
+    });
+    if (!res.ok) {
+      detail = `http ${res.status}`;
+      return null;
+    }
+    const raw = await readCapped(res, AGENT_LIMITS.webhookBytes);
+    const out = parseBrainJson(raw, input, "remote");
+    ok = true;
+    detail = "ok";
+    return out;
+  } catch (e) {
+    detail = ((e as Error).message || "error").slice(0, 200);
+    return null;
+  } finally {
+    breakerNote(npc.id, ok);
+    void db.insert(webhookLogs).values({ npcId: npc.id, ok, detail }).catch(() => null);
+  }
 }

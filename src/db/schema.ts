@@ -167,7 +167,13 @@ export const npcs = pgTable(
     sponsorId: integer("sponsor_id"),
     buildingId: integer("building_id"),
     kind: text("kind").notNull().default("builtin"), // builtin | remote
+    // Legacy plaintext key (kept until every agent has a hash; see agentApi.ts).
     apiKey: text("api_key").unique(),
+    // sha256 of the key, plus its first chars for display. New keys live only here.
+    apiKeyHash: text("api_key_hash").unique(),
+    apiKeyPrefix: text("api_key_prefix"),
+    // HMAC secret for signed webhooks (shown once, rotatable).
+    webhookSecret: text("webhook_secret"),
     webhookUrl: text("webhook_url"),
     mood: text("mood").notNull().default("cheerful"),
     // Current scheduled move (see src/lib/motion.ts). `x`/`y` hold the

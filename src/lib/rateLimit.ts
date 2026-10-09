@@ -34,3 +34,17 @@ export const npcLlmLimiter = new SlidingWindowLimiter({
   max: Number(process.env.NPC_LLM_RATE_PER_MIN ?? "3"),
   windowMs: 60_000,
 });
+
+// External agent API (src/app/api/agents). Keys are agent ids, or client IP
+// for registration. Caps are env-tunable; see AGENT_RATE in agentLimits.ts.
+const envInt = (name: string, fallback: number) => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+};
+export const agentWriteLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_WRITE_PER_MIN", 30), windowMs: 60_000 });
+export const agentSayLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_SAY_PER_MIN", 6), windowMs: 60_000 });
+export const agentMoveLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_MOVE_PER_MIN", 12), windowMs: 60_000 });
+export const agentDropLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_DROP_PER_HOUR", 10), windowMs: 3_600_000 });
+export const agentMissionLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_MISSION_PER_HOUR", 5), windowMs: 3_600_000 });
+export const agentReadLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_READ_PER_MIN", 60), windowMs: 60_000 });
+export const agentRegisterLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_REGISTER_PER_HOUR", 5), windowMs: 3_600_000 });

@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 type Dash = {
   sponsor: { id: number; businessName: string; status: string; brandColor: string; tagline: string; pitch: string; persona: string; discountCode: string; discountText: string; website: string | null; agentName: string; plan: string };
   building: { name: string; key: string } | null;
-  agent: { id: number; name: string; role: string; kind: string; apiKey: string | null; webhookUrl: string | null } | null;
+  agent: { id: number; name: string; role: string; kind: string; keyPrefix: string | null; webhookUrl: string | null } | null;
   leads: { id: number; kind: string; code: string | null; feeCents: number; note: string; createdAt: string; playerName: string; playerLevel: number }[];
   missions: { id: number; title: string }[];
   billing: { rentCents: number; leadFeeCents: number; leadFeesCents: number; totalCents: number; plan: string };
@@ -22,6 +22,7 @@ function Dashboard() {
   const [token, setToken] = useState(params.get("token") ?? "");
   const [d, setD] = useState<Dash | null>(null);
   const [err, setErr] = useState("");
+  const [newSecrets, setNewSecrets] = useState<{ apiKey: string | null; webhookSecret: string | null } | null>(null);
   const [edit, setEdit] = useState<{ pitch: string; persona: string; discountCode: string; discountText: string; tagline: string; webhookUrl: string; agentName: string } | null>(null);
   const [saved, setSaved] = useState("");
 
@@ -44,7 +45,11 @@ function Dashboard() {
 
   const save = async (extra: Record<string, unknown> = {}) => {
     const res = await fetch("/api/sponsors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, ...edit, ...extra }) });
-    if (res.ok) { setSaved("Saved — your agent updated live."); setTimeout(() => setSaved(""), 3000); void load(token); }
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) { setSaved(j.error ?? "Could not save."); return; }
+    // Keys and secrets come back once, right after they are created or rotated.
+    if (j.apiKey || j.webhookSecret) setNewSecrets({ apiKey: j.apiKey ?? null, webhookSecret: j.webhookSecret ?? null });
+    setSaved("Saved — your agent updated live."); setTimeout(() => setSaved(""), 3000); void load(token);
   };
 
   if (!d) {
@@ -109,7 +114,16 @@ function Dashboard() {
                   <div className="grid grid-cols-2 gap-2"><F label="Code"><input value={edit.discountCode} onChange={(e) => setEdit({ ...edit, discountCode: e.target.value.toUpperCase() })} className="inp" /></F><F label="Tagline"><input value={edit.tagline} onChange={(e) => setEdit({ ...edit, tagline: e.target.value })} className="inp" /></F></div>
                   <F label="What the code gets them"><input value={edit.discountText} onChange={(e) => setEdit({ ...edit, discountText: e.target.value })} className="inp" /></F>
                   <F label="Bring your own agent — webhook URL (optional)"><input value={edit.webhookUrl} onChange={(e) => setEdit({ ...edit, webhookUrl: e.target.value })} placeholder="https://your-agent.example/grove" className="inp" /></F>
-                  <div className="text-[11px] text-stone-500">We POST each player message to your webhook with the persona, history and available offers; reply with <code>{`{"text": "...", "offers": ["discount:1"]}`}</code>. See <Link href="/agents" className="underline">the agent API</Link>. Agent API key: <code className="break-all">{d.agent?.apiKey}</code></div>
+                  <div className="text-[11px] text-stone-500">We POST each player message to your webhook with the persona, history and available offers; reply with <code>{`{"text": "...", "offers": ["discount:1"]}`}</code>. See <Link href="/agents" className="underline">the agent API</Link>.</div>
+                  <div className="text-[11px] text-stone-500">Agent API key: <code>{d.agent?.keyPrefix ? `${d.agent.keyPrefix}…` : "none yet (save a webhook URL to create one)"}</code>{d.agent?.keyPrefix && <button onClick={() => { if (confirm("Rotate the key? The old one stops working immediately.")) void save({ rotateKey: true }); }} className="ml-2 underline">rotate</button>}</div>
+                  {newSecrets && (
+                    <div className="rounded-lg border-2 border-amber-600 bg-amber-50 p-2 text-[11px] text-amber-900">
+                      <div className="font-bold">Copy these now. They are shown only once.</div>
+                      {newSecrets.apiKey && <div>API key: <code className="break-all">{newSecrets.apiKey}</code></div>}
+                      {newSecrets.webhookSecret && <div>Webhook secret (verifies x-thegroove-signature): <code className="break-all">{newSecrets.webhookSecret}</code></div>}
+                      <button onClick={() => setNewSecrets(null)} className="mt-1 underline">I saved them</button>
+                    </div>
+                  )}
                   <button onClick={() => save()} className="w-full rounded-lg bg-orange-500 px-3 py-2 font-bold text-white">Save & update agent</button>
                   {saved && <div className="text-emerald-700">{saved}</div>}
                 </div>

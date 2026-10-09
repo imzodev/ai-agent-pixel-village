@@ -10,6 +10,8 @@ export async function POST(req: Request) {
   const key = process.env.STRIPE_SECRET_KEY;
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!key) return Response.json({ error: "Payments not configured" }, { status: 400 });
+  // Never accept unsigned events in production: anyone could activate or cancel a sponsorship.
+  if (!secret && process.env.NODE_ENV === "production") return Response.json({ error: "webhook secret not configured" }, { status: 503 });
   const stripe = new Stripe(key);
   const raw = await req.text();
   let event: Stripe.Event;

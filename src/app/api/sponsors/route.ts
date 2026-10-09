@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import Stripe from "stripe";
 import { db } from "@/db";
@@ -7,6 +7,7 @@ import { handleApiError } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
+import { attachExternalController, issueAgentKey } from "@/lib/agentApi";
 
 export const dynamic = "force-dynamic";
 
@@ -177,13 +178,14 @@ export async function GET(req: Request) {
       }
     }
     const [building] = sp.buildingId ? await db.select().from(buildings).where(eq(buildings.id, sp.buildingId)) : [null];
-    const [agent] = await db.select().from(npcs).where(eq(npcs.sponsorId, sp.id));
+    const [agent] = await db.select().from(npcs).where(and(eq(npcs.sponsorId, sp.id), eq(npcs.active, true))).orderBy(desc(npcs.id));
     const leadRows = await db.select({ lead: leads, playerName: characters.name, playerLevel: characters.level }).from(leads).innerJoin(characters, eq(characters.id, leads.characterId)).where(eq(leads.sponsorId, sp.id)).orderBy(desc(leads.id)).limit(200);
     const ms = await db.select().from(missions).where(eq(missions.sponsorId, sp.id));
     const [{ fees }] = await db.select({ fees: sql<number>`coalesce(sum(${leads.feeCents}), 0)::int` }).from(leads).where(eq(leads.sponsorId, sp.id));
     return Response.json({
       sponsor: { ...sp, ownerToken: undefined },
-      building, agent: agent ? { id: agent.id, name: agent.name, role: agent.role, kind: agent.kind, apiKey: agent.apiKey, webhookUrl: agent.webhookUrl, x: agent.x, y: agent.y } : null,
+      // Keys are never returned after creation; the dashboard shows the prefix and can rotate.
+      building, agent: agent ? { id: agent.id, name: agent.name, role: agent.role, kind: agent.kind, keyPrefix: agent.apiKeyPrefix, webhookUrl: agent.webhookUrl, x: agent.x, y: agent.y } : null,
       leads: leadRows.map((r) => ({ ...r.lead, playerName: r.playerName, playerLevel: r.playerLevel })),
       missions: ms,
       billing: { rentCents: sp.rentCents, leadFeeCents: sp.leadFeeCents, leadFeesCents: fees, totalCents: sp.rentCents + fees, plan: PLANS[sp.plan]?.label ?? sp.plan },
@@ -207,19 +209,39 @@ export async function PATCH(req: Request) {
     if (typeof b.brandColor === "string") patch.brandColor = hex(b.brandColor, sp.brandColor);
     if (b.status === "cancelled") patch.status = "cancelled";
     await db.update(sponsors).set(patch).where(eq(sponsors.id, sp.id));
+    // Only the live agent of this sponsor is changed (not retired ones).
+    const [home] = await db.select().from(npcs).where(and(eq(npcs.sponsorId, sp.id), eq(npcs.active, true))).orderBy(desc(npcs.id));
     const npcPatch: Partial<typeof npcs.$inferInsert> = {};
     if (patch.persona) npcPatch.persona = patch.persona;
-    if (typeof b.webhookUrl === "string") npcPatch.webhookUrl = b.webhookUrl.trim() || null;
-    if (typeof b.webhookUrl === "string") npcPatch.kind = b.webhookUrl.trim() ? "remote" : "builtin";
     if (typeof b.agentName === "string" && b.agentName.trim()) npcPatch.name = b.agentName.trim().slice(0, 30);
-    if (Object.keys(npcPatch).length) await db.update(npcs).set(npcPatch).where(eq(npcs.sponsorId, sp.id));
+    let issued: { apiKey: string | null; webhookSecret: string | null } = { apiKey: null, webhookSecret: null };
+    if (home && Object.keys(npcPatch).length) await db.update(npcs).set(npcPatch).where(eq(npcs.id, home.id));
+    if (home && typeof b.webhookUrl === "string") {
+      const url = b.webhookUrl.trim();
+      if (url) {
+        try {
+          issued = await attachExternalController(home, url);
+        } catch (e) {
+          return Response.json({ error: `webhookUrl: ${(e as Error).message}` }, { status: 400 });
+        }
+      } else {
+        await db.update(npcs).set({ webhookUrl: null, kind: "builtin" }).where(eq(npcs.id, home.id));
+      }
+    }
+    let rotated: string | null = null;
+    if (home && b.rotateKey === true) rotated = await issueAgentKey(home.id);
     if (patch.status === "cancelled") {
       await db.update(npcs).set({ active: false }).where(eq(npcs.sponsorId, sp.id));
       if (sp.buildingId) await db.update(buildings).set({ sponsorId: null }).where(eq(buildings.id, sp.buildingId));
       const s = stripe();
       if (s && sp.stripeSubscriptionId) await s.subscriptions.cancel(sp.stripeSubscriptionId).catch(() => null);
     }
-    return Response.json({ ok: true });
+    // Secrets are returned once, only when they were just created or rotated.
+    return Response.json({
+      ok: true,
+      ...(issued.apiKey || rotated ? { apiKey: issued.apiKey ?? rotated } : {}),
+      ...(issued.webhookSecret ? { webhookSecret: issued.webhookSecret } : {}),
+    });
   } catch (e) {
     return handleApiError(e);
   }

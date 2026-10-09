@@ -136,6 +136,19 @@ async function main(): Promise<void> {
     }
   };
 
+  // Webhook call logs (agent API) are kept a week; prune hourly.
+  let lastLogPrune = 0;
+  const maybePruneWebhookLogs = async (): Promise<void> => {
+    const now = Date.now();
+    if (now - lastLogPrune < LOT_SWEEP_MS) return;
+    lastLogPrune = now;
+    try {
+      await pool.query("delete from webhook_logs where created_at < now() - interval '7 days'");
+    } catch (err) {
+      log.error({ err }, "webhook log prune failed");
+    }
+  };
+
   const maybeRefreshView = async (): Promise<void> => {
     const now = Date.now();
     if (now - lastViewRefresh < VIEW_REFRESH_MS) return;
@@ -188,6 +201,7 @@ async function main(): Promise<void> {
     await inFlight;
     await maybeRefreshView();
     await maybeReleaseInactiveLots();
+    await maybePruneWebhookLogs();
   }
 }
 
