@@ -1,5 +1,32 @@
 # Runbook
 
+## Deploying
+
+Pushing to `main` runs `.github/workflows/deploy.yml`: typecheck, lint and tests, then SSH to the droplet and run `scripts/deploy.sh <sha>`. The script builds the new commit in `releases/<sha>` while the live one keeps serving, runs the drift fix and `db:push`, draws the map, swaps the `current` symlink and restarts pm2 (server first, then tickd). It then polls `/api/health` and rolls back if that fails. Expect a few seconds of WebSocket reconnects per deploy.
+
+Layout on the droplet (`/srv/thegroove`):
+
+- `releases/<sha>/`: one checkout per deploy, the newest 5 kept
+- `current` → the live release
+- `shared/.env`: secrets, linked into every release
+- `shared/.cache/`: map tiles and nav grids, so they survive deploys
+- `shared/lpc/*.png`: sprite sheets (`public/lpc` is gitignored)
+
+Manual deploy or rollback:
+
+```bash
+/srv/thegroove/current/scripts/deploy.sh <sha>          # deploy any commit on main
+ln -sfn /srv/thegroove/releases/<old-sha> /srv/thegroove/current.next \
+  && mv -Tf /srv/thegroove/current.next /srv/thegroove/current \
+  && cd /srv/thegroove/current && pm2 delete ai-village-server ai-village-tickd; pm2 start ecosystem.config.js && pm2 save
+```
+
+One-time setup (not automated): create `releases/` and `shared/`, move the live `.env` and `.cache` into `shared/`, copy the `public/lpc/*.png` sprites into `shared/lpc/`, and make sure `node`, `pnpm`, `pm2`, `psql` and `git` are on the deploy user's PATH. The deploy user also needs read access to the GitHub repo, and the Action needs `DEPLOY_HOST`, `DEPLOY_USER` and `DEPLOY_SSH_KEY` secrets. Keep port 5432 firewalled.
+
+## Health
+
+`GET /api/health` (`src/app/api/health/route.ts`) reports DB reachability and WS state; the deploy script polls it. Some notes below predate this endpoint.
+
 The HTTP `health` and `metrics` endpoints were removed at the user's request. The underlying registries are still kept (metrics in `src/lib/metrics.ts`, lifecycle flags in `src/lib/lifecycle.ts`) so a future endpoint can expose them. This runbook therefore uses what is actually available today: the lifecycle state, the metrics module via a future endpoint, the Postgres connection state, and the WS logs.
 
 ## High p99 latency on the WS path (snapshot refresh)

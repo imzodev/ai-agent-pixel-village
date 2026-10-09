@@ -19,11 +19,23 @@
 //   - WS_REFRESH_MS: how often the WS pushes a fresh snapshot (default 5s).
 //   - WS_MAX_UPGRADES_PER_IP / WS_IP_WINDOW_MS: Phase 4 rate limit.
 
+// Deploys run from release directories (scripts/deploy.sh): `current` is a
+// symlink, and `cwd: __dirname` follows whichever release this file lives in.
+// tsx runs from node_modules/tsx (its JS entry, not the .bin shim, which is a
+// shell script) so pm2 doesn't need it on PATH. The server
+// drains for 5 s on SIGTERM (src/server.ts), so kill_timeout must be longer.
+const TSX = "node_modules/tsx/dist/cli.mjs";
+
 module.exports = {
   apps: [
     {
       name: "ai-village-server",
-      script: "tsx src/server.ts",
+      cwd: __dirname,
+      script: TSX,
+      node_args: "--env-file=.env",
+      args: "src/server.ts",
+      interpreter: "node",
+      kill_timeout: 10000,
       // The custom server boots Next.js + the WS on a single port.
       env: {
         NODE_ENV: "production",
@@ -32,7 +44,13 @@ module.exports = {
     },
     {
       name: "ai-village-tickd",
-      script: "tsx src/lib/world-tickd.ts",
+      cwd: __dirname,
+      script: TSX,
+      node_args: "--env-file=.env",
+      args: "src/lib/world-tickd.ts",
+      interpreter: "node",
+      // Long enough for tickd to release its advisory lock (pg lock 42).
+      kill_timeout: 10000,
       env: {
         NODE_ENV: "production",
       },
