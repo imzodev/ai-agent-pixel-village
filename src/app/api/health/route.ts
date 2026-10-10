@@ -1,6 +1,6 @@
 import { pool } from "@/db";
 import { redisDegraded } from "@/lib/redis";
-import { wsConnectionCount } from "@/lib/world-stream";
+import { wsConnectionCount, wsSpectatorCount } from "@/lib/world-stream";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId, parseShardRegions } from "@/lib/shards";
 import type { Health } from "@/types/health";
@@ -18,6 +18,7 @@ export async function GET() {
     },
     ws: {
       connections: wsConnectionCount(),
+      spectators: wsSpectatorCount(),
       shard: localShardId(),
       shardCount: parseShardRegions(process.env.WS_SHARD_REGIONS).length,
       draining,

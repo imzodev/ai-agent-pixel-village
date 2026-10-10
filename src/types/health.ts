@@ -11,6 +11,8 @@ export type Health = {
   };
   ws: {
     connections: number;
+    /** Logged-out visitors watching the village. */
+    spectators: number;
     shard: string;
     shardCount: number;
     draining: boolean;

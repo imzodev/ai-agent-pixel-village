@@ -52,6 +52,10 @@ export type WsSharedState = {
   combat: CombatState;
   dirtyPoints: Array<{ x: number; y: number }>;
   dirtyTimer: ReturnType<typeof setTimeout> | null;
+  /** Logged-out visitors watching the village (read-only, no player). */
+  spectators: Set<WebSocket>;
+  /** The latest shared visitor snapshot (built once a beat), if any. */
+  spectatorSnap: WorldSnapshot | null;
 };
 
 /** Client-side stream callbacks. */

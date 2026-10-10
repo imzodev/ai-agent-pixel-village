@@ -170,12 +170,15 @@ export class WorldStream {
       // "error" is observable via close events; nothing to do.
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (e) => {
       this.stopHeartbeat();
       this.stopPositionStream();
       this.stopClockSync();
       this.opts.handlers.onClose?.();
-      if (!this.closed) this.scheduleReconnect();
+      if (this.closed) return;
+      // 4429: the village is full of visitors. Try again in a minute, not in a burst.
+      if (e.code === 4429) this.reconnectTimer = setTimeout(() => this.connect(), 60_000);
+      else this.scheduleReconnect();
     };
 
     this.ws.onerror = () => {

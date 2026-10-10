@@ -34,6 +34,7 @@ import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
+import PitchCard from "./PitchCard";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
 import { ENCOUNTERS } from "@/lib/encounters";
@@ -844,6 +845,7 @@ export default function Hud() {
           </div>
         )}
         <div className="hidden sm:contents">{navItems(() => {})}</div>
+        {!loggedIn && <Link href="/signup" className="shrink-0 rounded-lg bg-emerald-500 px-2 py-1 font-bold text-white hover:bg-emerald-400 sm:hidden">Play free</Link>}
         <div className="relative shrink-0 sm:hidden">
           <TopBtn on={() => setMenuOpen((o) => !o)} active={menuOpen}>☰</TopBtn>
           {navBadge && !menuOpen && <span className="pointer-events-none absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-white bg-red-500" />}
@@ -870,17 +872,8 @@ export default function Hud() {
         </div>
       )}
 
-      {/* Welcome card for spectators */}
-      {snap && !loggedIn && !auth && (
-        <div className="pointer-events-auto absolute bottom-24 left-1/2 w-[min(92vw,420px)] -translate-x-1/2 pixel-panel p-4 shadow-xl">
-          <div className="text-lg font-bold text-amber-900">A village that keeps going without you.</div>
-          <p className="mt-1 text-stone-700">You&apos;re watching live. Animals wander, weather turns, AI agents run the shops — some of them sponsored by real businesses that hand out real discount codes. Drag to look around, scroll to zoom, click anything to learn about it.</p>
-          <div className="mt-3 flex gap-2">
-            <Link href="/signup" className="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-500">Create your character →</Link>
-            <button className="rounded-lg bg-stone-200 px-3 py-2 hover:bg-stone-300" onClick={() => setAuth("login")}>I have one</button>
-          </div>
-        </div>
-      )}
+      {/* The pitch for logged-out visitors, over the live village */}
+      {snap && !loggedIn && !auth && <PitchCard snap={snap} onLogin={() => setAuth("login")} />}
 
       {/* Login */}
       {auth && <LoginModal onClose={() => setAuth(null)} />}
@@ -1022,7 +1015,6 @@ export default function Hud() {
           <button className="rounded-lg bg-amber-700 px-3 text-white">Say</button>
         </form>
       )}
-      {!loggedIn && <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/40 px-2 py-1 text-[11px] text-white">Spectating · <span className="sm:hidden">drag · pinch · tap things</span><span className="hidden sm:inline">drag to pan · scroll to zoom · click things</span></div>}
 
       {/* Toasts + gains (their own component: bursts don't re-render the HUD) */}
       <Notifications />

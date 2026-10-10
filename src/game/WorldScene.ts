@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { VISITOR_CHUNK } from "@/lib/constants";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SHOOT_FRAMES, SHOOT_RELEASE_FRAME, SHOOT_ROW, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
@@ -299,9 +300,10 @@ export class WorldScene extends Phaser.Scene {
         }
       }
     }
-    // Initial chunk window: central chunk (0, 0). Streaming kicks in once the
-    // player crosses a chunk boundary in updatePlayer.
-    this.lastPlayerChunk = { cx: 0, cy: 0 };
+    // Initial chunk window: the village (VISITOR_CHUNK), which is all a
+    // logged-out visitor ever sees. A player's window follows them once they
+    // cross a chunk boundary in updatePlayer.
+    this.lastPlayerChunk = { ...VISITOR_CHUNK };
     await ensureChunks(this, this.lastPlayerChunk);
     // The scene may have been shut down during the await (StrictMode
     // remount, HMR, navigation). Stop before touching Phaser again.
@@ -430,7 +432,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     // bus wiring
-    this.unsub.push(bus.on("focus", ({ x, y }) => this.cameras.main.pan(x, y, 500)));
+    this.unsub.push(bus.on("focus", ({ x, y, ms }) => this.cameras.main.pan(x, y, ms ?? 500, "Sine.easeInOut")));
     this.unsub.push(bus.on("moveTo", ({ x, y }) => { this.moveTarget = { x, y }; this.marker.setPosition(x, y).setVisible(true); }));
     this.unsub.push(bus.on("poke", () => { this.lastHeartbeat = 0; }));
     this.unsub.push(bus.on("attack", (e) => {
@@ -736,17 +738,11 @@ export class WorldScene extends Phaser.Scene {
       if (s.me.equipped.includes("lantern") && !this.player.glow) {
         this.player.glow = this.add.circle(s.me.x, s.me.y, 70, 0xffc866, 0.16).setDepth(DEPTH_LIGHT).setBlendMode(Phaser.BlendModes.ADD);
       }
-    } else if (!this.player) {
-      // No `s.me` on the very first snapshot (e.g. cookie not yet set
-      // up). Place the player at the central chunk so we have something
-      // to follow. Subsequent snapshots with `s.me` non-null will spawn
-      // a real sprite; we still won't destroy this placeholder.
-      const spawn = chunkCenter(0, 0);
-      this.player = this.makeChar(spawn.x, spawn.y, "you", { body: "male", skin: "#f1c9a5", hair: "plain", hairColor: "#5a3a1a", shirtColor: "#4a7c59", pantsColor: "#3a3a4a" }, PLAYER_SPEED, "#ffe08a");
-      this.player.sprite.setDepth(DEPTH_CHAR_BASE + spawn.y);
-      this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
-      this.resizeOverlays();
     }
+    // No `s.me`: a logged-out visitor. There's no player sprite and nothing
+    // to follow; the camera stays free (drag, zoom, the visitor tour) inside
+    // the chunk window around the village. A player whose `me` arrives on a
+    // later snapshot is spawned then, by the branch above.
     // other players
     this.syncChars(this.players, s.players.filter((p) => p.id !== this.meId), 130, "#d6f5ff", (p) => ({ type: "player", id: p.id, name: p.name, distance: this.distTo(p.x, p.y) }));
     // npcs

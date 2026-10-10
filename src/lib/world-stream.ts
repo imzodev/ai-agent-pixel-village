@@ -27,7 +27,8 @@ import { WebSocketServer } from "ws";
 import { and, asc, eq, gt, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, enemies, inventory, sessions, users, wildChunks, worldState } from "@/db/schema";
-import { CHUNK_TILE_H, CHUNK_TILE_W, chunkAtWorldPx } from "@/lib/chunkCollision";
+import { CHUNK_PX_H, CHUNK_PX_W, CHUNK_TILE_H, CHUNK_TILE_PX, CHUNK_TILE_W, chunkAtWorldPx } from "@/lib/chunkCollision";
+import { overlapsVisitorView } from "@/lib/visitorView";
 import { enemySnapshotOf, getSnapshot, invalidateSnapshots, PROXIMITY_RADIUS_PX } from "@/lib/snapshot";
 import { refreshLastSeen } from "@/lib/presence";
 import { initRedis, subscribePubSub } from "@/lib/redis";
@@ -36,7 +37,7 @@ import { metrics } from "@/lib/metrics";
 import { log } from "@/lib/logger";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId } from "@/lib/shards";
-import { BROADCAST_OFFSET_MS, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
+import { BROADCAST_OFFSET_MS, VISITOR_CHUNK, WORLD_TICK_MS, WS_RESYNC_MS } from "@/lib/constants";
 import { beatIndex, nextBeatAt, rowPositionAt, tileCenter, tileOf } from "@/lib/motion";
 import { ENEMY_KINDS, enemyDmgAt, enemyHpAt, enemyKind, enemyZoneAt, isAggressive } from "@/lib/progression";
 import { biomeAt, inHeartland, tierAt } from "@/lib/continent";
@@ -114,12 +115,14 @@ function getSharedState(): WsSharedState {
   const g = globalThis as unknown as Record<string, WsSharedState | undefined>;
   let s = g[SHARED_STATE_KEY];
   if (!s) {
-    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null, guards: new Map(), bikes: new Map(), combat: newCombat() };
+    s = { connections: new Map(), dirtyPoints: [], dirtyTimer: null, guards: new Map(), bikes: new Map(), combat: newCombat(), spectators: new Set(), spectatorSnap: null };
     g[SHARED_STATE_KEY] = s;
   }
   // Added later: a hot-reloaded process may hold an older state object.
   s.guards ??= new Map();
   s.bikes ??= new Map();
+  s.spectators ??= new Set();
+  s.spectatorSnap ??= null;
   s.combat ??= newCombat();
   if (!(s.combat.rows instanceof Map)) Object.assign(s.combat, { rows: new Map(), rowsAt: 0, verifiedAt: new Map() }); // an older hot-reloaded shape
   return s;
@@ -130,6 +133,69 @@ const connections = shared.connections;
 const guards = shared.guards;
 const combat = shared.combat;
 const bikes = shared.bikes;
+const spectators = shared.spectators;
+
+// ── Spectators (logged-out visitors) ───────────────────────────────────
+// Visitors watch the village read-only. They live in their own set, never
+// in `connections`, so nothing player-only (relays, presence, wild packs,
+// combat) sees them. Everyone watches the same spot, so one snapshot is
+// built a beat and the same string goes to all of them.
+const SPECTATOR_MAX = Number(process.env.SPECTATOR_MAX ?? 500);
+// Centre of the visitor chunk (as the client's chunkCenter), where a
+// visitor's camera starts; the snapshot's proximity radius covers the chunk
+// window they can pan around.
+const SPECTATOR_X = VISITOR_CHUNK.cx * CHUNK_PX_W + CHUNK_PX_W / 2;
+const SPECTATOR_Y = -VISITOR_CHUNK.cy * CHUNK_PX_H + CHUNK_PX_H / 2;
+
+async function buildSpectatorSnap(): Promise<WorldSnapshot | null> {
+  try {
+    const snap = await getSnapshot(null, SPECTATOR_X, SPECTATOR_Y);
+    applyLivePositions(snap);
+    // The snapshot carries every building on the continent (~250, most of
+    // its bytes); a visitor only sees the dozen in their window. (A copy:
+    // the built snapshot may be the shared cached one.)
+    shared.spectatorSnap = {
+      ...snap,
+      buildings: snap.buildings.filter((b) => overlapsVisitorView(b.tx * CHUNK_TILE_PX, b.ty * CHUNK_TILE_PX, b.tw * CHUNK_TILE_PX, b.th * CHUNK_TILE_PX)),
+    };
+  } catch (err) {
+    log.error({ err }, "spectator snapshot build failed");
+  }
+  return shared.spectatorSnap;
+}
+
+/** The snapshot message, stamped now (the client syncs its clock to it). */
+const spectatorMsg = (snap: WorldSnapshot) => JSON.stringify({ type: "snapshot", data: { ...snap, now: Date.now() } });
+
+function sendToSpectator(ws: WebSocket, msg: string): void {
+  if (ws.readyState !== ws.OPEN) return;
+  if (((ws as unknown as { bufferedAmount?: number }).bufferedAmount ?? 0) > SKIP_BUFFERED_BYTES) return; // the next beat heals it
+  try { ws.send(msg); } catch { /* socket closed */ }
+}
+
+async function onSpectator(ws: WebSocket): Promise<void> {
+  if (spectators.size >= SPECTATOR_MAX) {
+    ws.close(4429, "too many visitors");
+    return;
+  }
+  spectators.add(ws);
+  const drop = () => { spectators.delete(ws); };
+  ws.on("close", drop);
+  ws.on("error", drop);
+  // Read-only: whatever a visitor sends is ignored.
+  ws.on("message", () => {});
+  const snap = shared.spectatorSnap ?? await buildSpectatorSnap();
+  if (snap) sendToSpectator(ws, spectatorMsg(snap));
+}
+
+/** Once a beat: one fresh snapshot, serialised once, for every visitor. */
+async function spectatorBeat(): Promise<void> {
+  if (spectators.size === 0) { shared.spectatorSnap = null; return; }
+  const snap = await buildSpectatorSnap();
+  if (!snap) return;
+  const msg = spectatorMsg(snap);
+  for (const ws of spectators) sendToSpectator(ws, msg);
+}
 
 // ── Speed limit (src/lib/speedGuard.ts) ────────────────────────────────
 /** How long a "does this player own a bike" answer is trusted. */
@@ -359,7 +425,8 @@ async function authenticate(req: http.IncomingMessage): Promise<{ playerId: numb
 async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<void> {
   const auth = await authenticate(req);
   if (!auth) {
-    ws.close(4401, "unauthenticated");
+    // Not logged in: watch the village as a visitor.
+    await onSpectator(ws);
     return;
   }
 
@@ -657,6 +724,11 @@ async function onBeat(boundary: number): Promise<void> {
     await treeBeat();
   } catch (err) {
     log.error({ err }, "tree sync failed");
+  }
+  try {
+    await spectatorBeat();
+  } catch (err) {
+    log.error({ err }, "spectator beat failed");
   }
   if (connections.size === 0) {
     // Nobody to tell: whoever connects next gets them in their snapshot.
@@ -1347,6 +1419,11 @@ export function closeAllWs(wss: WebSocketServer): void {
  *  for future operational tooling; no HTTP endpoint currently reads it. */
 export function wsConnectionCount(): number {
   return connections.size;
+}
+
+/** Number of logged-out visitors watching the village. */
+export function wsSpectatorCount(): number {
+  return spectators.size;
 }
 
 // Re-export so callers that still want to boot this as a standalone

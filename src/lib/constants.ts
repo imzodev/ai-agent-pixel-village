@@ -146,3 +146,10 @@ export const HUNT_SPEED = 56;
 export const HUNT_RADIUS_PX = 8 * 16;
 /** …and how far past their zone they will follow before giving up. */
 export const HUNT_LEASH_PX = 4 * 16;
+
+/**
+ * The chunk a logged-out visitor's camera centres on. Their view is the
+ * 5×5-chunk window around it (the village's houses, inn, bakery and
+ * plaza), and the WS server builds the shared visitor snapshot there.
+ */
+export const VISITOR_CHUNK = { cx: 1, cy: 0 } as const;

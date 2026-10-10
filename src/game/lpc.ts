@@ -48,6 +48,24 @@ export const HAIR_STYLES = ["plain", "bob", "spiked", "messy1", "long", "bangs",
 export const SKIN_TONES = ["#f1c9a5", "#e8c39e", "#d9a066", "#c68e5a", "#a86a3d", "#7a4a2a", "#5a3a22"];
 export const HAIR_COLORS = ["#2b1d14", "#5a3a1a", "#8c5a2b", "#c94f2a", "#e8c14a", "#dcdcdc", "#4a6fa5", "#b04a8a", "#3d8a5a"];
 export const CLOTH_COLORS = ["#4a7c59", "#e76f51", "#f4a261", "#2a9d8f", "#264653", "#e9c46a", "#7b5ea7", "#d94f70", "#f7e7d3", "#3a3a4a", "#7a4a2a", "#5b7db1"];
+/** Default names offered at character creation. */
+export const VILLAGER_NAMES = ["Fennel", "Juniper", "Bramble", "Sorrel", "Tansy", "Rowan", "Clover", "Basil", "Hazel", "Pip"];
+
+const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+
+/** A random villager look (character creation's "Surprise me"). */
+export function randomAppearance(): Appearance {
+  return {
+    body: Math.random() < 0.5 ? "male" : "female",
+    skin: pick(SKIN_TONES),
+    hair: pick(HAIR_STYLES),
+    hairColor: pick(HAIR_COLORS),
+    shirtColor: pick(CLOTH_COLORS),
+    pantsColor: pick(CLOTH_COLORS),
+  };
+}
+
+export const randomVillagerName = () => pick(VILLAGER_NAMES);
 
 const BASE_SKIN = [0xf1, 0xc9, 0xa5];
 const imgCache = new Map<string, Promise<HTMLImageElement>>();

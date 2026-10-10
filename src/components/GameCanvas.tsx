@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { inputRouter } from "@/game/input/router";
 import { installDomKeyboard } from "@/game/input/domKeyboard";
+import { bus } from "@/game/bus";
 
 export default function GameCanvas() {
   const ref = useRef<HTMLDivElement>(null);
@@ -19,9 +20,13 @@ export default function GameCanvas() {
       const { WorldScene } = await import("@/game/WorldScene");
       if (cancelled || !ref.current || !inputRef.current) return;
 
-      // Only show the joystick + buttons on coarse pointers (touch).
+      // Only show the joystick + buttons on coarse pointers (touch), and
+      // only to players: a logged-out visitor has nobody to move.
       const isTouch = window.matchMedia("(pointer: coarse)").matches;
-      inputRef.current.style.display = isTouch ? "block" : "none";
+      inputRef.current.style.display = "none";
+      disposers.current.push(bus.on("snapshot", (s) => {
+        if (inputRef.current) inputRef.current.style.display = isTouch && s.me ? "block" : "none";
+      }));
 
       game = new Phaser.Game({
         type: Phaser.AUTO,

@@ -14,7 +14,8 @@ export type Events = {
   /** Items the local player just got (the "+2 wood" badges). */
   gained: GainInput[];
   enterBuilding: { key: string; name: string };
-  focus: { x: number; y: number };
+  /** Pan the camera to (x, y); `ms` is the pan's length (default 500). */
+  focus: { x: number; y: number; ms?: number };
   refreshMe: undefined;
   moveTo: { x: number; y: number };
   poke: undefined;
