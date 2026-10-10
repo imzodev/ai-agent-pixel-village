@@ -49,6 +49,10 @@ export type Events = {
   /** The scene is up and listening: the HUD resends what it already knows
    *  (found relics, whether you own a bike). */
   sceneReady: undefined;
+  /** Loading the world, 0…1 (only goes up): the loading screen's bar. */
+  loading: { progress: number };
+  /** The world is fully there (map, buildings, first snapshot's sprites): the loading screen fades. */
+  worldReady: undefined;
   /** The local player just picked up a relic: show it off over their head. */
   relicPicked: { key: string; have: number; total: number };
   /** The local player was knocked out and wakes at (x, y). */

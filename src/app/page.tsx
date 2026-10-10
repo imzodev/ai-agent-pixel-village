@@ -1,14 +1,8 @@
-"use client";
-import dynamic from "next/dynamic";
-import Hud from "@/components/Hud";
+import { randomLoadingWalker } from "@/lib/loadingWalkers";
+import GamePage from "./GamePage";
 
-const GameCanvas = dynamic(() => import("@/components/GameCanvas"), { ssr: false, loading: () => <div className="absolute inset-0 flex items-center justify-center bg-[#6fae5f] font-mono text-white">waking up the grove…</div> });
+export const dynamic = "force-dynamic"; // a new farm animal on the loading screen every visit
 
 export default function Home() {
-  return (
-    <main className="relative h-dvh w-screen overflow-hidden bg-[#6fae5f]">
-      <GameCanvas />
-      <Hud />
-    </main>
-  );
+  return <GamePage walker={randomLoadingWalker()} />;
 }

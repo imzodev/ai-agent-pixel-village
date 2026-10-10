@@ -215,6 +215,13 @@ export class WorldScene extends Phaser.Scene {
   private marker!: Phaser.GameObjects.Image;
   private sentFirst = false;
   private lastPlayerChunk: { cx: number; cy: number } | null = null;
+  // The loading screen (src/components/LoadingScreen.tsx): progress so far,
+  // whether the world is ready, and the first snapshot's character sprites
+  // being drawn (collected until then; null once they've all settled).
+  private loadingProgress = 0;
+  private loadingDone = false;
+  private firstSnapshotSeen = false;
+  private firstSprites: Promise<void>[] | null = [];
   private unsub: (() => void)[] = [];
   // Camera zoom floor: the smallest zoom at which the viewport still fits
   // inside the loaded 5×5 chunk window. Recomputed on resize; used by the
@@ -258,6 +265,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   preload() {
+    this.load.on("progress", (v: number) => this.reportLoading(0.05 + 0.25 * v));
     loadTilemapAssets(this);
     loadPropSprites(this);
     // Animated animals (cow, fox, …) — one sheet per species, see
@@ -304,7 +312,7 @@ export class WorldScene extends Phaser.Scene {
     // logged-out visitor ever sees. A player's window follows them once they
     // cross a chunk boundary in updatePlayer.
     this.lastPlayerChunk = { ...VISITOR_CHUNK };
-    await ensureChunks(this, this.lastPlayerChunk);
+    await ensureChunks(this, this.lastPlayerChunk, (done, total) => this.reportLoading(0.3 + (0.4 * done) / total));
     // The scene may have been shut down during the await (StrictMode
     // remount, HMR, navigation). Stop before touching Phaser again.
     if (!this.alive()) return;
@@ -316,6 +324,7 @@ export class WorldScene extends Phaser.Scene {
       /* manifest unavailable — decor-only world */
     }
     if (!this.alive()) return;
+    this.reportLoading(0.8);
     recenterCamera(this, this.lastPlayerChunk);
     // placeholder char texture
     if (!this.textures.exists("ph_char")) {
@@ -514,6 +523,7 @@ export class WorldScene extends Phaser.Scene {
           this.applySnapshot(data);
           if (!this.alive()) return;
           bus.emit("snapshot", data);
+          if (!this.firstSnapshotSeen) { this.firstSnapshotSeen = true; this.awaitFirstSprites(); }
         },
         onDelta: () => {
           // Phase 2 minimum viable: ignore delta hints and rely on the
@@ -854,7 +864,35 @@ export class WorldScene extends Phaser.Scene {
     return ent;
   }
 
-  private async ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string) {
+  /** Loading screen: report progress (0…1, only ever up). */
+  private reportLoading(p: number): void {
+    if (this.loadingDone || p <= this.loadingProgress) return;
+    this.loadingProgress = p;
+    bus.emit("loading", { progress: p });
+  }
+
+  /** After the first snapshot: once its characters have real sprites (no placeholder squares), the world is ready. */
+  private awaitFirstSprites(): void {
+    const sprites = this.firstSprites ?? [];
+    this.firstSprites = null;
+    this.reportLoading(0.9);
+    let settled = 0;
+    const one = () => { settled++; this.reportLoading(0.9 + (0.1 * settled) / Math.max(1, sprites.length)); };
+    void Promise.allSettled(sprites.map((p) => p.finally(one))).then(() => {
+      if (this.loadingDone) return;
+      this.reportLoading(1);
+      this.loadingDone = true;
+      bus.emit("worldReady", undefined);
+    });
+  }
+
+  private ensureCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string): Promise<void> {
+    const p = this.loadCharTexture(ent, app, eq, weapon);
+    this.firstSprites?.push(p); // the loading screen waits for the first snapshot's sprites
+    return p;
+  }
+
+  private async loadCharTexture(ent: CharEnt, app: Appearance, eq?: EquippedCosmetics, weapon?: string) {
     const key = await this.ensureSheet(app, eq, weapon);
     if (!key || !ent.sprite.active) return;
     ent.texKey = key;

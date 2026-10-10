@@ -837,6 +837,8 @@ let windowCenter: { cx: number; cy: number } | null = null;
 export async function ensureChunks(
   scene: Phaser.Scene,
   { cx, cy }: { cx: number; cy: number },
+  /** Called as each chunk of the window is ready (the loading screen's bar). */
+  onLoaded?: (done: number, total: number) => void,
 ): Promise<void> {
   if (!sceneAlive(scene)) return;
   windowCenter = { cx, cy };
@@ -853,6 +855,7 @@ export async function ensureChunks(
     // The scene can be shut down at any await boundary (StrictMode remount,
     // HMR, scene restart). Bail before touching Phaser with a dead scene.
     if (!sceneAlive(scene)) return;
+    if (i > 0) onLoaded?.(i, chunks.length);
     const c = chunks[i];
     const key = chunkKey(c.cx, c.cy);
     const state = chunkStates.get(key);
@@ -876,6 +879,7 @@ export async function ensureChunks(
     chunkStates.set(key, fresh);
     buildChunkLayers(fresh, chunkOrigin(c.cx, c.cy));
   }
+  onLoaded?.(chunks.length, chunks.length);
   evictFar(scene, { cx, cy });
 }
 
