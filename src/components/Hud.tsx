@@ -739,6 +739,15 @@ export default function Hud() {
   const hh = Math.floor(hour), mm = Math.floor((hour % 1) * 60);
   const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; return Math.hypot(n.x - b.doorX, n.y - b.doorY) < 200; }) ?? [] : [];
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
+  const gems = (snap?.me as unknown as { gems?: number })?.gems ?? 0;
+  // XP toward the next level, with the next unlock as a hint.
+  const xpInfo = me?.me ? (() => {
+    const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
+    const lv = levelForXp(xp);
+    const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
+    const next = nextUnlock(lv);
+    return { into: xp - lo, span: hi - lo, pct: (100 * (xp - lo)) / (hi - lo), next, hint: `${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}` };
+  })() : null;
   const onlineLine = `👥 ${snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 ${snap?.npcs.length ?? 0} agents`;
   const missionDone = !!me?.missions?.some((m) => m.status === "active" && m.progress >= m.target);
   const navBadge = loggedIn && ((me?.perkPoints ?? 0) > 0 || missionDone);
@@ -826,19 +835,12 @@ export default function Hud() {
                   <span className="whitespace-nowrap">❤️ {hp}</span>
                 </>
               );
-            })()}<span className="whitespace-nowrap">🪙 {snap?.me?.coins ?? me.me.coins}</span><span className="hidden sm:inline">💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
-            {(() => {
-              // XP toward the next level, with the next unlock as a hint.
-              const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
-              const lv = levelForXp(xp);
-              const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
-              const next = nextUnlock(lv);
-              return (
-                <span className="hidden items-center gap-1 sm:flex" title={`${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}`}>
-                  ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${(100 * (xp - lo)) / (hi - lo)}%` }} /></span>
-                </span>
-              );
-            })()}
+            })()}<span className="whitespace-nowrap">🪙 {snap?.me?.coins ?? me.me.coins}</span><span className="hidden sm:inline">💎 {gems}</span>
+            {xpInfo && (
+              <span className="hidden items-center gap-1 sm:flex" title={xpInfo.hint}>
+                ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${xpInfo.pct}%` }} /></span>
+              </span>
+            )}
           </div>
         )}
         <div className="hidden sm:contents">{navItems(() => {})}</div>
@@ -851,6 +853,17 @@ export default function Hud() {
       {menuOpen && (
         <div className="pointer-events-auto absolute inset-0 z-30 sm:hidden" onClick={() => setMenuOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="pixel-panel absolute left-2 right-2 top-12 p-2 text-white shadow-2xl">
+            {loggedIn && me?.me && xpInfo && (
+              // Gems and XP are left off the phone's top bar; they live here.
+              <div className="pixel-panel-dark mb-2 px-2 py-1.5">
+                <div className="flex items-center gap-1.5 text-[12px]">
+                  ✨<span className="h-2 flex-1 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${xpInfo.pct}%` }} /></span>
+                  <span className="whitespace-nowrap">{xpInfo.into}/{xpInfo.span} XP</span>
+                  <span className="ml-1 whitespace-nowrap text-[14px]">💎 {gems}</span>
+                </div>
+                {xpInfo.next && <div className="mt-0.5 text-[11px] opacity-75">Next unlock at Lv {xpInfo.next.level}: {xpInfo.next.text}</div>}
+              </div>
+            )}
             <div className="mb-2 px-1 text-[12px] text-stone-600">{onlineLine}</div>
             <div className="grid grid-cols-2 gap-1.5 [&>*]:text-center">{navItems(() => setMenuOpen(false))}</div>
           </div>
