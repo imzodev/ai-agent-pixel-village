@@ -33,5 +33,20 @@ export type NpcDef = {
   trades: NpcTrade[];
 };
 
+/** How an NPC talks and what they care about (src/lib/npcPersonalities.ts). */
+export type NpcPersonality = {
+  /** How they speak: rhythm, habits, words they like. */
+  voice: string;
+  /** What they care about, enjoy or worry over. */
+  likes: string;
+  /** A habit or oddity that makes them recognisable. */
+  quirk: string;
+  /** What they think of their neighbours (true to who those neighbours are). */
+  opinions?: string;
+};
+
+/** An item's display name by key (the caller supplies the catalogue, e.g. the items table). */
+export type ItemNameOf = (itemKey: string) => string;
+
 /** Old NPC key → its `<place>_<name>` key (renamed once at boot). */
 export type LegacyKeyMap = Readonly<Record<string, string>>;

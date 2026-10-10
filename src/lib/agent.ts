@@ -3,6 +3,10 @@ import { webhookLogs } from "@/db/schema";
 import { db } from "@/db";
 import { getActiveProvider, chatWithFallback, chatStreamWithFallback, type ChatMessage } from "@/lib/llm";
 import { streamedTextField } from "@/lib/streamedText";
+import { buildSystemPrompt } from "@/lib/npcPrompt";
+
+/** Recent conversation lines sent with each reply (older ones live in the NPC's note). */
+export const HISTORY_LINES = 12;
 import type { Offer } from "@/lib/types";
 import type { AgentWebhookConversation, BrainInput, BrainOutput } from "@/types/agent";
 import { AGENT_LIMITS, WEBHOOK_BREAKER } from "@/lib/agentLimits";
@@ -103,27 +107,16 @@ export function scriptedReply(input: BrainInput): BrainOutput {
 }
 
 // ---------- LLM brain ----------
-function systemPrompt(input: BrainInput) {
-  const { npc, sponsor, character, offers, hour, weather } = input;
-  const offerList = offers.map((o) => `- id="${o.id}" (${o.type}) ${o.label}: suggested line: "${o.line}"`).join("\n");
-  return `You are ${npc.name}, the ${npc.role} in a cozy pixel-art village called the grove. Stay fully in character. Never mention being an AI.
-Persona: ${npc.persona}
-Mood: ${npc.mood}. It is ${Math.floor(hour)}:00 (${weather}). You are talking to a villager named ${character.name} (level ${character.level}).${input.mindNote ? `\n${input.mindNote}` : ""}
-${sponsor ? `You are sponsored by ${sponsor.businessName} ("${sponsor.tagline}"). You are two things at once: a helpful villager who hands out missions and items, AND an ambassador for the sponsor. Weave this pitch naturally into conversation as something you would genuinely say — never a hard sell, one mention at most per reply: "${sponsor.pitch}" When you make the pitch, include the offer with type "discount" so the player can accept a real discount code.` : "You are not sponsored by anyone; you simply help the player."}
-Available offers you may extend this turn (include their ids in "offers" only if you actually mention them):
-${offerList || "(none)"}
-Reply with STRICT JSON only: {"text": "<1-3 short sentences, in character>", "offers": ["<offer id>", ...]}. Always include turnin offers if present.`;
-}
-
 async function llmReply(input: BrainInput, onText?: (textSoFar: string) => void): Promise<BrainOutput | null> {
-  const sys = systemPrompt(input);
+  const sys = buildSystemPrompt(input);
   const role = (h: { role: string }): "user" | "assistant" => (h.role === "npc" ? "assistant" : "user");
   const msgs: ChatMessage[] = [
     { role: "system", content: sys },
-    ...input.history.slice(-8).map((h) => ({ role: role(h), content: h.text })),
+    ...input.history.slice(-HISTORY_LINES).map((h) => ({ role: role(h), content: h.text })),
     { role: "user", content: input.message || "(walks up and waves)" },
   ];
-  const opts = { jsonMode: true, temperature: 0.8, maxTokens: 300 };
+  // A little cooler than chatty: keeps the voice, invents fewer facts.
+  const opts = { jsonMode: true, temperature: 0.6, maxTokens: 300 };
   let r: { text: string; provider: string } | null;
   if (onText) {
     let buffer = "", shown = "";

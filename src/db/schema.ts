@@ -751,6 +751,22 @@ export const npcRegard = pgTable(
   (t) => [uniqueIndex("npc_regard_pk").on(t.npcId, t.characterId)],
 );
 
+/** What an NPC remembers about one player (src/lib/npcNotes.ts): a short
+ *  note rewritten from their conversations. Private to that pair: only
+ *  this player's note is used when they talk to this NPC. */
+export const npcPlayerNotes = pgTable(
+  "npc_player_notes",
+  {
+    npcId: integer("npc_id").notNull(),
+    characterId: integer("character_id").notNull(),
+    note: text("note").notNull().default(""),
+    /** The last conversation line (conversations.id) folded into the note. */
+    lastLineId: integer("last_line_id").notNull().default(0),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("npc_player_notes_pk").on(t.npcId, t.characterId)],
+);
+
 /** How a ranch has grown (src/lib/ranchUpgrades.ts): farm XP, coop / barn
  *  levels, the silo's feed, buildings and the workshop's jobs. */
 export const ranchState = pgTable("ranch_state", {

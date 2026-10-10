@@ -1,8 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { conversations, npcs, worldChat, worldState } from "@/db/schema";
+import { conversations, items, npcs, worldChat, worldState } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
-import { generateReply } from "@/lib/agent";
+import { generateReply, HISTORY_LINES } from "@/lib/agent";
+import { knowledgeFor } from "@/lib/npcKnowledge";
+import { memoryOf, refreshNote } from "@/lib/npcNotes";
 import { npcLlmLimiter } from "@/lib/rateLimit";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
@@ -23,17 +25,28 @@ import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 
 export const dynamic = "force-dynamic";
 
+// Item display names for the NPCs' knowledge sheets (the catalogue only
+// changes with a deploy, so it's read once).
+let itemNamesLoad: Promise<Map<string, string>> | null = null;
+function itemNames(): Promise<Map<string, string>> {
+  itemNamesLoad ??= db.select({ key: items.key, name: items.name }).from(items)
+    .then((rows) => new Map(rows.map((r) => [r.key, r.name])))
+    .catch((e) => { itemNamesLoad = null; throw e; });
+  return itemNamesLoad;
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const character = await requireCharacter();
     const { id } = await ctx.params;
-    const history = await db
+    // The latest 40 lines, in order (newest first, then put back).
+    const latest = await db
       .select()
       .from(conversations)
       .where(and(eq(conversations.characterId, character.id), eq(conversations.npcId, Number(id))))
-      .orderBy(asc(conversations.id))
+      .orderBy(desc(conversations.id))
       .limit(40);
-    return Response.json({ history });
+    return Response.json({ history: latest.reverse() });
   } catch (e) {
     return handleApiError(e);
   }
@@ -60,25 +73,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const message = String(body.message ?? "").trim().slice(0, 400);
 
     // Everything the reply needs, looked up together (none depends on another).
-    const [history, offers, sponsor, [ws], mindNote] = await Promise.all([
+    const [latest, offers, sponsor, [ws], mindNote, memory, names] = await Promise.all([
+      // The latest lines (newest first, put back in order below).
       db
         .select({ role: conversations.role, text: conversations.text })
         .from(conversations)
         .where(and(eq(conversations.characterId, character.id), eq(conversations.npcId, npc.id)))
-        .orderBy(asc(conversations.id))
-        .limit(30),
+        .orderBy(desc(conversations.id))
+        .limit(HISTORY_LINES),
       buildOffers(npc, character),
       loadSponsor(npc),
       db.select().from(worldState).where(eq(worldState.id, 1)),
       mindNoteFor(npc, character.id, character.name),
+      memoryOf(npc.id, character.id),
+      itemNames(),
     ]);
+    const history = latest.reverse();
     const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes);
 
     // Soft rate limit on LLM-powered replies per character. The player
     // still gets an answer (scripted) once the cap is hit — this protects
     // the bill, not the gameplay.
     const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString());
-    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote };
+    const knowledge = knowledgeFor(npc.key, (k) => names.get(k) ?? k.replace(/_/g, " "));
+    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory };
 
     // After the reply: save it and count the conversation, then the answer body.
     const finish = async (reply: BrainOutput): Promise<TalkReply> => {
@@ -89,6 +107,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: reply.text });
       await db.insert(worldChat).values({ speakerType: "npc", speakerId: npc.id, text: reply.text.slice(0, 140) });
+      // Fold the new lines into what this NPC remembers about the player
+      // (in the background, every few lines; never delays the reply).
+      void refreshNote(npc, character);
 
       // Talking counts for "talk to X" missions, the tutorial, and the book.
       await progressMissions(character.id, (r) => r.type === "talk" && r.npcKey === npc.key);

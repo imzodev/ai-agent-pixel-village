@@ -18,6 +18,20 @@ export type BrainInput = {
   forceScripted?: boolean;
   /** An NPC with a mind: how it feels about this player and what it's up to. */
   mindNote?: string | null;
+  /** What this NPC knows about the world (src/lib/npcKnowledge.ts). */
+  knowledge?: string;
+  /** What this NPC remembers about this player (src/lib/npcNotes.ts). */
+  memory?: NpcMemory;
+};
+
+/** An NPC's memory of one player: its private note and how well they know each other. */
+export type NpcMemory = {
+  /** The note ("" until enough has been said to write one). */
+  note: string;
+  /** Conversation lines between them so far (both sides). */
+  lines: number;
+  /** When they first spoke, if ever. */
+  firstMetAt: Date | null;
 };
 
 export type BrainSource = "scripted" | "llm" | "remote";
