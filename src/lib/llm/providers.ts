@@ -9,30 +9,28 @@
 // Every provider speaks OpenAI's /chat/completions protocol — only the
 // baseUrl, key and default model differ.
 import { createOpenAiCompatibleClient } from "./client";
-import type { LlmClient } from "./types";
-
-type ProviderDef = {
-  keyEnv: string;
-  baseUrlEnv: string;
-  modelEnv: string;
-  defaultBaseUrl: string;
-  defaultModel: string;
-  timeoutMs: number;
-};
+import type { LlmClient, ProviderDef } from "./types";
 
 const PROVIDERS: Record<string, ProviderDef> = {
   minimax: {
     keyEnv: "MINIMAX_API_KEY",
     baseUrlEnv: "MINIMAX_BASE_URL",
     modelEnv: "MINIMAX_MODEL",
+    thinkingEnv: "MINIMAX_THINKING",
+    effortEnv: "MINIMAX_REASONING_EFFORT",
     defaultBaseUrl: "https://api.minimax.io/v1",
     defaultModel: "MiniMax-M3",
     timeoutMs: 15_000,
+    // Thinking goes to `reasoning_content`, not into the reply text.
+    extraBody: { reasoning_split: true },
+    thinkingHeadroom: 600,
   },
   openai: {
     keyEnv: "OPENAI_API_KEY",
     baseUrlEnv: "OPENAI_BASE_URL",
     modelEnv: "OPENAI_MODEL",
+    thinkingEnv: "OPENAI_THINKING",
+    effortEnv: "OPENAI_REASONING_EFFORT",
     defaultBaseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
     timeoutMs: 15_000,
@@ -41,6 +39,8 @@ const PROVIDERS: Record<string, ProviderDef> = {
     keyEnv: "DEEPSEEK_API_KEY",
     baseUrlEnv: "DEEPSEEK_BASE_URL",
     modelEnv: "DEEPSEEK_MODEL",
+    thinkingEnv: "DEEPSEEK_THINKING",
+    effortEnv: "DEEPSEEK_REASONING_EFFORT",
     defaultBaseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-chat",
     timeoutMs: 15_000,
@@ -63,6 +63,10 @@ function buildClient(name: string): LlmClient | null {
     apiKey,
     model: process.env[def.modelEnv] || def.defaultModel,
     timeoutMs: def.timeoutMs,
+    thinking: process.env[def.thinkingEnv]?.trim() || undefined,
+    reasoningEffort: process.env[def.effortEnv]?.trim() || undefined,
+    extraBody: def.extraBody,
+    thinkingHeadroom: def.thinkingHeadroom,
   });
   clientCache.set(name, client);
   return client;

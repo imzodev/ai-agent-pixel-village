@@ -20,6 +20,39 @@ export type ChatResult = {
   provider: string;
 };
 
+/** One provider in the registry (providers.ts): where its settings live. */
+export type ProviderDef = {
+  keyEnv: string;
+  baseUrlEnv: string;
+  modelEnv: string;
+  /** Optional: `<KEY>_THINKING` → `thinking: { type }` (e.g. "disabled"). */
+  thinkingEnv: string;
+  /** Optional: `<KEY>_REASONING_EFFORT` → `reasoning_effort` (e.g. "low"). */
+  effortEnv: string;
+  defaultBaseUrl: string;
+  defaultModel: string;
+  timeoutMs: number;
+  /** Fixed extra request fields this provider understands. */
+  extraBody?: Record<string, unknown>;
+  /** Tokens added to max_tokens while the model thinks (thinking counts toward it). */
+  thinkingHeadroom?: number;
+};
+
+/** A configured OpenAI-compatible client (client.ts). */
+export type OpenAiCompatibleConfig = {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+  /** `thinking.type` to send, if any ("disabled" turns thinking off where supported). */
+  thinking?: string;
+  /** `reasoning_effort` to send, if any. */
+  reasoningEffort?: string;
+  extraBody?: Record<string, unknown>;
+  thinkingHeadroom?: number;
+};
+
 export type LlmClient = {
   name: string;
   chat(messages: ChatMessage[], opts?: ChatOptions): Promise<string>;
