@@ -17,13 +17,11 @@ export type TouchButton = {
 
 // A fixed grid in px (52px buttons, 60px pitch), so they never overlap on a
 // narrow phone the way percent offsets did. The bottom row sits above the
-// chat bar; A, the most used, is nearest the right thumb.
+// chat bar; A, the most used, is nearest the right thumb. Bag, map and shop
+// have no button here: they're in the ☰ menu (and on B / M / Y).
 export const TOUCH_BUTTONS: readonly TouchButton[] = [
   { id: "player.interact", label: "A", ariaLabel: "Interact", right: "16px", bottom: "64px" },
-  { id: "ui.shop", label: "Y", ariaLabel: "Shop", right: "76px", bottom: "64px" },
-  { id: "ui.bag", label: "B", ariaLabel: "Bag", right: "136px", bottom: "64px" },
-  { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "196px", bottom: "64px" },
+  { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "76px", bottom: "64px" },
   { id: "player.attack", label: "⚔", ariaLabel: "Attack", right: "16px", bottom: "124px" },
-  { id: "ui.map", label: "M", ariaLabel: "Map", right: "76px", bottom: "124px" },
-  { id: "player.dodge", label: "⤼", ariaLabel: "Dodge roll", right: "136px", bottom: "124px" },
+  { id: "player.dodge", label: "💨", ariaLabel: "Dodge roll", right: "76px", bottom: "124px" },
 ];
