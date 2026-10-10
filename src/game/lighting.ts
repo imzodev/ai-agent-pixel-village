@@ -18,6 +18,8 @@ import type { AtmosphereState, LightSource } from "@/types/lighting";
 export type { AtmosphereState, LightSource } from "@/types/lighting";
 
 const LIGHT_TEX = "fx_light_soft";
+/** World px the darkness reaches past each edge of the view: more than the camera moves in a frame. */
+const OVERSCAN_PX = 160;
 const CLOUD_TEX = "fx_cloud_shadow";
 const FOG_TEX = "fx_fog_bank";
 const SPLASH_TEX = "fx_splash";
@@ -81,6 +83,8 @@ export class Lighting {
   private splashZone = new Phaser.Geom.Rectangle(0, 0, 10, 10);
   private rtW = 0;
   private rtH = 0;
+  /** The area the darkness covers: the camera view plus OVERSCAN_PX around it. */
+  private cover = new Phaser.Geom.Rectangle(0, 0, 0, 0);
 
   constructor(private scene: Phaser.Scene, private depths: { night: number; glow: number; clouds: number; fog: number; ground: number }) {
     makeTextures(scene);
@@ -106,14 +110,20 @@ export class Lighting {
   }
 
   update(state: AtmosphereState, view: Phaser.Geom.Rectangle, extra: LightSource[], time: number, dtMs: number): void {
-    const vx = Math.floor(view.x), vy = Math.floor(view.y);
-    const w = Math.ceil(view.width) + 2, h = Math.ceil(view.height) + 2;
+    // `view` is the camera's worldView as of this update, but the camera
+    // settles later in the frame (follow, drag, pans: Camera.preRender), so
+    // a rectangle exactly the view's size trails it by a frame and leaves an
+    // uncovered strip along the leading edge. Cover a margin beyond it.
+    const m = OVERSCAN_PX;
+    const vx = Math.floor(view.x) - m, vy = Math.floor(view.y) - m;
+    const w = Math.ceil(view.width) + 2 + 2 * m, h = Math.ceil(view.height) + 2 + 2 * m;
+    this.cover.setTo(vx, vy, w, h);
 
     // Colour grading over the world, under the darkness.
     this.grade.setPosition(vx, vy).setSize(w, h).setFillStyle(state.gradeColor, state.gradeAlpha);
 
     // Darkness with light pools.
-    const lights = state.darkness > 0.02 ? this.visibleLights(view, extra) : [];
+    const lights = state.darkness > 0.02 ? this.visibleLights(this.cover, extra) : [];
     if (state.darkness > 0.02) {
       if (w !== this.rtW || h !== this.rtH) { this.rt.resize(w, h); this.rtW = w; this.rtH = h; }
       this.rt.setPosition(vx, vy).setVisible(true);
