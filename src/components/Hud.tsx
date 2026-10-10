@@ -145,6 +145,7 @@ export default function Hud() {
   const [me, setMe] = useState<Me | null>(null);
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
+  const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
   const [craft, setCraft] = useState<{ npcId: number; npcName: string; recipes: Recipe[] } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
@@ -332,10 +333,10 @@ export default function Hud() {
   const lotAction = (action: "acquire" | "release" | "cheer", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
-  const buy = async (npcKey: string, itemKey: string) => {
-    const r = await api<{ ok?: boolean; spent?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty: 1 });
+  const buy = async (npcKey: string, itemKey: string, qty = 1) => {
+    const r = await api<{ ok?: boolean; spent?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty });
     if (r.error) toast(r.error, "bad");
-    else { showGain([{ itemKey, qty: 1 }]); notify(r.notices); void refreshMe(); }
+    else { showGain([{ itemKey, qty }]); notify(r.notices); void refreshMe(); }
   };
   const myId = me?.me?.id ?? null;
   /** Standing inside one of your own lots with `target` in the same lot: every plot there is in reach. */
@@ -598,7 +599,7 @@ export default function Hud() {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
   })();
-  const keyHint = (cmd: "player.craft" | "player.sell" | "player.attack"): string => {
+  const keyHint = (cmd: "player.craft" | "player.sell" | "player.buy" | "player.attack"): string => {
     const k = formatBinding(cmd);
     return k ? `(${prettyKey(k)})` : "";
   };
@@ -717,12 +718,13 @@ export default function Hud() {
     if (board) { setBoard(null); return; }
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
+    if (shop) { setShop(null); return; }
     if (craft) { setCraft(null); return; }
     if (inspect) { setInspect(null); return; }
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [mapOpen, board, talk, trade, craft, inspect, panel, building, sel]);
+  }, [mapOpen, board, talk, trade, shop, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -778,6 +780,16 @@ export default function Hud() {
           const sellable = trades.some((t) => inv.some((i) => i.itemKey === t.itemKey && i.qty > 0));
           if (!sellable) return;
           openTrade(sel.id, sel.name, npcKey);
+        },
+      }),
+      inputRouter.register({
+        id: "player.buy",
+        scope: "ui",
+        run: () => {
+          if (!sel || sel.type !== "npc" || sel.distance > 160) return;
+          const npcKey = (snap?.npcs.find((n) => n.id === sel.id) as { key?: string } | undefined)?.key;
+          if (!npcKey || stockForNpc(npcKey).length === 0) return;
+          setShop({ npcName: sel.name, npcKey });
         },
       }),
     ];
@@ -956,14 +968,9 @@ export default function Hud() {
                 {sellable && (
                   <Btn on={() => npcKey && openTrade(sel.id, sel.name, npcKey)}>💰 Sell {keyHint("player.sell")}</Btn>
                 )}
-                {npcKey && stock.map((t) => {
-                  const locked = !!t.minLevel && (me?.me?.level ?? 1) < t.minLevel;
-                  return (
-                    <Btn key={t.itemKey} on={() => void buy(npcKey, t.itemKey)} subtle disabled={locked}>
-                      {locked ? `🔒 Lv ${t.minLevel}` : t.itemKey.endsWith("_seeds") ? "🌱" : ITEM_ICONS[t.itemKey] ?? "🛒"} Buy {t.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} · {t.price}🪙
-                    </Btn>
-                  );
-                })}
+                {npcKey && stock.length > 0 && (
+                  <Btn on={() => setShop({ npcName: sel.name, npcKey })}>🛒 Buy {keyHint("player.buy")}</Btn>
+                )}
               </>
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
@@ -1076,6 +1083,13 @@ export default function Hud() {
       <Notifications />
 
       {/* Trade modal — dedicated sell flow, no conversation required. */}
+      {/* Shop modal — everything this NPC sells, behind one Buy button. */}
+      {shop && (
+        <ShopModal npcName={shop.npcName} stock={stockForNpc(shop.npcKey)} level={me?.me?.level ?? 1} coins={snap?.me?.coins ?? me?.me?.coins ?? 0}
+          have={(itemKey) => (me?.inventory ?? []).filter((i) => i.itemKey === itemKey).reduce((n, i) => n + i.qty, 0)}
+          onBuy={(itemKey, qty) => buy(shop.npcKey, itemKey, qty)} onClose={() => setShop(null)} />
+      )}
+
       {trade && (
         <TradeModal trade={trade} performTrade={performTrade} onClose={() => setTrade(null)} />
       )}
@@ -1481,6 +1495,80 @@ function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null
         <button disabled={busy || !canMake} onClick={() => onCraft(qty)} className="rounded bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft {qty}</button>
         <button disabled={busy || !canMake} onClick={() => onCraft(max)} className="rounded bg-yellow-600 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft all ({max})</button>
       </div>
+    </div>
+  );
+}
+
+/** What an NPC sells (the Buy menu): one row per item, with a quantity. */
+function ShopModal({ npcName, stock, level, coins, have, onBuy, onClose }: {
+  npcName: string;
+  stock: TradeItem[];
+  level: number;
+  coins: number;
+  have: (itemKey: string) => number;
+  onBuy: (itemKey: string, qty: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  // Its own keymap, like the sell modal: blocks walking while it's open,
+  // Escape closes it.
+  useEffect(() => inputRouter.pushKeymap({
+    label: "shop",
+    bindings: [{ keys: ["escape"], command: "ui.close" as const, mode: "press" as const }],
+    handlers: [{ id: "ui.close" as const, scope: "ui" as const, run: () => { onClose(); } }],
+  }), [onClose]);
+  const doBuy = async (itemKey: string, qty: number) => {
+    if (busy) return;
+    setBusy(true);
+    await onBuy(itemKey, qty);
+    setBusy(false);
+  };
+  return (
+    <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-[min(94vw,520px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <div className="text-lg font-bold text-amber-900">🛒 Buy from {npcName}</div>
+            <div className="mt-0.5 text-[12px] text-stone-600">You have {coins} 🪙</div>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="mt-3 space-y-2 overflow-y-auto">
+          {stock.map((t) => (
+            <ShopRow key={t.itemKey} item={t} locked={!!t.minLevel && level < t.minLevel} coins={coins} have={have(t.itemKey)} busy={busy} onBuy={(qty) => doBuy(t.itemKey, qty)} />
+          ))}
+        </div>
+        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+function ShopRow({ item, locked, coins, have, busy, onBuy }: { item: TradeItem; locked: boolean; coins: number; have: number; busy: boolean; onBuy: (qty: number) => void }) {
+  const [qty, setQty] = useState(1);
+  const total = qty * item.price;
+  const name = item.itemKey.replace(/_/g, " ");
+  return (
+    <div className={`flex items-center gap-2 rounded-lg bg-white p-2 shadow ${locked ? "opacity-60" : ""}`}>
+      <span className="text-xl">{item.itemKey.endsWith("_seeds") ? "🌱" : ITEM_ICONS[item.itemKey] ?? "📦"}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-bold capitalize">{name}{item.qty > 1 && <span className="font-normal text-stone-500"> ×{item.qty}</span>}</div>
+        <div className="text-[11px] text-stone-500">{item.price} 🪙 each{have > 0 ? ` · you have ${have}` : ""}</div>
+      </div>
+      {locked ? (
+        <span className="rounded bg-stone-100 px-2 py-1 text-[12px] font-bold text-stone-500">🔒 Lv {item.minLevel}</span>
+      ) : (
+        <>
+          <div className="flex items-center gap-1">
+            <button disabled={busy || qty <= 1} onClick={() => setQty((q) => Math.max(1, q - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40" aria-label={`One less ${name}`}>−</button>
+            <span className="w-6 text-center text-sm tabular-nums">{qty}</span>
+            <button disabled={busy || qty >= 99 || (qty + 1) * item.price > coins} onClick={() => setQty((q) => Math.min(99, q + 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40" aria-label={`One more ${name}`}>+</button>
+          </div>
+          <button disabled={busy || total > coins} onClick={() => onBuy(qty)} className="rounded bg-emerald-600 px-2.5 py-1 text-[12px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">
+            Buy · {total} 🪙
+          </button>
+        </>
+      )}
     </div>
   );
 }
