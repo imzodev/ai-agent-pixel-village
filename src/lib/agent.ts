@@ -1,7 +1,8 @@
 import type { characters, npcs, sponsors } from "@/db/schema";
 import { webhookLogs } from "@/db/schema";
 import { db } from "@/db";
-import { getActiveProvider, chatWithFallback, type ChatMessage } from "@/lib/llm";
+import { getActiveProvider, chatWithFallback, chatStreamWithFallback, type ChatMessage } from "@/lib/llm";
+import { streamedTextField } from "@/lib/streamedText";
 import type { Offer } from "@/lib/types";
 import type { AgentWebhookConversation, BrainInput, BrainOutput } from "@/types/agent";
 import { AGENT_LIMITS, WEBHOOK_BREAKER } from "@/lib/agentLimits";
@@ -13,14 +14,19 @@ export type { BrainInput, BrainOutput } from "@/types/agent";
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
-export async function generateReply(input: BrainInput): Promise<BrainOutput> {
+/**
+ * The NPC's answer. With `onText`, an LLM reply is streamed: `onText` gets
+ * the reply text so far each time it grows (scripted and remote replies
+ * arrive whole, in the result).
+ */
+export async function generateReply(input: BrainInput, onText?: (textSoFar: string) => void): Promise<BrainOutput> {
   if (input.skipLocalBrain) return scriptedReply(input);
   if (!input.forceScripted && input.npc.kind === "remote" && input.npc.webhookUrl) {
     const r = await remoteReply(input).catch(() => null);
     if (r) return r;
   }
   if (!input.forceScripted && getActiveProvider()) {
-    const r = await llmReply(input).catch((e) => {
+    const r = await llmReply(input, onText).catch((e) => {
       console.error("llm error", e);
       return null;
     });
@@ -109,7 +115,7 @@ ${offerList || "(none)"}
 Reply with STRICT JSON only: {"text": "<1-3 short sentences, in character>", "offers": ["<offer id>", ...]}. Always include turnin offers if present.`;
 }
 
-async function llmReply(input: BrainInput): Promise<BrainOutput | null> {
+async function llmReply(input: BrainInput, onText?: (textSoFar: string) => void): Promise<BrainOutput | null> {
   const sys = systemPrompt(input);
   const role = (h: { role: string }): "user" | "assistant" => (h.role === "npc" ? "assistant" : "user");
   const msgs: ChatMessage[] = [
@@ -117,10 +123,18 @@ async function llmReply(input: BrainInput): Promise<BrainOutput | null> {
     ...input.history.slice(-8).map((h) => ({ role: role(h), content: h.text })),
     { role: "user", content: input.message || "(walks up and waves)" },
   ];
-  const r = await chatWithFallback(
-    msgs,
-    { jsonMode: true, temperature: 0.8, maxTokens: 300 },
-  );
+  const opts = { jsonMode: true, temperature: 0.8, maxTokens: 300 };
+  let r: { text: string; provider: string } | null;
+  if (onText) {
+    let buffer = "", shown = "";
+    r = await chatStreamWithFallback(msgs, opts, (piece) => {
+      buffer += piece;
+      const text = streamedTextField(buffer);
+      if (text.length > shown.length) { shown = text; onText(text); }
+    });
+  } else {
+    r = await chatWithFallback(msgs, opts);
+  }
   if (!r) return null;
   return parseBrainJson(r.text, input, "llm");
 }

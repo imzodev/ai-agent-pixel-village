@@ -102,6 +102,29 @@ export function getActiveProvider(): LlmClient | null {
   return providerChain()[0] ?? null;
 }
 
+/**
+ * Streamed chat with failover. A provider that fails before writing
+ * anything falls through to the next; once text has been handed on, a
+ * failure ends it (null): the caller can't take those words back.
+ */
+export async function chatStreamWithFallback(
+  messages: import("./types").ChatMessage[],
+  opts: import("./types").ChatOptions,
+  onDelta: (piece: string) => void,
+): Promise<{ text: string; provider: string } | null> {
+  for (const client of providerChain()) {
+    let started = false;
+    try {
+      const text = await client.chatStream(messages, opts, (piece) => { started = true; onDelta(piece); });
+      return { text, provider: client.name };
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : e);
+      if (started) return null;
+    }
+  }
+  return null;
+}
+
 /** Chat with failover: try each configured provider in order. */
 export async function chatWithFallback(
   messages: import("./types").ChatMessage[],

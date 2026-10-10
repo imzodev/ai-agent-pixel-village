@@ -11,6 +11,8 @@ export type TalkLine = {
   role: "npc" | "player";
   text: string;
   source?: ConversationSource;
+  /** Shown as it was written (streamed): no typewriter on it. */
+  streamed?: boolean;
 };
 
 /** Sliding-window rate limit config. */

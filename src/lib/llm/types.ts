@@ -56,4 +56,6 @@ export type OpenAiCompatibleConfig = {
 export type LlmClient = {
   name: string;
   chat(messages: ChatMessage[], opts?: ChatOptions): Promise<string>;
+  /** Like `chat`, streamed: `onDelta` gets each new piece of the reply as it's written. */
+  chatStream(messages: ChatMessage[], opts: ChatOptions, onDelta: (piece: string) => void): Promise<string>;
 };

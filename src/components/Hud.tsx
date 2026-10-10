@@ -5,6 +5,7 @@ import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
 import { inputRouter } from "@/game/input/router";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
+import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
@@ -62,6 +63,57 @@ async function api<T = unknown>(url: string, body?: unknown, method = body ? "PO
     // unhandled rejection into the browser console.
     return { error: err instanceof Error ? err.message : "Network error" } as T & { error?: string };
   }
+}
+
+/**
+ * Talk to an NPC with the reply streamed: `onText` gets the reply so far as
+ * it's written, then the finished answer comes back (or `{ error }`, as
+ * from `api`). A server that answers with plain JSON (an error before the
+ * stream, e.g. "walk closer") is read as such.
+ */
+async function streamTalk(npcId: number, message: string, onText: (text: string) => void): Promise<TalkReply | { error: string }> {
+  try {
+    const res = await fetch(`/api/npc/${npcId}/talk`, { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ message }) });
+    if (!(res.headers.get("content-type") ?? "").includes("text/event-stream") || !res.body) {
+      const j = await res.json().catch(() => ({ error: "Something went wrong." }));
+      return j.error ? { error: String(j.error) } : (j as TalkReply);
+    }
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let pending = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += value;
+      const events = pending.split("\n\n");
+      pending = events.pop() ?? "";
+      for (const block of events) {
+        const event = /^event: (.*)$/m.exec(block)?.[1];
+        const data = /^data: (.*)$/m.exec(block)?.[1];
+        if (!event || !data) continue;
+        const payload = JSON.parse(data);
+        if (event === "text") onText((payload as TalkTextEvent).text);
+        else if (event === "done") return payload as TalkReply;
+        else if (event === "error") return { error: (payload as TalkErrorEvent).error };
+      }
+    }
+    return { error: "The conversation was cut off." };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Network error" };
+  }
+}
+
+/** The reply being written, as the panel's last line (added on its first words). */
+function withStreamingReply(lines: TalkLine[], text: string): TalkLine[] {
+  const last = lines[lines.length - 1];
+  if (last?.role === "npc" && last.streamed) return [...lines.slice(0, -1), { ...last, text }];
+  return [...lines, { role: "npc", text, streamed: true }];
+}
+
+/** The finished reply: replaces the streamed line, or is added (and typed out) if none was. */
+function withFinalReply(lines: TalkLine[], r: TalkReply): TalkLine[] {
+  const last = lines[lines.length - 1];
+  if (last?.role === "npc" && last.streamed) return [...lines.slice(0, -1), { role: "npc", text: r.text, source: r.source, streamed: true }];
+  return [...lines, { role: "npc", text: r.text, source: r.source }];
 }
 
 /** Stop a press on the HUD from reaching the game (see the HUD's root). */
@@ -313,17 +365,21 @@ export default function Hud() {
     setTalk({ npcId, name, role, sponsor: null, lines: [], offers: [], busy: true });
     setSel(null);
     const hist = await api<{ history: { role: string; text: string }[] }>(`/api/npc/${npcId}/talk`);
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[]; npc: { sponsor: { businessName: string; brandColor: string } | null } }>(`/api/npc/${npcId}/talk`, { message: "" });
-    if (r.error) { toast(r.error, "bad"); setTalk(null); return; }
+    const past: TalkLine[] = (hist.history ?? []).slice(-6).map((h) => ({ role: h.role as "player" | "npc", text: h.text }));
+    setTalk((t) => t && t.npcId === npcId ? { ...t, lines: past } : t);
+    // The greeting streams in as it's written.
+    const r = await streamTalk(npcId, "", (text) => setTalk((t) => t && t.npcId === npcId ? { ...t, lines: withStreamingReply(t.lines, text) } : t));
+    if ("error" in r) { toast(r.error, "bad"); setTalk(null); return; }
     if (r.notices?.length) { notify(r.notices); void refreshMe(); }
-    setTalk({ npcId, name, role, sponsor: r.npc.sponsor, lines: [...(hist.history ?? []).slice(-6).map((h) => ({ role: h.role as "player" | "npc", text: h.text })), { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
+    setTalk((t) => t && t.npcId === npcId ? { ...t, sponsor: r.npc.sponsor, lines: withFinalReply(t.lines, r), offers: r.offers, busy: false } : t);
     setTimeout(() => talkInput.current?.focus(), 50);
   };
   const sendTalk = async (message: string) => {
     if (!talk || talk.busy) return;
+    const npcId = talk.npcId;
     setTalk({ ...talk, lines: [...talk.lines, { role: "player", text: message }], busy: true });
-    const r = await api<{ text: string; offers: Offer[]; source?: ConversationSource; notices?: string[] }>(`/api/npc/${talk.npcId}/talk`, { message });
-    if (r.error) {
+    const r = await streamTalk(npcId, message, (text) => setTalk((t) => t && t.npcId === npcId ? { ...t, lines: withStreamingReply(t.lines, text) } : t));
+    if ("error" in r) {
       toast(r.error, "bad");
       // Walked out of range? Close the panel — the conversation is no longer
       // reachable and an open panel hides the toast behind itself.
@@ -332,7 +388,7 @@ export default function Hud() {
       return;
     }
     if (r.notices?.length) { notify(r.notices); void refreshMe(); }
-    setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text, source: r.source }], offers: r.offers, busy: false });
+    setTalk((t) => t && t.npcId === npcId ? { ...t, lines: withFinalReply(t.lines, r), offers: r.offers, busy: false } : t);
   };
   const acceptOffer = async (offerId: string) => {
     if (!talk) return;
@@ -1070,7 +1126,7 @@ export default function Hud() {
               if (!l) return talk.busy ? <span className="blink-caret">▼</span> : null;
               return (
                 <div className="flex items-start gap-1.5">
-                  <Typewriter key={`${i}:${l.text.length}`} text={l.text} />
+                  {l.streamed ? <span className="flex-1">{l.text}</span> : <Typewriter key={i} text={l.text} />}
                   {l.source && <SourceBadge source={l.source} />}
                 </div>
               );
@@ -1235,11 +1291,16 @@ function lastNpcLine(lines: TalkLine[]): number {
 }
 
 /** Text that types itself out; a click shows it all at once. */
+// Types a line out (for replies that arrive whole; streamed ones show as
+// they're written). Any line finishes in about TYPE_MS; a click finishes it.
+const TYPE_MS = 600;
+const TYPE_TICK_MS = 16;
 function Typewriter({ text }: { text: string }) {
   const [n, setN] = useState(0);
   useEffect(() => {
     if (n >= text.length) return;
-    const t = setTimeout(() => setN((k) => Math.min(text.length, k + (text[k] === " " ? 2 : 1))), 22);
+    const step = Math.max(1, Math.ceil(text.length / (TYPE_MS / TYPE_TICK_MS)));
+    const t = setTimeout(() => setN((k) => Math.min(text.length, k + step)), TYPE_TICK_MS);
     return () => clearTimeout(t);
   }, [n, text]);
   return (
