@@ -69,7 +69,18 @@ set -a; . "$rel/.env"; set +a
 log "fixing constraint drift"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/fix-db-drift.sql
 log "pushing schema"
-timeout 300 pnpm db:push </dev/null
+# drizzle-kit exits 0 even when it stops at a question it can't ask here
+# ("truncate npcs?" for a new unique column on a table with rows), having
+# applied nothing. Going live anyway runs the new code against the old
+# schema (every snapshot failed on a missing column), so only carry on when
+# it says it applied the changes or found none; otherwise stop before the
+# swap, while the previous release is still serving.
+push_out="$(timeout 300 pnpm db:push </dev/null 2>&1)" || { printf '%s\n' "$push_out"; log "db:push failed"; exit 1; }
+printf '%s\n' "$push_out"
+if ! grep -qE "Changes applied|No changes detected" <<<"$push_out"; then
+  log "db:push stopped without applying the schema: fix it by hand (scripts/fix-db-drift.sql, AGENTS.md: Database), then redeploy"
+  exit 1
+fi
 
 # 5. Draw the map for this version before traffic arrives.
 log "drawing map tiles"
