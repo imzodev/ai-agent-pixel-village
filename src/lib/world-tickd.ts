@@ -20,6 +20,7 @@
 //
 // Run: `pnpm dev:tickd` (or `node --import tsx src/lib/world-tickd.ts`).
 
+import type { PoolClient } from "pg";
 import { pool } from "@/db";
 import { tickWorld } from "./sim";
 import {
@@ -51,8 +52,14 @@ const ADVISORY_LOCK_KEY = 42;
 const VIEW_REFRESH_MS = Number(process.env.ONLINE_PLAYERS_REFRESH_MS ?? 5000);
 const LOT_SWEEP_MS = 60 * 60 * 1000;
 
+// A session-scoped lock lives on the connection that took it. That connection
+// is checked out of the pool and kept for the life of the process: a pooled
+// client that sits idle gets closed, which would silently drop the lock.
+let lockClient: PoolClient | null = null;
+
 async function tryAcquireAdvisoryLock(): Promise<boolean> {
-  const result = await pool.query<{ locked: boolean }>(
+  lockClient ??= await pool.connect();
+  const result = await lockClient.query<{ locked: boolean }>(
     "SELECT pg_try_advisory_lock($1) AS locked",
     [ADVISORY_LOCK_KEY],
   );
@@ -61,10 +68,12 @@ async function tryAcquireAdvisoryLock(): Promise<boolean> {
 
 async function releaseAdvisoryLock(): Promise<void> {
   try {
-    await pool.query("SELECT pg_advisory_unlock($1)", [ADVISORY_LOCK_KEY]);
+    await lockClient?.query("SELECT pg_advisory_unlock($1)", [ADVISORY_LOCK_KEY]);
   } catch {
     // Connection may already be gone; lock auto-released.
   }
+  lockClient?.release();
+  lockClient = null;
 }
 
 async function acquireWithWait(): Promise<boolean> {
@@ -105,6 +114,7 @@ async function main(): Promise<void> {
     console.error(
       `[tickd] could not acquire advisory lock within ${LOCK_WAIT_MS}ms — another instance is running or a previous tickd crashed without releasing. Exiting.`,
     );
+    await releaseAdvisoryLock();
     await pool.end();
     process.exit(1);
   }
