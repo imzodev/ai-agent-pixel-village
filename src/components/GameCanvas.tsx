@@ -75,9 +75,9 @@ export default function GameCanvas() {
       <style jsx global>{`
         .grove-input .grove-action-btn {
           pointer-events: auto;
-          width: 56px;
-          height: 56px;
-          border-radius: 28px;
+          width: 52px;
+          height: 52px;
+          border-radius: 26px;
           border: 2px solid rgba(255, 255, 255, 0.55);
           background: rgba(20, 28, 50, 0.45);
           color: white;

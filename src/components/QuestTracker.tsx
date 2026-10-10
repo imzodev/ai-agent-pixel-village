@@ -50,7 +50,7 @@ export default function QuestTracker({ step, progress, snap, onSkip }: { step: n
   }
 
   return (
-    <div className="pointer-events-auto absolute left-2 top-14 z-10 w-64 max-w-[calc(100vw-1rem)]">
+    <div className="pointer-events-auto absolute left-2 top-14 z-10 w-56 sm:w-64 max-w-[calc(100vw-1rem)]">
       <div className="pixel-panel p-2 text-amber-950">
         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-amber-800">
           <span>📜 Step {step + 1}/{TUTORIAL_STEPS.length}</span>

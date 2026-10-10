@@ -9,18 +9,21 @@ export type TouchButton = {
   readonly id: CommandId;
   readonly label: string;
   readonly ariaLabel: string;
-  /** Right column offset (% from right edge). */
+  /** Offset from the right edge (CSS length). */
   readonly right: string;
-  /** Bottom offset (% from bottom edge). */
+  /** Offset from the bottom edge (CSS length). */
   readonly bottom: string;
 };
 
+// A fixed grid in px (52px buttons, 60px pitch), so they never overlap on a
+// narrow phone the way percent offsets did. The bottom row sits above the
+// chat bar; A, the most used, is nearest the right thumb.
 export const TOUCH_BUTTONS: readonly TouchButton[] = [
-  { id: "player.interact", label: "A", ariaLabel: "Interact", right: "8%", bottom: "20%" },
-  { id: "player.attack", label: "⚔", ariaLabel: "Attack", right: "14%", bottom: "28%" },
-  { id: "ui.bag", label: "B", ariaLabel: "Bag", right: "20%", bottom: "12%" },
-  { id: "ui.shop", label: "Y", ariaLabel: "Shop", right: "8%", bottom: "12%" },
-  { id: "ui.map", label: "M", ariaLabel: "Map", right: "20%", bottom: "20%" },
-  { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "26%", bottom: "12%" },
-  { id: "player.dodge", label: "⤼", ariaLabel: "Dodge roll", right: "26%", bottom: "28%" },
+  { id: "player.interact", label: "A", ariaLabel: "Interact", right: "16px", bottom: "64px" },
+  { id: "ui.shop", label: "Y", ariaLabel: "Shop", right: "76px", bottom: "64px" },
+  { id: "ui.bag", label: "B", ariaLabel: "Bag", right: "136px", bottom: "64px" },
+  { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "196px", bottom: "64px" },
+  { id: "player.attack", label: "⚔", ariaLabel: "Attack", right: "16px", bottom: "124px" },
+  { id: "ui.map", label: "M", ariaLabel: "Map", right: "76px", bottom: "124px" },
+  { id: "player.dodge", label: "⤼", ariaLabel: "Dodge roll", right: "136px", bottom: "124px" },
 ];

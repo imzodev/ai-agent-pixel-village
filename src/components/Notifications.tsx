@@ -52,7 +52,7 @@ function Notifications() {
   }, [soonest]);
 
   return (
-    <div className="pointer-events-none absolute right-3 top-14 flex w-72 flex-col gap-1" style={{ contain: "layout paint" }}>
+    <div className="pointer-events-none absolute right-2 top-14 flex w-[min(18rem,calc(100vw-1rem))] flex-col sm:right-3 gap-1" style={{ contain: "layout paint" }}>
       {toasts.map((t) => (
         <div key={t.id} ref={popIn} className={`rounded-lg border-2 px-3 py-1.5 shadow ${t.kind === "bad" ? "border-red-800/50 bg-red-100 text-red-900" : t.kind === "good" ? "border-emerald-800/50 bg-emerald-100 text-emerald-900" : "border-stone-500/50 bg-stone-100"}`}>
           {t.text}{t.count > 1 && <span className="ml-1 rounded bg-black/10 px-1 text-[11px] font-bold">×{t.count}</span>}

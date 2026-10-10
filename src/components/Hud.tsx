@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
 import { inputRouter } from "@/game/input/router";
@@ -65,6 +65,10 @@ async function api<T = unknown>(url: string, body?: unknown, method = body ? "PO
 
 /** Stop a press on the HUD from reaching the game (see the HUD's root). */
 const keepOffCanvas = (e: React.SyntheticEvent) => e.stopPropagation();
+// Tailwind's `sm` breakpoint, for the few things CSS classes can't switch (placeholders).
+const WIDE_QUERY = "(min-width: 640px)";
+const subscribeWide = (cb: () => void) => { const m = window.matchMedia(WIDE_QUERY); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
+const isWide = () => window.matchMedia(WIDE_QUERY).matches;
 
 export default function Hud() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -93,6 +97,8 @@ export default function Hud() {
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [building, setBuilding] = useState<{ key: string; name: string } | null>(null);
   const [auth, setAuth] = useState<"login" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [chat, setChat] = useState("");
   const [ask, setAsk] = useState("");
   const [canFish, setCanFish] = useState(false);
@@ -733,6 +739,42 @@ export default function Hud() {
   const hh = Math.floor(hour), mm = Math.floor((hour % 1) * 60);
   const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; return Math.hypot(n.x - b.doorX, n.y - b.doorY) < 200; }) ?? [] : [];
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
+  const onlineLine = `👥 ${snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 ${snap?.npcs.length ?? 0} agents`;
+  const missionDone = !!me?.missions?.some((m) => m.status === "active" && m.progress >= m.target);
+  const navBadge = loggedIn && ((me?.perkPoints ?? 0) > 0 || missionDone);
+  const togglePanel = (p: NonNullable<typeof panel>) => setPanel(panel === p ? null : p);
+  // The navigation buttons, laid out inline in the desktop bar and as a grid
+  // in the phone menu; `pick` runs after any choice (closes the menu).
+  const navItems = (pick: () => void) => (
+    <>
+      {loggedIn ? (
+        <>
+          <TopBtn on={() => { pick(); togglePanel("bag"); }} active={panel === "bag"}>🎒 Bag</TopBtn>
+          {((me?.perkPoints ?? 0) > 0 || (me?.perks.length ?? 0) > 0) && (
+            <TopBtn on={() => { pick(); togglePanel("perks"); }} active={panel === "perks"}>⭐ Perks{(me?.perkPoints ?? 0) > 0 ? ` (${me?.perkPoints})` : ""}</TopBtn>
+          )}
+          <TopBtn on={() => { pick(); togglePanel("missions"); }} active={panel === "missions"}>📜 Missions{missionDone ? " ✓" : ""}</TopBtn>
+          <TopBtn on={() => { pick(); togglePanel("quests"); }} active={panel === "quests"}>⚡ Quests</TopBtn>
+          <TopBtn on={() => { pick(); togglePanel("friends"); }} active={panel === "friends"}>👥 Friends</TopBtn>
+          <TopBtn on={() => { pick(); togglePanel("home"); }} active={panel === "home"}>🏡 Home</TopBtn>
+          <TopBtn on={() => { pick(); togglePanel("book"); }} active={panel === "book"}>📖 Book</TopBtn>
+          <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
+        </>
+      ) : null}
+      {loggedIn && <TopBtn on={() => { pick(); setMapOpen(mapOpen ? null : "browse"); }} active={!!mapOpen}>🗺️ Map</TopBtn>}
+      <TopBtn on={() => { pick(); togglePanel("log"); }} active={panel === "log"}>📰 World</TopBtn>
+      <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
+      <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60">🤖 Agent API</Link>
+      {loggedIn ? (
+        <button className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60" onClick={async () => { await api("/api/auth/logout", {}); location.reload(); }}>Sign out</button>
+      ) : (
+        <>
+          <button className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60" onClick={() => { pick(); setAuth("login"); }}>Sign in</button>
+          <Link href="/signup" className="rounded-lg bg-emerald-500 px-2 py-1 font-bold text-white hover:bg-emerald-400">Create character</Link>
+        </>
+      )}
+    </>
+  );
 
   return (
     // Presses on the HUD stay on the HUD: Phaser listens on the window for
@@ -742,7 +784,7 @@ export default function Hud() {
       <LocationBanner />
       {loggedIn && (selfPos ?? snap?.me) && (
         // Where you stand, in world tiles (x grows east, y grows south).
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-black/55 px-2 py-0.5 text-[11px] text-white" title="Your position in tiles (x east, y south)">
+        <div className="absolute bottom-2 left-1/2 hidden -translate-x-1/2 rounded bg-black/55 sm:block px-2 py-0.5 text-[11px] text-white" title="Your position in tiles (x east, y south)">
           📍 {Math.floor((selfPos ?? snap!.me!).x / 16)}, {Math.floor((selfPos ?? snap!.me!).y / 16)}
         </div>
       )}
@@ -761,29 +803,30 @@ export default function Hud() {
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
       )}
       {loggedIn && canFish && hasRod && !sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-20 left-1/2 -translate-x-1/2">
+        <div className="pointer-events-auto absolute bottom-[196px] left-1/2 -translate-x-1/2 sm:bottom-20">
           <button onClick={() => inputRouter.trigger("player.fish")} className="pixel-btn px-3 py-1.5 font-bold">🎣 Fish {fishHint}</button>
         </div>
       )}
-      {/* Top bar */}
-      <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-wrap items-center gap-2 bg-gradient-to-b from-black/50 to-transparent p-2 text-white">
-        <div className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 text-base font-bold tracking-tight text-amber-900 shadow">🌳 thegroove</div>
-        <div className="pixel-panel-dark px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]} {snap?.weather ?? "…"} · 🕰 {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
-        <div className="pixel-panel-dark px-2 py-1">👥 {snap?.onlineCount ?? snap?.players.length ?? 0} online · 🤖 {snap?.npcs.length ?? 0} agents</div>
+      {/* Top bar: one compact row on phones (navigation lives in the ☰ menu),
+          the full wrapping bar from sm up. */}
+      <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-nowrap items-center gap-1.5 bg-gradient-to-b from-black/50 to-transparent p-1.5 text-white sm:flex-wrap sm:gap-2 sm:p-2">
+        <div className="shrink-0 rounded-lg border-2 border-amber-900/60 bg-amber-100 px-2 py-1 text-base font-bold tracking-tight text-amber-900 shadow sm:px-3">🌳<span className="hidden sm:inline"> thegroove</span></div>
+        <div className="pixel-panel-dark shrink-0 px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]}<span className="hidden sm:inline"> {snap?.weather ?? "…"} · 🕰</span> {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
+        <div className="pixel-panel-dark hidden px-2 py-1 sm:block">{onlineLine}</div>
         <div className="flex-1" />
         {loggedIn && me?.me && (
-          <div className="pixel-panel-dark flex items-center gap-2 px-2 py-1">
-            <span className="font-bold text-amber-200">{me.me.name}</span> <span>Lv {me.me.level}</span>
+          <div className="pixel-panel-dark flex min-w-0 items-center gap-1.5 px-2 py-1 sm:gap-2">
+            <span className="hidden font-bold text-amber-200 sm:inline">{me.me.name}</span> <span className="whitespace-nowrap">Lv {me.me.level}</span>
             {(() => {
               const hp = hpLive?.hp ?? snap?.me?.hp ?? me.me.hp;
               const maxHp = hpLive?.maxHp ?? snap?.me?.maxHp ?? me.me.maxHp;
               return (
                 <>
-                  <span className="h-2 w-20 overflow-hidden rounded bg-black/50"><span className="block h-full bg-red-500" style={{ width: `${(100 * hp) / maxHp}%` }} /></span>
-                  <span>❤️ {hp}</span>
+                  <span className="hidden h-2 w-20 shrink-0 overflow-hidden rounded bg-black/50 sm:block"><span className="block h-full bg-red-500" style={{ width: `${(100 * hp) / maxHp}%` }} /></span>
+                  <span className="whitespace-nowrap">❤️ {hp}</span>
                 </>
               );
-            })()}<span>🪙 {snap?.me?.coins ?? me.me.coins}</span><span>💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
+            })()}<span className="whitespace-nowrap">🪙 {snap?.me?.coins ?? me.me.coins}</span><span className="hidden sm:inline">💎 {(snap?.me as unknown as { gems?: number })?.gems ?? 0}</span>
             {(() => {
               // XP toward the next level, with the next unlock as a hint.
               const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
@@ -791,40 +834,28 @@ export default function Hud() {
               const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
               const next = nextUnlock(lv);
               return (
-                <span className="flex items-center gap-1" title={`${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}`}>
+                <span className="hidden items-center gap-1 sm:flex" title={`${xp - lo}/${hi - lo} XP to level ${lv + 1}${next ? ` · next unlock at Lv ${next.level}: ${next.text}` : ""}`}>
                   ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${(100 * (xp - lo)) / (hi - lo)}%` }} /></span>
                 </span>
               );
             })()}
           </div>
         )}
-        {loggedIn ? (
-          <>
-            <TopBtn on={() => setPanel(panel === "bag" ? null : "bag")} active={panel === "bag"}>🎒 Bag</TopBtn>
-            {((me?.perkPoints ?? 0) > 0 || (me?.perks.length ?? 0) > 0) && (
-              <TopBtn on={() => setPanel(panel === "perks" ? null : "perks")} active={panel === "perks"}>⭐ Perks{(me?.perkPoints ?? 0) > 0 ? ` (${me?.perkPoints})` : ""}</TopBtn>
-            )}
-            <TopBtn on={() => setPanel(panel === "missions" ? null : "missions")} active={panel === "missions"}>📜 Missions{me?.missions.some((m) => m.status === "active" && m.progress >= m.target) ? " ✓" : ""}</TopBtn>
-            <TopBtn on={() => setPanel(panel === "quests" ? null : "quests")} active={panel === "quests"}>⚡ Quests</TopBtn>
-            <TopBtn on={() => setPanel(panel === "friends" ? null : "friends")} active={panel === "friends"}>👥 Friends</TopBtn>
-            <TopBtn on={() => setPanel(panel === "home" ? null : "home")} active={panel === "home"}>🏡 Home</TopBtn>
-            <TopBtn on={() => setPanel(panel === "book" ? null : "book")} active={panel === "book"}>📖 Book</TopBtn>
-            <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
-          </>
-        ) : null}
-        {loggedIn && <TopBtn on={() => setMapOpen(mapOpen ? null : "browse")} active={!!mapOpen}>🗺️ Map</TopBtn>}
-        <TopBtn on={() => setPanel(panel === "log" ? null : "log")} active={panel === "log"}>📰 World</TopBtn>
-        <Link href="/sponsor" className="rounded-lg bg-orange-500 px-2 py-1 font-bold text-white hover:bg-orange-400">🏪 For businesses</Link>
-        <Link href="/agents" className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60">🤖 Agent API</Link>
-        {loggedIn ? (
-          <button className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60" onClick={async () => { await api("/api/auth/logout", {}); location.reload(); }}>Sign out</button>
-        ) : (
-          <>
-            <button className="rounded-lg bg-black/40 px-2 py-1 hover:bg-black/60" onClick={() => setAuth("login")}>Sign in</button>
-            <Link href="/signup" className="rounded-lg bg-emerald-500 px-2 py-1 font-bold text-white hover:bg-emerald-400">Create character</Link>
-          </>
-        )}
+        <div className="hidden sm:contents">{navItems(() => {})}</div>
+        <div className="relative shrink-0 sm:hidden">
+          <TopBtn on={() => setMenuOpen((o) => !o)} active={menuOpen}>☰</TopBtn>
+          {navBadge && !menuOpen && <span className="pointer-events-none absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-white bg-red-500" />}
+        </div>
       </div>
+      {/* Phone menu: the same items as the desktop bar, in a sheet under it. */}
+      {menuOpen && (
+        <div className="pointer-events-auto absolute inset-0 z-30 sm:hidden" onClick={() => setMenuOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="pixel-panel absolute left-2 right-2 top-12 p-2 text-white shadow-2xl">
+            <div className="mb-2 px-1 text-[12px] text-stone-600">{onlineLine}</div>
+            <div className="grid grid-cols-2 gap-1.5 [&>*]:text-center">{navItems(() => setMenuOpen(false))}</div>
+          </div>
+        </div>
+      )}
 
       {/* Welcome card for spectators */}
       {snap && !loggedIn && !auth && (
@@ -843,7 +874,7 @@ export default function Hud() {
 
       {/* Selection action bar */}
       {sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-20 left-1/2 flex -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl">
+        <div className="pointer-events-auto absolute bottom-[196px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl sm:bottom-20">
           <div className="px-2">
             <div className="font-bold text-amber-900">{selTitle(sel)}</div>
             <div className="text-[11px] text-stone-500">{sel.distance < 9000 ? `${Math.round(sel.distance / 32)} tiles away` : "spectating"}</div>
@@ -973,12 +1004,12 @@ export default function Hud() {
 
       {/* Chat input */}
       {loggedIn && !talk && (
-        <form className="pointer-events-auto absolute bottom-3 left-3 flex w-[min(90vw,360px)] gap-1" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); }}>
-          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Say something to the plaza… (WASD to walk, Shift to run, E to interact)" className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
+        <form className="pointer-events-auto absolute bottom-2 left-2 right-2 flex gap-1 sm:bottom-3 sm:left-3 sm:right-auto sm:w-[min(90vw,360px)]" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); }}>
+          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder={wide ? "Say something to the plaza… (WASD to walk, Shift to run, E to interact)" : "Say something to the plaza…"} className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
           <button className="rounded-lg bg-amber-700 px-3 text-white">Say</button>
         </form>
       )}
-      {!loggedIn && <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/40 px-2 py-1 text-[11px] text-white">Spectating · drag to pan · scroll to zoom · click things</div>}
+      {!loggedIn && <div className="pointer-events-none absolute bottom-3 left-3 rounded bg-black/40 px-2 py-1 text-[11px] text-white">Spectating · <span className="sm:hidden">drag · pinch · tap things</span><span className="hidden sm:inline">drag to pan · scroll to zoom · click things</span></div>}
 
       {/* Toasts + gains (their own component: bursts don't re-render the HUD) */}
       <Notifications />
@@ -1063,7 +1094,7 @@ export default function Hud() {
 
       {/* Side panels */}
       {panel && (
-        <div className="pointer-events-auto absolute bottom-16 right-3 top-14 w-[min(92vw,360px)] overflow-y-auto pixel-panel p-3 shadow-2xl">
+        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-14 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
