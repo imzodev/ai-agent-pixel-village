@@ -1,56 +1,95 @@
-// Touch input adapter. The joystick writes its vector to the router;
-// each on-screen button triggers a router command. No keyboard code lives
+// Touch input adapter. The arrow pad (left thumb) writes the movement axis
+// to the router; on the right thumb's side, the run button toggles running
+// and each action button triggers a router command. No keyboard code lives
 // here — keyboard is its own adapter (domKeyboard.ts) so the two paths
 // stay independent and testable.
+//
+// The controls sit in a container with pointer-events: none (taps between
+// them reach the game), so every control that takes touches turns them back
+// on for itself.
 
-import nipplejs from "nipplejs";
 import type { InputRouter } from "./input/router";
-import { TOUCH_BUTTONS } from "./input/touchButtons";
+import { RUN_BUTTON, TOUCH_BUTTONS } from "./input/touchButtons";
+import { dpadAxis } from "./input/dpad";
 
 export type InputSource = {
   getAxis(): { x: number; y: number };
   destroy(): void;
 };
 
-const DEADZONE = 0.18;
-// Joystick push (0..1) at which movement switches from walking to running.
-const RUN_STICK_MAG = 0.95;
-const MAX_DIST = 50;
+/** Arrow cells in the pad's 3×3 grid (row, column). */
+const ARROWS = [
+  { row: 1, col: 2, label: "▲", aria: "Walk up", x: 0, y: -1 },
+  { row: 2, col: 1, label: "◀", aria: "Walk left", x: -1, y: 0 },
+  { row: 2, col: 3, label: "▶", aria: "Walk right", x: 1, y: 0 },
+  { row: 3, col: 2, label: "▼", aria: "Walk down", x: 0, y: 1 },
+] as const;
 
 export function createInputSource(opts: {
   router: InputRouter;
   container: HTMLElement;
 }): InputSource {
-  // --- Joystick (left thumb) ---
-  const joy = nipplejs.create({
-    zone: opts.container,
-    mode: "dynamic",
-    position: { left: "18%", bottom: "20%" },
-    color: "rgba(255,255,255,0.55)",
-    size: 110,
-    restOpacity: 0.55,
-  }) as unknown as {
-    on: (e: string, cb: (...args: unknown[]) => void) => void;
-    destroy: () => void;
+  // --- Arrow pad (left thumb) ---
+  // One element takes the whole touch: press an arrow and slide between
+  // them without lifting (pointer capture keeps the pad receiving moves).
+  const pad = document.createElement("div");
+  pad.className = "grove-dpad";
+  pad.setAttribute("role", "group");
+  pad.setAttribute("aria-label", "Movement");
+  const arrowEls = ARROWS.map((a) => {
+    const el = document.createElement("div");
+    el.className = "grove-dpad-arrow";
+    el.textContent = a.label;
+    el.setAttribute("aria-label", a.aria);
+    el.style.gridRow = String(a.row);
+    el.style.gridColumn = String(a.col);
+    pad.appendChild(el);
+    return el;
+  });
+  let padPointer: number | null = null;
+  const steer = (e: PointerEvent) => {
+    const r = pad.getBoundingClientRect();
+    const axis = dpadAxis(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    opts.router.setVirtualAxis(axis.x, axis.y);
+    ARROWS.forEach((a, i) => arrowEls[i].classList.toggle("active", a.x === axis.x && a.y === axis.y && (axis.x !== 0 || axis.y !== 0)));
   };
-  joy.on("move", (...args: unknown[]) => {
-    const data = args[1] as { vector?: { x: number; y: number }; distance?: number } | undefined;
-    if (!data) return;
-    const dx = data.vector?.x ?? 0;
-    const dy = data.vector?.y ?? 0;
-    const dist = data.distance ?? 0;
-    const mag = Math.min(1, dist / MAX_DIST);
-    opts.router.setVirtualAxis(
-      Math.abs(dx) < DEADZONE ? 0 : dx * mag,
-      Math.abs(dy) < DEADZONE ? 0 : dy * mag,
-    );
-    // Pushing the stick all the way runs; a partial push walks.
-    opts.router.setHeld("move.run", mag >= RUN_STICK_MAG);
-  });
-  joy.on("end", () => {
+  const release = () => {
+    padPointer = null;
     opts.router.setVirtualAxis(0, 0);
-    opts.router.setHeld("move.run", false);
+    for (const el of arrowEls) el.classList.remove("active");
+  };
+  pad.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    padPointer = e.pointerId;
+    pad.setPointerCapture(e.pointerId);
+    steer(e);
   });
+  pad.addEventListener("pointermove", (e) => { if (e.pointerId === padPointer) steer(e); });
+  pad.addEventListener("pointerup", (e) => { if (e.pointerId === padPointer) release(); });
+  pad.addEventListener("pointercancel", (e) => { if (e.pointerId === padPointer) release(); });
+
+  opts.container.appendChild(pad);
+
+  // Run: a toggle for the right thumb (the left one is on the arrows), on
+  // top of the action buttons. Tap to run, tap again to walk.
+  let running = false;
+  const run = document.createElement("button");
+  run.type = "button";
+  run.className = "grove-action-btn grove-run-btn";
+  run.textContent = "🏃";
+  run.setAttribute("aria-label", "Run");
+  run.setAttribute("aria-pressed", "false");
+  run.style.position = "absolute";
+  run.style.right = RUN_BUTTON.right;
+  run.style.bottom = RUN_BUTTON.bottom;
+  run.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    running = !running;
+    opts.router.setHeld("move.run", running);
+    run.classList.toggle("active", running);
+    run.setAttribute("aria-pressed", String(running));
+  });
+  opts.container.appendChild(run);
 
   // Presses on the touch controls stay there: Phaser listens on the window
   // for presses outside its canvas and would select whatever is under a
@@ -80,7 +119,10 @@ export function createInputSource(opts: {
   return {
     getAxis: () => ({ x: 0, y: 0 }),
     destroy() {
-      joy.destroy();
+      release();
+      opts.router.setHeld("move.run", false);
+      pad.remove();
+      run.remove();
       opts.container.removeEventListener("touchstart", keepOffCanvas);
       opts.container.removeEventListener("mousedown", keepOffCanvas);
       opts.container.querySelectorAll(".grove-action-btn").forEach((el) => el.remove());

@@ -881,7 +881,7 @@ export default function Hud() {
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Talk to the Elder any time for tips.", "info"); void refreshMe(); }} />
       )}
       {loggedIn && canFish && hasRod && !sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-[196px] left-1/2 -translate-x-1/2 sm:bottom-20">
+        <div className="pointer-events-auto absolute bottom-[240px] left-1/2 -translate-x-1/2 sm:bottom-20">
           <button onClick={() => inputRouter.trigger("player.fish")} className="pixel-btn px-3 py-1.5 font-bold">🎣 Fish {fishHint}</button>
         </div>
       )}
@@ -948,7 +948,7 @@ export default function Hud() {
 
       {/* Selection action bar */}
       {sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-[196px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl sm:bottom-20">
+        <div className="pointer-events-auto absolute bottom-[240px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl sm:bottom-20">
           <div className="px-2">
             <div className="font-bold text-amber-900">{selTitle(sel)}</div>
             <div className="text-[11px] text-stone-500">{sel.distance < 9000 ? `${Math.round(sel.distance / 32)} tiles away` : "spectating"}</div>

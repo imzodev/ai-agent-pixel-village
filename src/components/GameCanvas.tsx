@@ -95,8 +95,39 @@ export default function GameCanvas() {
         .grove-input .grove-action-btn:active {
           background: rgba(255, 200, 80, 0.5);
         }
-        .grove-input .nipple {
+        /* Arrow pad (left thumb): arrows on a 3×3 cross. */
+        .grove-input .grove-dpad {
+          position: absolute;
+          left: 16px;
+          bottom: 64px;
+          display: grid;
+          grid-template-columns: repeat(3, 52px);
+          grid-template-rows: repeat(3, 52px);
+          gap: 4px;
           pointer-events: auto;
+          touch-action: none;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .grove-input .grove-dpad-arrow {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid rgba(255, 255, 255, 0.55);
+          background: rgba(20, 28, 50, 0.45);
+          color: white;
+          font-size: 20px;
+          backdrop-filter: blur(2px);
+          touch-action: none;
+        }
+        .grove-input .grove-dpad-arrow {
+          border-radius: 12px;
+        }
+        /* The run toggle wears the action-button look (grove-action-btn), lit while on. */
+        .grove-input .grove-dpad-arrow.active,
+        .grove-input .grove-run-btn.active {
+          background: rgba(255, 200, 80, 0.6);
+          border-color: rgba(255, 230, 160, 0.9);
         }
       `}</style>
     </div>
