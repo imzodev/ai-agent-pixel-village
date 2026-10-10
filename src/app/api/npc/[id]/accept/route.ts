@@ -6,7 +6,8 @@ import { buildOffers, loadSponsor } from "@/lib/offers";
 import { addItem, emitLead, grantReward, logEvent, removeItem } from "@/lib/game";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
-import { adjustStock, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
+import { adjustStock, mindPurse, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
+import { cantAffordText } from "@/lib/mind/profile";
 import { regardHelped } from "@/lib/mind/regard";
 import { deliverOrder, takeOrder } from "@/lib/ordersServer";
 import { onCommissionDone } from "@/lib/commissionsServer";
@@ -76,7 +77,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     } else if (offer.type === "sell") {
       // An NPC with a mind pays from its own purse (src/lib/mind/).
       const purse = await npcBuys(npc.key, offer.itemKey, offer.qty, offer.price);
-      if (!purse.ok) return Response.json({ error: `${npc.name} can't afford that today.` }, { status: 400 });
+      if (!purse.ok) return Response.json({ error: cantAffordText(npc.name, (await mindPurse(npc.key)) ?? 0, offer.itemKey, offer.price / Math.max(1, offer.qty)) }, { status: 400 });
       const ok = await removeItem(character.id, offer.itemKey, offer.qty);
       if (!ok) {
         if (purse.npcId) await adjustStock(purse.npcId, { [offer.itemKey]: -offer.qty }, offer.price, true);

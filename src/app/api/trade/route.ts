@@ -15,15 +15,14 @@ import { HAGGLER_MULT } from "@/lib/progression";
 import { getLivePlayerPosition, markWorldDirty, refreshBikeOwnership } from "@/lib/world-stream";
 import { BIKE_ITEM } from "@/lib/bike";
 
-import { adjustStock, npcBuys, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
+import { adjustStock, mindPurse, npcBuys, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
+import { affordableQty, cantAffordText } from "@/lib/mind/profile";
+import type { BuyerPurse, SellResult } from "@/types/trade";
 import { isMindNpc } from "@/lib/mind/config";
 import { regardHelped, tierFor } from "@/lib/mind/regard";
 
 export const dynamic = "force-dynamic";
 
-type SellResult =
-  | { ok: true; soldTo: string; itemKey: string; qty: number; gained: number; coins: number }
-  | { ok: false; error: string };
 
 async function performSell(opts: {
   characterId: number;
@@ -31,7 +30,7 @@ async function performSell(opts: {
   qty: number;
   npcKey?: string;
 }): Promise<SellResult> {
-  const qty = Math.max(1, Math.min(99, Math.floor(opts.qty || 1)));
+  const wanted = Math.max(1, Math.min(99, Math.floor(opts.qty || 1)));
   if (!opts.itemKey) return { ok: false, error: "What are you selling?" };
 
   const buyer = opts.npcKey
@@ -44,10 +43,17 @@ async function performSell(opts: {
 
   // Haggler: NPCs pay 20% more.
   const haggler = (await perksOf(opts.characterId)).has("haggler");
-  const gained = Math.round(buyer.trade.price * qty * (haggler ? HAGGLER_MULT : 1));
-  // An NPC with a mind pays from its own purse (src/lib/mind/).
+  const unit = buyer.trade.price * (haggler ? HAGGLER_MULT : 1);
+  // An NPC with a mind pays from its own purse (src/lib/mind/): it takes as
+  // many as it can pay for, and says what it has when that's none.
+  const before = await mindPurse(buyer.npcKey);
+  let sold = affordableQty(wanted, unit, before);
+  while (sold > 0 && before != null && Math.round(unit * sold) > before) sold--; // rounding
+  if (sold === 0) return { ok: false, error: cantAffordText(npc.name, before ?? 0, opts.itemKey, unit) };
+  const qty = sold;
+  const gained = Math.round(unit * qty);
   const purse = await npcBuys(buyer.npcKey, opts.itemKey, qty, gained);
-  if (!purse.ok) return { ok: false, error: `${npc.name} can't afford that today.` };
+  if (!purse.ok) return { ok: false, error: cantAffordText(npc.name, (await mindPurse(buyer.npcKey)) ?? 0, opts.itemKey, unit) };
   const ok = await removeItem(opts.characterId, opts.itemKey, qty);
   if (!ok) {
     if (purse.npcId) await adjustStock(purse.npcId, { [opts.itemKey]: -qty }, gained, true);
@@ -59,7 +65,19 @@ async function performSell(opts: {
     .select({ coins: sql<number>`coalesce(${characters.coins}, 0)::int` })
     .from(characters)
     .where(eq(characters.id, opts.characterId));
-  return { ok: true, soldTo: npc.name, itemKey: opts.itemKey, qty, gained, coins: row?.coins ?? 0 };
+  return { ok: true, soldTo: npc.name, itemKey: opts.itemKey, qty, wanted, gained, coins: row?.coins ?? 0, purse: before == null ? null : await mindPurse(buyer.npcKey) };
+}
+
+/** What an NPC can pay with: GET /api/trade?npcKey=… → { purse } (null = no limit). */
+export async function GET(req: Request) {
+  try {
+    await requireCharacter();
+    const npcKey = new URL(req.url).searchParams.get("npcKey") ?? "";
+    const body: BuyerPurse = { purse: npcKey ? await mindPurse(npcKey) : null };
+    return Response.json(body);
+  } catch (e) {
+    return handleApiError(e);
+  }
 }
 
 export async function POST(req: Request) {
@@ -121,7 +139,7 @@ export async function POST(req: Request) {
     const step = await tutorialEvent(me.id, "sell");
     const sellTown = r.ok && npcKey ? townOfNpc(npcKey) : null;
     const rep = sellTown ? await addReputation(me.id, sellTown, REP_PER_TRADE) : null;
-    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, gained: r.gained, coins: r.coins, notices: [...(step ? [step] : []), ...(rep?.reached ? [`🏘️ ${townName(sellTown!)} now sees you as ${rep.reached}!`] : [])] });
+    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, wanted: r.wanted, gained: r.gained, coins: r.coins, purse: r.purse, notices: [...(step ? [step] : []), ...(rep?.reached ? [`🏘️ ${townName(sellTown!)} now sees you as ${rep.reached}!`] : [])] });
   } catch (e) {
     return handleApiError(e);
   }

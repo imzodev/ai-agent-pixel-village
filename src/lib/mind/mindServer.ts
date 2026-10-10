@@ -21,9 +21,9 @@ import { latestBatch, setOutBatch } from "@/lib/bakeryServer";
 import { startTrip } from "@/lib/nav/trips";
 import { chatWithFallback } from "@/lib/llm";
 import { askJev } from "./jev";
-import { MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
+import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
-import { MOODS, REQUEST_TTL_MS, URGENCY, count, feasibleActions, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
+import { MOODS, REQUEST_TTL_MS, URGENCY, count, feasibleActions, incomeFor, incomeRate, purseTarget, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
 import { profileFor } from "./profiles";
 import type { MindDecision, MindIntent, MindMemory, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
 
@@ -316,15 +316,47 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
 /** tickd, every beat: each mind NPC that's due thinks once. */
 export async function thinkMinds(now = Date.now()): Promise<number> {
   let n = 0;
+  const active = await activePlayers(now);
   for (const key of mindNpcKeys()) {
     const m = await mindNpcByKey(key);
     if (!m || !m.npc.active) continue;
     const [mind] = await db.select({ at: npcMinds.lastThinkAt }).from(npcMinds).where(eq(npcMinds.npcId, m.npc.id));
     if (mind?.at && now - mind.at.getTime() < MIND_INTERVAL_MS) continue;
+    // Takings since they last thought, then think with them in the purse.
+    if (mind?.at) await payIncome(m.npc.id, m.profile, active, now - mind.at.getTime()).catch((e) => console.warn(`[mind] ${key} income:`, e instanceof Error ? e.message : e));
     await think(m.npc, now).catch((e) => console.warn(`[mind] ${key}:`, e instanceof Error ? e.message : e));
     n++;
   }
   return n;
+}
+
+/** Players active in the last day: the income scales with them. */
+async function activePlayers(now: number): Promise<number> {
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(characters).where(gte(characters.lastSeenAt, new Date(now - ACTIVE_WINDOW_MS)));
+  return r?.n ?? 0;
+}
+const ACTIVE_WINDOW_MS = 24 * 3600_000;
+
+/**
+ * Add a mind's takings from villagers you don't see (`elapsedMs` of them),
+ * up to its purse target. A purse already above the target (sales) is left
+ * alone, never cut.
+ */
+async function payIncome(npcId: number, p: MindProfile, active: number, elapsedMs: number): Promise<void> {
+  const coins = incomeFor(incomeRate(p, active, MIND_INCOME_SCALE), elapsedMs);
+  if (coins <= 0) return;
+  const target = purseTarget(p, active, MIND_INCOME_SCALE);
+  await db.update(npcMinds)
+    .set({ purse: sql`least(${target}, ${npcMinds.purse} + ${coins})` })
+    .where(and(eq(npcMinds.npcId, npcId), sql`${npcMinds.purse} < ${target}`));
+}
+
+/** What a mind NPC has in its purse right now; null for NPCs without a mind (they always pay). */
+export async function mindPurse(npcKey: string): Promise<number | null> {
+  const m = await mindNpcByKey(npcKey);
+  if (!m) return null;
+  const [row] = await db.select({ purse: npcMinds.purse }).from(npcMinds).where(eq(npcMinds.npcId, m.npc.id));
+  return row?.purse ?? 0;
 }
 
 /** The admin view of one mind. */

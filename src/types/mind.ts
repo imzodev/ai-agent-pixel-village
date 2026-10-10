@@ -82,12 +82,26 @@ export type OrderDef = { qty: number; pay: number };
 export type AskDef = { qty: number; pay: number; low: number };
 
 /** A kind of mind (src/lib/mind/profiles.ts): pure data, the logic is shared. */
+/** How a mind NPC's purse refills, scaled by the players active in the last day. */
+export type MindIncome = {
+  /** Coins an hour with nobody playing. */
+  basePerHour: number;
+  /** Extra coins an hour per active player. */
+  perPlayerPerHour: number;
+  /** The purse refills up to this with nobody playing... */
+  baseTarget: number;
+  /** ...plus this per active player. */
+  perPlayerTarget: number;
+};
+
 export type MindProfile = {
   key: string;
   /** "the village baker", for Jev's state and the LLM. */
   trade: string;
   startStock: NpcStock;
   startPurse: number;
+  /** Takings from villagers you don't see, so the purse can pay players (src/lib/mind/profile.ts incomeRate). */
+  income: MindIncome;
   /** What they sell off their shelf, only while they have it (item → unit price, for the state text). */
   shelf: Readonly<Record<string, number>>;
   shelfFull: number;

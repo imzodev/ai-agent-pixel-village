@@ -18,6 +18,41 @@ export const word = (p: MindProfile, item: string) => p.words[item] ?? item.repl
 /** "1 stone sword", "20 arrows". */
 export const count = (p: MindProfile, n: number, item: string) => `${n} ${n === 1 ? word(p, item).replace(/s$/, "") : word(p, item)}`;
 
+// ── Income ────────────────────────────────────────────────────────────
+// A mind's purse refills from villagers you don't see, in step with how many
+// players there are (active in the last day): more players selling to them,
+// more coins to pay with.
+
+/** Income is paid for at most this much time away (a stopped tickd doesn't pay a week at once). */
+export const INCOME_MAX_ELAPSED_MS = 24 * 3600_000;
+
+/** Coins an hour, with `active` players. */
+export function incomeRate(p: MindProfile, active: number, scale = 1): number {
+  return (p.income.basePerHour + p.income.perPlayerPerHour * Math.max(0, active)) * scale;
+}
+
+/** The purse refills up to this, with `active` players. */
+export function purseTarget(p: MindProfile, active: number, scale = 1): number {
+  return Math.round((p.income.baseTarget + p.income.perPlayerTarget * Math.max(0, active)) * scale);
+}
+
+/** Whole coins earned at `perHour` over `elapsedMs` (capped). */
+export function incomeFor(perHour: number, elapsedMs: number): number {
+  const ms = Math.min(Math.max(0, elapsedMs), INCOME_MAX_ELAPSED_MS);
+  return Math.floor((perHour * ms) / 3600_000);
+}
+
+/** How many of a sale a buyer with `purse` coins can pay for at `unit` each (all if no purse limit). */
+export function affordableQty(qty: number, unit: number, purse: number | null): number {
+  if (purse == null || unit <= 0) return qty;
+  return Math.max(0, Math.min(qty, Math.floor(purse / unit)));
+}
+
+/** Why a buyer turned a sale down: how much they have against what one costs them. */
+export function cantAffordText(buyer: string, purse: number, itemKey: string, unit: number): string {
+  return `${buyer} only has ${purse} 🪙 right now (one ${itemKey.replace(/_/g, " ")} costs ${Math.round(unit)}). Come back a little later.`;
+}
+
 /** Regard score → how they feel. */
 export function regardTier(score: number): RegardTier {
   return score >= 10 ? "dear" : score >= 4 ? "fond" : score <= -3 ? "cool" : "neutral";

@@ -13,6 +13,8 @@ export const BAKER: MindProfile = {
   trade: "the village baker",
   startStock: { flour: 12, egg: 6, honey: 4, milk: 0, bread: 4, honey_bun: 2 },
   startPurse: 40,
+  // At 100 active players: 6,300 coins/hour, up to 21,000.
+  income: { basePerHour: 300, perPlayerPerHour: 60, baseTarget: 1000, perPlayerTarget: 200 },
   shelf: { bread: 4, honey_bun: 6, apple_pie: 9, cherry_pie: 9, peach_pie: 9 },
   shelfFull: 12,
   minCraftGapMs: 10 * MIN,
@@ -39,6 +41,8 @@ export const SMITH: MindProfile = {
   trade: "the blacksmith of Hollowmere",
   startStock: { stone: 10, wood: 8, axe: 1, arrow: 20, stone_sword: 0, fittings: 8 },
   startPurse: 60,
+  // At 100 active players: 4,200 coins/hour, up to 15,800.
+  income: { basePerHour: 200, perPlayerPerHour: 40, baseTarget: 800, perPlayerTarget: 150 },
   shelf: { axe: 25, arrow: 1, stone_sword: 30, fittings: 6 },
   shelfFull: 4,
   shelfCap: { arrow: 30, fittings: 16 },

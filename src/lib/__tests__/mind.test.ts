@@ -150,3 +150,37 @@ describe("first-meeting gifts", () => {
     for (const k of keys) expect(npcDef(k), k).toBeDefined();
   });
 });
+
+describe("mind income", () => {
+  it("grows with the players active in the last day", async () => {
+    const { incomeRate, purseTarget } = await import("@/lib/mind/profile");
+    expect(incomeRate(BAKER, 0)).toBe(300);
+    expect(incomeRate(BAKER, 100)).toBe(6300);
+    expect(purseTarget(BAKER, 0)).toBe(1000);
+    expect(purseTarget(BAKER, 100)).toBe(21000);
+    expect(incomeRate(SMITH, 100)).toBe(4200);
+    expect(incomeRate(BAKER, 100, 0.5)).toBe(3150); // MIND_INCOME_SCALE
+  });
+
+  it("pays by time passed, never for more than a day at once", async () => {
+    const { incomeFor, INCOME_MAX_ELAPSED_MS } = await import("@/lib/mind/profile");
+    expect(incomeFor(360, 60_000)).toBe(6); // 6 a minute at 360/h
+    expect(incomeFor(360, -5)).toBe(0);
+    expect(incomeFor(1000, INCOME_MAX_ELAPSED_MS * 7)).toBe(24_000);
+  });
+});
+
+describe("selling to a buyer with a purse", () => {
+  it("sells as many as they can pay for", async () => {
+    const { affordableQty } = await import("@/lib/mind/profile");
+    expect(affordableQty(7, 24, 20)).toBe(0); // the pumpkin with Haggler, 20 coins
+    expect(affordableQty(7, 24, 80)).toBe(3);
+    expect(affordableQty(7, 24, 1000)).toBe(7);
+    expect(affordableQty(7, 24, null)).toBe(7); // no purse: always pays
+  });
+
+  it("says what they have when they can't pay for one", async () => {
+    const { cantAffordText } = await import("@/lib/mind/profile");
+    expect(cantAffordText("Marigold", 20, "pumpkin", 24)).toBe("Marigold only has 20 🪙 right now (one pumpkin costs 24). Come back a little later.");
+  });
+});

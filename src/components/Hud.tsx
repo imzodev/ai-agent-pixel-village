@@ -6,10 +6,12 @@ import { inputRouter } from "@/game/input/router";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
+import type { BuyerPurse } from "@/types/trade";
+import { affordableQty } from "@/lib/mind/profile";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
-import { ARROW_ITEM, AXE_ITEMS, PERKS, bowOf, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
+import { ARROW_ITEM, AXE_ITEMS, HAGGLER_MULT, PERKS, bowOf, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
 import { positionAt } from "@/lib/motion";
 import { NPC_TALK_KEEPALIVE_MS } from "@/lib/constants";
 import LocationBanner from "./LocationBanner";
@@ -415,11 +417,16 @@ export default function Hud() {
     setTrade({ npcId, npcName, npcKey, rows });
   };
 
-  const performTrade = async (itemKey: string, qty: number) => {
-    if (!trade) return;
-    const r = await api<{ ok?: boolean; error?: string; gained?: number; coins?: number; notices?: string[] }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
-    if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return; }
-    toast(`Sold ${qty} ${itemKey.replace(/_/g, " ")} for ${r.gained} 🪙.`, "good");
+  /** Sell to the trade window's NPC; resolves to their purse afterwards (null: no limit; undefined: failed). */
+  const performTrade = async (itemKey: string, qty: number): Promise<number | null | undefined> => {
+    if (!trade) return undefined;
+    const r = await api<{ ok?: boolean; error?: string; qty?: number; wanted?: number; gained?: number; coins?: number; purse?: number | null; notices?: string[] }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
+    if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return undefined; }
+    const name = itemKey.replace(/_/g, " ");
+    const sold = r.qty ?? qty;
+    toast(sold < (r.wanted ?? sold)
+      ? `${trade.npcName} could only afford ${sold} of your ${r.wanted} ${name}: +${r.gained} 🪙.`
+      : `Sold ${sold} ${name} for ${r.gained} 🪙.`, "good");
     notify(r.notices);
     void refreshMe();
     // Refresh modal contents from the updated `me` (state set by refreshMe).
@@ -432,6 +439,7 @@ export default function Hud() {
         .filter((r) => r.have > 0);
       return updated.length === 0 ? null : { ...cur, rows: updated };
     });
+    return r.purse ?? null;
   };
 
   const openCraft = (npcId: number, npcName: string, npcKey: string) => {
@@ -1091,7 +1099,7 @@ export default function Hud() {
       )}
 
       {trade && (
-        <TradeModal trade={trade} performTrade={performTrade} onClose={() => setTrade(null)} />
+        <TradeModal trade={trade} performTrade={performTrade} mult={me?.perks.includes("haggler") ? HAGGLER_MULT : 1} onClose={() => setTrade(null)} />
       )}
 
       {/* Craft modal — per-NPC recipes. */}
@@ -1573,18 +1581,30 @@ function ShopRow({ item, locked, coins, have, busy, onBuy }: { item: TradeItem; 
   );
 }
 
-function TradeModal({ trade, performTrade, onClose }: {
+function TradeModal({ trade, performTrade, mult, onClose }: {
   trade: { npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] };
-  performTrade: (itemKey: string, qty: number) => void;
+  performTrade: (itemKey: string, qty: number) => Promise<number | null | undefined>;
+  /** What the NPC pays per coin of price (Haggler pays more). */
+  mult: number;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const firstQtyRef = useRef<HTMLInputElement | null>(null);
+  // What the buyer can pay with: undefined while loading, null for no limit.
+  const [purse, setPurse] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    void api<BuyerPurse>(`/api/trade?npcKey=${encodeURIComponent(trade.npcKey)}`).then((r) => { if (live && !r.error) setPurse(r.purse); });
+    return () => { live = false; };
+  }, [trade.npcKey]);
+  /** How many of a row the buyer can pay for (all while unknown or unlimited). */
+  const affordable = (row: { trade: TradeItem; have: number }) => (purse == null ? row.have : affordableQty(row.have, row.trade.price * mult, purse));
 
   const doSell = async (row: { trade: TradeItem; have: number }, qty: number) => {
     if (busy) return;
     setBusy(true);
-    await performTrade(row.trade.itemKey, qty);
+    const after = await performTrade(row.trade.itemKey, qty);
+    if (after !== undefined) setPurse(after);
     setBusy(false);
   };
 
@@ -1613,6 +1633,7 @@ function TradeModal({ trade, performTrade, onClose }: {
             if (!firstRow || busy) return;
             const input = firstQtyRef.current;
             const qty = input ? Math.max(1, Math.min(firstRow.have, Number(input.value) || 1)) : 1;
+            if (purse != null && affordableQty(qty, firstRow.trade.price * mult, purse) === 0) return;
             void doSell(firstRow, qty);
           },
         },
@@ -1636,7 +1657,7 @@ function TradeModal({ trade, performTrade, onClose }: {
     // Focus the first qty input so the user can type immediately.
     const focusTimer = setTimeout(() => firstQtyRef.current?.focus(), 50);
     return () => { dispose(); clearTimeout(focusTimer); };
-  }, [trade, busy, onClose]);
+  }, [trade, busy, onClose, purse, mult]); // eslint-disable-line react-hooks/exhaustive-deps -- doSell is recreated each render
 
   return (
     <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -1645,6 +1666,7 @@ function TradeModal({ trade, performTrade, onClose }: {
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">💰 Trade with {trade.npcName}</div>
             {trade.rows.length > 0 && <div className="mt-1 text-[12px] italic text-stone-600">&ldquo;{trade.rows[0].trade.line}&rdquo;</div>}
+            {typeof purse === "number" && <div className="mt-0.5 text-[12px] font-bold text-amber-800">{trade.npcName} has {purse} 🪙 to spend</div>}
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
@@ -1653,7 +1675,7 @@ function TradeModal({ trade, performTrade, onClose }: {
             <div className="rounded bg-stone-100 p-3 text-center text-stone-500">You have nothing {trade.npcName} buys right now.</div>
           )}
           {trade.rows.map((r, i) => (
-            <TradeRow key={r.trade.itemKey} row={r} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
+            <TradeRow key={r.trade.itemKey} row={r} unit={r.trade.price * mult} canAfford={affordable(r)} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
           ))}
         </div>
         <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
@@ -1662,46 +1684,58 @@ function TradeModal({ trade, performTrade, onClose }: {
   );
 }
 
-function TradeRow({ row, busy, onSell, firstQtyRef }: {
+function TradeRow({ row, unit, canAfford, busy, onSell, firstQtyRef }: {
   row: { trade: TradeItem; have: number };
+  /** What the buyer pays for one (with Haggler). */
+  unit: number;
+  /** How many the buyer can pay for right now (≤ have). */
+  canAfford: number;
   busy: boolean;
   onSell: (qty: number) => void;
   firstQtyRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const [qty, setQty] = useState(1);
-  const total = qty * row.trade.price;
-  // Keep the quantity within what the player holds now.
-  const clampedQty = Math.min(Math.max(1, qty), row.have);
+  const max = Math.min(row.have, canAfford);
+  // Keep the quantity within what the player holds and the buyer can pay for.
+  const clampedQty = Math.min(Math.max(1, qty), Math.max(1, max));
   if (clampedQty !== qty) setQty(clampedQty);
+  const total = Math.round(qty * unit);
+  const broke = max === 0;
   return (
-    <div className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+    <div className={`flex items-center gap-2 rounded-lg bg-white p-2 shadow ${broke ? "opacity-60" : ""}`}>
       <span className="text-xl">{ITEM_ICONS[row.trade.itemKey] ?? "📦"}</span>
       <div className="flex-1">
         <div className="font-bold capitalize">{row.trade.itemKey.replace(/_/g, " ")}</div>
-        <div className="text-[11px] text-stone-500">you have {row.have}</div>
+        <div className="text-[11px] text-stone-500">you have {row.have}{!broke && canAfford < row.have ? ` · can afford ${canAfford}` : ""}</div>
       </div>
-      <div className="flex items-center gap-1.5">
-        <button disabled={busy || qty <= 1} onClick={() => setQty((q) => Math.max(1, q - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">−</button>
-        <input
-          ref={firstQtyRef}
-          type="number"
-          min={1}
-          max={row.have}
-          value={qty}
-          onChange={(e) => setQty(Math.max(1, Math.min(row.have, Number(e.target.value) || 1)))}
-          className="w-12 rounded border border-stone-300 px-1 py-0.5 text-center text-sm"
-          disabled={busy}
-        />
-        <button disabled={busy || qty >= row.have} onClick={() => setQty((q) => Math.min(row.have, q + 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">+</button>
-      </div>
-      <div className="w-20 text-right">
-        <div className="text-[11px] text-stone-500">= {total} 🪙</div>
-        <div className="text-[11px] text-stone-500">{row.trade.price} ea</div>
-      </div>
-      <div className="flex flex-col gap-1">
-        <button disabled={busy || qty < 1} onClick={() => onSell(qty)} className="rounded bg-yellow-600 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell {qty}</button>
-        <button disabled={busy} onClick={() => onSell(row.have)} className="rounded bg-amber-700 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell all ({row.have})</button>
-      </div>
+      {broke ? (
+        <div className="text-right text-[11px] font-bold text-stone-500">Can&apos;t afford one<br />right now ({Math.round(unit)} 🪙)</div>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5">
+            <button disabled={busy || qty <= 1} onClick={() => setQty((q) => Math.max(1, q - 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">−</button>
+            <input
+              ref={firstQtyRef}
+              type="number"
+              min={1}
+              max={max}
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(max, Number(e.target.value) || 1)))}
+              className="w-12 rounded border border-stone-300 px-1 py-0.5 text-center text-sm"
+              disabled={busy}
+            />
+            <button disabled={busy || qty >= max} onClick={() => setQty((q) => Math.min(max, q + 1))} className="rounded bg-stone-200 px-2 py-0.5 text-sm font-bold disabled:opacity-40">+</button>
+          </div>
+          <div className="w-20 text-right">
+            <div className="text-[11px] text-stone-500">= {total} 🪙</div>
+            <div className="text-[11px] text-stone-500">{Math.round(unit * 10) / 10} ea</div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <button disabled={busy || qty < 1} onClick={() => onSell(qty)} className="rounded bg-yellow-600 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell {qty}</button>
+            <button disabled={busy} onClick={() => onSell(max)} className="rounded bg-amber-700 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell {max < row.have ? "max" : "all"} ({max})</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
