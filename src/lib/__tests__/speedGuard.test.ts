@@ -44,3 +44,56 @@ describe("speed guard", () => {
     expect(guardStep(h, maxSpeedPx(true) * 5, 0, 1000, false).ok).toBe(false);
   });
 });
+
+describe("speed guard: timed by each report's own stamp", () => {
+  const RUN = PLAYER_SPEED * RUN_SPEED_MULT;
+
+  /** Run at `speed` for `secs` from x=0, reporting every 200 ms, all held by the network until `arrive` (ms). */
+  function heldThenBurst(speed: number, secs: number, arrive: number, stamped: boolean) {
+    const g = newGuard(0, 0, 0);
+    let refused = 0;
+    for (let t = 200; t <= secs * 1000; t += 200) {
+      const r = guardStep(g, (speed * t) / 1000, 0, Math.max(t, arrive), false, stamped ? t : undefined);
+      if (!r.ok) refused++;
+    }
+    return refused;
+  }
+
+  it("a sprint the network held up and then delivered at once passes when stamped (the snap-back bug)", () => {
+    expect(heldThenBurst(RUN, 2.5, 2500, false)).toBeGreaterThan(0); // timed by arrival: snapped back
+    expect(heldThenBurst(RUN, 2.5, 2500, true)).toBe(0); // timed by the stamps: fine
+  });
+
+  it("still clamps a speed hack with honest stamps", () => {
+    const g = newGuard(0, 0, 0);
+    let refused = 0;
+    for (let t = 200; t <= 10_000; t += 200) if (!guardStep(g, (PLAYER_SPEED * 3 * t) / 1000, 0, t, false, t).ok) refused++;
+    expect(refused).toBeGreaterThan(5);
+  });
+
+  it("a stamp from the future earns no extra time", async () => {
+    const { CLOCK_AHEAD_MS } = await import("@/lib/speedGuard");
+    const g = newGuard(0, 0, 0);
+    g.budget = 0;
+    // Claims an hour has passed; only CLOCK_AHEAD_MS past the server clock counts.
+    const allowed = (maxSpeedPx(false) * CLOCK_AHEAD_MS) / 1000;
+    const r = guardStep(g, 10_000, 0, 0, false, 3_600_000);
+    expect(r.ok).toBe(false);
+    expect(r.x).toBeCloseTo(allowed, 0);
+  });
+
+  it("a stamp older than the last report counts as no time passing", () => {
+    const g = newGuard(0, 0, 0);
+    g.budget = 0;
+    guardStep(g, 0, 0, 1000, false, 1000);
+    expect(g.budget).toBeCloseTo(maxSpeedPx(false), 0);
+    const before = g.budget;
+    guardStep(g, 0, 0, 1200, false, 500); // stamped before the previous report
+    expect(g.budget).toBeCloseTo(before, 5);
+  });
+
+  it("an old client without stamps behaves as before (arrival time)", () => {
+    expect(walk(RUN, 20, 200)).toBe(0);
+    expect(walk(PLAYER_SPEED * 3, 10, 200)).toBeGreaterThan(5);
+  });
+});

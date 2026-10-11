@@ -4,6 +4,8 @@
 // budget of distance that refills at the fastest legal speed — running, or
 // riding if you really own a bike — and is capped at a short burst, so
 // network jitter is fine but speed hacks are clamped and snapped back.
+// Time is measured by each report's own (server-synced) stamp, so reports
+// the network held up and then delivered at once still count as on time.
 // Teleports the server makes itself (waystones, portals, knockouts) reset
 // the guard. Pure.
 
@@ -23,6 +25,8 @@ export const BURST_S = 1.5;
 export const SLACK_PX = 16;
 /** A reconnecting player may catch up on at most this long offline. */
 export const RECONNECT_GRACE_S = 30;
+/** A report may be stamped at most this far ahead of the server's clock (clock-sync slack). */
+export const CLOCK_AHEAD_MS = 250;
 
 /** The fastest a player may legally go (px/s), with tolerance. */
 export function maxSpeedPx(mounted: boolean): number {
@@ -41,12 +45,25 @@ function refill(g: SpeedGuard, now: number, speed: number): void {
 }
 
 /**
- * Check a reported move to (x, y). Accepts it (spending budget), or clamps
- * it to as far as the budget reaches. Mutates and returns the guard's new
- * position; `ok` is false when the client must be corrected.
+ * When a report counts as made: its stamp `t` (the client's server-synced
+ * clock), kept between the previous report and a little past the server's
+ * `now`. Judging by when you moved, not when the message arrived, lets
+ * reports held up by the network and then delivered in a burst pass; and a
+ * forged stamp can never earn more time than the arrival time would.
  */
-export function guardStep(g: SpeedGuard, x: number, y: number, now: number, mounted: boolean): { x: number; y: number; ok: boolean } {
-  refill(g, now, maxSpeedPx(mounted));
+export function reportTime(g: SpeedGuard, now: number, t?: number): number {
+  const at = t !== undefined && Number.isFinite(t) ? t : now;
+  return Math.min(Math.max(at, g.t), now + CLOCK_AHEAD_MS);
+}
+
+/**
+ * Check a reported move to (x, y), made at `t` (see reportTime; arrival time
+ * if absent). Accepts it (spending budget), or clamps it to as far as the
+ * budget reaches. Mutates and returns the guard's new position; `ok` is
+ * false when the client must be corrected.
+ */
+export function guardStep(g: SpeedGuard, x: number, y: number, now: number, mounted: boolean, t?: number): { x: number; y: number; ok: boolean } {
+  refill(g, reportTime(g, now, t), maxSpeedPx(mounted));
   const d = Math.hypot(x - g.x, y - g.y);
   // The slack is a cushion, not a gift: dipping into it is paid back
   // (the budget can go slightly negative), so it can't add speed.

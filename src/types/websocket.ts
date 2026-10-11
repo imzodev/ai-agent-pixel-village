@@ -96,7 +96,7 @@ export type WorldStreamOptions = {
 };
 
 /** A position the client has reported to the stream (and whether it's riding a bike). */
-export type StreamPosition = { x: number; y: number; facing: Facing; mounted: boolean };
+export type StreamPosition = { x: number; y: number; facing: Facing; mounted: boolean; /** Server-synced time it was current. */ t?: number };
 
 /** Best clock-offset sample so far (server clock − client clock). */
 export type ClockSample = { offsetMs: number; rttMs: number };

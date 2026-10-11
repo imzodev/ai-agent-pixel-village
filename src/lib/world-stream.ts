@@ -219,15 +219,16 @@ function ownsBike(playerId: number): boolean {
 }
 
 /**
- * Check a client's reported position against its speed budget. Returns the
+ * Check a client's reported position against its speed budget, timed by the
+ * report's own stamp `t` (when it moved; speedGuard reportTime). Returns the
  * position to believe; a client that moved too far is told where it is.
  */
-function acceptPosition(conn: Connection, x: number, y: number, mounted: boolean): { x: number; y: number } {
+function acceptPosition(conn: Connection, x: number, y: number, mounted: boolean, t?: number): { x: number; y: number } {
   const now = Date.now();
   let g = guards.get(conn.playerId);
   if (!g) { g = newGuard(conn.homePx, conn.homePy, now); guards.set(conn.playerId, g); }
   conn.mounted = mounted && ownsBike(conn.playerId);
-  const r = guardStep(g, x, y, now, conn.mounted);
+  const r = guardStep(g, x, y, now, conn.mounted, t);
   if (!r.ok && now - (conn.lastCorrectAt ?? 0) >= CORRECT_MIN_INTERVAL_MS) {
     conn.lastCorrectAt = now;
     try { conn.ws.send(JSON.stringify({ type: "correct", x: r.x, y: r.y })); } catch { /* socket closed */ }
@@ -560,7 +561,7 @@ if (msg.type === "roll") {
     // players so they see movement within a frame or two. Only as far as
     // the speed limit allows.
     const facing = normalizeFacing(msg.facing);
-    const at = acceptPosition(conn, msg.x!, msg.y!, msg.mounted === true);
+    const at = acceptPosition(conn, msg.x!, msg.y!, msg.mounted === true, msg.t);
     const { cx, cy } = chunkAtWorldPx(at.x, at.y);
     const changedChunk = cx !== conn.homeCx || cy !== conn.homeCy;
     conn.homePx = at.x;
@@ -582,7 +583,7 @@ if (msg.type === "heartbeat" && Number.isFinite(msg.x) && Number.isFinite(msg.y)
     const facing = normalizeFacing(msg.facing);
     // Update home chunk so subsequent refreshes use the right bbox. Cheap;
     // happens every client heartbeat. Speed-checked like `pos`.
-    const at = acceptPosition(conn, msg.x!, msg.y!, conn.mounted === true);
+    const at = acceptPosition(conn, msg.x!, msg.y!, conn.mounted === true, msg.t);
     const { cx, cy } = chunkAtWorldPx(at.x, at.y);
     conn.homePx = at.x;
     conn.homePy = at.y;

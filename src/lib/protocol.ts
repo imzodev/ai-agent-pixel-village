@@ -20,10 +20,12 @@ export type WsClientMessage =
   // echoes it back in `pong` together with its own clock.
   | { type: "ping"; t?: number }
   // Presence heartbeat: slow (1.5 s) and drives the DB lastSeenAt write.
-  | { type: "heartbeat"; x: number; y: number; facing: Facing; mounted?: boolean }
+  // `t` (both here and in `pos`): server-synced time this position was
+  // current; the speed check times moves by it (src/lib/speedGuard.ts).
+  | { type: "heartbeat"; x: number; y: number; facing: Facing; mounted?: boolean; t?: number }
   // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
   // players. Never triggers a DB write.
-  | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean }
+  | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean; t?: number }
   // One-shot action (attack swing), relayed to nearby players. In-memory only.
   | { type: "act"; kind: PlayerActKind; facing: Facing }
   // A dodge roll, started at server time `t` (src/lib/combat/strikes.ts).

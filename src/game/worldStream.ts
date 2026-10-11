@@ -94,9 +94,10 @@ export class WorldStream {
     this.send({ type: "act", kind, facing });
   }
 
-  /** Update the player's position; sent on the next pos/heartbeat tick. */
+  /** Update the player's position; sent on the next pos/heartbeat tick,
+   *  stamped with when it was current (the server's speed check times moves by it). */
   setPosition(x: number, y: number, facing: Facing, mounted = false): void {
-    this.lastPosition = { x, y, facing, mounted };
+    this.lastPosition = { x, y, facing, mounted, t: Math.round(this.serverNow()) };
   }
 
   private connect(): void {
@@ -203,6 +204,7 @@ export class WorldStream {
         x: this.lastPosition.x,
         y: this.lastPosition.y,
         facing: this.lastPosition.facing,
+        t: this.lastPosition.t,
       });
     };
     // Send immediately so the server's proximity bbox is anchored on the
@@ -229,7 +231,7 @@ export class WorldStream {
       if (!p) return;
       if (sent && p.x === sent.x && p.y === sent.y && p.facing === sent.facing && p.mounted === sent.mounted) return;
       sent = { ...p };
-      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing, mounted: p.mounted });
+      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing, mounted: p.mounted, t: p.t });
     };
     this.posTimer = setInterval(tick, POS_INTERVAL_MS);
   }
