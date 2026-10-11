@@ -188,7 +188,16 @@ export default function Hud() {
   const toast = useCallback((text: string, kind: ToastKind | string = "info") => {
     bus.emit("toast", { text, kind: kind === "good" || kind === "bad" ? kind : "info" });
   }, []);
-  const refreshMe = useCallback(async () => setMe(await api<Me>("/api/me")), []);
+  // Coins shown: whichever count is newest. A buy/sell answer or /api/me is
+  // fresh at once; a snapshot only wins when its count actually changed (the
+  // periodic one can be seconds old and would flip the purse back).
+  const [coinsLive, setCoinsLive] = useState<number | null>(null);
+  const lastSnapCoins = useRef<number | null>(null);
+  const refreshMe = useCallback(async () => {
+    const m = await api<Me>("/api/me");
+    setMe(m);
+    if (m.me) setCoinsLive(m.me.coins);
+  }, []);
   const loadBounties = useCallback(async () => {
     const r = await api<{ bounties?: BountyView[] }>("/api/bounties?mine=1");
     if (r.bounties) { setMyBounties(r.bounties); bountiesRef.current = r.bounties; }
@@ -198,7 +207,11 @@ export default function Hud() {
 
   useEffect(() => {
     const u = [
-      bus.on("snapshot", setSnap),
+      bus.on("snapshot", (s) => {
+        setSnap(s);
+        const c = s.me?.coins;
+        if (c != null && c !== lastSnapCoins.current) { lastSnapCoins.current = c; setCoinsLive(c); }
+      }),
       bus.on("playerMoved", setSelfPos),
       bus.on("select", setSel),
       bus.on("refreshMe", () => void refreshMe()),
@@ -336,7 +349,8 @@ export default function Hud() {
   // Land lots are fenced fields, not buildings you can walk into.
   const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string, qty = 1) => {
-    const r = await api<{ ok?: boolean; spent?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty });
+    const r = await api<{ ok?: boolean; spent?: number; coins?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty });
+    if (r.coins != null) setCoinsLive(r.coins);
     if (r.error) toast(r.error, "bad");
     else { showGain([{ itemKey, qty }]); notify(r.notices); void refreshMe(); }
   };
@@ -422,6 +436,7 @@ export default function Hud() {
     if (!trade) return undefined;
     const r = await api<{ ok?: boolean; error?: string; qty?: number; wanted?: number; gained?: number; coins?: number; purse?: number | null; notices?: string[] }>("/api/trade", { itemKey, qty, npcKey: trade.npcKey });
     if (r.error || !r.ok) { toast(r.error ?? "Trade failed.", "bad"); return undefined; }
+    if (r.coins != null) setCoinsLive(r.coins);
     const name = itemKey.replace(/_/g, " ");
     const sold = r.qty ?? qty;
     toast(sold < (r.wanted ?? sold)
@@ -817,6 +832,7 @@ export default function Hud() {
   const npcsInBuilding = building ? snap?.npcs.filter((n) => { const b = snap.buildings.find((b) => b.key === building.key); if (!b) return false; return Math.hypot(n.x - b.doorX, n.y - b.doorY) < 200; }) ?? [] : [];
   const bInfo = building ? snap?.buildings.find((b) => b.key === building.key) : null;
   const gems = (snap?.me as unknown as { gems?: number })?.gems ?? 0;
+  const coins = coinsLive ?? snap?.me?.coins ?? me?.me?.coins ?? 0;
   // XP toward the next level, with the next unlock as a hint.
   const xpInfo = me?.me ? (() => {
     const xp = (snap?.me as unknown as { xp?: number })?.xp ?? me.me.xp;
@@ -912,7 +928,7 @@ export default function Hud() {
                   <span className="whitespace-nowrap">❤️ {hp}</span>
                 </>
               );
-            })()}<span className="whitespace-nowrap">🪙 {snap?.me?.coins ?? me.me.coins}</span><span className="hidden sm:inline">💎 {gems}</span>
+            })()}<span className="whitespace-nowrap">🪙 {coins}</span><span className="hidden sm:inline">💎 {gems}</span>
             {xpInfo && (
               <span className="hidden items-center gap-1 sm:flex" title={xpInfo.hint}>
                 ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${xpInfo.pct}%` }} /></span>
@@ -1093,7 +1109,7 @@ export default function Hud() {
       {/* Trade modal — dedicated sell flow, no conversation required. */}
       {/* Shop modal — everything this NPC sells, behind one Buy button. */}
       {shop && (
-        <ShopModal npcName={shop.npcName} stock={stockForNpc(shop.npcKey)} level={me?.me?.level ?? 1} coins={snap?.me?.coins ?? me?.me?.coins ?? 0}
+        <ShopModal npcName={shop.npcName} stock={stockForNpc(shop.npcKey)} level={me?.me?.level ?? 1} coins={coins}
           have={(itemKey) => (me?.inventory ?? []).filter((i) => i.itemKey === itemKey).reduce((n, i) => n + i.qty, 0)}
           onBuy={(itemKey, qty) => buy(shop.npcKey, itemKey, qty)} onClose={() => setShop(null)} />
       )}
