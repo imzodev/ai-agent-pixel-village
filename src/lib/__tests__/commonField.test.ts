@@ -9,18 +9,20 @@ import { terrainWalkable } from "@/lib/regions";
 import { BOSS_SPOT, ENEMY_ZONES } from "@/lib/progression";
 import { NORTH_WOODS, WILD_ZONES, tilePoint } from "@/lib/worldmap";
 import { npcDef } from "@/lib/npcDefs";
+import { blockedFromChunk } from "@/lib/chunkCollision";
 import type { Rect } from "@/lib/worldmap";
 
 const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8"));
 const entries: { key: string; tx: number; ty: number; file: string }[] = Array.isArray(manifest) ? manifest : manifest.buildings;
-const blockedIn = new Map<string, number[]>();
+const templates = new Map<string, { layers: { name: string; data: number[] }[] }>();
+const templateOf = (file: string) => {
+  if (!templates.has(file)) templates.set(file, JSON.parse(fs.readFileSync(`public${file}`, "utf8")));
+  return templates.get(file)!;
+};
+/** Solid the way movement sees it: Collision or any DecorationLower art (chunkCollision.ts). */
 const blocked = (tx: number, ty: number): boolean => {
   const s = COMMON_FIELD_STAMPS.find((st) => tx >= st.tx && tx < st.tx + 24 && ty >= st.ty && ty < st.ty + 15)!;
-  if (!blockedIn.has(s.file)) {
-    const t = JSON.parse(fs.readFileSync(`public${s.file}`, "utf8"));
-    blockedIn.set(s.file, t.layers.find((l: { name: string }) => l.name === "Collision").data);
-  }
-  return blockedIn.get(s.file)![(ty - s.ty) * 24 + (tx - s.tx)] === 1;
+  return blockedFromChunk(templateOf(s.file)).has((ty - s.ty) * 24 + (tx - s.tx));
 };
 const inRect = (p: { x: number; y: number }, r: Rect) => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -56,6 +58,24 @@ describe("the Common Field", () => {
       expect(c > LAYOUT.fence.left && c < LAYOUT.fence.right && r > LAYOUT.fence.top && r < LAYOUT.fence.bottom, `${tx},${ty}`).toBe(true);
       expect(blocked(tx, ty), `blocked at ${tx},${ty}`).toBe(false);
     }
+  });
+
+  it("blocks only where it means to: no lower-layer art on open tiles", () => {
+    for (const s of COMMON_FIELD_STAMPS) {
+      const t = templateOf(s.file);
+      const collision = t.layers.find((l) => l.name === "Collision")!.data;
+      const lower = t.layers.find((l) => l.name === "DecorationLower")!.data;
+      lower.forEach((g, i) => expect(g === 0 || collision[i] === 1, `${s.key} tile ${i % 24},${Math.floor(i / 24)}`).toBe(true));
+    }
+  });
+
+  it("opens every gate across its whole width, with room to walk through", () => {
+    const { origin: o, fence, gates } = LAYOUT;
+    const open = (c: number, r: number) => expect(blocked(o.tx + c, o.ty + r), `${o.tx + c},${o.ty + r}`).toBe(false);
+    for (const [a, b] of gates.south) for (let c = a; c <= b; c++) for (const r of [fence.bottom - 1, fence.bottom]) open(c, r);
+    for (const [a, b] of gates.north) for (let c = a; c <= b; c++) for (const r of [fence.top, fence.top + 1]) open(c, r);
+    for (const [a, b] of gates.west) for (let r = a; r <= b; r++) for (const c of [fence.left, fence.left + 1]) open(c, r);
+    for (const [a, b] of gates.east) for (let r = a; r <= b; r++) for (const c of [fence.right - 1, fence.right]) open(c, r);
   });
 
   it("keeps enemies off the field and Hollis, and the Rootking in the north woods", () => {

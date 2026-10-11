@@ -117,6 +117,19 @@ for (const [c, r] of L.signs) sign(c, r);
 lower.outline(P.ink);
 upper.outline(P.ink);
 
+// Any tile with DecorationLower art blocks (src/lib/chunkCollision.ts), so an
+// outline pixel or a bale's edge spilling into a gate or onto the soil would
+// make an invisible wall. Move what spilled onto open tiles up to
+// DecorationUpper1 (drawn the same, never blocks): only the fence, bale and
+// sign tiles stay solid.
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  if (blocked.has(`${Math.floor(x / T)},${Math.floor(y / T)}`)) continue;
+  const i = (y * W + x) * 4;
+  if (lower.px[i + 3] === 0) continue;
+  if (upper.px[i + 3] === 0) upper.px.set(lower.px.subarray(i, i + 4), i);
+  lower.px.fill(0, i, i + 4);
+}
+
 // ── Cut into stamps, bake each distinct one ─────────────────────────────
 function crop(c, x0, y0) {
   const out = new Canvas(SW * T, SH * T);
