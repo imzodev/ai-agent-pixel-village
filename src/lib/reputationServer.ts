@@ -4,8 +4,10 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characterReputation } from "@/db/schema";
 import { TOWNS } from "./settlements";
-import { nextTier, repTier, repTitle } from "./reputation";
+import { nextTier, repTier, repTitle, townName } from "./reputation";
 import type { RepView } from "@/types/reputation";
+import { createMoment } from "./momentsServer";
+import { titleMoment } from "./moments";
 
 /** Add points with a town; returns the new total and whether a tier was reached. */
 export async function addReputation(characterId: number, town: string, points: number): Promise<{ points: number; reached: string | null }> {
@@ -13,6 +15,10 @@ export async function addReputation(characterId: number, town: string, points: n
     .onConflictDoUpdate({ target: [characterReputation.characterId, characterReputation.town], set: { points: sql`${characterReputation.points} + ${points}` } })
     .returning({ points: characterReputation.points });
   const before = repTier(row.points - points), after = repTier(row.points);
+  // Revered standing earns a title: a card to share.
+  if (after.name === "Revered" && before.name !== "Revered") {
+    await createMoment(characterId, "title", titleMoment(repTitle(town), `revered in ${townName(town)}`), `title:${repTitle(town)}`);
+  }
   return { points: row.points, reached: after.name !== before.name ? after.name : null };
 }
 

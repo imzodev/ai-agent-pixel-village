@@ -11,6 +11,8 @@ import type { FarmView } from "@/types/garden";
 import { affordableQty } from "@/lib/mind/profile";
 import { profileFor } from "@/lib/mind/profiles";
 import type { OrdersPanel } from "@/types/mind";
+import type { MomentNotice } from "@/types/moments";
+import MomentModal from "./MomentModal";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
@@ -54,7 +56,7 @@ import type { Move } from "@/types/motion";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -157,6 +159,8 @@ export default function Hud() {
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
   const [orders, setOrders] = useState<{ npcId: number; npcName: string } | null>(null);
+  // Proud moments shown this session (their share card, once each).
+  const [momentsShown, setMomentsShown] = useState<ReadonlySet<string>>(new Set());
   // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
   const [farmMenu, setFarmMenu] = useState<{ lotKey: string; target: Selection } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -980,6 +984,7 @@ export default function Hud() {
           <TopBtn on={() => { pick(); togglePanel("friends"); }} active={panel === "friends"}>👥 Friends</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("home"); }} active={panel === "home"}>🏡 Home</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("book"); }} active={panel === "book"}>📖 Book</TopBtn>
+          {me?.username && <a href={`/u/${me.username}`} target="_blank" rel="noopener" onClick={pick} className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-white hover:bg-amber-400">🪪 Profile</a>}
           <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
         </>
       ) : null}
@@ -1240,6 +1245,13 @@ export default function Hud() {
           have={(itemKey) => (me?.inventory ?? []).filter((i) => i.itemKey === itemKey).reduce((n, i) => n + i.qty, 0)}
           onBuy={(itemKey, qty) => buy(shop.npcKey, itemKey, qty)} onClose={() => setShop(null)} />
       )}
+
+      {/* A proud moment to share (src/components/MomentModal.tsx), one at a time. */}
+      {(() => {
+        const next = me?.moments?.find((m) => !momentsShown.has(m.id));
+        if (!next) return null;
+        return <MomentModal key={next.id} moment={next} onClose={() => { setMomentsShown((s) => new Set(s).add(next.id)); void api(`/api/moments/${next.id}/seen`, {}); }} />;
+      })()}
 
       {/* Standing orders — supply this NPC every week (their own menu, not the chat). */}
       {orders && <OrdersModal npcId={orders.npcId} npcName={orders.npcName} onDone={(text, gained) => { toast(text, "good"); if (gained.length) showGain(gained); void refreshMe(); }} onClose={() => setOrders(null)} />}

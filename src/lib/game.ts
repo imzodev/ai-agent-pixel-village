@@ -13,6 +13,8 @@ import {
   type MissionReward,
 } from "@/db/schema";
 import { levelForXp, maxHpFor, unlocksBetween } from "./progression";
+import { createMoment } from "./momentsServer";
+import { levelMilestone, levelMoment } from "./moments";
 
 export async function addItem(characterId: number, itemKey: string, qty = 1, meta: Record<string, unknown> = {}) {
   const stackable = Object.keys(meta).length === 0;
@@ -95,6 +97,9 @@ export async function recalcLevel(characterId: number) {
     await db.update(characters).set({ level, maxHp, hp: maxHp }).where(eq(characters.id, characterId));
     const unlocked = unlocksBetween(c.level, level).map((u) => u.text).join(" · ");
     await logEvent("level", `${c.name} reached level ${level}!${unlocked ? ` Unlocked: ${unlocked}` : ""}`, "character", characterId, c.x, c.y);
+    // Every 5th level is a card to share.
+    const milestone = levelMilestone(c.level, level);
+    if (milestone) await createMoment(characterId, "level", levelMoment(milestone), `level:${milestone}`);
   }
 }
 

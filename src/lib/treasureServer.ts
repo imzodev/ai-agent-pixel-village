@@ -19,6 +19,8 @@ import {
 } from "./treasure";
 import type { TreasureLoot, TreasureMapOpts, TreasureMapView } from "@/types/treasure";
 import type { Point } from "@/types/world";
+import { createMoment } from "./momentsServer";
+import { treasureMoment } from "./moments";
 
 const rnd = (lo: number, hi: number) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
@@ -191,7 +193,10 @@ export async function digTreasure(characterId: number, mapId: number, pos: Point
   await payLoot(characterId, loot);
   const notices: string[] = [];
   if (await recordCollection(characterId, "treasure", "chest")) notices.push("📖 Your first buried treasure!");
-  if (legendary) await recordCollection(characterId, "treasure", "cache");
+  if (legendary) {
+    await recordCollection(characterId, "treasure", "cache");
+    await createMoment(characterId, "treasure", treasureMoment(), `treasure:${m.id}`);
+  }
   if (m.part && !legendary) {
     const next = await grantTreasureMap(characterId, { part: m.part + 1 });
     if (next) notices.push(next);

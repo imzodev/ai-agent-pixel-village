@@ -1,5 +1,6 @@
 import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloon";
 import type { ShoppingRule } from "@/types/businessAgent";
+import type { MomentData, MomentKind } from "@/types/moments";
 import {
   bigint,
   pgMaterializedView,
@@ -824,6 +825,24 @@ export const characterBounties = pgTable(
     acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("character_bounties_pk").on(t.characterId, t.bountyId)],
+);
+
+/** Proud moments a player can share (src/lib/momentsServer.ts, /m/[id]). */
+export const moments = pgTable(
+  "moments",
+  {
+    /** A short random slug: the share link is /m/<id>. */
+    id: text("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    kind: text("kind").$type<MomentKind>().notNull(),
+    /** One moment per character and key ("lair:frost_giant", "level:20"…). */
+    dedupeKey: text("dedupe_key").notNull(),
+    data: jsonb("data").$type<MomentData>().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    /** When the player closed its share card (null = still to show). */
+    seenAt: timestamp("seen_at"),
+  },
+  (t) => [uniqueIndex("moments_character_dedupe_unique").on(t.characterId, t.dedupeKey), index("moments_character_idx").on(t.characterId, t.createdAt)],
 );
 
 /** Standing with each continent town (src/lib/reputation.ts). */

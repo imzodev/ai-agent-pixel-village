@@ -11,6 +11,8 @@ import { NPC_DEFS } from "./seed";
 import { reputationTitles } from "./reputationServer";
 import { TUTORIAL_DONE } from "./tutorial";
 import { grantTreasureMap } from "./treasureServer";
+import { createMoment } from "./momentsServer";
+import { titleMoment } from "./moments";
 
 export { recordCollection } from "./collectionStore";
 
@@ -62,6 +64,7 @@ export async function claimPage(characterId: number, pageKey: string): Promise<{
   await addCoins(characterId, page.reward.coins);
   // A finished relic set comes with the first map of a treasure trail.
   const map = page.reward.treasureMap ? await grantTreasureMap(characterId, { chain: true }) : null;
+  await createMoment(characterId, "title", titleMoment(page.reward.title, `the ${page.name} page complete`), `title:${page.reward.title}`);
   return { ok: true, message: `📖 ${page.name} page complete! +${page.reward.coins} coins and the title “${page.reward.title}”.${map ? ` ${map}` : ""}` };
 }
 

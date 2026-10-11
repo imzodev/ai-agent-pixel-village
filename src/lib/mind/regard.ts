@@ -5,8 +5,10 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { npcMinds, npcRegard } from "@/db/schema";
-import { regardTier } from "./profile";
+import { npcMinds, npcRegard, npcs } from "@/db/schema";
+import { createMoment } from "@/lib/momentsServer";
+import { dearFriendMoment } from "@/lib/moments";
+import { becameDear, regardTier } from "./profile";
 import type { RegardTier } from "@/types/mind";
 
 /** Free loaves in a row (without helping) before regard starts to drop. */
@@ -18,10 +20,16 @@ export async function hasMind(npcId: number): Promise<boolean> {
   return !!m;
 }
 
-/** The player helped: raise regard and forgive the free loaves. */
+/** The player helped: raise regard and forgive the free loaves. Becoming a
+ *  dear friend is a card to share ("Marigold calls you a dear friend"). */
 export async function regardHelped(npcId: number, characterId: number, points: number): Promise<void> {
-  await db.insert(npcRegard).values({ npcId, characterId, score: points, freebies: 0 })
-    .onConflictDoUpdate({ target: [npcRegard.npcId, npcRegard.characterId], set: { score: sql`${npcRegard.score} + ${points}`, freebies: 0 } });
+  const [row] = await db.insert(npcRegard).values({ npcId, characterId, score: points, freebies: 0 })
+    .onConflictDoUpdate({ target: [npcRegard.npcId, npcRegard.characterId], set: { score: sql`${npcRegard.score} + ${points}`, freebies: 0 } })
+    .returning({ score: npcRegard.score });
+  if (row && becameDear(row.score - points, row.score)) {
+    const [npc] = await db.select({ key: npcs.key, name: npcs.name, role: npcs.role }).from(npcs).where(eq(npcs.id, npcId));
+    if (npc) await createMoment(characterId, "dear_friend", dearFriendMoment(npc.name, npc.key, npc.role), `dear:${npc.key}`);
+  }
 }
 
 /** The player took a free loaf: past the grace, each one costs a point. */

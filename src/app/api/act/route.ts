@@ -31,6 +31,8 @@ const STAGGER_DMG_MULT = 1.5;
 const lastShot = new Map<number, number>();
 
 import { PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } from "@/lib/ranchUpgrades";
+import { createMoment } from "@/lib/momentsServer";
+import { lairBossMoment, rootkingMoment } from "@/lib/moments";
 
 export const dynamic = "force-dynamic";
 
@@ -271,6 +273,9 @@ export async function POST(req: Request) {
           if (getsUnique(lair, Math.random())) { await addItem(id, lair.unique, 1); uniques.push(id); }
           await recalcLevel(id);
           await recordCollection(id, "enemy", e.kind);
+          // A card to share: the first kill of each lair boss, and its legendary weapon.
+          const unique = uniques.includes(id);
+          await createMoment(id, "lair_boss", lairBossMoment(lair, unique ? lair.unique : undefined), unique ? `lair:${lair.kind}:unique` : `lair:${lair.kind}`);
         }
         await db.insert(bossLairs).values({ kind: e.kind, defeatedAt: new Date() }).onConflictDoUpdate({ target: bossLairs.kind, set: { defeatedAt: new Date() } });
         const Name = `${lair.name[0].toUpperCase()}${lair.name.slice(1)}`;
@@ -291,6 +296,7 @@ export async function POST(req: Request) {
           await addItem(id, BOSS_REWARD.itemKey, 1);
           await recalcLevel(id);
           await recordCollection(id, "enemy", BOSS_KIND);
+          await createMoment(id, "rootking", rootkingMoment(), `rootking:${new Date().toISOString().slice(0, 10)}`);
         }
         if (winners.includes(me.id)) gained.push({ itemKey: BOSS_REWARD.itemKey, qty: 1 });
         message = winners.includes(me.id)

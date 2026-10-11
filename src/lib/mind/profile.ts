@@ -58,6 +58,9 @@ export function regardTier(score: number): RegardTier {
   return score >= 10 ? "dear" : score >= 4 ? "fond" : score <= -3 ? "cool" : "neutral";
 }
 
+/** Did this change of regard just make the player a dear friend? */
+export const becameDear = (before: number, after: number): boolean => regardTier(after) === "dear" && regardTier(before) !== "dear";
+
 /** Can they make a batch from their stock? */
 export function canCraft(stock: NpcStock, r: CraftRecipe): boolean {
   return Object.entries(r.uses).every(([k, n]) => have(stock, k) >= n);

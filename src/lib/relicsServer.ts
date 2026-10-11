@@ -8,6 +8,8 @@ import { recordCollection } from "./collectionStore";
 import { recalcLevel } from "./game";
 import { RELICS, RELIC_REACH_PX, relicByKey, relicPoint, relicSet } from "./relics";
 import type { Point } from "@/types/world";
+import { createMoment } from "./momentsServer";
+import { relicSetMoment } from "./moments";
 
 /** The relics a character has found. */
 export async function relicsFound(characterId: number): Promise<string[]> {
@@ -29,5 +31,6 @@ export async function pickUpRelic(characterId: number, key: string, pos: Point):
   const have = RELICS.filter((x) => x.set === r.set && mine.has(x.key)).length;
   const total = RELICS.filter((x) => x.set === r.set).length;
   const notices = have === total ? [`📖 You've found every one of the ${set.name}! Claim the reward in your book.`] : [];
+  if (have === total) await createMoment(characterId, "relic_set", relicSetMoment(set.name, total), `relics:${r.set}`);
   return { ok: true, message: `${set.icon} Found: ${r.name}! (${have}/${total} ${set.name}) +25 XP, +10 🪙`, notices, have, total };
 }

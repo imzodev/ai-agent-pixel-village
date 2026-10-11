@@ -1,12 +1,13 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { characterMissions, characters, homeDecor, inventory, items, leads, missions, npcs } from "@/db/schema";
+import { characterMissions, characters, homeDecor, inventory, items, leads, missions, npcs, users } from "@/db/schema";
 import { getCurrentCharacter, handleApiError } from "@/lib/auth";
 import { missionProgressFor, requirementTarget } from "@/lib/game";
 import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
 import { perksOf } from "@/lib/combat";
 import { perkPoints } from "@/lib/progression";
+import { unseenMoments } from "@/lib/momentsServer";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,10 @@ export async function GET() {
       codesClaimed: myLeads.length,
       perks: [...perks],
       perkPoints: Math.max(0, perkPoints(me.level) - perks.size),
+      // Proud moments not yet shown as a share card (src/lib/momentsServer.ts).
+      moments: await unseenMoments(me.id),
+      // For the profile link (/u/<username>).
+      username: (await db.select({ username: users.username }).from(users).where(eq(users.id, me.userId)))[0]?.username ?? null,
     });
   } catch (e) {
     return handleApiError(e);
