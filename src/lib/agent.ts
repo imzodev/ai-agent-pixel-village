@@ -119,9 +119,9 @@ async function llmReply(input: BrainInput, onText?: (textSoFar: string) => void)
     ...input.history.slice(-HISTORY_LINES).map((h) => ({ role: role(h), content: h.text === WAVE ? "Hi!" : plainSpeech(h.text) })),
     { role: "user", content: input.message || "Hi!" },
   ];
-  // A little cooler than chatty: keeps the voice, invents fewer facts. A short
-  // budget keeps replies to a sentence or two.
-  const opts = { jsonMode: true, temperature: 0.6, maxTokens: 160 };
+  // Cool: the voice comes from the personality, and a low temperature keeps
+  // the model from guessing facts. A short budget keeps replies to a sentence or two.
+  const opts = { jsonMode: true, temperature: 0.4, maxTokens: 160 };
   let r: { text: string; provider: string } | null;
   if (onText) {
     let buffer = "", shown = "";

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { knowledgeFor } from "./npcKnowledge";
+import { knowledgeFor, topicsOf } from "./npcKnowledge";
+import { SHOP_STOCK } from "./trade";
 import { personalityFor, hasNamedPersonality } from "./npcPersonalities";
 import { buildSystemPrompt } from "./npcPrompt";
 import { NPC_DEFS } from "./npcDefs";
@@ -116,5 +117,65 @@ describe("npcs talk like people", () => {
   it("hides a stage direction still streaming in", () => {
     expect(plainSpeech("*doesn't look up, adjusting a", { streaming: true })).toBe("");
     expect(plainSpeech('*nods* "Hm? New', { streaming: true })).toBe("Hm? New");
+  });
+});
+
+describe("knowledge is spread out, and always true", () => {
+  const everyone = NPC_DEFS.map((n) => n.key);
+  const soldAnywhere = [...new Set(Object.values(SHOP_STOCK).flatMap((s) => s.map((t) => t.itemKey.replace(/_/g, " "))))];
+
+  it("gives innkeepers the whole world, and a kid only home and nearby", () => {
+    expect([...topicsOf("village_hettie")].sort()).toEqual(["craft", "roads", "trade"]);
+    expect(topicsOf("village_tobin").size).toBe(0);
+    const inns = SETTLEMENT_NPCS.filter((n) => n.job === "innkeeper");
+    for (const n of inns) expect(topicsOf(n.key).has("trade")).toBe(true);
+    // Most townsfolk know only home and nearby.
+    const folk = SETTLEMENT_NPCS.filter((n) => n.job === "folk");
+    expect(folk.filter((n) => topicsOf(n.key).size === 0).length).toBeGreaterThan(folk.length / 2);
+  });
+
+  it("lets anyone who knows the trade find every item sold anywhere", () => {
+    for (const key of everyone.filter((k) => topicsOf(k).has("trade"))) {
+      const k = knowledgeFor(key);
+      for (const item of soldAnywhere) expect(k, `${key} / ${item}`).toContain(`- ${item}:`);
+    }
+  });
+
+  it("puts lemon saplings in the desert towns, never with Pip", () => {
+    const k = knowledgeFor("village_hettie");
+    expect(k).toContain("lemon sapling: the general stores of Sunrest, Miragespring, Scorchrest and Sunspring");
+    expect(k).toMatch(/apple sapling: Pip \(the grove\)\n/);
+  });
+
+  it("names, for each thing they don't know, someone who really does", () => {
+    for (const key of everyone) {
+      const k = knowledgeFor(key);
+      for (const [, name, place] of k.matchAll(/you don't know, but (.+?) \(.+?, (here|in .+?)\) does\./g)) {
+        const who = NPC_DEFS.filter((n) => n.name === name);
+        expect(who.length, `${key} → ${name}`).toBeGreaterThan(0);
+      }
+      // Every topic is either known or has someone to ask.
+      for (const [topic, ask] of [["trade", "Where to buy things"], ["craft", "Who makes things"], ["roads", "The way to towns"]] as const) {
+        expect(topicsOf(key).has(topic) || k.includes(ask), `${key} / ${topic}`).toBe(true);
+      }
+    }
+    expect(knowledgeFor("village_tobin")).toContain("but Hettie (Innkeeper of the Wayfarer's Rest, here) does");
+  });
+
+  it("knows the way: Sunrest lies south-west of the grove", () => {
+    expect(knowledgeFor("village_oswin")).toMatch(/Sunrest \(south-west, /);
+    // Without the roads, far towns are names only.
+    expect(knowledgeFor("village_tobin")).not.toMatch(/Sunrest \(/);
+  });
+
+  it("keeps every sheet small enough for the prompt", () => {
+    for (const key of everyone) expect(knowledgeFor(key).length, key).toBeLessThan(6000);
+  });
+
+  it("tells them to say they don't know rather than guess", () => {
+    const p = buildSystemPrompt({ npc: { key: "village_tobin", name: "Tobin", role: "Kid", persona: "A kid.", mood: "shy" }, sponsor: null, character: { name: "M", level: 1 }, message: "hi", history: [], offers: [], hour: 9, weather: "clear", knowledge: knowledgeFor("village_tobin") } as unknown as BrainInput);
+    expect(p).toContain("only an exact match counts");
+    expect(p).toContain("say plainly that you don't know");
+    expect(p).not.toContain("innkeepers hear every rumour");
   });
 });

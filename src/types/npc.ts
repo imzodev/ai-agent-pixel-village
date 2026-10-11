@@ -50,3 +50,11 @@ export type ItemNameOf = (itemKey: string) => string;
 
 /** Old NPC key → its `<place>_<name>` key (renamed once at boot). */
 export type LegacyKeyMap = Readonly<Record<string, string>>;
+
+/** What an NPC may know beyond their own town (src/lib/npcKnowledge.ts):
+ *  where things are sold across the world, who makes what, and the roads. */
+export type KnowledgeTopic = "trade" | "craft" | "roads";
+
+/** A place an NPC can live in or know of: a continent town or one of the
+ *  hand-made places (the grove, Hollowmere, Brightwater), with its centre tile. */
+export type KnowledgePlace = { key: string; name: string; tx: number; ty: number };
