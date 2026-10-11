@@ -147,3 +147,24 @@ export type MindReport = {
   memories: MindMemory[];
   requests: OpenRequest[];
 };
+
+/** One standing order in an NPC's Orders menu (src/lib/orders.ts `orderRow`). */
+export type OrderView = {
+  itemKey: string;
+  /** "eggs", "bags of flour"… */
+  name: string;
+  qtyPerWeek: number;
+  /** Coins per item delivered. */
+  pay: number;
+  /** You supply this one. */
+  taken: boolean;
+  /** Delivered so far this week (0 after the week rolls over). */
+  deliveredThisWeek: number;
+  /** How many you could deliver now (from your bag, up to what's left this week). */
+  canDeliver: number;
+  /** No room for another farm (you haven't taken it and the slots are gone). */
+  full: boolean;
+};
+
+/** GET /api/npc/[id]/orders: an NPC's standing orders, as you see them. */
+export type OrdersPanel = { npcName: string; bonusPct: number; rows: OrderView[] };

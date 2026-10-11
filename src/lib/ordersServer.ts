@@ -15,8 +15,9 @@ import { regardHelped } from "@/lib/mind/regard";
 import { addFarmXp, ranchOfOwner } from "@/lib/ranchServer";
 import { XP_PER_DELIVERY } from "@/lib/ranchUpgrades";
 import { withLock } from "@/lib/locks";
-import { MAX_ORDERS_PER_ITEM, deliverable, deliveryPay, weekRolled } from "@/lib/orders";
+import { MAX_ORDERS_PER_ITEM, ORDER_BONUS, deliverable, deliveryPay, orderRow, weekRolled } from "@/lib/orders";
 import type { Offer } from "@/lib/types";
+import type { OrdersPanel } from "@/types/mind";
 
 type NpcRow = typeof npcs.$inferSelect;
 type Result = { ok: true; message: string; coins?: number } | { ok: false; error: string };
@@ -41,6 +42,27 @@ export async function orderOffers(npc: NpcRow, characterId: number, now = Date.n
     if (n > 0) out.push({ id: `deliver:${item}`, type: "deliver", itemKey: item, qty: n, price: o.pay, label: `📦 Deliver ${n} ${word(p, item)} (${row.qtyPerWeek - delivered} left this week)`, line: `Oh, the ${word(p, item)}! Right on time.` });
   }
   return out;
+}
+
+/** The NPC's Orders menu, as this player sees it (empty when they have no mind or no orders). */
+export async function ordersView(npc: NpcRow, characterId: number, now = Date.now()): Promise<OrdersPanel> {
+  const p = profileFor(npc.key);
+  const panel: OrdersPanel = { npcName: npc.name, bonusPct: Math.round(ORDER_BONUS * 100), rows: [] };
+  if (!p || !isMindNpc(npc.key) || !Object.keys(p.orders).length) return panel;
+  const mine = await db.select().from(standingOrders).where(and(eq(standingOrders.npcId, npc.id), eq(standingOrders.characterId, characterId)));
+  const counts = await db.select({ itemKey: standingOrders.itemKey, n: sql<number>`count(*)::int` }).from(standingOrders).where(eq(standingOrders.npcId, npc.id)).groupBy(standingOrders.itemKey);
+  for (const [item, o] of Object.entries(p.orders)) {
+    const row = mine.find((m) => m.itemKey === item);
+    const have = row ? await countItem(characterId, item) : 0;
+    panel.rows.push(orderRow(
+      { itemKey: item, name: word(p, item), qty: o.qty, pay: o.pay },
+      row ? { qtyPerWeek: row.qtyPerWeek, delivered: row.delivered, weekStart: row.weekStart.getTime() } : null,
+      have,
+      counts.find((c) => c.itemKey === item)?.n ?? 0,
+      now,
+    ));
+  }
+  return panel;
 }
 
 export async function takeOrder(npc: NpcRow, characterId: number, itemKey: string, now = Date.now()): Promise<Result> {

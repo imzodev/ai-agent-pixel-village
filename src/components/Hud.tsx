@@ -9,6 +9,8 @@ import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import type { BuyerPurse } from "@/types/trade";
 import type { FarmView } from "@/types/garden";
 import { affordableQty } from "@/lib/mind/profile";
+import { profileFor } from "@/lib/mind/profiles";
+import type { OrdersPanel } from "@/types/mind";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
@@ -154,6 +156,7 @@ export default function Hud() {
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
+  const [orders, setOrders] = useState<{ npcId: number; npcName: string } | null>(null);
   // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
   const [farmMenu, setFarmMenu] = useState<{ lotKey: string; target: Selection } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -722,7 +725,7 @@ export default function Hud() {
     const k = formatBinding("player.interact");
     return k ? `(${prettyKey(k)})` : "";
   })();
-  const keyHint = (cmd: "player.craft" | "player.sell" | "player.buy" | "player.attack"): string => {
+  const keyHint = (cmd: "player.craft" | "player.sell" | "player.buy" | "player.orders" | "player.attack"): string => {
     const k = formatBinding(cmd);
     return k ? `(${prettyKey(k)})` : "";
   };
@@ -842,13 +845,14 @@ export default function Hud() {
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
     if (shop) { setShop(null); return; }
+    if (orders) { setOrders(null); return; }
     if (farmMenu) { setFarmMenu(null); return; }
     if (craft) { setCraft(null); return; }
     if (inspect) { setInspect(null); return; }
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [mapOpen, board, talk, trade, shop, farmMenu, craft, inspect, panel, building, sel]);
+  }, [mapOpen, board, talk, trade, shop, orders, farmMenu, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -914,6 +918,16 @@ export default function Hud() {
           const npcKey = (snap?.npcs.find((n) => n.id === sel.id) as { key?: string } | undefined)?.key;
           if (!npcKey || stockForNpc(npcKey).length === 0) return;
           setShop({ npcName: sel.name, npcKey });
+        },
+      }),
+      inputRouter.register({
+        id: "player.orders",
+        scope: "ui",
+        run: () => {
+          if (!sel || sel.type !== "npc" || sel.distance > 160) return;
+          const npcKey = (snap?.npcs.find((n) => n.id === sel.id) as { key?: string } | undefined)?.key;
+          if (!npcKey || !takesOrders(npcKey)) return;
+          setOrders({ npcId: sel.id, npcName: sel.name });
         },
       }),
     ];
@@ -1101,6 +1115,9 @@ export default function Hud() {
                 {npcKey && stock.length > 0 && (
                   <Btn on={() => setShop({ npcName: sel.name, npcKey })}>🛒 Buy {keyHint("player.buy")}</Btn>
                 )}
+                {npcKey && takesOrders(npcKey) && (
+                  <Btn on={() => setOrders({ npcId: sel.id, npcName: sel.name })}>📋 Orders {keyHint("player.orders")}</Btn>
+                )}
               </>
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
@@ -1223,6 +1240,9 @@ export default function Hud() {
           have={(itemKey) => (me?.inventory ?? []).filter((i) => i.itemKey === itemKey).reduce((n, i) => n + i.qty, 0)}
           onBuy={(itemKey, qty) => buy(shop.npcKey, itemKey, qty)} onClose={() => setShop(null)} />
       )}
+
+      {/* Standing orders — supply this NPC every week (their own menu, not the chat). */}
+      {orders && <OrdersModal npcId={orders.npcId} npcName={orders.npcName} onDone={(text, gained) => { toast(text, "good"); if (gained.length) showGain(gained); void refreshMe(); }} onClose={() => setOrders(null)} />}
 
       {trade && (
         <TradeModal trade={trade} performTrade={performTrade} mult={me?.perks.includes("haggler") ? HAGGLER_MULT : 1} onClose={() => setTrade(null)} />
@@ -1659,6 +1679,79 @@ function FarmMenu({ view, coins, onClose }: { view: FarmView; coins: number; onC
           <FarmPanel view={view} coins={coins} />
           <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Whether this NPC takes standing orders (a mind profile with orders; the server has the final say). */
+function takesOrders(npcKey: string): boolean {
+  return Object.keys(profileFor(npcKey)?.orders ?? {}).length > 0;
+}
+
+/** An NPC's standing orders (the Orders menu): take one, or deliver this week's. */
+function OrdersModal({ npcId, npcName, onDone, onClose }: {
+  npcId: number;
+  npcName: string;
+  onDone: (text: string, gained: { itemKey: string; qty: number; label?: string }[]) => void;
+  onClose: () => void;
+}) {
+  const [panel, setPanel] = useState<OrdersPanel | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Bumped after each take / delivery to read the order book again.
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void api<OrdersPanel>(`/api/npc/${npcId}/orders`).then((r) => { if (alive) setPanel(r.error ? { npcName, bonusPct: 0, rows: [] } : r); });
+    return () => { alive = false; };
+  }, [npcId, npcName, version]);
+  useEffect(() => inputRouter.pushKeymap({
+    label: "orders",
+    bindings: [{ keys: ["escape"], command: "ui.close" as const, mode: "press" as const }],
+    handlers: [{ id: "ui.close" as const, scope: "ui" as const, run: () => { onClose(); } }],
+  }), [onClose]);
+  const act = async (offerId: string) => {
+    if (busy) return;
+    setBusy(true);
+    const r = await api<{ text: string; gained: { itemKey: string; qty: number; label?: string }[] }>(`/api/npc/${npcId}/accept`, { offerId });
+    if (r.error) onDone(r.error, []);
+    else onDone(r.text.replace(/ ".*"$/, ""), r.gained ?? []);
+    setVersion((v) => v + 1);
+    setBusy(false);
+  };
+  return (
+    <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,520px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex shrink-0 items-start gap-3">
+          <div className="flex-1">
+            <div className="text-lg font-bold text-amber-900">📋 Orders for {npcName}</div>
+            <div className="mt-0.5 text-[12px] text-stone-600">Supply them every week. Paid from {npcName}&apos;s purse{panel?.bonusPct ? `, plus ${panel.bonusPct}% when you fill the week` : ""}.</div>
+          </div>
+          <button onClick={onClose} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
+          {!panel && <div className="p-3 text-center text-stone-500">Checking the order book…</div>}
+          {panel && panel.rows.length === 0 && <div className="rounded bg-stone-100 p-3 text-center text-stone-500">{npcName} isn&apos;t taking orders right now.</div>}
+          {panel?.rows.map((o) => (
+            <div key={o.itemKey} className="flex items-center gap-2 rounded-lg bg-white p-2 shadow">
+              <span className="text-xl">{ITEM_ICONS[o.itemKey] ?? "📦"}</span>
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-stone-800">{o.qtyPerWeek} {o.name} a week</div>
+                <div className="text-[12px] text-stone-600">{o.pay}🪙 each{o.taken ? ` · ${o.deliveredThisWeek}/${o.qtyPerWeek} this week` : ""}</div>
+                {o.taken && <div className="mt-1 h-1.5 overflow-hidden rounded bg-stone-200"><div className="h-full bg-emerald-500" style={{ width: `${(100 * o.deliveredThisWeek) / o.qtyPerWeek}%` }} /></div>}
+              </div>
+              {!o.taken && (o.full
+                ? <span className="text-[12px] font-bold text-stone-400">Full</span>
+                : <button disabled={busy} onClick={() => void act(`order:${o.itemKey}`)} className="pixel-btn bg-sky-600 px-3 py-1.5 text-sm font-bold text-white disabled:opacity-40">Take order</button>)}
+              {o.taken && (o.deliveredThisWeek >= o.qtyPerWeek
+                ? <span className="text-[12px] font-bold text-emerald-700">Done this week ✓</span>
+                : o.canDeliver > 0
+                  ? <button disabled={busy} onClick={() => void act(`deliver:${o.itemKey}`)} className="pixel-btn bg-emerald-600 px-3 py-1.5 text-sm font-bold text-white disabled:opacity-40">📦 Deliver {o.canDeliver}</button>
+                  : <span className="text-[12px] text-stone-400">none in your bag</span>)}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex shrink-0 justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
       </div>
     </div>
   );

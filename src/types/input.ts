@@ -17,6 +17,8 @@ export type CommandId =
   | "player.sell"
   // Open the NPC's shop (what they sell), like player.sell opens selling.
   | "player.buy"
+  // Open the NPC's standing orders (NPCs with a mind: src/lib/orders.ts).
+  | "player.orders"
   // Cast / strike / reel while fishing (needs a rod and deep water ahead).
   | "player.fish"
   // Get on / off your bicycle (src/lib/bike.ts).
