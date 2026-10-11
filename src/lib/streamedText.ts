@@ -32,3 +32,18 @@ export function streamedTextField(buffer: string): string {
   }
   return out;
 }
+
+/**
+ * Only the spoken words of a reply: drops *stage directions* (and an unclosed
+ * "*…" still streaming in), and when the speech is quoted between them, keeps
+ * just the quotes' contents. NPCs talk like people, not a narrated game.
+ */
+export function plainSpeech(text: string, { streaming = false } = {}): string {
+  // A "*" left unclosed is a direction still streaming in (hide it), or a stray in a finished reply (drop just it).
+  let t = text.replace(/\*[^*]*\*/g, " ").replace(streaming ? /\*[^*]*$/ : /\*/g, " ");
+  if (/^\s*["“]/.test(t)) t = [...t.matchAll(/["“]([^"“”]*)["”]?/g)].map((m) => m[1].trim()).filter(Boolean).join(" ");
+  t = t.replace(/\s+/g, " ").trim();
+  // Nothing spoken at all: a finished reply keeps its words rather than going
+  // blank; one still streaming shows nothing until the speech starts.
+  return t || (streaming ? "" : text.replace(/\*/g, "").trim());
+}

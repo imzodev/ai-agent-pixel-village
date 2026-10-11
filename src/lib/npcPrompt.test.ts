@@ -3,6 +3,7 @@ import { knowledgeFor } from "./npcKnowledge";
 import { personalityFor, hasNamedPersonality } from "./npcPersonalities";
 import { buildSystemPrompt } from "./npcPrompt";
 import { NPC_DEFS } from "./npcDefs";
+import { plainSpeech } from "./streamedText";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import type { BrainInput } from "@/types/agent";
 
@@ -79,5 +80,41 @@ describe("npc system prompt", () => {
     const p = buildSystemPrompt({ ...base, memory: { note: "She is saving up for a ranch.", lines: 14, firstMetAt: new Date(now - 3 * 86_400_000) } }, now);
     expect(p).toContain("talked with Mariana before (14 lines, first met 3 days ago)");
     expect(p).toContain("What you remember about Mariana: She is saving up for a ranch.");
+  });
+});
+
+describe("npcs talk like people", () => {
+  const base = {
+    npc: { key: "village_greta", name: "Greta", role: "Tinker", persona: "A tinker.", mood: "busy" },
+    sponsor: null, character: { name: "Mariana", level: 3 }, message: "hi", history: [], offers: [], hour: 9, weather: "clear",
+  } as unknown as BrainInput;
+
+  it("asks for short, plain, spoken replies", () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain("HOW TO TALK");
+    expect(p).toContain("no *actions*, no stage directions");
+    expect(p).toContain("One or two short sentences");
+    expect(p).not.toContain("Stay fully in character");
+  });
+
+  it("gives nobody a gesture to act out", () => {
+    const keys = [...NPC_DEFS.map((n) => n.key), ...SETTLEMENT_NPCS.map((n) => n.key)];
+    for (const key of keys) {
+      const { voice, quirk } = personalityFor(key);
+      expect(`${voice} ${quirk}`).not.toMatch(/strok|wipes|taps|hand along|mending|squint|shush|hums|fiddles|turns every/i);
+    }
+  });
+
+  it("keeps only the spoken words", () => {
+    expect(plainSpeech('*glances up* "Hm? New face." *sets it down* "Back already?"')).toBe("Hm? New face. Back already?");
+    expect(plainSpeech("Bread's five coins, love.")).toBe("Bread's five coins, love.");
+    expect(plainSpeech("Two *really* good loaves.")).toBe("Two good loaves.");
+    expect(plainSpeech("A lone * star")).toBe("A lone star");
+    expect(plainSpeech("*waves*")).toBe("waves");
+  });
+
+  it("hides a stage direction still streaming in", () => {
+    expect(plainSpeech("*doesn't look up, adjusting a", { streaming: true })).toBe("");
+    expect(plainSpeech('*nods* "Hm? New', { streaming: true })).toBe("Hm? New");
   });
 });

@@ -2,7 +2,7 @@ import type { characters, npcs, sponsors } from "@/db/schema";
 import { webhookLogs } from "@/db/schema";
 import { db } from "@/db";
 import { getActiveProvider, chatWithFallback, chatStreamWithFallback, type ChatMessage } from "@/lib/llm";
-import { streamedTextField } from "@/lib/streamedText";
+import { plainSpeech, streamedTextField } from "@/lib/streamedText";
 import { buildSystemPrompt } from "@/lib/npcPrompt";
 
 /** Recent conversation lines sent with each reply (older ones live in the NPC's note). */
@@ -107,23 +107,28 @@ export function scriptedReply(input: BrainInput): BrainOutput {
 }
 
 // ---------- LLM brain ----------
+/** What the player "says" when they just walk up (the talk route stores it as this). */
+const WAVE = "(waves hello)";
+
 async function llmReply(input: BrainInput, onText?: (textSoFar: string) => void): Promise<BrainOutput | null> {
   const sys = buildSystemPrompt(input);
   const role = (h: { role: string }): "user" | "assistant" => (h.role === "npc" ? "assistant" : "user");
   const msgs: ChatMessage[] = [
     { role: "system", content: sys },
-    ...input.history.slice(-HISTORY_LINES).map((h) => ({ role: role(h), content: h.text })),
-    { role: "user", content: input.message || "(walks up and waves)" },
+    // Old replies go back without their stage directions, so they don't teach new ones.
+    ...input.history.slice(-HISTORY_LINES).map((h) => ({ role: role(h), content: h.text === WAVE ? "Hi!" : plainSpeech(h.text) })),
+    { role: "user", content: input.message || "Hi!" },
   ];
-  // A little cooler than chatty: keeps the voice, invents fewer facts.
-  const opts = { jsonMode: true, temperature: 0.6, maxTokens: 300 };
+  // A little cooler than chatty: keeps the voice, invents fewer facts. A short
+  // budget keeps replies to a sentence or two.
+  const opts = { jsonMode: true, temperature: 0.6, maxTokens: 160 };
   let r: { text: string; provider: string } | null;
   if (onText) {
     let buffer = "", shown = "";
     r = await chatStreamWithFallback(msgs, opts, (piece) => {
       buffer += piece;
-      const text = streamedTextField(buffer);
-      if (text.length > shown.length) { shown = text; onText(text); }
+      const text = plainSpeech(streamedTextField(buffer), { streaming: true });
+      if (text && text !== shown) { shown = text; onText(text); }
     });
   } else {
     r = await chatWithFallback(msgs, opts);
@@ -169,7 +174,7 @@ function parseBrainJson(raw: string, input: BrainInput, source: BrainOutput["sou
       // JSON was valid but text was missing — degrade rather than fail.
       return { text: raw.trim().slice(0, 600) || "(...)", offerIds, source };
     }
-    return { text: j.text.trim().slice(0, 600), offerIds, source };
+    return { text: plainSpeech(j.text).slice(0, 600), offerIds, source };
   } catch {
     // Parse error — use the raw response as text so the player isn't
     // silently dropped back to scripted.
