@@ -126,3 +126,32 @@ describe("seed sources", () => {
     expect(forage.tomato_seeds).toBeGreaterThan(forage.pumpkin_seeds);
   });
 });
+
+describe("farmPlan (Plant / Harvest / Water all)", () => {
+  const soon = new Date(Date.now() + 60_000);
+  const crop = (id: number, plot: number, o: Partial<{ ownerId: number; stage: number; stages: number; wateredStage: number | null; nextAdvanceAt: Date | null }> = {}) =>
+    ({ id, plot, ownerId: 7, stage: 1, stages: 4, wateredStage: null, nextAdvanceAt: soon, ...o });
+
+  it("finds the free plots", async () => {
+    const { farmPlan } = await import("@/lib/gardenRules");
+    expect(farmPlan([{ plot: 1 }, { plot: 2 }, { plot: 3 }], [crop(10, 2)], 7).free).toEqual([1, 3]);
+  });
+
+  it("harvests only the owner's ripe crops", async () => {
+    const { farmPlan } = await import("@/lib/gardenRules");
+    const crops = [crop(10, 1, { stage: 3 }), crop(11, 2, { stage: 2 }), crop(12, 3, { stage: 3, ownerId: 99 })];
+    expect(farmPlan([], crops, 7).ripe).toEqual([10]);
+  });
+
+  it("waters what's growing and not yet watered this stage", async () => {
+    const { farmPlan } = await import("@/lib/gardenRules");
+    const crops = [
+      crop(10, 1),                                  // growing: yes
+      crop(11, 2, { wateredStage: 1 }),             // watered this stage: no
+      crop(12, 3, { stage: 3 }),                    // ripe: no
+      crop(13, 4, { nextAdvanceAt: null }),         // not growing: no
+      crop(14, 5, { ownerId: 99 }),                 // a neighbour's: yes (anyone may water)
+    ];
+    expect(farmPlan([], crops, 7).thirsty).toEqual([10, 14]);
+  });
+});

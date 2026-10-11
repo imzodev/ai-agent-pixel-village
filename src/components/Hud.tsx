@@ -7,6 +7,7 @@ import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import type { BuyerPurse } from "@/types/trade";
+import type { FarmView } from "@/types/garden";
 import { affordableQty } from "@/lib/mind/profile";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
@@ -22,7 +23,7 @@ import InnPanel from "./InnPanel";
 import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
 import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
-import { TEND_RANGE_PX, insideLot } from "@/lib/lotReach";
+import { TEND_RANGE_PX, atLot, insideLot } from "@/lib/lotReach";
 import FurnitureSprite from "./FurnitureSprite";
 import { plantablesFor, plotHint } from "@/lib/vineyard";
 import MapPanel from "./MapPanel";
@@ -38,6 +39,7 @@ import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
 import PitchCard from "./PitchCard";
+import FarmPanel from "./FarmPanel";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
 import { ENCOUNTERS } from "@/lib/encounters";
@@ -120,6 +122,8 @@ function withFinalReply(lines: TalkLine[], r: TalkReply): TalkLine[] {
 
 /** Stop a press on the HUD from reaching the game (see the HUD's root). */
 const keepOffCanvas = (e: React.SyntheticEvent) => e.stopPropagation();
+/** Lots with plots (the farm window): fields, home gardens, vineyards, orchards. */
+const FARM_KINDS: ReadonlySet<string> = new Set(["land", "home", "vineyard", "orchard"]);
 /** How often your walking position may re-render the HUD (see the playerMoved handler). */
 const SELF_POS_EVERY_MS = 400;
 // Tailwind's `sm` breakpoint, for the few things CSS classes can't switch (placeholders).
@@ -150,6 +154,8 @@ export default function Hud() {
   const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
+  // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
+  const [farmMenu, setFarmMenu] = useState<{ lotKey: string; target: Selection } | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
   const [craft, setCraft] = useState<{ npcId: number; npcName: string; recipes: Recipe[] } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
@@ -381,6 +387,81 @@ export default function Hud() {
     return snap.lots.some((l) => l.owner?.id === myId && !!l.bounds && insideLot(l.bounds, self.x, self.y) && insideLot(l.bounds, target.x, target.y));
   };
   const seedsInBag = (me?.inventory ?? []).filter((i) => i.itemKey in GARDEN_CROPS && i.qty > 0);
+  // The farm menu (Plant / Harvest / Water all): the lot of yours you're
+  // standing in, and what in it there is to do.
+  const farm = (() => {
+    const self = selfPos ?? snap?.me;
+    if (!self || !snap) return null;
+    // Your growing lot you're in or right next to (at its gate counts): the one you stand in first.
+    const mine = snap.lots.filter((l) => l.owner?.id === myId && !!l.bounds && FARM_KINDS.has(l.kind) && atLot(l.bounds, self.x, self.y));
+    const lot = mine.find((l) => insideLot(l.bounds!, self.x, self.y)) ?? mine[0];
+    if (!lot?.bounds) return null;
+    const crops = snap.nodes.filter((n) => n.ownerId != null && insideLot(lot.bounds!, n.x, n.y));
+    const ripe = crops.filter((n) => n.ownerId === myId && n.stage >= n.stages - 1).length;
+    const thirsty = crops.filter((n) => n.stage < n.stages - 1 && !n.watered && n.nextAdvanceAt != null).length;
+    const seeds = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
+    return { lot, ripe, thirsty, seeds };
+  })();
+  const plantAllWith = (lotKey: string, seedKey: string) => void garden({ action: "plant_all", lotKey, seedKey });
+  /** The lot E was pressed in (a plot or crop of the lot you stand in, with something to do), else null. */
+  const farmLotOf = (s: Selection): string | null => {
+    if (!farm) return null;
+    // Your meadow lot itself (E on its gate): homes keep E for going inside.
+    if (s.type === "building") {
+      const lot = snap?.lots.find((l) => l.buildingKey === s.key);
+      return lot?.kind === "land" && lot.key === farm.lot.key ? lot.key : null;
+    }
+    if (s.type === "plot") return s.lotKey === farm.lot.key ? farm.lot.key : null;
+    if (s.type !== "node") return null;
+    const crop = snap?.nodes.find((n) => n.id === s.id);
+    return crop && crop.ownerId != null && farm.lot.bounds && insideLot(farm.lot.bounds, crop.x, crop.y) ? farm.lot.key : null;
+  };
+  // E's handler is registered once per state change, not per move: it reads the latest farmLotOf from here.
+  const farmLotOfRef = useRef(farmLotOf);
+  useEffect(() => { farmLotOfRef.current = farmLotOf; });
+  const seedName = (key: string) => key.replace(/_seeds$/, "").replace(/_/g, " ");
+  /**
+   * The farm window (E twice on your lot, or 🌾 Farm): the lot-wide actions,
+   * one card per crop type (harvest / water just that type), planting, and
+   * the plot or crop E was pressed on. Rebuilt from the snapshot each render,
+   * so counts stay live.
+   */
+  const farmViewFor = (lotKey: string, target: Selection | null): FarmView | null => {
+    if (!farm || farm.lot.key !== lotKey || !farm.lot.bounds || !snap) return null;
+    const bounds = farm.lot.bounds;
+    const crops = snap.nodes.filter((n) => n.ownerId != null && insideLot(bounds, n.x, n.y));
+    const kinds = [...new Set(crops.map((n) => n.kind))].map((kind) => {
+      const of = crops.filter((n) => n.kind === kind);
+      const produce = Object.values(GARDEN_CROPS).find((c) => c.kind === kind)?.produceKey ?? kind.replace(/_crop$/, "");
+      const ripe = of.filter((n) => n.ownerId === myId && n.stage >= n.stages - 1).length;
+      const thirsty = of.filter((n) => n.stage < n.stages - 1 && !n.watered && n.nextAdvanceAt != null).length;
+      return {
+        kind, name: produce.replace(/_/g, " "), icon: ITEM_ICONS[produce] ?? "🌱", total: of.length, ripe, thirsty,
+        harvest: ripe ? () => void garden({ action: "harvest_all", lotKey, kind }) : null,
+        water: thirsty ? () => void garden({ action: "water_all", lotKey, kind }) : null,
+      };
+    }).sort((x, y) => y.ripe - x.ripe || y.total - x.total);
+    const here: FarmView["here"] = [];
+    const t = target;
+    if (t?.type === "node") {
+      const crop = snap.nodes.find((n) => n.id === t.id);
+      if (crop && crop.stage >= crop.stages - 1 && crop.ownerId === myId) here.push({ key: "harvest_one", label: "🧺 Harvest this one", run: () => void garden({ action: "harvest", nodeId: t.id }) });
+      if (crop && crop.stage < crop.stages - 1 && !crop.watered) here.push({ key: "water_one", label: "💧 Water this one", run: () => void garden({ action: "water", nodeId: t.id }) });
+    } else if (t?.type === "plot") {
+      for (const i of farm.seeds) here.push({ key: `plant_${i.itemKey}`, label: `🌱 Plant ${seedName(i.itemKey)} here`, run: () => void garden({ action: "plant", lotKey: t.lotKey, plot: t.plot, seedKey: i.itemKey }) });
+    }
+    return {
+      title: snap.buildings.find((b) => b.key === farm.lot.buildingKey)?.name ?? "Your field",
+      kindLabel: LOT_LABELS[farm.lot.kind]?.yours ?? "Your field",
+      ripe: farm.ripe, thirsty: farm.thirsty,
+      harvestAll: farm.ripe ? () => void garden({ action: "harvest_all", lotKey }) : null,
+      waterAll: farm.thirsty ? () => void garden({ action: "water_all", lotKey }) : null,
+      kinds,
+      plant: farm.seeds.map((i) => ({ key: i.itemKey, label: `${ITEM_ICONS[i.itemKey] ?? "🌱"} ${seedName(i.itemKey)} ×${i.qty}`, run: () => plantAllWith(lotKey, i.itemKey) })),
+      here,
+    };
+  };
+  const farmView = farmMenu ? farmViewFor(farmMenu.lotKey, farmMenu.target) : null;
   const hasAxe = (me?.inventory ?? []).some((i) => AXE_ITEMS.includes(i.itemKey) && i.qty > 0);
   const hasRod = (me?.inventory ?? []).some((i) => i.itemKey === "fishing_rod" && i.qty > 0);
   // An equipped bow turns attacks into shots (one arrow each).
@@ -761,12 +842,13 @@ export default function Hud() {
     if (talk) { setTalk(null); return; }
     if (trade) { setTrade(null); return; }
     if (shop) { setShop(null); return; }
+    if (farmMenu) { setFarmMenu(null); return; }
     if (craft) { setCraft(null); return; }
     if (inspect) { setInspect(null); return; }
     if (panel) { setPanel(null); return; }
     if (building) { setBuilding(null); return; }
     if (sel) { setSel(null); return; }
-  }, [mapOpen, board, talk, trade, shop, craft, inspect, panel, building, sel]);
+  }, [mapOpen, board, talk, trade, shop, farmMenu, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -838,6 +920,11 @@ export default function Hud() {
     // Chopping a tree acts at once; everything else, the first E just opens
     // the card (so any button can be picked) and a second E takes the main action.
     const offPrimary = bus.on("primaryAction", (s) => {
+      // E on a plot or crop of the lot you stand in: the farm menu (everything you can do there).
+      // E on a plot, crop or the lot of your own farm: the first E shows its
+      // card (with 🌾 Farm (E)), the second opens the farm window.
+      const farmLot = farmLotOfRef.current(s);
+      if (farmLot && menuShownFor.current === selectionKey(s)) { setFarmMenu({ lotKey: farmLot, target: s }); return; }
       if (eDecision({ inReach: s.distance <= 160, instant: isChopTarget(s), menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
     });
     return () => {
@@ -1088,6 +1175,7 @@ export default function Hud() {
               const confirming = confirmRelease === lot.key;
               return <>
                 <span className="text-[11px] font-bold text-emerald-700">{L.icon} {L.yours}</span>
+                {farm?.lot.key === lot.key && (lot.kind === "land" || lot.kind === "home") && <Btn on={() => setFarmMenu({ lotKey: lot.key, target: sel })}>🌾 Farm {lot.kind === "land" ? interactHint : ""}</Btn>}
                 <Btn on={() => setBannerFor(bannerFor === lot.key ? null : lot.key)} subtle>🚩 Banner</Btn>
                 {bannerFor === lot.key && lot.banner && (
                   <span className="flex w-full flex-wrap items-center gap-1">
@@ -1126,6 +1214,9 @@ export default function Hud() {
       <Notifications />
 
       {/* Trade modal — dedicated sell flow, no conversation required. */}
+      {/* Farm menu: E on a plot or crop of your lot. */}
+      {farmView && <FarmMenu view={farmView} coins={coins} onClose={() => setFarmMenu(null)} />}
+
       {/* Shop modal — everything this NPC sells, behind one Buy button. */}
       {shop && (
         <ShopModal npcName={shop.npcName} stock={stockForNpc(shop.npcKey)} level={me?.me?.level ?? 1} coins={coins}
@@ -1259,7 +1350,8 @@ export default function Hud() {
         <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
           <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
-          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop" || bInfo?.kind === "orchard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain} />}
+          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop" || bInfo?.kind === "orchard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain}
+            farm={(() => { const lot = snap?.lots.find((l) => l.buildingKey === bInfo.key); const v = lot && (lot.kind === "vineyard" || lot.kind === "orchard") ? farmViewFor(lot.key, null) : null; return v ? <FarmPanel view={v} coins={coins} /> : undefined; })()} />}
           {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
@@ -1537,6 +1629,31 @@ function CraftRow({ recipe, me, busy, onCraft }: { recipe: Recipe; me: Me | null
       <div className="flex flex-col gap-1">
         <button disabled={busy || !canMake} onClick={() => onCraft(qty)} className="rounded bg-amber-700 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft {qty}</button>
         <button disabled={busy || !canMake} onClick={() => onCraft(max)} className="rounded bg-yellow-600 px-2 py-1 text-[10px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Craft all ({max})</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The farm window opened by E (twice) on your lot: FarmPanel in a modal. Its
+ * keymap closes it on Escape and stops walking while it's open.
+ */
+function FarmMenu({ view, coins, onClose }: { view: FarmView; coins: number; onClose: () => void }) {
+  useEffect(() => inputRouter.pushKeymap({
+    label: "farm",
+    bindings: [{ keys: ["escape"], command: "ui.close" as const, mode: "press" as const }],
+    handlers: [{ id: "ui.close" as const, scope: "ui" as const, run: () => { onClose(); } }],
+  }), [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label={view.title} onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div onClick={(e) => e.stopPropagation()} className="max-h-[85vh] w-[min(94vw,520px)] overflow-y-auto pixel-panel p-4 shadow-2xl">
+        <div className="mb-3 flex items-start">
+          <div><div className="text-lg font-bold text-amber-900">{view.title}</div><div className="text-[12px] font-bold text-emerald-700">🌾 {view.kindLabel}</div></div>
+          <div className="flex-1" />
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <FarmPanel view={view} coins={coins} />
+        <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
       </div>
     </div>
   );

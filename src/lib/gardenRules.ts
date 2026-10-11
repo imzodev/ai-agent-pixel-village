@@ -40,3 +40,20 @@ export function rollForageSeed(rand: () => number = Math.random, chanceMult = 1)
   }
   return entries[entries.length - 1][0];
 }
+
+/**
+ * What the lot-wide actions (Plant / Harvest / Water all) act on: the free
+ * plots, `ownerId`'s ripe crops, and the crops that can be watered now.
+ */
+export function farmPlan(
+  plots: readonly { plot: number }[],
+  crops: readonly { id: number; plot: number | null; ownerId: number | null; stage: number; stages: number; wateredStage: number | null; nextAdvanceAt: Date | null }[],
+  ownerId: number,
+): { free: number[]; ripe: number[]; thirsty: number[] } {
+  const taken = new Set(crops.map((c) => c.plot));
+  return {
+    free: plots.map((p) => p.plot).filter((p) => !taken.has(p)),
+    ripe: crops.filter((c) => c.ownerId === ownerId && isRipe(c.stage, c.stages)).map((c) => c.id),
+    thirsty: crops.filter((c) => waterCheck(c, c.stages) === null).map((c) => c.id),
+  };
+}

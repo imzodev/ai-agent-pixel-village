@@ -70,7 +70,7 @@ export type GardenCropDef = {
 
 /** Result of a lot / garden action. */
 export type GardenResult =
-  | { ok: true; message: string; gained?: { itemKey: string; qty: number }[]; x?: number; y?: number; notices?: string[] }
+  | { ok: true; message: string; gained?: { itemKey: string; qty: number }[]; x?: number; y?: number; notices?: string[]; /** How many plots a lot-wide action did. */ count?: number }
   | { ok: false; error: string };
 
 /** An orchard fruit (src/lib/orchard.ts): its tree, fruit, sapling and where saplings are sold. */
@@ -87,4 +87,25 @@ export type OrchardFruit = {
   families: readonly ("port" | "desert" | "snow" | "swamp" | "darkwood" | "hills")[];
   /** Where the sapling comes from, in its description. */
   origin: string;
+};
+
+/** One action in the farm window (src/components/FarmPanel.tsx). */
+export type FarmAction = { key: string; label: string; run: () => void };
+
+/** A crop type in a lot, as the farm window shows it. */
+export type FarmKindView = {
+  kind: string; name: string; icon: string; total: number; ripe: number; thirsty: number;
+  /** Harvest / water just this type (null: nothing to do). */
+  harvest: (() => void) | null; water: (() => void) | null;
+};
+
+/** What the farm window shows for one lot (built by the HUD from the snapshot). */
+export type FarmView = {
+  title: string; kindLabel: string; ripe: number; thirsty: number;
+  harvestAll: (() => void) | null; waterAll: (() => void) | null;
+  kinds: FarmKindView[];
+  /** Plant all, one per seed that fits. */
+  plant: FarmAction[];
+  /** The plot / crop E was pressed on. */
+  here: FarmAction[];
 };

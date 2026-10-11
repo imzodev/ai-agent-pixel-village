@@ -19,6 +19,17 @@ export function insideLot(b: LotBounds, x: number, y: number): boolean {
     && y >= b.ty * TILE_PX - EDGE_MARGIN_PX && y < (b.ty + b.th) * TILE_PX + EDGE_MARGIN_PX;
 }
 
+/**
+ * Close enough to work the whole lot (the farm window, Plant / Harvest /
+ * Water all): inside it, or around it within FARM_REACH_PX, e.g. at its
+ * gate on the path. The client and the garden route use the same rule.
+ */
+export const FARM_REACH_PX = 64;
+export function atLot(b: LotBounds, x: number, y: number): boolean {
+  return x >= b.tx * TILE_PX - FARM_REACH_PX && x < (b.tx + b.tw) * TILE_PX + FARM_REACH_PX
+    && y >= b.ty * TILE_PX - FARM_REACH_PX && y < (b.ty + b.th) * TILE_PX + FARM_REACH_PX;
+}
+
 /** Can you tend something `distPx` away? Yes when it's near, or when it's in your own lot and you stand in it. */
 export function canTend(distPx: number, range: number, standingInOwnLot: boolean): boolean {
   return distPx <= range || standingInOwnLot;

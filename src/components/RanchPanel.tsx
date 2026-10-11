@@ -3,7 +3,8 @@
 // chicks / lambs / calves, feeding them, collecting eggs, wool and milk —
 // and growing the farm (Build and Workshop tabs: RanchUpgrades, RanchWorkshop).
 // Vineyards and workshops share it: no animals, just their Build and Workshop
-// tabs (and a workshop's Showroom, RanchShowroom).
+// tabs (and a workshop's Showroom, RanchShowroom). Your own vineyard or
+// orchard also gets a Farm tab (FarmPanel: harvest / water / plant).
 import { useCallback, useEffect, useState } from "react";
 import { ITEM_ICONS } from "@/game/bus";
 import { FED_BELOW, HUNGRY_AT, MAX_STORED, RANCH_SPECIES, isRanchSpecies } from "@/lib/ranch";
@@ -14,10 +15,16 @@ import RanchShowroom from "./RanchShowroom";
 
 const mins = (ms: number) => `${Math.max(1, Math.ceil(ms / 60_000))}m`;
 
-export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: string; onMessage: (text: string, kind: "good" | "bad") => void; onGain: (items: { itemKey: string; qty: number }[]) => void }) {
+export default function RanchPanel({ ranchKey, onMessage, onGain, farm }: {
+  ranchKey: string;
+  onMessage: (text: string, kind: "good" | "bad") => void;
+  onGain: (items: { itemKey: string; qty: number }[]) => void;
+  /** A vineyard's / orchard's Farm tab (FarmPanel), when you're at your own. */
+  farm?: React.ReactNode;
+}) {
   const [view, setView] = useState<RanchView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"animals" | "build" | "workshop" | "showroom">("animals");
+  const [tab, setTab] = useState<"animals" | "farm" | "build" | "workshop" | "showroom">(farm ? "farm" : "animals");
   const load = useCallback(() => fetch(`/api/ranch?key=${encodeURIComponent(ranchKey)}`).then((r) => r.json()).then((r) => { if (r && !r.error) setView(r); }).catch(() => {}), [ranchKey]);
   useEffect(() => {
     void load();
@@ -69,8 +76,8 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
           <div className="h-1.5 w-28 overflow-hidden rounded bg-stone-300"><div className="h-full bg-emerald-500" style={{ width: `${g.nextAt ? Math.min(100, (100 * g.farmXp) / g.nextAt) : 100}%` }} /></div>
           <span className="text-stone-600">{g.nextAt ? `${g.farmXp}/${g.nextAt} XP` : "max"}</span>
           <span className="flex-1" />
-          {(workshop ? (["build", "workshop", "showroom"] as const) : vineyard || orchard ? (["build", "workshop"] as const) : (["animals", "build", "workshop"] as const)).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${(tab === t || (animalless && tab === "animals" && t === "build")) ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "build" ? "🔨 Build" : t === "showroom" ? "🪑 Showroom" : workshop ? "🪚 Make" : "⚙️ Workshop"}</button>
+          {(workshop ? (["build", "workshop", "showroom"] as const) : vineyard || orchard ? (farm ? (["farm", "build", "workshop"] as const) : (["build", "workshop"] as const)) : (["animals", "build", "workshop"] as const)).map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={`rounded px-2 py-0.5 text-xs font-bold ${(tab === t || (animalless && tab === "animals" && t === "build")) ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "animals" ? "🐔 Animals" : t === "farm" ? "🌾 Farm" : t === "build" ? "🔨 Build" : t === "showroom" ? "🪑 Showroom" : workshop ? "🪚 Make" : "⚙️ Workshop"}</button>
           ))}
         </div>
       )}
@@ -79,6 +86,7 @@ export default function RanchPanel({ ranchKey, onMessage, onGain }: { ranchKey: 
       {g && (tab === "build" || (animalless && tab === "animals")) && <RanchUpgrades g={g} busy={busy} act={(b) => void act(b)} />}
       {g && tab === "showroom" && <RanchShowroom g={g} busy={busy} act={(b) => void act(b)} />}
       {g && tab === "workshop" && <RanchWorkshop g={g} busy={busy} act={(b) => void act(b)} />}
+      {tab === "farm" && farm}
       {!animalless && (!g || tab === "animals") && <>
       <div className="flex flex-wrap items-center gap-2">
         <button disabled={busy || ready === 0} onClick={() => void act({ action: "collect" })} className="pixel-btn bg-amber-300 px-2 py-1 text-sm font-bold disabled:opacity-40">🧺 Collect {ready > 0 ? `(${ready})` : ""}</button>

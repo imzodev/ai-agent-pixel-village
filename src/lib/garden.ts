@@ -15,7 +15,7 @@ import { characters, lots, resourceNodes } from "@/db/schema";
 import { CROP_KINDS, GARDEN_CROPS } from "./crops";
 import { addItem, countItem, progressMissions, recalcLevel, removeItem } from "./game";
 import { plotsOfLot } from "./lots";
-import { isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
+import { farmPlan, isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
 import type { GardenResult } from "@/types/garden";
 import { perksOf } from "./combat";
 import { tutorialEvent } from "./tutorialServer";
@@ -150,4 +150,85 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
     x: node.x,
     y: node.y,
   };
+}
+
+// ── Lot-wide actions (Plant / Harvest / Water all) ──────────────────────
+// Each loops over the single-plot actions above, so every rule (owner only,
+// what may grow where, seeds, XP, farm XP) stays exactly the same.
+
+/** A lot and what's growing in it, with each crop's stage count. */
+async function lotGarden(lotKey: string) {
+  const [lot] = await db.select().from(lots).where(eq(lots.key, lotKey));
+  if (!lot) return null;
+  const rows = await db.select().from(resourceNodes).where(eq(resourceNodes.lotId, lot.id));
+  const crops = rows.map((n) => ({ ...n, stages: CROP_KINDS[n.kind]?.stages ?? 99 }));
+  return { lot, crops, plots: await plotsOfLot(lot) };
+}
+
+const lotCenter = (lot: { tx: number; ty: number; tw: number; th: number }) => ({ x: (lot.tx + lot.tw / 2) * 16, y: (lot.ty + lot.th / 2) * 16 });
+
+/** Plant `seedKey` in every free plot of the lot it fits, until the seeds run out. */
+export async function plantAll(characterId: number, lotKey: string, seedKey: string): Promise<GardenResult> {
+  const g = await lotGarden(lotKey);
+  if (!g) return { ok: false, error: "There's no garden here." };
+  if (g.lot.ownerId !== characterId) return { ok: false, error: "This isn't your garden." };
+  const { free } = farmPlan(g.plots, g.crops, characterId);
+  if (free.length === 0) return { ok: false, error: "Every plot is already growing something." };
+  let planted = 0, firstError: string | null = null, ranOut = false;
+  const notices = new Set<string>();
+  for (const plot of free) {
+    if ((await countItem(characterId, seedKey)) < 1) { ranOut = planted > 0; break; }
+    const r = await plantCrop(characterId, lotKey, plot, seedKey);
+    if (r.ok) { planted++; for (const n of r.notices ?? []) notices.add(n); }
+    else firstError ??= r.error;
+  }
+  if (planted === 0) return { ok: false, error: firstError ?? "You don't have any of those seeds." };
+  const name = (GARDEN_CROPS[seedKey]?.produceKey ?? seedKey.replace(/_seeds$/, "")).replace(/_/g, " ");
+  return {
+    ok: true,
+    count: planted,
+    message: `Planted ${planted} ${name}${planted > 1 ? " plots" : " plot"}.${ranOut ? " You ran out of seeds." : ""}`,
+    notices: [...notices],
+    ...lotCenter(g.lot),
+  };
+}
+
+/** Harvest every ripe crop of yours in the lot (only crops of `kind`, if given). */
+export async function harvestAll(characterId: number, lotKey: string, kind?: string): Promise<GardenResult> {
+  const g = await lotGarden(lotKey);
+  if (!g) return { ok: false, error: "There's no garden here." };
+  const { ripe } = farmPlan(g.plots, kind ? g.crops.filter((c) => c.kind === kind) : g.crops, characterId);
+  if (ripe.length === 0) return { ok: false, error: "Nothing here is ready to harvest yet." };
+  const totals = new Map<string, number>();
+  const notices = new Set<string>();
+  let harvested = 0;
+  for (const id of ripe) {
+    const r = await harvestCrop(characterId, id);
+    if (!r.ok) continue;
+    harvested++;
+    for (const it of r.gained ?? []) totals.set(it.itemKey, (totals.get(it.itemKey) ?? 0) + it.qty);
+    for (const n of r.notices ?? []) notices.add(n);
+  }
+  if (harvested === 0) return { ok: false, error: "It's already been harvested." };
+  const gained = [...totals].map(([itemKey, qty]) => ({ itemKey, qty }));
+  return {
+    ok: true,
+    count: harvested,
+    message: `Harvested ${harvested} crop${harvested > 1 ? "s" : ""}: ${gained.map((g) => `${g.qty} ${g.itemKey.replace(/_/g, " ")}`).join(", ")}.`,
+    gained,
+    notices: [...notices],
+    ...lotCenter(g.lot),
+  };
+}
+
+/** Water every crop in the lot that can be watered this stage (only crops of `kind`, if given; anyone may help). */
+export async function waterAll(lotKey: string, kind?: string): Promise<GardenResult> {
+  const g = await lotGarden(lotKey);
+  if (!g) return { ok: false, error: "There's no garden here." };
+  const { thirsty } = farmPlan(g.plots, kind ? g.crops.filter((c) => c.kind === kind) : g.crops, -1);
+  if (thirsty.length === 0) return { ok: false, error: "Nothing here needs water right now." };
+  let watered = 0;
+  for (const id of thirsty) if ((await waterCrop(id)).ok) watered++;
+  if (watered === 0) return { ok: false, error: "Already watered. Check back when it grows." };
+  return { ok: true, count: watered, message: `Watered ${watered} crop${watered > 1 ? "s" : ""}! They'll grow faster this stage.`, ...lotCenter(g.lot) };
 }

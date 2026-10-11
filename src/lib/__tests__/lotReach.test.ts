@@ -43,3 +43,14 @@ describe("canTend", () => {
     expect(TEND_RANGE_SERVER_PX).toBeGreaterThan(TEND_RANGE_PX);
   });
 });
+
+describe("atLot (the farm window's reach)", () => {
+  const b = { tx: 10, ty: 20, tw: 12, th: 8 }; // px: x 160–352, y 320–448
+  it("counts inside the lot and around it, e.g. at its gate on the path", async () => {
+    const { atLot, FARM_REACH_PX } = await import("@/lib/lotReach");
+    expect(atLot(b, 250, 400)).toBe(true); // in the field
+    expect(atLot(b, 250, 320 - 30)).toBe(true); // on the path by the gate
+    expect(atLot(b, 250, 320 - FARM_REACH_PX - 1)).toBe(false); // further up the road
+    expect(atLot(b, 352 + FARM_REACH_PX + 5, 400)).toBe(false); // next lot over
+  });
+});
