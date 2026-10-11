@@ -48,7 +48,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     title: "Sell something to a villager",
-    hint: "Pip buys stones, mushrooms and crops. Talk to him and sell anything from your bag.",
+    hint: "Pip buys stones, mushrooms and crops. Walk up to him, choose Sell and sell anything from your bag.",
     event: "sell", qty: 1,
     target: { kind: "npc", npcKey: "village_pip" },
     reward: { coins: 30, items: [{ itemKey: "bread", qty: 2 }], title: "Newcomer" },

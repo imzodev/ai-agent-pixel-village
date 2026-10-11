@@ -81,7 +81,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         .where(and(eq(conversations.characterId, character.id), eq(conversations.npcId, npc.id)))
         .orderBy(desc(conversations.id))
         .limit(HISTORY_LINES),
-      buildOffers(npc, character),
+      // Selling has its own window (the Sell menu), so talk leaves it out: no
+      // sell buttons in the chat and no haggling over what's in your bag.
+      buildOffers(npc, character).then((all) => all.filter((o) => o.type !== "sell")),
       loadSponsor(npc),
       db.select().from(worldState).where(eq(worldState.id, 1)),
       mindNoteFor(npc, character.id, character.name),
@@ -136,11 +138,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (sponsor && history.length === 0) {
         await emitLead({ sponsorId: sponsor.id, characterId: character.id, npcId: npc.id, kind: "conversation", note: `${character.name} met ${npc.name}` });
       }
-      // Sell offers are player-driven actions, not NPC-driven narrative, so
-      // they're always shown regardless of whether the brain mentioned them.
-      // Everything else (turnin, mission, gift, discount) is gated on the
-      // brain's choice so the panel reflects only what the NPC "said".
-      const shown = offers.filter((o) => o.type === "sell" || o.type === "order" || o.type === "deliver" || reply.offerIds.includes(o.id));
+      // Standing orders are player-driven, so they're always shown. Everything
+      // else (turnin, mission, gift, discount) is gated on the brain's choice
+      // so the panel reflects only what the NPC "said".
+      const shown = offers.filter((o) => o.type === "order" || o.type === "deliver" || reply.offerIds.includes(o.id));
       return { text: reply.text, offers: shown, source: reply.source, notices, npc: { id: npc.id, name: npc.name, role: npc.role, sponsored: !!sponsor, sponsor: sponsor ? { businessName: sponsor.businessName, brandColor: sponsor.brandColor } : null } };
     };
 
