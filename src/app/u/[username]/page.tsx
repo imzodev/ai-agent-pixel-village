@@ -7,6 +7,11 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { loadProfile } from "@/lib/profileServer";
 import { xShareUrl } from "@/lib/moments";
+import { headers } from "next/headers";
+import { track } from "@/lib/track";
+import { isBot } from "@/lib/bots";
+import RefMark from "@/components/RefMark";
+import ShareLink from "@/components/ShareLink";
 
 export const dynamic = "force-dynamic";
 
@@ -44,11 +49,13 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
       </main>
     );
   }
+  if (!isBot((await headers()).get("user-agent"))) track("profile_view");
   const url = `${BASE}/u/${username}`;
   const shareText = `${p.look.name}${p.look.title ? `, ${p.look.title},` : ""} on thegroove: level ${p.look.level}${p.trophies.length ? `, ${p.trophies.length} trophies` : ""}`;
   const days = (d: Date) => d.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
   return (
     <main className="min-h-dvh bg-[#141c3c] px-4 py-6 text-white">
+      <RefMark from={`u:${username}`} />
       <div className="mx-auto max-w-3xl">
         <Link href="/" className="text-lg font-extrabold text-amber-300">🌳 thegroove</Link>
         {/* eslint-disable-next-line @next/next/no-img-element -- a generated PNG, already sized */}
@@ -56,7 +63,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
         <h1 className="mt-5 text-3xl font-extrabold">{p.look.name}</h1>
         <p className="text-stone-300">{p.look.title ? `${p.look.title} · ` : ""}level {p.look.level} · @{username} · playing since {days(p.memberSince)}</p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <a href={xShareUrl(shareText, url)} target="_blank" rel="noopener noreferrer" className="rounded-xl bg-black px-5 py-3 font-extrabold ring-2 ring-white/30 hover:bg-stone-800">Share on 𝕏</a>
+          <ShareLink href={xShareUrl(shareText, url)} via="x" page="profile" className="rounded-xl bg-black px-5 py-3 font-extrabold ring-2 ring-white/30 hover:bg-stone-800">Share on 𝕏</ShareLink>
           <Link href="/" className="rounded-xl bg-emerald-500 px-5 py-3 font-extrabold shadow-lg hover:brightness-110">▶ Play free</Link>
         </div>
 

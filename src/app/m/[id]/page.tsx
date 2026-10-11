@@ -4,6 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { momentById } from "@/lib/momentsServer";
+import { headers } from "next/headers";
+import { track } from "@/lib/track";
+import { isBot } from "@/lib/bots";
+import RefMark from "@/components/RefMark";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +33,10 @@ export default async function MomentPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const m = await momentById(id);
   if (!m) notFound();
+  if (!isBot((await headers()).get("user-agent"))) track("moment_view", null, { kind: m.kind });
   return (
     <main className="min-h-dvh bg-[#141c3c] px-4 py-6 text-white">
+      <RefMark from={`m:${m.id}`} />
       <div className="mx-auto max-w-3xl">
         <Link href="/" className="text-lg font-extrabold text-amber-300">🌳 thegroove</Link>
         {/* eslint-disable-next-line @next/next/no-img-element -- a generated PNG, already sized */}

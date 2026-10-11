@@ -66,6 +66,10 @@ ln -sfn "$BASE/shared/.cache" "$rel/.cache"
 #    terminal, and `timeout` stops it if it waits anyway. Never answer
 #    "truncate" (AGENTS.md).
 set -a; . "$rel/.env"; set +a
+# A snapshot before the schema changes, so a bad push can be undone
+# (scripts/backup-db.sh; restore steps in docs/RUNBOOK.md).
+log "backing up the database"
+bash "$rel/scripts/backup-db.sh" predeploy
 log "fixing constraint drift"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/fix-db-drift.sql
 log "pushing schema"

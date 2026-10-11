@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-type Info = { plans: Record<string, { rentCents: number; leadFeeCents: number; label: string }>; paymentsConfigured: boolean; buildings: { key: string; name: string; kind: string; color: string; taken: boolean; tenant: string | null }[] };
+type Info = { plans: Record<string, { rentCents: number; leadFeeCents: number; label: string }>; paymentsConfigured: boolean; open: boolean; buildings: { key: string; name: string; kind: string; color: string; taken: boolean; tenant: string | null }[] };
 
 export default function SponsorPage() {
   return <Suspense fallback={null}><SponsorInner /></Suspense>;
@@ -60,7 +60,8 @@ function SponsorInner() {
                 ))}
               </div>
             )}
-            {info && !info.paymentsConfigured && <div className="mt-2 rounded-lg bg-yellow-100 px-3 py-2 text-[12px] text-yellow-900">Payments are in sandbox mode on this deployment (no STRIPE_SECRET_KEY) — reservations activate instantly so you can try the whole loop.</div>}
+            {info && !info.open && <div className="mt-2 rounded-lg bg-yellow-100 px-3 py-2 text-[12px] text-yellow-900">Reservations open soon. Have a look around; you&apos;ll be able to reserve a building here shortly.</div>}
+            {info && info.open && !info.paymentsConfigured && <div className="mt-2 rounded-lg bg-yellow-100 px-3 py-2 text-[12px] text-yellow-900">Payments are in sandbox mode (development, no STRIPE_SECRET_KEY): reservations activate instantly so you can try the whole loop.</div>}
           </div>
           <form onSubmit={submit} className="space-y-3 rounded-xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-xl">
             <div className="text-lg font-bold text-amber-900">Move in</div>
@@ -86,7 +87,7 @@ function SponsorInner() {
             <Ta label="The pitch — one or two sentences the character would naturally say" v={f.pitch} on={set("pitch")} placeholder="Our weekend cinnamon knots are half price for villagers, and the sourdough subscription delivers every Saturday." />
             <In label="Greeting line" v={f.greeting} on={set("greeting")} placeholder="Oh, hello love! Mind the flour." />
             {err && <div className="rounded-lg bg-red-100 px-3 py-2 text-red-800">{err}</div>}
-            <button disabled={busy} className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-base font-bold text-white hover:bg-orange-400 disabled:opacity-50">{busy ? "Hanging the sign…" : info?.paymentsConfigured ? "Continue to payment →" : "Reserve & spawn my agent →"}</button>
+            <button disabled={busy || info?.open === false} className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-base font-bold text-white hover:bg-orange-400 disabled:opacity-50">{info?.open === false ? "Opening soon" : busy ? "Hanging the sign…" : info?.paymentsConfigured ? "Continue to payment →" : "Reserve & spawn my agent →"}</button>
             <p className="text-[11px] text-stone-500">Rent is billed monthly by card. Per-lead fees accrue on your dashboard and bill with rent. Cancel any time from the dashboard.</p>
           </form>
         </section>

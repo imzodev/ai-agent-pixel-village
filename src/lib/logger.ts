@@ -29,3 +29,16 @@ function build(): PinoLogger {
 export const log: PinoLogger =
   globalForLog.__villageLogger ??
   (globalForLog.__villageLogger = build());
+
+/**
+ * Log what would otherwise vanish: a promise nobody caught is logged; an
+ * exception nobody caught is logged and the process exits, so pm2 restarts
+ * it clean rather than leaving it half-broken. Call once at process start.
+ */
+export function installCrashLogging(): void {
+  process.on("unhandledRejection", (reason) => log.error({ err: reason }, "unhandled promise rejection"));
+  process.on("uncaughtException", (err) => {
+    log.fatal({ err }, "uncaught exception, exiting");
+    setTimeout(() => process.exit(1), 200).unref(); // let the log line flush
+  });
+}

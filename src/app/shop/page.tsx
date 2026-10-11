@@ -29,6 +29,8 @@ type Pack = { key: string; gems: number; priceCents: number };
 export default function ShopPage() {
   const [view, setView] = useState<{ items: Item[]; balance: { coins: number; gems: number } } | null>(null);
   const [packs, setPacks] = useState<Pack[]>([]);
+  /** Gem packs can be bought here (false: payments aren't set up yet). */
+  const [gemsOpen, setGemsOpen] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<CosmeticSlot | "all">("all");
   const [tab, setTab] = useState<"cosmetics" | "gems">("cosmetics");
@@ -46,6 +48,7 @@ export default function ShopPage() {
   const applyShop = ([s, p, meRes]: Awaited<ReturnType<typeof fetchShop>>) => {
     setView(s);
     setPacks(p.packs);
+    setGemsOpen(p.open !== false);
     if (meRes?.me) {
       setMeAppearance(meRes.me.appearance as Appearance);
       const eq: EquippedCosmetics = {};
@@ -215,14 +218,19 @@ export default function ShopPage() {
         </>
       )}
 
+      {tab === "gems" && !gemsOpen && (
+        <div style={{ background: "#0e1830", border: "2px solid #ffd166", borderRadius: 10, padding: 16, marginBottom: 12, color: "#ffd166" }}>
+          💎 Gem packs are coming soon. Everything else in the game is free to play, and coin items are on sale now.
+        </div>
+      )}
       {tab === "gems" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
           {packs.map((p) => (
             <div key={p.key} style={{ background: "#0e1830", border: "2px solid #6b8cff", borderRadius: 10, padding: 16 }}>
               <div style={{ fontFamily: "inherit", fontSize: 28, marginBottom: 4 }}>💎 {p.gems}</div>
               <div style={{ fontFamily: "inherit", color: "#9aa", marginBottom: 12 }}>${(p.priceCents / 100).toFixed(2)}</div>
-              <button disabled={busy === p.key} onClick={() => buyGems(p.key)} style={btnPrimary}>
-                {busy === p.key ? "…" : "Buy"}
+              <button disabled={busy === p.key || !gemsOpen} onClick={() => buyGems(p.key)} style={gemsOpen ? btnPrimary : btnDisabled}>
+                {!gemsOpen ? "Coming soon" : busy === p.key ? "…" : "Buy"}
               </button>
             </div>
           ))}

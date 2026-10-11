@@ -67,6 +67,7 @@ import type { CombatState, StatusEffect, Strike } from "@/types/combat";
 import type { Move, MoveWrite } from "@/types/motion";
 import { BIKE_ITEM } from "@/lib/bike";
 import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
+import { track } from "@/lib/track";
 
 const WS_PATH = "/ws";
 
@@ -179,6 +180,7 @@ async function onSpectator(ws: WebSocket): Promise<void> {
     return;
   }
   spectators.add(ws);
+  track("visitor"); // someone watching the live village (no personal data)
   const drop = () => { spectators.delete(ws); };
   ws.on("close", drop);
   ws.on("error", drop);

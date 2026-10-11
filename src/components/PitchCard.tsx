@@ -107,6 +107,7 @@ export default function PitchCard({ snap, onLogin }: { snap: Snapshot; onLogin: 
         <Link href="/signup" className="pixel-btn flex-1 bg-emerald-600 px-3 py-2 text-center text-base font-bold text-white hover:bg-emerald-500">Create your character, it&apos;s free →</Link>
         <button className="rounded-lg px-2 py-2 text-stone-600 underline hover:text-stone-900" onClick={onLogin}>I have one</button>
       </div>
+      <div className="mt-2 text-[11px] text-stone-500"><Link href="/privacy" className="underline">Privacy</Link> · <Link href="/terms" className="underline">Terms</Link></div>
       <style>{`@keyframes pitch-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }`}</style>
     </div>
   );

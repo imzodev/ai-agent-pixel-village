@@ -4,15 +4,18 @@
 import { NextResponse } from "next/server";
 import { getContainer } from "@/lib/container";
 import { requireCharacter, handleApiError } from "@/lib/auth";
+import { checkoutOpen } from "@/lib/payments";
 
 export async function GET() {
   const c = getContainer();
-  return NextResponse.json({ packs: c.services.gem.getPacks() });
+  // `open: false`: no payments here yet (the shop says "coming soon").
+  return NextResponse.json({ packs: c.services.gem.getPacks(), open: checkoutOpen() });
 }
 
 export async function POST(req: Request) {
   try {
     const ch = await requireCharacter();
+    if (!checkoutOpen()) return NextResponse.json({ error: "The gem shop opens soon." }, { status: 503 });
     const body = (await req.json()) as { packKey?: string };
     if (!body.packKey) return NextResponse.json({ error: "packKey required" }, { status: 400 });
     const c = getContainer();

@@ -33,6 +33,8 @@ const lastShot = new Map<number, number>();
 import { PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } from "@/lib/ranchUpgrades";
 import { createMoment } from "@/lib/momentsServer";
 import { lairBossMoment, rootkingMoment } from "@/lib/moments";
+import { cleanPlayerChat } from "@/lib/moderation";
+import { chatBurstLimiter, chatMinuteLimiter } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +61,10 @@ export async function POST(req: Request) {
     const action = String(body.action ?? "");
 
     if (action === "chat") {
-      const text = String(body.text ?? "").trim().slice(0, 140);
+      // Everyone nearby sees it: no links, bad words masked, and no spamming.
+      const text = cleanPlayerChat(String(body.text ?? ""));
       if (!text) return Response.json({ error: "Say something." }, { status: 400 });
+      if (!chatBurstLimiter.allow(String(me.id)) || !chatMinuteLimiter.allow(String(me.id))) return Response.json({ error: "Slow down a little." }, { status: 429 });
       await db.insert(worldChat).values({ speakerType: "player", speakerId: me.id, text });
       const p = livePos(me);
       markWorldDirty(p.x, p.y);

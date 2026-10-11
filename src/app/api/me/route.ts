@@ -8,6 +8,7 @@ import { getContainer } from "@/lib/container";
 import { perksOf } from "@/lib/combat";
 import { perkPoints } from "@/lib/progression";
 import { unseenMoments } from "@/lib/momentsServer";
+import { markActive } from "@/lib/track";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function GET() {
     await ensureSeeded();
     const me = await getCurrentCharacter();
     if (!me) return Response.json({ me: null });
+    markActive(me.id); // played today (analytics: daily players, retention)
     const perks = await perksOf(me.id);
     const [inv, itemDefs, missionRows, decor, myLeads] = await Promise.all([
       db.select().from(inventory).where(eq(inventory.characterId, me.id)).orderBy(inventory.id),

@@ -12,6 +12,7 @@ import { allPlaces } from "@/lib/nav/places";
 import { SHOP_STOCK } from "@/lib/trade";
 import { validateSettings } from "@/lib/businessConfig";
 import { businessSummary, saveSettings } from "@/lib/mind/businessServer";
+import { checkoutOpen, paymentsLive } from "@/lib/payments";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
   try {
     await ensureSeeded();
     const b = await req.json().catch(() => ({}));
+    if (!checkoutOpen()) return Response.json({ error: "Reservations open soon. Leave us a note and we'll be in touch." }, { status: 503 });
     const businessName = String(b.businessName ?? "").trim().slice(0, 60);
     const contactEmail = String(b.contactEmail ?? "").trim().slice(0, 120);
     if (!businessName || !contactEmail.includes("@")) return Response.json({ error: "Business name and a contact email are required." }, { status: 400 });
@@ -163,7 +165,9 @@ export async function GET(req: Request) {
       const sps = await db.select({ id: sponsors.id, status: sponsors.status, businessName: sponsors.businessName }).from(sponsors);
       return Response.json({
         plans: PLANS,
-        paymentsConfigured: !!process.env.STRIPE_SECRET_KEY,
+        paymentsConfigured: paymentsLive(),
+        /** Reservations are open (payments live, or the dev sandbox). */
+        open: checkoutOpen(),
         buildings: bs.filter((b) => b.reservable).map((b) => {
           const sp = sps.find((s) => s.id === b.sponsorId);
           return { key: b.key, name: b.name, kind: b.kind, color: b.color, taken: !!sp && sp.status === "active", tenant: sp?.status === "active" ? sp.businessName : null };

@@ -7,6 +7,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, moments, users } from "@/db/schema";
 import type { Moment, MomentData, MomentKind, MomentNotice, MomentView } from "@/types/moments";
+import { track } from "./track";
 
 const ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 /** A 10-character slug (no look-alike letters), for /m/<id>. */
@@ -22,7 +23,8 @@ export function momentId(): string {
  */
 export async function createMoment(characterId: number, kind: MomentKind, data: MomentData, dedupeKey: string): Promise<void> {
   try {
-    await db.insert(moments).values({ id: momentId(), characterId, kind, data, dedupeKey }).onConflictDoNothing();
+    const added = await db.insert(moments).values({ id: momentId(), characterId, kind, data, dedupeKey }).onConflictDoNothing().returning({ id: moments.id });
+    if (added.length) track("moment_created", characterId, { kind });
   } catch (e) {
     console.warn("[moments]", e instanceof Error ? e.message : e);
   }
@@ -47,7 +49,7 @@ export async function momentById(id: string): Promise<MomentView | null> {
     .from(moments)
     .innerJoin(characters, eq(characters.id, moments.characterId))
     .leftJoin(users, eq(users.id, characters.userId))
-    .where(eq(moments.id, id));
+    .where(and(eq(moments.id, id), isNull(users.bannedAt))); // suspended accounts' moments aren't shown
   return r ? { ...(r.m as Moment), characterName: r.name, username: r.username } : null;
 }
 

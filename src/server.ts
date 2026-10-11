@@ -20,7 +20,7 @@ import { startMapWork } from "@/lib/worldAtlasServer";
 import { attachWsServer, closeAllWs, startPubSubBridge, stopPubSubBridge, startPeriodicRefresh, stopPeriodicRefresh } from "@/lib/world-stream";
 import { initRedis } from "@/lib/redis";
 import { setDraining } from "@/lib/lifecycle";
-import { log } from "@/lib/logger";
+import { installCrashLogging, log } from "@/lib/logger";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const dev = process.env.NODE_ENV !== "production";
@@ -69,6 +69,7 @@ async function main(): Promise<void> {
 
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
+  installCrashLogging();
 
   server.listen(PORT, () => {
     log.info({ port: PORT, wsPath: "/ws" }, "ready");

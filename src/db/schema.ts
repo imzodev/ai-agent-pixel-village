@@ -58,7 +58,25 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  /** Suspended by an admin (src/app/api/admin/ban): can't sign in or be seen. */
+  bannedAt: timestamp("banned_at"),
 });
+
+/** A player reported by another (src/app/api/report); admins read them at /api/admin/reports. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: serial("id").primaryKey(),
+    reporterId: integer("reporter_id").notNull(),
+    targetId: integer("target_id").notNull(),
+    reason: text("reason").notNull(),
+    /** The reported player's latest chat lines, as they were. */
+    chat: jsonb("chat").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at"),
+  },
+  (t) => [index("reports_target_idx").on(t.targetId), index("reports_open_idx").on(t.resolvedAt)],
+);
 
 export const sessions = pgTable("sessions", {
   token: text("token").primaryKey(),
@@ -825,6 +843,31 @@ export const characterBounties = pgTable(
     acceptedAt: timestamp("accepted_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("character_bounties_pk").on(t.characterId, t.bountyId)],
+);
+
+/** Product analytics, self-hosted (src/lib/track.ts): what happened and when.
+ *  No personal data beyond the character id. */
+export const events = pgTable(
+  "events",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(),
+    characterId: integer("character_id"),
+    meta: jsonb("meta").$type<Record<string, string | number | boolean>>().notNull().default({}),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("events_kind_at_idx").on(t.kind, t.at)],
+);
+
+/** Which days each character played (daily players and retention). */
+export const activeDays = pgTable(
+  "active_days",
+  {
+    characterId: integer("character_id").notNull(),
+    /** UTC date, "2026-10-11". */
+    day: text("day").notNull(),
+  },
+  (t) => [uniqueIndex("active_days_character_day_unique").on(t.characterId, t.day), index("active_days_day_idx").on(t.day)],
 );
 
 /** Proud moments a player can share (src/lib/momentsServer.ts, /m/[id]). */

@@ -2,7 +2,7 @@
 // in the world calls them a friend, and their latest moments. Read-only
 // (/u/[username] and its share card).
 
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, inventory, lots, npcRegard, npcs, ranchState, users } from "@/db/schema";
 import { LAIR_BOSSES } from "@/lib/lairs";
@@ -33,7 +33,7 @@ const SHELF: readonly Omit<ProfileTrophy, "name">[] = [
 export async function loadProfile(username: string): Promise<Profile | null> {
   const [row] = await db.select({ user: users, character: characters }).from(users)
     .innerJoin(characters, eq(characters.userId, users.id))
-    .where(eq(users.username, username)).limit(1);
+    .where(and(eq(users.username, username), isNull(users.bannedAt))).limit(1); // suspended accounts aren't shown
   if (!row) return null;
   const id = row.character.id;
   const look = await lookOf(id);

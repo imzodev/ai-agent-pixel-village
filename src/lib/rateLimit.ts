@@ -48,3 +48,23 @@ export const agentDropLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_DR
 export const agentMissionLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_MISSION_PER_HOUR", 5), windowMs: 3_600_000 });
 export const agentReadLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_READ_PER_MIN", 60), windowMs: 60_000 });
 export const agentRegisterLimiter = new SlidingWindowLimiter({ max: envInt("AGENT_REGISTER_PER_HOUR", 5), windowMs: 3_600_000 });
+
+// Sign-in and sign-up (src/app/api/auth): brute force and mass account creation.
+// Per IP (when the proxy tells us the IP) and per username for failed logins.
+export const loginIpLimiter = new SlidingWindowLimiter({ max: envInt("LOGIN_PER_IP_10MIN", 10), windowMs: 600_000 });
+export const loginFailLimiter = new SlidingWindowLimiter({ max: envInt("LOGIN_FAILS_PER_USER_15MIN", 8), windowMs: 900_000 });
+export const signupIpLimiter = new SlidingWindowLimiter({ max: envInt("SIGNUP_PER_IP_10MIN", 3), windowMs: 600_000 });
+
+// Player chat (/api/act "chat"): one line every 2 s, 15 a minute.
+export const chatBurstLimiter = new SlidingWindowLimiter({ max: 1, windowMs: 2_000 });
+export const chatMinuteLimiter = new SlidingWindowLimiter({ max: 15, windowMs: 60_000 });
+
+// Reports (/api/report): a few an hour per player.
+export const reportLimiter = new SlidingWindowLimiter({ max: 6, windowMs: 3_600_000 });
+
+/** The client's IP as the reverse proxy reports it; null when there's no proxy header
+ *  (then IP limits are skipped rather than lumping everyone into one bucket). */
+export function clientIp(req: Request): string | null {
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip")?.trim();
+  return ip || null;
+}

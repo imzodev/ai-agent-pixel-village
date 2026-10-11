@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, bossLairs, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks } from "@/db/schema";
+import { animals, bossLairs, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks, worldChat } from "@/db/schema";
 import { getCropKind } from "@/lib/crops";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
@@ -42,6 +42,8 @@ import { tickRanches } from "./ranchServer";
 import { tickCommissions } from "./commissionsServer";
 import { maybeOpenRows } from "./lotRowsServer";
 let lastRowCheck = 0;
+/** How long world chat is kept (the privacy policy promises this). */
+const CHAT_KEEP_MS = 30 * 24 * 3600_000;
 import { stageMs } from "./vineyard";
 import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
@@ -153,6 +155,8 @@ export async function tickWorld(): Promise<number | null> {
     // Homestead rows: a safety net for the check each claim makes.
     lastRowCheck = nowMs;
     await maybeOpenRows().catch((err) => console.warn("[tick] lot rows failed:", err instanceof Error ? err.message : err));
+    // World chat is kept 30 days (the privacy policy says so).
+    await db.delete(worldChat).where(lt(worldChat.createdAt, new Date(nowMs - CHAT_KEEP_MS))).catch((err) => console.warn("[tick] chat cleanup failed:", err instanceof Error ? err.message : err));
   }
   await runRandomEvents({ db, hour, weather: ws.weather, now, moveStartAt: beat.startAt });
   if (elapsedSec > 90) await unattendedEvents(elapsedSec);

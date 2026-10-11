@@ -41,7 +41,7 @@ import { initRedis } from "./redis";
 import { releaseInactiveLots } from "./lots";
 import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 import { metrics } from "@/lib/metrics";
-import { log } from "@/lib/logger";
+import { installCrashLogging, log } from "@/lib/logger";
 
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
@@ -183,6 +183,7 @@ async function main(): Promise<void> {
 
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
+  installCrashLogging();
 
   // Beat loop. Sleep until the next epoch-aligned boundary (k * WORLD_TICK_MS)
   // rather than "WORLD_TICK_MS minus however long the tick took": the WS

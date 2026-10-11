@@ -61,7 +61,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
               <div className="grid gap-2 sm:grid-cols-3">
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Character name" maxLength={24} className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required />
                 <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username (login)" className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="username" />
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password (6+)" className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="new-password" />
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password (8+)" minLength={8} className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="new-password" />
               </div>
             </Section>
             {err && <div className="rounded-lg bg-red-100 px-3 py-2 text-red-800">{err}</div>}
@@ -69,6 +69,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
               <button disabled={busy} className="rounded-lg bg-emerald-600 px-4 py-2 text-base font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{busy ? "Packing your bag…" : "Enter the grove →"}</button>
               <span className="text-stone-500">Already a villager? <Link href="/" className="underline">Sign in on the map</Link></span>
             </div>
+            <p className="text-[12px] text-stone-500">By joining you agree to the <Link href="/terms" className="underline" target="_blank">terms</Link> and the <Link href="/privacy" className="underline" target="_blank">privacy policy</Link>. You must be 13 or older.</p>
             <details className="rounded-lg border-2 border-amber-900/20 bg-white/50 p-3">
               <summary className="cursor-pointer font-bold text-amber-900">🎨 Customise your look (optional)</summary>
               <div className="mt-3 space-y-4">

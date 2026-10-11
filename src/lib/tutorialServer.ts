@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { characters } from "@/db/schema";
 import { addCoins, addItem } from "./game";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, stepMatches, type TutorialEventKind } from "./tutorial";
+import { track } from "./track";
 
 /**
  * Count an event toward the current tutorial step. Returns a short message
@@ -39,6 +40,7 @@ export async function tutorialEvent(
     .where(and(eq(characters.id, characterId), eq(characters.tutorialStep, c.step)))
     .returning({ id: characters.id });
   if (done.length === 0) return null;
+  track("tutorial_step", characterId, { step: c.step + 1 });
   if (step.reward.coins) await addCoins(characterId, step.reward.coins);
   for (const it of step.reward.items ?? []) await addItem(characterId, it.itemKey, it.qty);
   const parts = [
@@ -55,5 +57,6 @@ export async function skipTutorial(characterId: number): Promise<void> {
     .update(characters)
     .set({ tutorialStep: TUTORIAL_SKIPPED, tutorialProgress: 0 })
     .where(and(eq(characters.id, characterId), lt(characters.tutorialStep, TUTORIAL_STEPS.length)));
+  track("tutorial_skip", characterId);
 }
 

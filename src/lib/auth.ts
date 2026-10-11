@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, sessions, users } from "@/db/schema";
 
@@ -29,6 +29,8 @@ export async function createSession(userId: number, shardId?: string) {
   jar.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
+    // HTTPS only in production, so the session can't leak over plain HTTP.
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: expiresAt,
   });
@@ -61,7 +63,7 @@ export async function getCurrentUser() {
     .select({ user: users })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
+    .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date()), isNull(users.bannedAt)))
     .limit(1);
   return rows[0]?.user ?? null;
 }

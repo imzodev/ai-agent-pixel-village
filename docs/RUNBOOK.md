@@ -25,9 +25,31 @@ One-time setup (not automated): create `releases/` and `shared/`, move the live 
 
 ## Health
 
-`GET /api/health` (`src/app/api/health/route.ts`) reports DB reachability and WS state; the deploy script polls it. Some notes below predate this endpoint.
+`GET /api/health` (`src/app/api/health/route.ts`) reports DB reachability, Redis and WS state (503 when something's wrong); the deploy script polls it, and an uptime checker should too (`https://thegroove.fun/api/health`). The metrics registry (`src/lib/metrics.ts`) is collected but not exposed.
 
-The HTTP `health` and `metrics` endpoints were removed at the user's request. The underlying registries are still kept (metrics in `src/lib/metrics.ts`, lifecycle flags in `src/lib/lifecycle.ts`) so a future endpoint can expose them. This runbook therefore uses what is actually available today: the lifecycle state, the metrics module via a future endpoint, the Postgres connection state, and the WS logs.
+## Backups
+
+`scripts/backup-db.sh [label]` writes a compressed `pg_dump` (custom format) to `/srv/thegroove/backups/thegroove-<label>-<UTC time>.dump`, checks it can be read, and deletes dumps older than 14 days (`RETAIN_DAYS`).
+
+- **Before every deploy:** `deploy.sh` takes a `predeploy` dump before touching the schema, and stops if it fails.
+- **Nightly** (install once on the server, `crontab -e`):
+  `15 3 * * * /srv/thegroove/current/scripts/backup-db.sh nightly >> /srv/thegroove/backups/backup.log 2>&1`
+- **Off the server:** a backup on the same disk doesn't survive losing the droplet. Copy them elsewhere now and then, for example
+  `scp -i ~/.ssh/id_ed25519_thegroove 'root@159.223.121.138:/srv/thegroove/backups/thegroove-nightly-*.dump' ~/thegroove-backups/`
+  (or sync them to DigitalOcean Spaces).
+
+**Restore** (the game is down meanwhile):
+
+```bash
+cd /srv/thegroove/current
+pm2 stop ai-village-server ai-village-tickd
+set -a; . ./.env; set +a
+ls -t /srv/thegroove/backups/*.dump | head          # pick one
+pg_restore --clean --if-exists --no-owner --dbname="$DATABASE_URL" /srv/thegroove/backups/<file>.dump
+pm2 start ai-village-server ai-village-tickd
+```
+
+To look inside a dump without touching the live database: `pg_restore --list <file>.dump`.
 
 ## High p99 latency on the WS path (snapshot refresh)
 

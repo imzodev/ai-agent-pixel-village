@@ -10,6 +10,7 @@
 // baseUrl, key and default model differ.
 import { createOpenAiCompatibleClient } from "./client";
 import type { LlmClient, ProviderDef } from "./types";
+import { llmBudget } from "./budget";
 
 const PROVIDERS: Record<string, ProviderDef> = {
   minimax: {
@@ -112,6 +113,7 @@ export async function chatStreamWithFallback(
   opts: import("./types").ChatOptions,
   onDelta: (piece: string) => void,
 ): Promise<{ text: string; provider: string } | null> {
+  if (providerChain().length && !llmBudget.take()) return null; // over today's budget: scripted
   for (const client of providerChain()) {
     let started = false;
     try {
@@ -130,6 +132,7 @@ export async function chatWithFallback(
   messages: import("./types").ChatMessage[],
   opts: import("./types").ChatOptions = {},
 ): Promise<{ text: string; provider: string } | null> {
+  if (providerChain().length && !llmBudget.take()) return null; // over today's budget: scripted
   for (const client of providerChain()) {
     try {
       const text = await client.chat(messages, opts);

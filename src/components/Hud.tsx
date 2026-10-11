@@ -13,6 +13,7 @@ import { profileFor } from "@/lib/mind/profiles";
 import type { OrdersPanel } from "@/types/mind";
 import type { MomentNotice } from "@/types/moments";
 import MomentModal from "./MomentModal";
+import { REPORT_REASONS } from "@/lib/moderation";
 import { TRADES, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
@@ -159,6 +160,8 @@ export default function Hud() {
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
   const [orders, setOrders] = useState<{ npcId: number; npcName: string } | null>(null);
+  // Reporting another player (offensive chat or name, spam…).
+  const [reporting, setReporting] = useState<{ id: number; name: string } | null>(null);
   // Proud moments shown this session (their share card, once each).
   const [momentsShown, setMomentsShown] = useState<ReadonlySet<string>>(new Set());
   // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
@@ -1127,6 +1130,7 @@ export default function Hud() {
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
           })()}
+          {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && <Btn subtle on={() => setReporting({ id: sel.id, name: sel.name })}>🚩 Report</Btn>}
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🫳 Pick up {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "node" && (() => {
@@ -1245,6 +1249,8 @@ export default function Hud() {
           have={(itemKey) => (me?.inventory ?? []).filter((i) => i.itemKey === itemKey).reduce((n, i) => n + i.qty, 0)}
           onBuy={(itemKey, qty) => buy(shop.npcKey, itemKey, qty)} onClose={() => setShop(null)} />
       )}
+
+      {reporting && <ReportModal who={reporting} onDone={(msg, ok) => { toast(msg, ok ? "good" : "bad"); setReporting(null); }} onClose={() => setReporting(null)} />}
 
       {/* A proud moment to share (src/components/MomentModal.tsx), one at a time. */}
       {(() => {
@@ -1690,6 +1696,36 @@ function FarmMenu({ view, coins, onClose }: { view: FarmView; coins: number; onC
         <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
           <FarmPanel view={view} coins={coins} />
           <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Report a player: pick a reason; their latest chat lines go with it. */
+function ReportModal({ who, onDone, onClose }: { who: { id: number; name: string }; onDone: (msg: string, ok: boolean) => void; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => inputRouter.pushKeymap({
+    label: "report",
+    bindings: [{ keys: ["escape"], command: "ui.close" as const, mode: "press" as const }],
+    handlers: [{ id: "ui.close" as const, scope: "ui" as const, run: () => { onClose(); } }],
+  }), [onClose]);
+  const send = async (reason: string) => {
+    if (busy) return;
+    setBusy(true);
+    const r = await api<{ ok?: boolean }>("/api/report", { characterId: who.id, reason });
+    onDone(r.error ?? `Thanks. ${who.name} has been reported and we'll take a look.`, !r.error);
+  };
+  return (
+    <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+      <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,380px)] rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex items-start">
+          <div className="flex-1 text-lg font-bold text-amber-900">🚩 Report {who.name}</div>
+          <button onClick={onClose} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="mt-1 text-[12px] text-stone-600">What&apos;s wrong? Their latest chat goes with the report.</div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {REPORT_REASONS.map((r) => <button key={r} disabled={busy} onClick={() => void send(r)} className="pixel-btn bg-white px-2 py-2 text-sm font-bold disabled:opacity-40">{r}</button>)}
         </div>
       </div>
     </div>
