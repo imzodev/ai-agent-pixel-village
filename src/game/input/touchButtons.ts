@@ -13,6 +13,8 @@ export type TouchButton = {
   readonly right: string;
   /** Offset from the bottom edge (CSS length). */
   readonly bottom: string;
+  /** Held, not tapped: the command stays held while the finger is down (attack keeps swinging). */
+  readonly hold?: boolean;
 };
 
 // A fixed grid in px (52px buttons, 60px pitch), so they never overlap on a
@@ -25,6 +27,6 @@ export const RUN_BUTTON: Pick<TouchButton, "right" | "bottom"> = { right: "16px"
 export const TOUCH_BUTTONS: readonly TouchButton[] = [
   { id: "player.interact", label: "A", ariaLabel: "Interact", right: "16px", bottom: "64px" },
   { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "76px", bottom: "64px" },
-  { id: "player.attack", label: "⚔", ariaLabel: "Attack", right: "16px", bottom: "124px" },
+  { id: "player.attack", label: "⚔", ariaLabel: "Attack or chop (hold to keep going)", right: "16px", bottom: "124px", hold: true },
   { id: "player.dodge", label: "💨", ariaLabel: "Dodge roll", right: "76px", bottom: "124px" },
 ];

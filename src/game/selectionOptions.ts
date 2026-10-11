@@ -19,9 +19,14 @@ export function npcOptions(npcKey: string, bag: readonly BagLine[]): NpcOptions 
   };
 }
 
-/** Chopping a tree (terrain trees and wild axe-nodes): the one action that happens on the first E. */
+/** Chopping a tree (terrain trees and wild axe-nodes): done with the attack key, at once. */
 export function isChopTarget(sel: Selection): boolean {
   return sel.type === "tree" || (sel.type === "node" && CROP_KINDS[sel.kind]?.needsAxe === true);
+}
+
+/** What the attack key acts on (enemies and things to chop); E leaves these alone. */
+export function isToolTarget(sel: Selection): boolean {
+  return sel.type === "enemy" || isChopTarget(sel);
 }
 
 /**

@@ -109,10 +109,19 @@ export function createInputSource(opts: {
     el.style.position = "absolute";
     el.style.right = b.right;
     el.style.bottom = b.bottom;
-    el.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      opts.router.trigger(b.id);
-    });
+    if (b.hold) {
+      // Held while the finger is down (pointer capture keeps the release ours).
+      el.addEventListener("pointerdown", (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); opts.router.setHeld(b.id, true); });
+      const up = () => opts.router.setHeld(b.id, false);
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+      el.addEventListener("lostpointercapture", up);
+    } else {
+      el.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        opts.router.trigger(b.id);
+      });
+    }
     opts.container.appendChild(el);
   }
 
@@ -121,6 +130,7 @@ export function createInputSource(opts: {
     destroy() {
       release();
       opts.router.setHeld("move.run", false);
+      for (const b of TOUCH_BUTTONS) if (b.hold) opts.router.setHeld(b.id, false);
       pad.remove();
       run.remove();
       opts.container.removeEventListener("touchstart", keepOffCanvas);

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { VISITOR_CHUNK } from "@/lib/constants";
+import { isChopTarget, isToolTarget } from "./selectionOptions";
 import type { Appearance } from "@/db/schema";
 import { isWalkable } from "@/lib/worldmap";
 import { appearanceKey, composeCharacter, FRAME, ROWS, SHOOT_FRAMES, SHOOT_RELEASE_FRAME, SHOOT_ROW, SLASH_FRAMES, SLASH_ROW, weaponOf } from "./lpc";
@@ -91,6 +92,10 @@ const SLASH_FPS = 14;
 const SLASH_MS = Math.round((SLASH_FRAMES / SLASH_FPS) * 1000);
 // How close an enemy must be for the attack key to hit it (server allows 80).
 const ATTACK_REACH_PX = 76;
+/** Holding the attack key swings again after this (ms), once the last swing is done. */
+const ATTACK_REPEAT_MS = 420;
+/** E's targets: anything but what the attack key handles (enemies, chopping). */
+const forInteract = (s: Selection) => !isToolTarget(s);
 // Drawing a bow takes as long as the server's shot cooldown; the arrow
 // leaves the string at the release frame and flies at ARROW_PX_S.
 const SHOOT_FPS = Math.round(SHOOT_FRAMES / (SHOT_COOLDOWN_MS / 1000));
@@ -190,7 +195,6 @@ export class WorldScene extends Phaser.Scene {
   /** The most recent Selection the player has chosen (click or E). Used
    *  by the context-sensitive `interact` command handler so a second
    *  press of E acts on the same selection instead of re-targeting. */
-  private lastSelection: Selection | null = null;
   private nextIdleEmote = 0;
   private fishing!: FishingController;
   private canFishShown = false;
@@ -215,6 +219,8 @@ export class WorldScene extends Phaser.Scene {
   private marker!: Phaser.GameObjects.Image;
   private sentFirst = false;
   private lastPlayerChunk: { cx: number; cy: number } | null = null;
+  /** When a held attack key may swing next (scene time). */
+  private nextAttackAt = 0;
   // The loading screen (src/components/LoadingScreen.tsx): progress so far,
   // whether the world is ready, and the first snapshot's character sprites
   // being drawn (collected until then; null once they've all settled).
@@ -492,7 +498,6 @@ export class WorldScene extends Phaser.Scene {
         cam.fadeIn(320, 0, 0, 0);
       });
     }));
-    this.unsub.push(bus.on("select", (s) => { this.lastSelection = s; }));
     this.unsub.push(bus.on("relicsFound", (keys) => { this.relicsFound = new Set(keys); this.syncRelics(); }));
     this.unsub.push(bus.on("relicPicked", (p) => this.showRelicPicked(p.key, p.have, p.total)));
     bus.emit("sceneReady", undefined);
@@ -1058,30 +1063,6 @@ export class WorldScene extends Phaser.Scene {
     });
   }
   /**
-   * True when the snapshot still contains the entity the selection points
-   * at. Used to detect stale selections (e.g. after a pickup, before the
-   * post-mutation snapshot has been pushed) so the next E press re-targets
-   * instead of silently acting on nothing.
-   */
-  private selectionExists(sel: Selection): boolean {
-    if (!this.snapshot) return false;
-    switch (sel.type) {
-      case "npc": return this.snapshot.npcs.some((x) => x.id === sel.id);
-      case "animal": return this.snapshot.animals.some((x) => x.id === sel.id);
-      case "enemy": return this.snapshot.enemies.some((x) => x.id === sel.id);
-      case "item": return this.snapshot.groundItems.some((x) => x.id === sel.id);
-      case "node": return this.snapshot.nodes.some((x) => x.id === sel.id);
-      case "building": return this.snapshot.buildings.some((x) => x.id === sel.id);
-      case "player": return this.snapshot.players.some((x) => x.id === sel.id);
-      case "tree": return this.treesNear(sel.x, sel.y, 24).some((t) => t.vx === sel.vx && t.vy === sel.vy);
-      case "board": return true;
-      case "relic": return !!this.relicsFound && !this.relicsFound.has(sel.key);
-      case "bread": return this.breadOnOffer(sel.table);
-      // An empty plot stays valid until something is planted in it.
-      case "plot": return !this.snapshot.nodes.some((n) => n.x === sel.x && n.y === sel.y);
-    }
-  }
-  /**
    * Context-sensitive E/Space handler: act on the closest usable thing
    * (facing wins ties); with nothing nearby, walk to the clicked selection.
    */
@@ -1090,14 +1071,11 @@ export class WorldScene extends Phaser.Scene {
     if (this.fishing?.active) { this.fishing.press(this.time.now); return; }
     // What you act on may change (a felled tree, a picked-up item): look again.
     this.targetFrom = null;
-    // 1. E acts on what's right here: the closest usable thing, preferring
-    //    what you face. If you moved, you want what's next to you now.
-    const near = this.nearestCandidate();
+    // E acts on what's right here: the closest usable thing, preferring what
+    // you face. Never trees or enemies (the attack key chops and fights), and
+    // never a walk to something far (click it, or its "Walk over", for that).
+    const near = this.nearestCandidate(forInteract);
     if (near) { this.select(near); bus.emit("primaryAction", near); return; }
-    // 2. Nothing close: walk to the (clicked) selection, if it's still there.
-    const sel = this.lastSelection;
-    if (sel && this.isActionable(sel) && this.selectionExists(sel) && !this.isSpent(sel)) { bus.emit("primaryAction", sel); return; }
-    this.lastSelection = null;
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
   }
   /** Is there a loaf on this table you may still take? */
@@ -1320,12 +1298,6 @@ export class WorldScene extends Phaser.Scene {
       e.rideKey = key;
     }).catch(() => this.rideBuilding.delete(key));
   }
-  /** A felled tree / picked-clean bush (or a wild patch you've picked): nothing to do until it's back. */
-  private isSpent(sel: Selection): boolean {
-    if (sel.type !== "node") return false;
-    const n = this.snapshot?.nodes.find((x) => x.id === sel.id);
-    return !n || n.stage < 1 || pickedByMe(n.kind, n.x, n.y);
-  }
   /** A wild patch you've picked is gone for you until your cooldown ends. */
   private showForage(img: Phaser.GameObjects.Image, kind: string, x: number, y: number): void {
     const hide = pickedByMe(kind, x, y);
@@ -1359,13 +1331,10 @@ export class WorldScene extends Phaser.Scene {
     return [...out.values()];
   }
 
-  /** Selection types that have a primary action the player can perform. */
-  private isActionable(sel: Selection): boolean {
-    return sel.type !== "player";
-  }
   /** What E acts on: the nearest usable thing in front of you, or right
    *  underfoot (src/game/interactTarget.ts) — never what's behind you. */
-  private nearestCandidate(): Selection | null {
+  /** The closest usable thing in reach (preferring what you face), among those `filter` keeps. */
+  private nearestCandidate(filter: (s: Selection) => boolean = () => true): Selection | null {
     if (!this.player || !this.snapshot) return null;
     const s = this.snapshot;
     const p = this.player.sprite;
@@ -1389,7 +1358,7 @@ export class WorldScene extends Phaser.Scene {
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
     for (const t of this.treesNear(p.x, p.y, 64)) { const at = trunkPoint(t.vx, t.vy); add(at.x, at.y, (d) => ({ type: "tree", vx: t.vx, vy: t.vy, kind: t.kind, x: at.x, y: at.y, distance: d })); }
-    return pickTarget(cands, p, this.player.facing);
+    return pickTarget(cands.filter((c) => filter(c.sel)), p, this.player.facing);
   }
 
   /**
@@ -1407,7 +1376,7 @@ export class WorldScene extends Phaser.Scene {
       const moved = !from || from.facing !== p.facing || Math.abs(from.x - p.sprite.x) > 1 || Math.abs(from.y - p.sprite.y) > 1;
       if (moved) {
         this.targetFrom = { x: p.sprite.x, y: p.sprite.y, facing: p.facing };
-        this.markerTarget = this.nearestCandidate();
+        this.markerTarget = this.nearestCandidate(forInteract);
       }
     }
     const at = !hidden && this.markerTarget ? this.markerPoint(this.markerTarget) : null;
@@ -1438,6 +1407,11 @@ export class WorldScene extends Phaser.Scene {
   update(time: number, deltaMs: number) {
     const dt = Math.min(0.05, deltaMs / 1000);
     if (this.player) {
+      // Holding the attack key keeps swinging (fight / chop), one swing at a time.
+      if (inputRouter.isHeld("player.attack") && time >= this.nextAttackAt && !(this.player.actingUntil !== undefined && time < this.player.actingUntil)) {
+        this.nextAttackAt = time + ATTACK_REPEAT_MS;
+        this.attack();
+      }
       this.updatePlayer(dt);
       this.syncStreamingChunks();
       this.noticeRelics(time);
@@ -1744,6 +1718,9 @@ export class WorldScene extends Phaser.Scene {
       bus.emit("primaryAction", sel); // HUD attacks: swing + server hit
       return;
     }
+    // No enemy in reach: chop what's in front (the HUD swings the axe, or says you need one).
+    const chop = bow ? null : this.nearestCandidate(isChopTarget);
+    if (chop) { this.select(chop); bus.emit("primaryAction", chop); return; }
     if (bow) { this.playShoot(p, p.facing); this.stream?.sendAct("shoot", p.facing); return; } // a shot at nothing
     this.playSlash(p, p.facing);
     this.stream?.sendAct("slash", p.facing);

@@ -1,6 +1,6 @@
 // What E does: chopping acts at once, everything else opens the menu first.
 import { describe, expect, it } from "vitest";
-import { eDecision, isChopTarget, npcOptions, selectionKey } from "./selectionOptions";
+import { eDecision, isChopTarget, isToolTarget, npcOptions, selectionKey } from "./selectionOptions";
 import { SETTLEMENT_NPCS } from "@/lib/settlements";
 import type { Selection } from "@/types/world";
 
@@ -21,6 +21,15 @@ describe("selection options", () => {
     expect(npcOptions("village_pip", []).sellable).toBe(false);
     expect(npcOptions("village_pip", [{ itemKey: "stone", qty: 3 }]).sellable).toBe(true);
   });
+  it("the attack key's targets: enemies and things to chop, nothing else", () => {
+    expect(isToolTarget(tree)).toBe(true);
+    expect(isToolTarget(oak)).toBe(true);
+    expect(isToolTarget({ type: "enemy", id: 3, kind: "slime", hp: 5, maxHp: 5, distance: 10 })).toBe(true);
+    expect(isToolTarget(berries)).toBe(false);
+    expect(isToolTarget(npc(1))).toBe(false);
+    expect(isToolTarget({ type: "item", id: 1, itemKey: "stone", distance: 5 })).toBe(false);
+  });
+
   it("only chopping a tree is instant", () => {
     expect(isChopTarget(tree)).toBe(true);
     expect(isChopTarget(oak)).toBe(true);

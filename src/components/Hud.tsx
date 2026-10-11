@@ -1063,7 +1063,7 @@ export default function Hud() {
             if (chop && !empty && !hasAxe) return <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>;
             return (
               <Btn on={() => commitSelection(sel)} disabled={empty}>
-                {chop ? (empty ? "🪵 Stump — regrowing" : "🪓 Chop") : empty ? "🌱 Empty" : "🧺 Gather"} {interactHint}
+                {chop ? (empty ? "🪵 Stump — regrowing" : "🪓 Chop") : empty ? "🌱 Empty" : "🧺 Gather"} {chop ? keyHint("player.attack") : interactHint}
               </Btn>
             );
           })()}
@@ -1071,7 +1071,7 @@ export default function Hud() {
           {loggedIn && sel.type === "bread" && (sel.distance > BREAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🍞 Take one, free {interactHint}</Btn>)}
           {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
-            : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {interactHint}</Btn>
+            : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {keyHint("player.attack")}</Btn>
             : <span className="text-[11px] text-stone-600">Needs an axe (Pip sells them).</span>)}
           {loggedIn && sel.type === "enemy" && (bow
             ? (sel.distance <= bow.rangePx ? <Btn on={() => commitSelection(sel)}>🏹 Shoot {keyHint("player.attack")} <span className="text-[10px] opacity-70">➶ {arrows}</span></Btn> : <WalkBtn snap={snap} sel={sel} />)
