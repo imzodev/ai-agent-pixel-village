@@ -444,15 +444,15 @@ export default function Hud() {
       : `Sold ${sold} ${name} for ${r.gained} 🪙.`, "good");
     notify(r.notices);
     void refreshMe();
-    // Refresh modal contents from the updated `me` (state set by refreshMe).
+    // Take what was sold off the window's rows right away (refreshMe is still
+    // loading; the `me` this closure sees is from before the sale). A row you
+    // have none left of goes; with nothing left to sell, the window closes.
     setTrade((cur) => {
       if (!cur) return null;
-      const fresh = (typeof me === "object" && me !== null ? me : { inventory: [] }).inventory ?? [];
-      const trades = TRADES[cur.npcKey] ?? [];
-      const updated = trades
-        .map((t) => ({ trade: t, have: fresh.filter((i) => i.itemKey === t.itemKey).reduce((s, i) => s + i.qty, 0) }))
-        .filter((r) => r.have > 0);
-      return updated.length === 0 ? null : { ...cur, rows: updated };
+      const rows = cur.rows
+        .map((row) => (row.trade.itemKey === itemKey ? { ...row, have: row.have - sold } : row))
+        .filter((row) => row.have > 0);
+      return rows.length === 0 ? null : { ...cur, rows };
     });
     return r.purse ?? null;
   };
