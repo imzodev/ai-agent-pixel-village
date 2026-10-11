@@ -14,12 +14,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const m = await momentById(id);
   if (!m) return { title: "thegroove" };
   const title = `${m.characterName}: ${m.data.headline}`;
-  const image = { url: `/m/${m.id}/card.png`, width: 1200, height: 630, alt: `${title}, on thegroove` };
+  const image = { url: `/m/${m.id}/card.png`, width: 1200, height: 630, type: "image/png", alt: `${title}, on thegroove` };
+  const url = `/m/${m.id}`;
   return {
     title: `${title} · thegroove`,
     description: `${m.data.sub}. ${PITCH}`,
-    openGraph: { type: "article", siteName: "thegroove", title, description: `${m.data.sub}. ${PITCH}`, images: [image] },
-    twitter: { card: "summary_large_image", title, description: `${m.data.sub}. ${PITCH}`, images: [image.url] },
+    alternates: { canonical: url },
+    openGraph: { type: "article", siteName: "thegroove", locale: "en_US", url, title, description: `${m.data.sub}. ${PITCH}`, images: [image] },
+    twitter: { card: "summary_large_image", title, description: `${m.data.sub}. ${PITCH}`, images: [{ url: image.url, alt: image.alt }] },
   };
 }
 

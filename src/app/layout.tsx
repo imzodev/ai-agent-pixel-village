@@ -14,15 +14,29 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"),
   title: TITLE,
   description: DESCRIPTION,
+  applicationName: "thegroove",
   manifest: "/manifest.webmanifest",
+  alternates: { canonical: "/" },
+  // Icons: scripts/make-icons.mjs draws them all from public/favicon.svg.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: { title: "thegroove", statusBarStyle: "black-translucent" },
   openGraph: {
     type: "website",
     siteName: "thegroove",
+    locale: "en_US",
+    url: "/",
     title: TITLE,
     description: DESCRIPTION,
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "The village of thegroove, live" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, type: "image/png", alt: "The village of thegroove, live" }],
   },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [{ url: "/og.png", alt: "The village of thegroove, live" }] },
 };
 export const viewport: Viewport = {
   width: "device-width",

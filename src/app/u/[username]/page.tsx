@@ -19,12 +19,14 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
   const p = await loadProfile(username);
   if (!p) return { title: "thegroove" };
   const title = `${p.look.name}${p.look.title ? `, ${p.look.title}` : ""} · level ${p.look.level}`;
-  const image = { url: `/u/${username}/og.png`, width: 1200, height: 630, alt: `${p.look.name} on thegroove` };
+  const image = { url: `/u/${username}/og.png`, width: 1200, height: 630, type: "image/png", alt: `${p.look.name} on thegroove` };
+  const url = `/u/${username}`;
   return {
     title: `${title} · thegroove`,
     description: PITCH,
-    openGraph: { type: "profile", siteName: "thegroove", title, description: PITCH, images: [image] },
-    twitter: { card: "summary_large_image", title, description: PITCH, images: [image.url] },
+    alternates: { canonical: url },
+    openGraph: { type: "profile", siteName: "thegroove", locale: "en_US", url, title, description: PITCH, images: [image] },
+    twitter: { card: "summary_large_image", title, description: PITCH, images: [{ url: image.url, alt: image.alt }] },
   };
 }
 
