@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { knowledgeFor, topicsOf } from "./npcKnowledge";
 import { SHOP_STOCK } from "./trade";
 import { personalityFor, hasNamedPersonality } from "./npcPersonalities";
-import { buildSystemPrompt } from "./npcPrompt";
+import { buildSystemPrompt, npcVoice, TALK_RULES } from "./npcPrompt";
 import { NPC_DEFS } from "./npcDefs";
 import { plainSpeech } from "./streamedText";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
@@ -177,5 +177,15 @@ describe("knowledge is spread out, and always true", () => {
     expect(p).toContain("only an exact match counts");
     expect(p).toContain("say plainly that you don't know");
     expect(p).not.toContain("innkeepers hear every rumour");
+  });
+});
+
+describe("one voice for every line an NPC says", () => {
+  it("builds the talk prompt from the shared voice and talk rules", () => {
+    const npc = { key: "village_marigold", name: "Marigold", role: "Village Baker", persona: "A baker.", mood: "cheerful" };
+    const p = buildSystemPrompt({ npc, sponsor: null, character: { name: "M", level: 1 }, message: "hi", history: [], offers: [], hour: 9, weather: "clear" } as unknown as BrainInput);
+    expect(p).toContain(npcVoice(npc as BrainInput["npc"]));
+    expect(p).toContain(TALK_RULES);
+    expect(npcVoice(npc as BrainInput["npc"])).toContain(personalityFor("village_marigold").voice);
   });
 });

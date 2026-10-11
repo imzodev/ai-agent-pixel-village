@@ -20,6 +20,8 @@ import { BREAD_TABLES, tablePoint } from "@/lib/bakery";
 import { latestBatch, setOutBatch } from "@/lib/bakeryServer";
 import { startTrip } from "@/lib/nav/trips";
 import { chatWithFallback } from "@/lib/llm";
+import { npcVoice, TALK_RULES } from "@/lib/npcPrompt";
+import { plainSpeech } from "@/lib/streamedText";
 import { askJev } from "./jev";
 import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
@@ -164,12 +166,13 @@ async function nearbyPlayers(npcId: number, pos: { x: number; y: number }, now: 
 export async function say(npc: NpcRow, doing: string, canned: string): Promise<string> {
   const r = await Promise.race([
     chatWithFallback([
-      { role: "system", content: `You are ${npc.name}, ${npc.role}, in a cozy pixel village. Persona: ${npc.persona}\nMood: ${npc.mood}. Write ONE short line (at most 18 words) you say out loud right now, in character. No quotes, no narration, no emoji.` },
+      { role: "system", content: `${npcVoice(npc)}\n\nHOW TO TALK:\n${TALK_RULES}\nWrite ONE short line (at most 18 words) that you say out loud right now about what's happening. Plain text, no quotes.` },
       { role: "user", content: doing },
     ], { temperature: 0.9, maxTokens: 60 }).catch(() => null),
     new Promise<null>((res) => setTimeout(() => res(null), 6000)),
   ]);
-  const text = r?.text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").replace(/^["'\s]+|["'\s]+$/g, "").split("\n")[0].trim();
+  const raw = r?.text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "").split("\n").find((l) => l.trim());
+  const text = raw ? plainSpeech(raw).replace(/^["'\s]+|["'\s]+$/g, "") : "";
   return text && text.length <= 160 ? text : canned;
 }
 

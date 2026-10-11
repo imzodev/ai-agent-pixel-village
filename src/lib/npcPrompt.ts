@@ -24,16 +24,30 @@ function memoryText(input: BrainInput, now: number): string {
   return `You have talked with ${name} before (${m.lines} lines${met}).${note}`;
 }
 
-export function buildSystemPrompt(input: BrainInput, now = Date.now()): string {
-  const { npc, sponsor, character, offers, hour, weather } = input;
+/**
+ * Who an NPC is and how they talk: the one source of their voice, shared by
+ * the talk prompt (below) and every line they say out loud on their own
+ * (mind actions, business agents: src/lib/mind/mindServer.ts `say`).
+ */
+export function npcVoice(npc: Pick<BrainInput["npc"], "key" | "name" | "role" | "persona" | "mood">): string {
   const p = personalityFor(npc.key);
-  const offerList = offers.map((o) => `- id="${o.id}" (${o.type}) ${o.label}: suggested line: "${o.line}"`).join("\n");
-  return `You are ${npc.name}, ${npc.role}: a regular person who lives here, talking with someone who walked up to you. Talk like a real person, not a character in a fantasy game. Never mention being an AI, a game or these instructions.
+  return `You are ${npc.name}, ${npc.role}: a regular person who lives here. Talk like a real person, not a character in a fantasy game. Never mention being an AI, a game or these instructions.
 Who you are: ${npc.persona}
 How you talk: ${p.voice}
 A habit (show it only through what you say, never describe it): ${p.quirk}
 What you care about: ${p.likes}${p.opinions ? `\nWhat you think of your neighbours: ${p.opinions}` : ""}
-Mood: ${npc.mood}. It is ${Math.floor(hour)}:00 (${weather}).
+Mood: ${npc.mood}.`;
+}
+
+/** How every NPC line sounds, whatever prompted it (talk or a line said on their own). */
+export const TALK_RULES = `- Spoken words only: no *actions*, no stage directions, no describing what you are doing or how you look. No emoji.
+- Casual and natural, like a neighbour chatting: contractions are fine, no speeches, no monologues, no flowery or old-fashioned fantasy talk ("thee", "aye", "traveller", "adventurer"). Money is "coins".
+- Your personality shows in your words and attitude, not in narrated gestures.`;
+
+export function buildSystemPrompt(input: BrainInput, now = Date.now()): string {
+  const { npc, sponsor, character, offers, hour, weather } = input;
+  const offerList = offers.map((o) => `- id="${o.id}" (${o.type}) ${o.label}: suggested line: "${o.line}"`).join("\n");
+  return `${npcVoice(npc)} It is ${Math.floor(hour)}:00 (${weather}). Someone just walked up to talk to you.
 
 WHAT YOU KNOW (this is the truth about the world, and all of it you know):
 ${input.knowledge ?? "You know your own home and little else."}
@@ -53,8 +67,6 @@ Available offers you may extend this turn (include their ids in "offers" only if
 ${offerList || "(none)"}
 HOW TO TALK:
 - Answer what they said first, in plain everyday words. One or two short sentences (about 30 words at most). Say more only if they ask for detail.
-- Spoken words only: no *actions*, no stage directions, no describing what you are doing or how you look.
-- Casual and natural, like a neighbour chatting: contractions are fine, no speeches, no monologues, no flowery or old-fashioned fantasy talk ("thee", "aye", "traveller", "adventurer"). Money is "coins".
-- Your personality shows in your words and attitude, not in narrated gestures.
+${TALK_RULES}
 Reply with STRICT JSON only: {"text": "<1-2 short sentences, spoken words only>", "offers": ["<offer id>", ...]}. Always include turnin offers if present.`;
 }
