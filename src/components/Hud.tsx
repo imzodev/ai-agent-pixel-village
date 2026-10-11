@@ -1347,8 +1347,10 @@ export default function Hud() {
 
       {/* Building interior */}
       {building && (
-        <div className="pointer-events-auto absolute left-1/2 top-1/2 w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
-          <div className="flex items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 flex max-h-[calc(100dvh-1.5rem)] w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col pixel-panel p-4 shadow-2xl">
+          {/* The title and ✕ stay put; everything below scrolls, so a long tab (Build, Workshop…) never pushes the window off a phone screen. */}
+          <div className="flex shrink-0 items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button></div>
+          <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
           {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop" || bInfo?.kind === "orchard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain}
             farm={(() => { const lot = snap?.lots.find((l) => l.buildingKey === bInfo.key); const v = lot && (lot.kind === "vineyard" || lot.kind === "orchard") ? farmViewFor(lot.key, null) : null; return v ? <FarmPanel view={v} coins={coins} /> : undefined; })()} />}
@@ -1362,6 +1364,7 @@ export default function Hud() {
             </div>
           </div>
           <div className="mt-3 flex gap-2"><Btn on={() => doInspect(`/api/inspect?type=building&id=${bInfo?.id}`)} subtle>🔍 About this place</Btn>{bInfo?.reservable && !bInfo.sponsor && <Link href={`/sponsor?building=${building.key}`} className="rounded-lg bg-orange-500 px-3 py-1.5 font-bold text-white">🏪 Reserve for your business</Link>}</div>
+          </div>
         </div>
       )}
     </div>
@@ -1560,20 +1563,20 @@ function CraftModal({ craft, me, performCraft, onClose }: {
 
   return (
     <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,560px)] rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
-        <div className="flex items-start gap-3">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,560px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex shrink-0 items-start gap-3">
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">📜 Craft with {craft.npcName}</div>
             {craft.recipes[0]?.line && <div className="mt-1 text-[12px] italic text-stone-600">&ldquo;{craft.recipes[0].line}&rdquo;</div>}
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
           {craft.recipes.map((r) => (
             <CraftRow key={r.key} recipe={r} me={me} busy={busy} onCraft={(qty) => doCraft(r, qty)} />
           ))}
         </div>
-        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done</Btn></div>
+        <div className="mt-3 flex shrink-0 justify-end"><Btn on={onClose} subtle>Done</Btn></div>
       </div>
     </div>
   );
@@ -1646,14 +1649,16 @@ function FarmMenu({ view, coins, onClose }: { view: FarmView; coins: number; onC
   }), [onClose]);
   return (
     <div role="dialog" aria-modal="true" aria-label={view.title} onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div onClick={(e) => e.stopPropagation()} className="max-h-[85vh] w-[min(94vw,520px)] overflow-y-auto pixel-panel p-4 shadow-2xl">
-        <div className="mb-3 flex items-start">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,520px)] flex-col pixel-panel p-4 shadow-2xl">
+        <div className="mb-3 flex shrink-0 items-start">
           <div><div className="text-lg font-bold text-amber-900">{view.title}</div><div className="text-[12px] font-bold text-emerald-700">🌾 {view.kindLabel}</div></div>
           <div className="flex-1" />
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+          <button onClick={onClose} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
-        <FarmPanel view={view} coins={coins} />
-        <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
+          <FarmPanel view={view} coins={coins} />
+          <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
+        </div>
       </div>
     </div>
   );
@@ -1685,7 +1690,7 @@ function ShopModal({ npcName, stock, level, coins, have, onBuy, onClose }: {
   };
   return (
     <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] w-[min(94vw,520px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,520px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
         <div className="flex items-start gap-3">
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">🛒 Buy from {npcName}</div>
@@ -1698,7 +1703,7 @@ function ShopModal({ npcName, stock, level, coins, have, onBuy, onClose }: {
             <ShopRow key={t.itemKey} item={t} locked={!!t.minLevel && level < t.minLevel} coins={coins} have={have(t.itemKey)} busy={busy} onBuy={(qty) => doBuy(t.itemKey, qty)} />
           ))}
         </div>
-        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
+        <div className="mt-3 flex shrink-0 justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
       </div>
     </div>
   );
@@ -1813,8 +1818,8 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
 
   return (
     <div role="dialog" aria-modal="true" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div onClick={(e) => e.stopPropagation()} className="w-[min(94vw,520px)] rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
-        <div className="flex items-start gap-3">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,520px)] flex-col rounded-2xl border-4 border-amber-900/70 bg-amber-50 p-4 shadow-2xl">
+        <div className="flex shrink-0 items-start gap-3">
           <div className="flex-1">
             <div className="text-lg font-bold text-amber-900">💰 Trade with {trade.npcName}</div>
             {trade.rows.length > 0 && <div className="mt-1 text-[12px] italic text-stone-600">&ldquo;{trade.rows[0].trade.line}&rdquo;</div>}
@@ -1822,7 +1827,7 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
           </div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
           {trade.rows.length === 0 && (
             <div className="rounded bg-stone-100 p-3 text-center text-stone-500">You have nothing {trade.npcName} buys right now.</div>
           )}
@@ -1830,7 +1835,7 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
             <TradeRow key={r.trade.itemKey} row={r} unit={r.trade.price * mult} canAfford={affordable(r)} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
           ))}
         </div>
-        <div className="mt-3 flex justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
+        <div className="mt-3 flex shrink-0 justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
       </div>
     </div>
   );

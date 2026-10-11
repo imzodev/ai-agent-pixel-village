@@ -30,14 +30,14 @@ export default function BountyPanel({ town, name, activeCount, onClose, onMessag
   };
 
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 w-[min(94vw,560px)] -translate-x-1/2 -translate-y-1/2 pixel-panel p-4 shadow-2xl">
-      <div className="mb-2 flex items-center">
+    <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 flex max-h-[min(85dvh,calc(100dvh-1.5rem))] w-[min(94vw,560px)] -translate-x-1/2 -translate-y-1/2 flex-col pixel-panel p-4 shadow-2xl">
+      <div className="mb-2 flex shrink-0 items-center">
         <div className="text-lg font-bold text-amber-900">📜 {name} Bounty Board</div>
         <span className="flex-1" />
         <span className="mr-2 text-xs text-stone-600">{activeCount}/{MAX_ACTIVE} carried</span>
         <button className="text-stone-400 hover:text-stone-700" onClick={onClose} aria-label="Close">✕</button>
       </div>
-      <div className="max-h-[60vh] space-y-2 overflow-y-auto rounded p-2" style={{ background: "repeating-linear-gradient(90deg,#b98a56 0 30px,#a87a48 30px 34px)" }}>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain rounded p-2" style={{ background: "repeating-linear-gradient(90deg,#b98a56 0 30px,#a87a48 30px 34px)" }}>
         {!list && <div className="text-amber-50">Reading the notices…</div>}
         {list?.length === 0 && <div className="text-amber-50">The board&apos;s bare. New work goes up soon.</div>}
         {list?.map((b) => {
@@ -63,7 +63,7 @@ export default function BountyPanel({ town, name, activeCount, onClose, onMessag
           );
         })}
       </div>
-      <div className="mt-2 text-[11px] text-stone-600">Hunts count anywhere in the wilds. Scouting spots and wanted beasts are marked on your map (M). Turn bounties in here, where they were posted.</div>
+      <div className="mt-2 shrink-0 text-[11px] text-stone-600">Hunts count anywhere in the wilds. Scouting spots and wanted beasts are marked on your map (M). Turn bounties in here, where they were posted.</div>
     </div>
   );
 }
