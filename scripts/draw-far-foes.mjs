@@ -160,37 +160,110 @@ async function gloamStag() {
   await sheet("gloam_stag", 48, { side, front: (f) => front(f, true), back: (f) => front(f, false) });
 }
 
-// ── Tier 7: Basalt Golem — a slab of dark rock with magma seams ───────────
+// ── Tier 7: Basalt Golem — a hulking heap of faceted basalt, cracked with
+//    glowing lava veins, crystal shards on its shoulders and molten footfalls ──
 async function basaltGolem() {
-  const C = { ol: rgb(0x0e0c0c), rock: rgb(0x4a4646), rockLo: rgb(0x2e2a2a), rockHi: rgb(0x6a6464), magma: rgb(0xff7a2a), core: rgb(0xffd060) };
-  const o = (fr) => trace(fr, C.ol);
-  const seams = (fr, pts) => { for (const [x, y] of pts) put(fr, x, y, C.magma); };
-  const side = ({ step, bob, atk }) => {
-    const fr = blank(), y = 30 - bob;
-    for (const [x, d] of [[16, step], [28, -step]]) rect(fr, x + d, y + 6, 7, 10, C.rockLo);
-    poly(fr, [[12, y + 8], [36, y + 8], [34, y - 12], [14, y - 14]], C.rock);
-    rect(fr, 16, y - 21, 12, 8, C.rockHi); // head block
-    put(fr, 18, y - 18, C.core);
-    const armY = atk === 1 ? y - 22 : atk === 2 ? y - 18 : atk === 3 ? y + 10 : y + 2;
-    rect(fr, 8, Math.min(armY, y - 6), 7, Math.abs(armY - (y - 6)) + 7, C.rockLo);
-    const out = o(fr);
-    seams(out, [[20, y - 6], [21, y - 5], [22, y - 3], [26, y - 9], [27, y - 8], [24, y + 2], [25, y + 3]]);
-    if (atk === 3) for (let x = 2; x < 20; x += 3) put(out, x, y + 15, C.magma); // ground cracks
+  const C = {
+    ol: rgb(0x0a0808), rock: rgb(0x3a3636), rockLo: rgb(0x242020), rockHi: rgb(0x5a5454), rockLit: rgb(0x787070),
+    shard: rgb(0x2c2a30), shardHi: rgb(0x8a8496), heat: rgb(0x6a2410), magma: rgb(0xe8501a), core: rgb(0xffa02a), hot: rgb(0xffe27a),
+  };
+  const ROCK = C.rock;
+  const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) ^ 0x5bd1e995; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  // Chunky facets: every rock pixel takes the tone of its 3×3 cell, lit from the top-left.
+  const facet = (fr) => {
+    const out = fr.map((r) => r.slice());
+    for (let y = 0; y < fr.length; y++) for (let x = 0; x < fr.length; x++) {
+      if (fr[y][x] !== ROCK) continue;
+      const r = hash(Math.floor((x + (y >> 2)) / 3), Math.floor(y / 3));
+      let c = r < 0.28 ? C.rockLo : r > 0.8 ? C.rockHi : C.rock;
+      if (!fr[y - 1]?.[x] || !fr[y]?.[x - 1]) c = r > 0.5 ? C.rockLit : C.rockHi; // rim light
+      else if (!fr[y + 1]?.[x] || !fr[y]?.[x + 1]) c = C.rockLo;
+      out[y][x] = c;
+    }
     return out;
   };
-  const front = ({ step, bob, atk }, face) => {
-    const fr = blank(), y = 30 - bob;
-    for (const s of [-1, 1]) rect(fr, 24 + s * 7 - 3, y + 6 + (s * step > 0 ? 1 : 0), 7, 10, C.rockLo);
-    poly(fr, [[11, y + 8], [37, y + 8], [35, y - 13], [13, y - 13]], C.rock);
-    rect(fr, 18, y - 21, 12, 8, C.rockHi);
-    const lift = atk === 1 || atk === 2 ? -12 : 0;
-    for (const s of [-1, 1]) rect(fr, 24 + s * 15 - 3, y - 8 + lift, 6, 14, C.rockLo);
-    const out = o(fr);
-    if (face) { put(out, 21, y - 18, C.core); put(out, 26, y - 18, C.core); }
-    seams(out, [[24, y - 8], [24, y - 6], [23, y - 4], [25, y - 2], [20, y + 2], [29, y]]);
+  // Lava veins: a bright core, an orange seam, and a dull heat glow in the rock beside it.
+  const veins = (fr, paths, pulse) => {
+    const seam = [];
+    for (const pts of paths) for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+      for (let s = 0; s <= n; s++) seam.push([Math.round(x0 + ((x1 - x0) * s) / n), Math.round(y0 + ((y1 - y0) * s) / n), i === 1 && s < n / 2]);
+    }
+    const solid = (x, y) => fr[y]?.[x] && fr[y][x] !== C.ol;
+    for (const [x, y] of seam) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]])
+      if (solid(x + dx, y + dy) && hash(x + dx, y * 7 + dy) < 0.6) put(fr, x + dx, y + dy, C.heat);
+    for (const [x, y, trunk] of seam) if (solid(x, y)) put(fr, x, y, trunk || hash(x, y) < 0.25 + pulse * 0.2 ? C.core : C.magma);
+    return fr;
+  };
+  const embers = (fr, i, cx, by, n) => {
+    for (let k = 0; k < n; k++) {
+      const x = cx - 14 + Math.floor(hash(k, 3) * 28), rise = (Math.floor(hash(k, 5) * 12) + i * 3) % 12;
+      if (!fr[by - rise]?.[x]) put(fr, x, by - rise, rise < 4 ? C.core : rise < 8 ? C.magma : C.heat);
+    }
+  };
+  const shards = (fr, spikes) => {
+    for (const [x, y, h, lean] of spikes) {
+      poly(fr, [[x - 3, y], [x + 3, y], [x + lean + 1, y - h], [x + lean - 1, y - h + 1]], C.shard);
+      line(fr, [[x - 1, y - 1], [x + lean - 1, y - h + 2]], C.shardHi, 1);
+    }
+  };
+  const lavaPool = (fr, cx, by, w) => { for (let x = cx - w; x <= cx + w; x++) if (!fr[by]?.[x] && hash(x, by) < 0.7) put(fr, x, by, hash(x, 9) < 0.4 ? C.core : C.magma); };
+  const fistAt = (fr, x, y) => { ellipse(fr, x, y, 5, 4.5, ROCK); };
+
+  const front = ({ step, bob, idle, atk }, i, face) => {
+    const fr = blank(), cx = 24, by = 45, top = by - bob;
+    // legs (one lifts on the walk)
+    for (const s of [-1, 1]) rect(fr, cx + s * 7 - 4, top - 12 - (s * step > 0 ? 1 : 0), 8, 12 + bob - (s * step > 0 ? 1 : 0), ROCK);
+    // hulking torso + shoulders
+    poly(fr, [[cx - 11, top - 10], [cx + 11, top - 10], [cx + 14, top - 22], [cx + 10, top - 29], [cx - 10, top - 29], [cx - 14, top - 22]], ROCK);
+    for (const s of [-1, 1]) ellipse(fr, cx + s * 13, top - 25, 6, 5, ROCK);
+    // arms: hang to the knees, rise overhead to wind up, slam into the ground
+    const fy = atk === 1 ? top - 34 : atk === 2 ? top - 38 : atk === 3 ? by - 4 : top - 10 + (idle === 2 ? 1 : 0);
+    for (const s of [-1, 1]) {
+      const fx = cx + s * (atk === 3 ? 13 : 17);
+      line(fr, [[cx + s * 15, top - 24], [fx, fy]], ROCK, 6);
+      fistAt(fr, fx, fy);
+    }
+    // head sunk between the shoulders
+    poly(fr, [[cx - 7, top - 25], [cx + 7, top - 25], [cx + 7, top - 34], [cx + 2, top - 37], [cx - 6, top - 35]], ROCK);
+    shards(fr, [[cx - 14, top - 27, 9, -3], [cx + 14, top - 27, 9, 3], [cx - 18, top - 23, 5, -3], [cx + 18, top - 23, 5, 3]]);
+    const out = trace(facet(fr), C.ol);
+    const pulse = (idle + i) % 2;
+    veins(out, face
+      ? [[[cx, top - 26], [cx, top - 20], [cx - 1, top - 16], [cx + 1, top - 12], [cx, top - 10]], [[cx, top - 20], [cx - 5, top - 17], [cx - 9, top - 21]], [[cx, top - 18], [cx + 6, top - 15], [cx + 9, top - 18]],
+        [[cx - 1, top - 12], [cx - 6, top - 6], [cx - 7, top]], [[cx + 1, top - 12], [cx + 7, top - 6], [cx + 6, top]], [[cx - 13, top - 24], [cx - 16, top - 18]], [[cx + 13, top - 24], [cx + 16, top - 18]]]
+      : [[[cx - 2, top - 28], [cx - 1, top - 22], [cx + 3, top - 17], [cx + 1, top - 11]], [[cx - 1, top - 22], [cx - 8, top - 18]], [[cx + 3, top - 17], [cx + 9, top - 21]], [[cx - 6, top - 9], [cx - 7, top - 2]], [[cx + 7, top - 8], [cx + 6, top - 1]]], pulse);
+    if (face) for (const s of [-1, 1]) { const ex = s < 0 ? cx - 4 : cx + 2; rect(out, ex, top - 31, 2, 2, C.core); put(out, ex + (s < 0 ? 1 : 0), top - 31, C.hot); put(out, ex + (s < 0 ? 0 : 1), top - 29, C.magma); }
+    else put(out, cx, top - 31, C.heat);
+    lavaPool(out, cx, by + 1, atk === 3 ? 20 : 10);
+    if (atk === 3) for (const s of [-1, 1]) for (let k = 1; k < 6; k++) put(out, cx + s * (13 + k * 2), by - (k % 2) - 1, k % 2 ? C.core : C.magma);
+    embers(out, i, cx, by - 1, atk === 3 ? 9 : 4);
     return out;
   };
-  await sheet("basalt_golem", 48, { side, front: (f) => front(f, true), back: (f) => front(f, false) });
+
+  const side = ({ step, bob, idle, atk }, i) => {
+    const fr = blank(), cx = 24, by = 45, top = by - bob;
+    // far arm, behind the body
+    line(fr, [[cx + 4, top - 24], [cx + 7, top - 11]], ROCK, 5);
+    for (const [x, d] of [[cx - 6, step], [cx + 3, -step]]) rect(fr, x + d * 2, top - 12, 7, 12 + bob, ROCK);
+    // hunched body, leaning toward where it walks (left)
+    poly(fr, [[cx - 9, top - 10], [cx + 10, top - 10], [cx + 12, top - 22], [cx + 6, top - 30], [cx - 6, top - 29], [cx - 11, top - 21]], ROCK);
+    poly(fr, [[cx - 14, top - 24], [cx - 3, top - 25], [cx - 3, top - 33], [cx - 10, top - 35], [cx - 15, top - 30]], ROCK); // head, jutting forward
+    shards(fr, [[cx + 4, top - 29, 9, 2], [cx + 9, top - 24, 8, 4]]);
+    // near arm swings forward and slams
+    const fist = atk === 1 ? [cx - 10, top - 36] : atk === 2 ? [cx - 6, top - 40] : atk === 3 ? [cx - 17, by - 4] : [cx - 3 - step * 2, top - 10 + (idle === 2 ? 1 : 0)];
+    line(fr, [[cx, top - 23], fist], ROCK, 6);
+    fistAt(fr, fist[0], fist[1]);
+    const out = trace(facet(fr), C.ol);
+    veins(out, [[[cx + 5, top - 27], [cx + 3, top - 20], [cx + 5, top - 15], [cx + 3, top - 10]], [[cx + 3, top - 20], [cx + 9, top - 17]], [[cx + 4, top - 12], [cx + 6, top - 4]],
+      [[cx, top - 23], [Math.round((cx + fist[0]) / 2), Math.round((top - 23 + fist[1]) / 2)]]], (idle + i) % 2);
+    rect(out, cx - 13, top - 30, 2, 2, C.core); put(out, cx - 13, top - 30, C.hot); put(out, cx - 12, top - 28, C.magma);
+    lavaPool(out, cx, by + 1, atk === 3 ? 18 : 9);
+    if (atk === 3) for (let k = 1; k < 8; k++) put(out, cx - 17 - k * 2 + 6, by - (k % 2) - 1, k % 2 ? C.core : C.magma);
+    embers(out, i, cx, by - 1, atk === 3 ? 9 : 4);
+    return out;
+  };
+  await sheet("basalt_golem", 48, { side, front: (f, i) => front(f, i, true), back: (f, i) => front(f, i, false) });
 }
 
 // ── Tier 7: Wyvern — a rust-red flyer with leathery wings (flies: no ground) ──
