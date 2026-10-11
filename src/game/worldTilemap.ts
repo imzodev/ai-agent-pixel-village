@@ -1,6 +1,7 @@
 import type Phaser from "phaser";
 import type { LightSource } from "@/types/lighting";
 import { wildsGid } from "@/lib/terrain/wilds";
+import { COMMON_FIELD_TILESETS } from "@/lib/commonField";
 import { clearLightGroup, setLightGroup } from "./lighting";
 import {
   CHUNK_PX_H,
@@ -178,6 +179,8 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "LandLot", file: "LandLot.png" },
   { name: "Wilds", file: "Wilds.png" },
   { name: "TownSquare", file: "TownSquare.png" },
+  // The Common Field's stamps (scripts/draw-wheat-field.mjs).
+  ...COMMON_FIELD_TILESETS.map((name) => ({ name, file: `${name}.png` })),
   { name: "CaveMouth", file: "CaveMouth.png" },
   { name: "CaveExit", file: "CaveExit.png" },
   { name: "CabinLog", file: "CabinLog.png" },

@@ -35,6 +35,10 @@ export const HOMESTEADS: readonly TileBox[] = [
 export const HEARTLAND: readonly TileBox[] = [
   { tx0: -809, tx1: 150, ty0: -21, ty1: 36 },
   { tx0: -125, tx1: 150, ty0: -31, ty1: 92 },
+  // North of the village: the Common Field (src/lib/commonField.json) and,
+  // above it, the north woods with the Rootking's clearing. Cleared of the
+  // mountain and the forest; open meadow.
+  { tx0: -21, tx1: 116, ty0: -127, ty1: -32 },
   ...HOMESTEADS,
 ];
 export const inHomesteads = (tx: number, ty: number): boolean =>
@@ -51,8 +55,8 @@ const WEST_RIDGE = { tx0: -1960, tx1: -1880 };
 const WEST_PASS_EVERY = 320;
 /** A great inland lake in the south-west. */
 const GREAT_LAKE = { x: -1500, y: 520, rx: 150, ry: 95 };
-/** The Old Rootking's clearing (BOSS_SPOT, src/lib/progression.ts) stays open. */
-const BOSS_TILE = { tx: 36, ty: -45 };
+/** The Old Rootking's clearing (BOSS_SPOT, src/lib/progression.ts, in tiles) stays open. */
+const BOSS_TILE = { tx: 48, ty: -112 };
 /** Open ground around the Rootking's clearing and every lair (src/lib/lairs.ts): room to fight. */
 const CLEARINGS: readonly { tx: number; ty: number; r: number }[] = [{ ...BOSS_TILE, r: 8 }, ...LAIR_SPOTS.map((s) => ({ tx: s.tx, ty: s.ty, r: LAIR_CLEARING }))];
 const inClearing = (x: number, y: number, extra = 0): boolean => CLEARINGS.some((c) => Math.hypot(x - c.tx, y - c.ty) < c.r + extra);

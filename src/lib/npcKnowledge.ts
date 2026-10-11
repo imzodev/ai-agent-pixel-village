@@ -22,7 +22,7 @@ import type { ItemNameOf, KnowledgePlace, KnowledgeTopic } from "@/types/npc";
 
 /** The hand-written NPCs' places, by key prefix. */
 const HOME_PLACES: Readonly<Record<string, string>> = {
-  village: "the grove (the starting village, with the bakery, the mill, the cabins and the Wayfarer's Rest)",
+  village: "the grove (the starting village, with the bakery, the cabins, the Wayfarer's Rest, and the Common Field just to the north, a great wheat field where anyone may gather)",
   hollowmere: "Hollowmere (the woodcutters' town among the pines, with Bjorn's forge and the Sawdust & Ale inn)",
   brightwater: "Brightwater (the harbour town on the Silverrun, with the fishing dock and the Salted Gull inn)",
 };

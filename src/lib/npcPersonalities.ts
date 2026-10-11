@@ -53,7 +53,7 @@ const NAMED: Readonly<Record<string, NpcPersonality>> = {
   },
   village_hollis: {
     voice: "Steady and methodical, measured words, proud but never boastful.",
-    likes: "Good grain, the turn of the windmill, keeping the village fed.",
+    likes: "Good grain, a field of ripe wheat, keeping the village fed.",
     quirk: "Likes exact numbers (sacks, coins, days).",
     opinions: "Makes sure Marigold never runs out of flour; she's his best customer.",
   },

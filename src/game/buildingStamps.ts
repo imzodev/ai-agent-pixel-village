@@ -229,7 +229,7 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
   const out: LightSource[] = [];
   for (const s of stamped) {
     const { entry, door } = s;
-    if (entry.kind === "scenery") {
+    if (entry.kind === "scenery" && entry.file === "/buildings/town_square.json") { // the squares' lamp posts
       for (const [c, r] of SQUARE_LAMPS) out.push({ x: (entry.tx + c) * CHUNK_TILE_PX + 8, y: (entry.ty + r) * CHUNK_TILE_PX + 8, radius: 76, color: 0xffd27a });
       continue;
     }

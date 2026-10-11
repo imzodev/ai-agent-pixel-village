@@ -1,0 +1,141 @@
+{
+ "_doc": "Written by scripts/draw-wheat-field.mjs: the Common Field's stamps and their tilesets.",
+ "tilesets": [
+  "WheatField0",
+  "WheatField1",
+  "WheatField2",
+  "WheatField3",
+  "WheatField4",
+  "WheatField5",
+  "WheatField6",
+  "WheatField7",
+  "WheatField8",
+  "WheatField9",
+  "WheatField10",
+  "WheatField11",
+  "WheatField12",
+  "WheatField13"
+ ],
+ "stamps": [
+  {
+   "key": "wheat_field_0_0",
+   "file": "/buildings/wheat_field_0.json",
+   "tx": -12,
+   "ty": -92
+  },
+  {
+   "key": "wheat_field_1_0",
+   "file": "/buildings/wheat_field_1.json",
+   "tx": 12,
+   "ty": -92
+  },
+  {
+   "key": "wheat_field_2_0",
+   "file": "/buildings/wheat_field_2.json",
+   "tx": 36,
+   "ty": -92
+  },
+  {
+   "key": "wheat_field_3_0",
+   "file": "/buildings/wheat_field_1.json",
+   "tx": 60,
+   "ty": -92
+  },
+  {
+   "key": "wheat_field_4_0",
+   "file": "/buildings/wheat_field_3.json",
+   "tx": 84,
+   "ty": -92
+  },
+  {
+   "key": "wheat_field_0_1",
+   "file": "/buildings/wheat_field_4.json",
+   "tx": -12,
+   "ty": -77
+  },
+  {
+   "key": "wheat_field_1_1",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 12,
+   "ty": -77
+  },
+  {
+   "key": "wheat_field_2_1",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 36,
+   "ty": -77
+  },
+  {
+   "key": "wheat_field_3_1",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 60,
+   "ty": -77
+  },
+  {
+   "key": "wheat_field_4_1",
+   "file": "/buildings/wheat_field_6.json",
+   "tx": 84,
+   "ty": -77
+  },
+  {
+   "key": "wheat_field_0_2",
+   "file": "/buildings/wheat_field_7.json",
+   "tx": -12,
+   "ty": -62
+  },
+  {
+   "key": "wheat_field_1_2",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 12,
+   "ty": -62
+  },
+  {
+   "key": "wheat_field_2_2",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 36,
+   "ty": -62
+  },
+  {
+   "key": "wheat_field_3_2",
+   "file": "/buildings/wheat_field_5.json",
+   "tx": 60,
+   "ty": -62
+  },
+  {
+   "key": "wheat_field_4_2",
+   "file": "/buildings/wheat_field_8.json",
+   "tx": 84,
+   "ty": -62
+  },
+  {
+   "key": "wheat_field_0_3",
+   "file": "/buildings/wheat_field_9.json",
+   "tx": -12,
+   "ty": -47
+  },
+  {
+   "key": "wheat_field_1_3",
+   "file": "/buildings/wheat_field_10.json",
+   "tx": 12,
+   "ty": -47
+  },
+  {
+   "key": "wheat_field_2_3",
+   "file": "/buildings/wheat_field_11.json",
+   "tx": 36,
+   "ty": -47
+  },
+  {
+   "key": "wheat_field_3_3",
+   "file": "/buildings/wheat_field_12.json",
+   "tx": 60,
+   "ty": -47
+  },
+  {
+   "key": "wheat_field_4_3",
+   "file": "/buildings/wheat_field_13.json",
+   "tx": 84,
+   "ty": -47
+  }
+ ]
+}

@@ -110,10 +110,10 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["miller"],
     role: "Miller",
     persona:
-      "Hollis is a steady, methodical miller who runs the windmill just north of the wheat field. Proud of the grain. Knows everyone's name in the village and never lets a baker run out of flour.",
+      "Hollis is a steady, methodical miller who works the Common Field, the great fenced wheat field just north of the village where anyone may gather wheat, and grinds the sheaves into flour. Proud of the grain. Knows everyone's name in the village and never lets a baker run out of flour.",
     greeting: "Sheaf of wheat, eh? Good haul. Bring it here, I'll get it ground.",
-    tilePos: [40, -48],
-    wanderRadius: 80,
+    tilePos: [52, -31], // at the Common Field's south gate (src/lib/commonField.json)
+    wanderRadius: 30,
     appearance: { body: "male", skin: "#f1c9a5", hair: "buzzcut", hairColor: "#5a4632", shirtColor: "#c8a06a", pantsColor: "#3a3a3a" },
     mood: "steady",
   },

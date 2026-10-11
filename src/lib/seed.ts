@@ -28,6 +28,7 @@ import { getCropKind } from "@/lib/crops";
 import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
+import { commonFieldWheat } from "./commonField";
 import { NPC_DEFS } from "./npcDefs";
 import { LEGACY_NPC_KEYS } from "./npcKeys";
 import { forageSpots } from "./forage";
@@ -205,11 +206,13 @@ const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: num
 // unauthored chunks so they never collide with map art.
 const NODE_DEFS: [string, string, number, number][] = [
   ["herb_patch", "herb", 8, 54], ["herb_patch", "herb", 26, 55], ["herb_patch", "herb", 48, 51],
-  ["herb_patch", "herb", 22, -55], ["herb_patch", "herb", 44, -57],
+  // East of the Common Field (the old spots were up on the mountain plateau).
+  ["herb_patch", "herb", 78, -26], ["herb_patch", "herb", 84, -17],
   ["berry_bush", "berry", 14, 49], ["berry_bush", "berry", 64, 56], ["berry_bush", "berry", 130, -21],
   ["rock", "stone", 123, 12], ["rock", "stone", 135, 39], ["rock", "stone", -77, 6], ["rock", "stone", 52, 54],
   ["mushroom_ring", "mushroom", -76, -6], ["mushroom_ring", "mushroom", 130, 54],
-  ["wheat_field", "wheat", 38, -45], ["wheat_field", "wheat", 44, -47], ["wheat_field", "wheat", 32, -42],
+  // The Common Field north-east of the village (src/lib/commonField.ts).
+  ...commonFieldWheat().map(([tx, ty]): [string, string, number, number] => ["wheat_field", "wheat", tx, ty]),
   // The regions west of the village place their own nodes (props keep clear of them).
   ...REGION_NODES.map((n): [string, string, number, number] => [n.kind, n.itemKey, n.tx, n.ty]),
 ];
@@ -426,7 +429,8 @@ let npcSynced = false;
 // sits on a Collision tile, snap to the nearest walkable neighbour so NPCs
 // stay reachable. An NPC stays where it is across restarts (it may be
 // mid-trip or lingering somewhere it travelled to, src/lib/nav/trips.ts);
-// only one standing somewhere no longer walkable is sent back home.
+// only one standing somewhere no longer walkable, or whose home moved, is
+// sent (back) home.
 async function syncNpcLayout() {
   if (npcSynced) return;
   npcSynced = true;
@@ -441,13 +445,15 @@ async function syncNpcLayout() {
         x = snap.x;
         y = snap.y;
       }
-      const [cur] = await db.select({ x: npcs.x, y: npcs.y }).from(npcs).where(eq(npcs.key, n.key));
+      const [cur] = await db.select({ x: npcs.x, y: npcs.y, homeX: npcs.homeX, homeY: npcs.homeY }).from(npcs).where(eq(npcs.key, n.key));
       const stranded = cur ? !(await isWalkableServer(cur.x, cur.y)) : false;
+      // A home moved in NPC_DEFS (more than a few tiles): they live there now.
+      const moved = cur ? Math.hypot(cur.homeX - x, cur.homeY - y) > 8 * 16 : false;
       await db.update(npcs)
         .set({
           homeX: x, homeY: y,
-          // Back home only when where it stands is no longer walkable.
-          ...(stranded ? { x, y, movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null } : {}),
+          // Back home only when where it stands is no longer walkable, or home moved.
+          ...(stranded || moved ? { x, y, movePath: null, moveStartAt: null, moveSpeed: null, moveAfter: null } : {}),
           name: n.name, appearance: n.appearance,
           role: n.role, persona: n.persona, greeting: n.greeting,
           mood: n.mood, wanderRadius: n.wanderRadius,

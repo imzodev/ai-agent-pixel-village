@@ -5,7 +5,7 @@
 // → deeper zones → levels unlock seeds, recipes, land and perks.
 
 import type { BowDef, EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
-import { chunkRect, tileRect } from "./worldmap";
+import { NORTH_WOODS, chunkRect, tileRect } from "./worldmap";
 import { CAVE_DY } from "./regions";
 
 export type { EnemyKindDef, EnemyZone, LevelUnlock, PerkDef, PerkKey, WeaponDef } from "@/types/progression";
@@ -42,8 +42,8 @@ export const ENEMY_KINDS: Record<string, EnemyKindDef> = {
 
 /** The world boss: when and where it rises, and what fighters earn. */
 export const BOSS_KIND = "rootking";
-/** A clearing in the north woods. */
-export const BOSS_SPOT = { x: 576, y: -720 };
+/** A clearing in the north woods, above the Common Field (tile 48, −112). */
+export const BOSS_SPOT = { x: 768, y: -1792 };
 /** How long it stays before sinking back into the earth. */
 export const BOSS_WINDOW_MS = 60 * 60_000;
 /** Share of its HP you must deal to earn the reward. */
@@ -102,7 +102,7 @@ export function isAggressive(kind: string): boolean {
 // WILD_ZONES ring, plus the oak forest west of town (src/lib/forest.ts),
 // which only fills with wisps at night so daytime woodcutting stays safe.
 export const ENEMY_ZONES: EnemyZone[] = [
-  { name: "north woods", rect: chunkRect(0, 4, 3, 2), kinds: { slime: 3, bat: 2 } },
+  { name: "north woods", rect: NORTH_WOODS, kinds: { slime: 3, bat: 2 } },
   { name: "south meadow", rect: chunkRect(0, -6, 3, 2), kinds: { slime: 3, bat: 2 } },
   { name: "east field", rect: chunkRect(5, 2, 2, 5), kinds: { slime: 3, thornling: 2 } },
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
