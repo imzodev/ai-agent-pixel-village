@@ -37,6 +37,8 @@ export default function GameCanvas() {
         scale: { mode: Phaser.Scale.RESIZE, width: "100%", height: "100%" },
         scene: [WorldScene],
         input: { activePointers: 2 },
+        // 120 Hz phones would otherwise draw twice as often for no gain in a pixel-art game.
+        fps: { limit: 60 },
         render: { antialias: false },
       });
 
@@ -84,12 +86,13 @@ export default function GameCanvas() {
           height: 52px;
           border-radius: 26px;
           border: 2px solid rgba(255, 255, 255, 0.55);
-          background: rgba(20, 28, 50, 0.45);
+          background: rgba(20, 28, 50, 0.55);
           color: white;
           font-family: var(--font-ui), system-ui, sans-serif;
           font-size: 18px;
           font-weight: 700;
-          backdrop-filter: blur(2px);
+          /* No backdrop blur: over a canvas that changes every frame, phones
+             redo the blur constantly. */
           touch-action: none;
         }
         .grove-input .grove-action-btn:active {
@@ -114,10 +117,9 @@ export default function GameCanvas() {
           align-items: center;
           justify-content: center;
           border: 2px solid rgba(255, 255, 255, 0.55);
-          background: rgba(20, 28, 50, 0.45);
+          background: rgba(20, 28, 50, 0.55);
           color: white;
           font-size: 20px;
-          backdrop-filter: blur(2px);
           touch-action: none;
         }
         .grove-input .grove-dpad-arrow {

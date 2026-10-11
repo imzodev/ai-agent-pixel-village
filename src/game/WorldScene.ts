@@ -352,7 +352,7 @@ export class WorldScene extends Phaser.Scene {
     }, DEPTH_CANOPY - 2);
     this.guideArrow = this.add.image(0, 0, "fx_guide_arrow").setDepth(DEPTH_NIGHT + 2).setVisible(false);
     this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
-    this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG);
+    this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG).setVisible(false);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
       emitZone: zoneOf(new Phaser.Geom.Rectangle(-600, -40, 1200, 60)),
@@ -2053,7 +2053,8 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.updateGuide(time);
-    this.fog.setFillStyle(0xdfe6ea, state.fog ? 0.16 : 0);
+    // Only drawn in fog (an invisible full-screen shape still costs a blend every frame).
+    this.fog.setFillStyle(0xdfe6ea, state.fog ? 0.16 : 0).setVisible(!!state.fog);
     const cam = this.cameras.main;
     const top = cam.worldView.y - 30;
     this.rain.setPosition(cam.midPoint.x, top); this.snow.setPosition(cam.midPoint.x, top);

@@ -120,6 +120,8 @@ function withFinalReply(lines: TalkLine[], r: TalkReply): TalkLine[] {
 
 /** Stop a press on the HUD from reaching the game (see the HUD's root). */
 const keepOffCanvas = (e: React.SyntheticEvent) => e.stopPropagation();
+/** How often your walking position may re-render the HUD (see the playerMoved handler). */
+const SELF_POS_EVERY_MS = 400;
 // Tailwind's `sm` breakpoint, for the few things CSS classes can't switch (placeholders).
 const WIDE_QUERY = "(min-width: 640px)";
 const subscribeWide = (cb: () => void) => { const m = window.matchMedia(WIDE_QUERY); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); };
@@ -206,13 +208,30 @@ export default function Hud() {
   const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
 
   useEffect(() => {
+    // Your position reaches the HUD at up to 10 Hz while you walk; re-rendering
+    // the whole HUD that often is heavy on phones. It goes into state at most
+    // every SELF_POS_EVERY_MS (and once more when you stop), or at once after
+    // a jump; what reads it (distances, the map's "you", 📍) is fine with that.
+    let shown: { x: number; y: number } | null = null;
+    let shownAt = 0;
+    let latest: { x: number; y: number } | null = null;
+    let trailing: ReturnType<typeof setTimeout> | null = null;
+    const showSelf = () => { trailing = null; shown = latest; shownAt = performance.now(); setSelfPos(latest); };
+    const onMoved = (pos: { x: number; y: number }) => {
+      latest = pos;
+      const jumped = !shown || Math.max(Math.abs(pos.x - shown.x), Math.abs(pos.y - shown.y)) > 48;
+      const wait = SELF_POS_EVERY_MS - (performance.now() - shownAt);
+      if (jumped || wait <= 0) { if (trailing) clearTimeout(trailing); showSelf(); }
+      else if (!trailing) trailing = setTimeout(showSelf, wait);
+    };
     const u = [
+      () => { if (trailing) clearTimeout(trailing); },
       bus.on("snapshot", (s) => {
         setSnap(s);
         const c = s.me?.coins;
         if (c != null && c !== lastSnapCoins.current) { lastSnapCoins.current = c; setCoinsLive(c); }
       }),
-      bus.on("playerMoved", setSelfPos),
+      bus.on("playerMoved", onMoved),
       bus.on("select", setSel),
       bus.on("refreshMe", () => void refreshMe()),
       bus.on("canFish", setCanFish),

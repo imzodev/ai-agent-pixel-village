@@ -120,7 +120,9 @@ export class Lighting {
     this.cover.setTo(vx, vy, w, h);
 
     // Colour grading over the world, under the darkness.
-    this.grade.setPosition(vx, vy).setSize(w, h).setFillStyle(state.gradeColor, state.gradeAlpha);
+    // Hidden when there's no tint: a fill-alpha-0 shape is still drawn (a
+    // full-screen blend and a pipeline switch every frame, costly on phones).
+    this.grade.setPosition(vx, vy).setSize(w, h).setFillStyle(state.gradeColor, state.gradeAlpha).setVisible(state.gradeAlpha > 0.01);
 
     // Darkness with light pools.
     const lights = state.darkness > 0.02 ? this.visibleLights(this.cover, extra) : [];
