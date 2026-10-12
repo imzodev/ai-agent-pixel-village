@@ -30,15 +30,14 @@ async function main(): Promise<void> {
   await initRedis();
   await startPubSubBridge();
 
-  // Next attaches its own 'upgrade' listener to the server of the first
-  // request it handles, and that listener also gets /ws sockets and kills
-  // them. Give it an inert emitter instead: attachWsServer below already
-  // forwards every other upgrade (HMR and the like) to Next.
-  const app = next({ dev, httpServer: new EventEmitter() as Server });
+  // Next attaches its own 'upgrade' listener (dev HMR and the like) to the
+  // server of the first request it handles, and that listener also takes
+  // /ws sockets and kills them. Hand it a stand-in server instead; the real
+  // one passes it every upgrade that isn't /ws (below).
+  const nextUpgrades = new EventEmitter();
+  const app = next({ dev, httpServer: nextUpgrades as Server });
   const handle = app.getRequestHandler();
   await app.prepare();
-  // After prepare(), the upgrade handler is available.
-  const upgradeHandler = app.getUpgradeHandler();
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
@@ -48,11 +47,13 @@ async function main(): Promise<void> {
     });
   });
 
-  // Attach WS so we get first crack at /ws upgrades. Next.js's upgrade
-  // handler still gets called for everything else (Turbopack HMR lives
-  // at /_next/webpack-hmr and other Next-internal paths). Without the
-  // fallback, those upgrades fall through and get killed.
-  const wss = attachWsServer(server, (req, socket, head) => upgradeHandler(req, socket, head));
+  // Attach WS so we get first crack at /ws upgrades. Everything else goes
+  // to Next's listener (Turbopack HMR at /_next/webpack-hmr: without it the
+  // dev page never starts). It exists once Next has served a request, which
+  // always comes before an HMR upgrade; until then there's no one to answer.
+  const wss = attachWsServer(server, (req, socket, head) => {
+    if (!nextUpgrades.emit("upgrade", req, socket, head)) socket.destroy();
+  });
   startPeriodicRefresh();
 
   const shutdown = async (signal: string): Promise<void> => {
