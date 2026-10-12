@@ -142,7 +142,12 @@ const spectators = shared.spectators;
 // in `connections`, so nothing player-only (relays, presence, wild packs,
 // combat) sees them. Everyone watches the same spot, so one snapshot is
 // built a beat and the same string goes to all of them.
-const SPECTATOR_MAX = Number(process.env.SPECTATOR_MAX ?? 500);
+const SPECTATOR_MAX = Number(process.env.SPECTATOR_MAX ?? 200);
+// Logged-in players one process serves before newcomers wait in line
+// (close 4430; the client says the world is full and retries). Both caps are
+// sized for a 1 vCPU / 2 GB droplet by scripts/load-test.ts; see AGENTS.md
+// "Alerts and capacity".
+const PLAYER_MAX = Number(process.env.PLAYER_MAX ?? 150);
 // Centre of the visitor chunk (as the client's chunkCenter), where a
 // visitor's camera starts; the snapshot's proximity radius covers the chunk
 // window they can pan around.
@@ -371,15 +376,33 @@ async function flushDirty(): Promise<void> {
   }
 }
 
-/** Relay a player's live position to nearby connections. */
+// Live positions go out in batches: each receiver gets one frame every
+// POS_FLUSH_MS with the latest spot of everyone nearby who moved. Sending
+// every move to every neighbour on its own was n² frames a second in a
+// crowd (50k/s with 100 players in the plaza: scripts/load-test.ts).
+const POS_FLUSH_MS = 100;
+/** Latest unsent position per player, as its JSON (built once, sent to many). */
+const posQueue = new Map<number, { x: number; y: number; json: string }>();
+let posTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Relay a player's live position to nearby connections (on the next flush). */
 function relayPosition(from: Connection, x: number, y: number, facing: Facing): void {
-  const msg = JSON.stringify({ type: "playerPos", id: from.playerId, x, y, facing, mounted: !!from.mounted });
+  posQueue.set(from.playerId, { x, y, json: JSON.stringify({ id: from.playerId, x, y, facing, mounted: !!from.mounted }) });
+}
+
+function flushPositions(): void {
+  if (!posQueue.size) return;
+  const moved = [...posQueue.entries()];
+  posQueue.clear();
   for (const conn of connections.values()) {
-    if (conn === from) continue;
     if (conn.ws.readyState !== conn.ws.OPEN) continue;
-    if (Math.hypot(conn.homePx - x, conn.homePy - y) > RELAY_RADIUS_PX) continue;
+    const near: string[] = [];
+    for (const [id, p] of moved) {
+      if (id !== conn.playerId && Math.hypot(conn.homePx - p.x, conn.homePy - p.y) <= RELAY_RADIUS_PX) near.push(p.json);
+    }
+    if (!near.length) continue;
     try {
-      conn.ws.send(msg);
+      conn.ws.send(`{"type":"playerPositions","list":[${near.join(",")}]}`);
     } catch {
       /* socket overflow — drop */
     }
@@ -431,6 +454,11 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   if (!auth) {
     // Not logged in: watch the village as a visitor.
     await onSpectator(ws);
+    return;
+  }
+  // Full: a reconnecting player keeps their place, a new one waits in line.
+  if (connections.size >= PLAYER_MAX && !connections.has(auth.playerId)) {
+    ws.close(4430, "world full");
     return;
   }
 
@@ -696,12 +724,15 @@ export function startPeriodicRefresh(): void {
   if (periodicStarted) return;
   periodicStarted = true;
   startCombatClock();
+  posTimer = setInterval(flushPositions, POS_FLUSH_MS);
   log.info({ beatMs: WORLD_TICK_MS, offsetMs: BROADCAST_OFFSET_MS, resyncMs: WS_RESYNC_MS }, "beat broadcaster armed");
   scheduleNextBroadcast();
 }
 
 export function stopPeriodicRefresh(): void {
   stopCombatClock();
+  if (posTimer) clearInterval(posTimer);
+  posTimer = null;
   if (periodicTimer) clearTimeout(periodicTimer);
   periodicTimer = null;
   periodicStarted = false;

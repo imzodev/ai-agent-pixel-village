@@ -55,8 +55,9 @@ export async function GET() {
       // The journey after the tutorial: the current goal, and any just met.
       journey: journey.view,
       journeyDone: journey.done,
-      // For the profile link (/u/<username>).
-      username: (await db.select({ username: users.username }).from(users).where(eq(users.id, me.userId)))[0]?.username ?? null,
+      // For the profile link (/u/<username>), and whether a "Play now"
+      // character still needs a password to be saved.
+      ...(await db.select({ username: users.username, hash: users.passwordHash }).from(users).where(eq(users.id, me.userId)).then(([u]) => ({ username: u?.username ?? null, unsaved: !!u && !u.hash }))),
     });
   } catch (e) {
     return handleApiError(e);

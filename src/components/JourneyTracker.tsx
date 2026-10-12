@@ -24,7 +24,7 @@ export default function JourneyTracker({ view, snap, touch }: { view: JourneyVie
 
   const counted = view.need > 1;
   return (
-    <div className="pointer-events-auto absolute left-2 top-14 z-10 w-[min(14rem,calc(50vw-0.75rem))] sm:top-28 sm:w-64">
+    <div className="pointer-events-auto absolute left-2 top-[var(--hud-top,3.5rem)] z-10 w-[min(14rem,calc(50vw-0.75rem))] sm:w-64">
       <div className="pixel-panel p-2 text-amber-950">
         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
           <span>🧭 Journey {view.step + 1}/{view.total}</span>

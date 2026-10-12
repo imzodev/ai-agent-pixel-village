@@ -33,7 +33,8 @@ export type Character = {
 export type User = {
   id: number;
   username: string;
-  passwordHash: string;
+  /** Null until a "Play now" character is saved with a password. */
+  passwordHash: string | null;
   createdAt: Date;
 };
 

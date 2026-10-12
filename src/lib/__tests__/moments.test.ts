@@ -1,7 +1,7 @@
 // Moments: the milestones, what each card says, the X link, the dear-friend
 // crossing, and the character layers shared by the game and the share cards.
 import { describe, expect, it } from "vitest";
-import { dearFriendMoment, lairBossMoment, levelMilestone, levelMoment, rootkingMoment, titleCase, xShareUrl } from "@/lib/moments";
+import { dearFriendMoment, lairBossMoment, levelMilestone, levelMoment, relicSetMoment, rootkingMoment, titleCase, titleMoment, treasureMoment, xShareUrl } from "@/lib/moments";
 import { lairBoss } from "@/lib/lairs";
 import { becameDear } from "@/lib/mind/profile";
 import { layersFor, tintPixels, weaponOf } from "@/lib/lpcLayers";
@@ -27,7 +27,7 @@ describe("moments", () => {
     expect(plain.art).toEqual({ kind: "enemy", key: "frost_giant" });
     const lucky = lairBossMoment(giant, "glacier_blade");
     expect(lucky.extra).toBe("and claimed the Glacier Blade");
-    expect(lucky.share).toContain("got the Glacier Blade");
+    expect(lucky.share).toContain("Glacier Blade");
     // A boss already named "the …" doesn't get a second "the".
     expect(lairBossMoment(lairBoss("the_hollow")!).headline).toBe("The Hollow felled");
     expect(rootkingMoment().art).toEqual({ kind: "enemy", key: "rootking" });
@@ -71,5 +71,26 @@ describe("character layers (shared by the game and the share cards)", () => {
     tintPixels(cloth, "#2a9d8f", "recolor");
     expect([...cloth.slice(0, 3)]).toEqual([0x2a, 0x9d, 0x8f]); // mid-grey maps onto the colour
     expect([...cloth.slice(4, 7)]).toEqual([20, 20, 20]); // a dark outline stays dark
+  });
+});
+
+describe("moment share lines", () => {
+  const giant = lairBoss("frost_giant")!;
+  const all = [0, 0.99].flatMap((r) => [
+    lairBossMoment(giant, undefined, r), lairBossMoment(giant, "glacier_blade", r), levelMoment(25, r),
+    dearFriendMoment("Marigold", "village_marigold", "Village Baker", r),
+  ]).concat([rootkingMoment(), titleMoment("Bread Hero", "revered in Hollowmere"), relicSetMoment("Sunken Bells", 6), treasureMoment()]);
+
+  it("read like a player, not an ad", () => {
+    for (const m of all) {
+      expect(m.share).toContain("thegroove");
+      expect(m.share).not.toMatch(/👇|[Nn]o download|\?|!|\b[Ff]ree\b/);
+      expect(m.share.length).toBeLessThanOrEqual(280 - 24);
+    }
+  });
+
+  it("has a few phrasings", () => {
+    expect(levelMoment(25, 0).share).not.toBe(levelMoment(25, 0.99).share);
+    expect(lairBossMoment(giant, "glacier_blade", 0.99).share).toContain("Glacier Blade");
   });
 });

@@ -318,3 +318,45 @@ change an NPC's mind, plan routes) must check `isAdmin(req)` from
 `x-admin-token: <ADMIN_TOKEN>`. With `ADMIN_TOKEN` unset (or under 24
 characters) these endpoints don't exist, in development too. Never gate them
 on `NODE_ENV` alone.
+
+## Alerts and capacity
+
+- **Alerts** (`src/lib/alerts.ts`): with `ALERT_WEBHOOK_URL` set (a Discord or
+  Slack incoming webhook, or an ntfy.sh topic URL) the server and tickd post on
+  a crash (`fatal`, sent before the process exits), on 20+ errors in 5 min
+  (`log.error` and `console.error` both count) and when `/api/health` can't
+  reach Postgres. Each kind at most once per 10 min. Unset = nothing is sent.
+- **DigitalOcean** (set up outside the repo, emails the DO account): an uptime
+  check on `https://thegroove.fun/api/health` (down 2 min, slow > 2 s,
+  certificate < 14 days) and droplet alerts (CPU > 85%, memory > 90%, disk > 85%).
+- **`/api/health`** also reports event-loop lag (`loopLag`, last 10 s) and `rssMb`.
+- **Caps** (`src/lib/world-stream.ts`): `PLAYER_MAX` (150) logged-in players and
+  `SPECTATOR_MAX` (200) visitors per process, sized for the 1 vCPU / 2 GB droplet.
+  Over the cap the client shows why on the loading screen (bus `busy`): visitors
+  get "busy" plus Play now (4429), players "the world is full" and a retry every
+  20 s (4430). Never let it fall through to a loading bar that never ends.
+- **DB pool**: `DB_POOL_MAX` per process (server 30, tickd 10 in
+  ecosystem.config.js). Every process shares Postgres's `max_connections` (100).
+- **Live positions** are relayed in batches (`flushPositions`, every 100 ms, one
+  `playerPositions` frame per receiver). Don't go back to one frame per move:
+  that's n² frames a second in a crowd.
+- **Load test** (`scripts/load-test.ts`), against a LOCAL production build only:
+  start the server with `SIGNUP_PER_IP_10MIN=100000 PLAYER_MAX=100000
+  SPECTATOR_MAX=100000` (and blank LLM keys), run
+  `npx tsx --env-file=.env scripts/load-test.ts --base http://localhost:3101`,
+  then `--cleanup`. Last run (8-core dev box, everyone in the plaza): fine to
+  200 players + 200 visitors, struggling at 300; memory ~1.2 GB at 200 + 200.
+- **Warm-up**: after `listen`, the server requests the routes the game loads
+  (`WARM_PATHS` in src/server.ts), so the first visitor after a deploy doesn't
+  wait ~30 s for route code to load. Add new boot-time routes there.
+
+## Play now (accounts without a password)
+
+`POST /api/auth/quick { name? }` makes a character from just a name (a random
+villager name if blank), a random look, an automatic username
+(`quickUsername`, `src/lib/quickPlay.ts`) and **no password**
+(`users.password_hash` is null), with a 365-day session. The HUD offers
+"💾 Save character" (`POST /api/auth/claim { username, password }`) in the menu,
+as a reminder from level 3 or after the tutorial, and instead of signing out
+(which would lose the character). Login refuses passwordless accounts with a
+message saying how to save.

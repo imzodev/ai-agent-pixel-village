@@ -42,6 +42,7 @@ import { releaseInactiveLots } from "./lots";
 import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 import { metrics } from "@/lib/metrics";
 import { installCrashLogging, log } from "@/lib/logger";
+import { sendAlert } from "@/lib/alerts";
 
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
@@ -216,7 +217,8 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("[tickd] fatal:", err);
+  await Promise.race([sendAlert("fatal", `tickd stopped: ${err instanceof Error ? err.message : String(err)}`), new Promise((r) => setTimeout(r, 3000))]);
   process.exit(1);
 });

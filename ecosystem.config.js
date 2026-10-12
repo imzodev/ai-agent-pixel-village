@@ -53,6 +53,7 @@ module.exports = {
       kill_timeout: 10000,
       env: {
         NODE_ENV: "production",
+        DB_POOL_MAX: 10, // it runs one beat at a time; the rest of Postgres's connections go to the server
       },
     },
     // Uncomment and replicate for a sharded WS deployment. Each shard

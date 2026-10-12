@@ -3,9 +3,12 @@
 // really there (map chunks, buildings, the first snapshot's villagers with
 // their sprites), so nobody watches it being built square by square. Progress
 // comes from WorldScene over the bus ("loading", then "worldReady"); a cap
-// lets it go after MAX_WAIT_MS whatever happens.
-import { useEffect, useState, useSyncExternalStore } from "react";
+// lets it go after MAX_WAIT_MS whatever happens, unless the server is full
+// (bus "busy"): then it says so instead of pretending to load.
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { bus } from "@/game/bus";
+import PlayNowForm from "./PlayNowForm";
+import type { TurnedAway } from "@/types/websocket";
 import { ANIMAL_SPRITES } from "@/game/animalSprites";
 
 const MAX_WAIT_MS = 15_000;
@@ -88,6 +91,8 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
   const [line, setLine] = useState(0);
   const [tip, setTip] = useState(0);
   const [phase, setPhase] = useState<"loading" | "fading" | "gone">("loading");
+  const [busy, setBusy] = useState<TurnedAway | null>(null);
+  const busyRef = useRef<TurnedAway | null>(null);
   const touch = useSyncExternalStore(subscribeTouch, isTouch, () => false);
   const tips = touch ? TIPS_TOUCH : TIPS_DESKTOP;
 
@@ -95,7 +100,7 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
     const timers: ReturnType<typeof setTimeout>[] = [];
     let finished = false;
     const finish = () => {
-      if (finished) return;
+      if (finished || busyRef.current) return; // full: keep saying so until we're in
       finished = true;
       setProgress(1);
       timers.push(setTimeout(() => setPhase("fading"), HOLD_MS));
@@ -103,10 +108,11 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
     };
     const offLoading = bus.on("loading", ({ progress: p }) => setProgress((cur) => Math.max(cur, Math.min(1, p))));
     const offReady = bus.on("worldReady", finish);
+    const offBusy = bus.on("busy", (why) => { busyRef.current = why; setBusy(why); });
     timers.push(setTimeout(finish, MAX_WAIT_MS));
     const lines = setInterval(() => { if (!reducedMotion()) setLine((i) => (i + 1) % LINES.length); }, LINE_EVERY_MS);
     const tipTimer = setInterval(() => setTip((i) => i + 1), TIP_EVERY_MS);
-    return () => { offLoading(); offReady(); clearInterval(lines); clearInterval(tipTimer); timers.forEach(clearTimeout); };
+    return () => { offLoading(); offReady(); offBusy(); clearInterval(lines); clearInterval(tipTimer); timers.forEach(clearTimeout); };
   }, []);
 
   if (phase === "gone") return null;
@@ -120,6 +126,23 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
       style={{ opacity: phase === "fading" ? 0 : 1, transitionDuration: `${FADE_MS}ms`, backgroundImage: "radial-gradient(#6fae5f 2px, transparent 2px)", backgroundSize: "18px 18px" }}
     >
       <div className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-4 py-1.5 text-2xl font-extrabold tracking-tight text-amber-900 shadow-lg">🌳 thegroove</div>
+      {busy ? (
+        <div className="pixel-panel mt-6 w-[min(92vw,420px)] p-4 text-amber-950 shadow-2xl">
+          {busy === "visitors" ? (
+            <>
+              <div className="text-lg font-extrabold text-amber-900">It&apos;s busy in the village right now</div>
+              <p className="mt-1 text-sm leading-snug">Lots of people are watching at the moment, so there&apos;s no room to look around. Make a character and walk straight in.</p>
+              <PlayNowForm onLogin={() => { setPhase("gone"); bus.emit("openLogin", undefined); }} />
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-extrabold text-amber-900">The world is full right now</div>
+              <p className="mt-1 text-sm leading-snug">There&apos;s no room for one more just now. We&apos;ll keep trying and let you in as soon as a spot opens, no need to refresh.</p>
+              <div className="mt-3 text-[12px] text-amber-900/70">Trying again every 20 seconds…</div>
+            </>
+          )}
+        </div>
+      ) : (
       <div className="w-[min(80vw,420px)]" style={{ marginTop: animal.art + 16 }}>
         <div className="relative">
           {/* One of the village's own farm animals, walking the bar as it fills. */}
@@ -136,6 +159,7 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
         <div key={line} className="loading-line mt-3 h-6 text-center text-base font-bold text-amber-50 drop-shadow">{LINES[line]}</div>
         <div className="mt-6 text-center text-[13px] text-emerald-50/90">{tips[tip % tips.length]}</div>
       </div>
+      )}
       <style>{`
         /* A farm animal's sheet (src/game/animalSprites.ts), drawn crisp; its
            size, walk row, frame count and speed come in as inline values. */

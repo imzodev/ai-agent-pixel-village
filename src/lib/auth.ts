@@ -6,6 +6,8 @@ import { characters, sessions, users } from "@/db/schema";
 
 const COOKIE = "grove_session";
 const SESSION_DAYS = 30;
+/** A "Play now" character has no password to log back in with, so its session lasts a year. */
+export const QUICK_SESSION_DAYS = 365;
 
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
@@ -21,9 +23,10 @@ export function verifyPassword(password: string, stored: string) {
   return test.length === expected.length && timingSafeEqual(test, expected);
 }
 
-export async function createSession(userId: number, shardId?: string) {
+/** `days`: how long the session lasts (a "Play now" character, with no password to log back in, gets a year). */
+export async function createSession(userId: number, shardId?: string, days = SESSION_DAYS) {
   const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400_000);
+  const expiresAt = new Date(Date.now() + days * 86400_000);
   await db.insert(sessions).values({ token, userId, expiresAt });
   const jar = await cookies();
   jar.set(COOKIE, token, {

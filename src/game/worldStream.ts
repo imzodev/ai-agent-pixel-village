@@ -165,6 +165,8 @@ export class WorldStream {
         this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
       } else if (msg.type === "saloon") {
         this.opts.handlers.onSaloon?.({ inn: msg.inn });
+      } else if (msg.type === "playerPositions") {
+        for (const p of msg.list) this.opts.handlers.onPlayerPos(p);
       } else if (msg.type === "playerPos") {
         this.opts.handlers.onPlayerPos({ id: msg.id, x: msg.x, y: msg.y, facing: msg.facing, mounted: msg.mounted });
       }
@@ -177,9 +179,12 @@ export class WorldStream {
       this.stopClockSync();
       this.opts.handlers.onClose?.();
       if (this.closed) return;
-      // 4429: the village is full of visitors. Try again in a minute, not in a burst.
-      if (e.code === 4429) this.reconnectTimer = setTimeout(() => this.connect(), 60_000);
-      else this.scheduleReconnect();
+      // Full: say so, and try again calmly (not in a burst). 4429: too many
+      // visitors, a minute; 4430: too many players, 20 s (they're in line).
+      if (e.code === 4429 || e.code === 4430) {
+        this.opts.handlers.onTurnedAway?.(e.code === 4429 ? "visitors" : "players");
+        this.reconnectTimer = setTimeout(() => this.connect(), e.code === 4429 ? 60_000 : 20_000);
+      } else this.scheduleReconnect();
     };
 
     this.ws.onerror = () => {

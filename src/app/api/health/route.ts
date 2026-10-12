@@ -3,6 +3,8 @@ import { redisDegraded } from "@/lib/redis";
 import { wsConnectionCount, wsSpectatorCount } from "@/lib/world-stream";
 import { isDraining } from "@/lib/lifecycle";
 import { localShardId, parseShardRegions } from "@/lib/shards";
+import { loopLag } from "@/lib/loopLag";
+import { sendAlert } from "@/lib/alerts";
 import type { Health } from "@/types/health";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,8 @@ export async function GET() {
   const health: Health = {
     ok: true,
     db: false,
+    loopLag: loopLag(),
+    rssMb: Math.round(process.memoryUsage().rss / 1048576),
     redis: {
       configured: Boolean(process.env.UPSTASH_REDIS_REST_URL),
       degraded: redisDegraded(),
@@ -34,6 +38,7 @@ export async function GET() {
   } catch {
     health.db = false;
     health.ok = false;
+    void sendAlert("db_down", "the game server can't reach Postgres (/api/health)");
   }
 
   // Redis is OPTIONAL (off the hot path), so a degraded client is reported

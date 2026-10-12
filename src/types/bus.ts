@@ -1,6 +1,7 @@
 // Event-bus types. Types only — no logic. Imported by lib/bus.ts (the
 // emitter) and its subscribers (the scene, the HUD).
 
+import type { TurnedAway } from "@/types/websocket";
 import type { Snapshot } from "@/types/snapshot";
 import type { Selection } from "@/types/world";
 import type { GainInput } from "@/types/notifications";
@@ -57,6 +58,10 @@ export type Events = {
   loading: { progress: number };
   /** The world is fully there (map, buildings, first snapshot's sprites): the loading screen fades. */
   worldReady: undefined;
+  /** The server is full: the loading screen shows why, until a snapshot arrives (null). */
+  busy: TurnedAway | null;
+  /** Open the sign-in window (from the busy screen). */
+  openLogin: undefined;
   /** The local player just picked up a relic: show it off over their head. */
   relicPicked: { key: string; have: number; total: number };
   /** The local player was knocked out and wakes at (x, y). */

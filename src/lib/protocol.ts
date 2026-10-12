@@ -38,6 +38,9 @@ export type WsServerMessage =
   // existing sprite if present; ignored otherwise (the next snapshot
   // creates it).
   | { type: "playerPos"; id: number; x: number; y: number; facing: Facing; mounted?: boolean }
+  // The same, batched: everyone nearby who moved in the last POS_FLUSH_MS,
+  // latest position each (one frame per receiver instead of one per move).
+  | { type: "playerPositions"; list: { id: number; x: number; y: number; facing: Facing; mounted?: boolean }[] }
   // Another player's one-shot action (plays the matching animation).
   | { type: "playerAct"; id: number; kind: PlayerActKind; facing: Facing }
   // Moves scheduled on the last beat, all starting at `startAt`. Sent

@@ -56,7 +56,8 @@ export type {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  /** Null for a "Play now" character that hasn't been saved with a password yet. */
+  passwordHash: text("password_hash"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   /** Suspended by an admin (src/app/api/admin/ban): can't sign in or be seen. */
   bannedAt: timestamp("banned_at"),

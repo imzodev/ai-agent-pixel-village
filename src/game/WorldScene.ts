@@ -204,6 +204,8 @@ export class WorldScene extends Phaser.Scene {
   private nextFishCheck = 0;
   /** Mission markers by NPC id (bus "missionMarks", from /api/missions/marks). */
   private missionMarks: Record<number, "!" | "?"> = {};
+  /** The server was full last time we connected (bus "busy" is showing). */
+  private turnedAway = false;
   /** The danger tier the player was last in (null before the first check). */
   private lastTier: number | null = null;
   private guide: { x: number; y: number; npcId?: number } | null = null;
@@ -533,6 +535,7 @@ export class WorldScene extends Phaser.Scene {
       handlers: {
         onSnapshot: (data) => {
           if (!this.alive()) return;
+          if (this.turnedAway) { this.turnedAway = false; bus.emit("busy", null); }
           this.applySnapshot(data);
           if (!this.alive()) return;
           bus.emit("snapshot", data);
@@ -601,6 +604,7 @@ export class WorldScene extends Phaser.Scene {
             ent.facing = facing;
           }
         },
+        onTurnedAway: (why) => { this.turnedAway = true; bus.emit("busy", why); },
         onClose: () => {
           // Optional: trigger a one-off HTTP snapshot fallback. For now,
           // the stream auto-reconnects; the player sees stale state until

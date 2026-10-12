@@ -57,13 +57,14 @@ import type { Move } from "@/types/motion";
 import JourneyTracker from "./JourneyTracker";
 import type { JourneyView } from "@/types/journey";
 import HelpModal from "./HelpModal";
+import SaveCharacterModal from "./SaveCharacterModal";
 import { deviceKeys } from "@/lib/keyHints";
 import { dangerNotice } from "@/lib/danger";
 import BossCountdown from "./BossCountdown";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; journey?: JourneyView | null; journeyDone?: string[] };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[] };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -167,6 +168,19 @@ export default function Hud() {
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
   const [orders, setOrders] = useState<{ npcId: number; npcName: string } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The top bar wraps to two or three rows on mid-size screens: everything
+  // that sits under it reads its real height from --hud-top.
+  const topBarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = topBarRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty("--hud-top", `${el.offsetHeight + 4}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // A "Play now" character with no password yet: the save window ("leaving" when opened from Sign out).
+  const [saveOpen, setSaveOpen] = useState<null | "save" | "leaving">(null);
+  const [saveNudgeHidden, setSaveNudgeHidden] = useState(false);
   // Mission markers (! and ?) for the scene; resent when it (re)starts.
   const [missionMarks, setMissionMarks] = useState<Record<number, "!" | "?">>({});
   useEffect(() => {
@@ -274,6 +288,7 @@ export default function Hud() {
       bus.on("playerMoved", onMoved),
       bus.on("select", setSel),
       bus.on("refreshMe", () => void refreshMe()),
+      bus.on("openLogin", () => setAuth("login")),
       bus.on("canFish", setCanFish),
       bus.on("guide", setGuideTarget),
       // Entering a region fills the book's Places page (server checks you're there).
@@ -1017,6 +1032,7 @@ export default function Hud() {
           <TopBtn on={() => { pick(); togglePanel("friends"); }} active={panel === "friends"}>👥 Friends</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("home"); }} active={panel === "home"}>🏡 Home</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("book"); }} active={panel === "book"}>📖 Book</TopBtn>
+          {me?.unsaved && <TopBtn on={() => { pick(); setSaveOpen("save"); }} active={saveOpen === "save"}>💾 Save character</TopBtn>}
           {me?.username && <a href={`/u/${me.username}`} target="_blank" rel="noopener" onClick={pick} className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-white hover:bg-amber-400">🪪 Profile</a>}
           <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
         </>
@@ -1025,7 +1041,7 @@ export default function Hud() {
       <TopBtn on={() => { pick(); togglePanel("log"); }} active={panel === "log"}>📰 World</TopBtn>
       <TopBtn on={() => { pick(); setHelpOpen(true); }} active={helpOpen}>❓ Help</TopBtn>
       {loggedIn ? (
-        <button className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60" onClick={async () => { await api("/api/auth/logout", {}); location.reload(); }}>Sign out</button>
+        <button className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60" onClick={async () => { pick(); if (me?.unsaved) { setSaveOpen("leaving"); return; } await api("/api/auth/logout", {}); location.reload(); }}>Sign out</button>
       ) : (
         <>
           <button className="rounded-lg bg-black/40 px-2 py-1 text-white hover:bg-black/60" onClick={() => { pick(); setAuth("login"); }}>Sign in</button>
@@ -1069,7 +1085,7 @@ export default function Hud() {
       )}
       {/* Top bar: one compact row on phones (navigation lives in the ☰ menu),
           the full wrapping bar from sm up. */}
-      <div className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-nowrap items-center gap-1.5 bg-gradient-to-b from-black/50 to-transparent p-1.5 text-white sm:flex-wrap sm:gap-2 sm:p-2">
+      <div ref={topBarRef} className="pointer-events-auto absolute left-0 right-0 top-0 flex flex-nowrap items-center gap-1.5 bg-gradient-to-b from-black/50 to-transparent p-1.5 text-white sm:flex-wrap sm:gap-2 sm:p-2">
         <div className="shrink-0 rounded-lg border-2 border-amber-900/60 bg-amber-100 px-2 py-1 text-base font-bold tracking-tight text-amber-900 shadow sm:px-3">🌳<span className="hidden sm:inline"> thegroove</span></div>
         <div className="pixel-panel-dark shrink-0 px-2 py-1">{WEATHER_ICON[snap?.weather ?? "clear"]}<span className="hidden sm:inline"> {snap?.weather ?? "…"} · 🕰</span> {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}</div>
         <div className="pixel-panel-dark hidden px-2 py-1 sm:block">{onlineLine}</div>
@@ -1280,6 +1296,19 @@ export default function Hud() {
       )}
 
       {helpOpen && <HelpModal touch={isTouch} onClose={() => setHelpOpen(false)} />}
+      {saveOpen && me?.me && (
+        <SaveCharacterModal name={me.me.name} suggested={me.username ?? ""} leaving={saveOpen === "leaving"} onClose={() => setSaveOpen(null)}
+          onSaved={(u) => { setSaveOpen(null); toast(`Saved! Log in as ${u} anywhere.`, "good"); void refreshMe(); }}
+          onSignOut={async () => { await api("/api/auth/logout", {}); location.reload(); }} />
+      )}
+      {loggedIn && me?.me && me.unsaved && !saveNudgeHidden && !saveOpen && !sel && !talk && (me.me.level >= 3 || me.me.tutorialStep >= TUTORIAL_STEPS.length) && (
+        // Above the touch buttons (they reach ~236 px up) on phones and tablets.
+        <div className={`pointer-events-auto absolute ${isTouch ? "bottom-[250px]" : "bottom-[4.5rem]"} left-1/2 z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-amber-50/95 py-1 pl-3 pr-1 text-sm text-amber-950 shadow-lg ring-2 ring-amber-700/40`}>
+          <span className="truncate">💾 Save {me.me.name} with a password</span>
+          <button onClick={() => setSaveOpen("save")} className="rounded-full bg-emerald-600 px-3 py-0.5 font-bold text-white hover:bg-emerald-500">Save</button>
+          <button onClick={() => setSaveNudgeHidden(true)} className="px-1.5 text-stone-500 hover:text-stone-800" aria-label="Later">✕</button>
+        </div>
+      )}
       {reporting && <ReportModal who={reporting} onDone={(msg, ok) => { toast(msg, ok ? "good" : "bad"); setReporting(null); }} onClose={() => setReporting(null)} />}
 
       {/* A proud moment to share (src/components/MomentModal.tsx), one at a time. */}
@@ -1371,7 +1400,7 @@ export default function Hud() {
 
       {/* Side panels */}
       {panel && (
-        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-14 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
+        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}

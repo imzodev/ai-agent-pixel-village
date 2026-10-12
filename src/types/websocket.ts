@@ -86,7 +86,12 @@ export type StreamHandlers = {
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;
   onClose?: () => void;
+  /** The server turned us away because it's full (it retries on its own). */
+  onTurnedAway?: (why: TurnedAway) => void;
 };
+
+/** Why a connection was refused: too many visitors watching (4429), or too many players (4430). */
+export type TurnedAway = "visitors" | "players";
 
 /** Client-side stream construction options. */
 export type WorldStreamOptions = {

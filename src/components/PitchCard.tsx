@@ -7,6 +7,7 @@ import Link from "next/link";
 import { bus, type Snapshot } from "@/game/bus";
 import { positionAt } from "@/lib/motion";
 import { VISITOR_VIEW as VIEW } from "@/lib/visitorView";
+import PlayNowForm from "./PlayNowForm";
 
 const MIN_KEY = "grove.pitchMinimized";
 const TOUR_EVERY_MS = 8000;
@@ -103,10 +104,7 @@ export default function PitchCard({ snap, onLogin }: { snap: Snapshot; onLogin: 
         ))}
       </ul>
       <button onClick={() => setPerksOpen((o) => !o)} className="mt-1 text-[12px] font-bold text-amber-800 underline sm:hidden">{perksOpen ? "Show less" : "What can I do here? ▾"}</button>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Link href="/signup" className="pixel-btn flex-1 bg-emerald-600 px-3 py-2 text-center text-base font-bold text-white hover:bg-emerald-500">Create your character, it&apos;s free →</Link>
-        <button className="rounded-lg px-2 py-2 text-stone-600 underline hover:text-stone-900" onClick={onLogin}>I have one</button>
-      </div>
+      <PlayNowForm onLogin={onLogin} />
       <div className="mt-2 text-[11px] text-stone-500"><Link href="/privacy" className="underline">Privacy</Link> · <Link href="/terms" className="underline">Terms</Link> · <Link href="/sponsor" className="underline">For businesses</Link> · <Link href="/agents" className="underline">Agent API</Link></div>
       <style>{`@keyframes pitch-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }`}</style>
     </div>

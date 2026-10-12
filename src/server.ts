@@ -22,9 +22,24 @@ import { attachWsServer, closeAllWs, startPubSubBridge, stopPubSubBridge, startP
 import { initRedis } from "@/lib/redis";
 import { setDraining } from "@/lib/lifecycle";
 import { installCrashLogging, log } from "@/lib/logger";
+import { loopLag } from "@/lib/loopLag";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const dev = process.env.NODE_ENV !== "production";
+
+// What the game asks for while it loads. In production each route's code is
+// loaded on its first request (the first /api/me took 5 s), so right after a
+// deploy the first visitors sat on the loading screen for half a minute.
+// Ask once ourselves, before they do.
+const WARM_PATHS = ["/", "/api/me", "/api/missions/marks", "/api/buildings", "/api/map/markers", "/api/forage", "/api/bakery", "/api/relics", "/api/bounties", "/api/encounters", "/api/chunks/1/0"];
+
+async function warmUp(): Promise<void> {
+  const t0 = Date.now();
+  for (const path of WARM_PATHS) {
+    await fetch(`http://127.0.0.1:${PORT}${path}`, { signal: AbortSignal.timeout(30_000) }).then((r) => r.arrayBuffer()).catch(() => {});
+  }
+  log.info({ ms: Date.now() - t0 }, "warmed up");
+}
 
 async function main(): Promise<void> {
   await initRedis();
@@ -76,9 +91,11 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
   installCrashLogging();
+  loopLag(); // start measuring now, so /api/health has a full window
 
   server.listen(PORT, () => {
     log.info({ port: PORT, wsPath: "/ws" }, "ready");
+    void warmUp();
     // The world map: drop old versions' pictures, pre-draw around the towns (low priority, background workers).
     void startMapWork().catch((err) => log.warn({ err }, "map pre-draw failed"));
   });

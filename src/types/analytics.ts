@@ -4,6 +4,8 @@
 export type TrackKind =
   | "signup"
   | "login"
+  // A "Play now" character saved with a username and password.
+  | "character_saved"
   | "tutorial_step"
   | "tutorial_skip"
   | "journey_step"
