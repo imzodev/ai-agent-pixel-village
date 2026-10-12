@@ -67,6 +67,7 @@ import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import { gameFont } from "./gameFont";
 import { buildLotBanner, lotBannerSignature } from "./lotBanners";
 import type { EquippedCosmetics } from "@/types/cosmetic";
+import { tierAt } from "@/lib/continent";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -176,6 +177,8 @@ export class WorldScene extends Phaser.Scene {
   private targetCheckAt = 0;
   private targetFrom: { x: number; y: number; facing: Facing } | null = null;
   private forageCheckAt = 0;
+  /** Next time the Common Field's off-screen wheat is switched off (cullFieldWheat). */
+  private fieldCullAt = 0;
   /** Enemy attacks under way: their telegraphs (and bolts in flight). */
   private fights = new Map<number, { s: Strike; g: Phaser.GameObjects.Graphics; bolt?: Phaser.GameObjects.Image }>();
   /** When the last dodge roll started (rolls have a short cooldown). */
@@ -199,6 +202,10 @@ export class WorldScene extends Phaser.Scene {
   private fishing!: FishingController;
   private canFishShown = false;
   private nextFishCheck = 0;
+  /** Mission markers by NPC id (bus "missionMarks", from /api/missions/marks). */
+  private missionMarks: Record<number, "!" | "?"> = {};
+  /** The danger tier the player was last in (null before the first check). */
+  private lastTier: number | null = null;
   private guide: { x: number; y: number; npcId?: number } | null = null;
   private guideArrow!: Phaser.GameObjects.Image;
   private nextGuideEmote = 0;
@@ -358,6 +365,7 @@ export class WorldScene extends Phaser.Scene {
     }, DEPTH_CANOPY - 2);
     this.guideArrow = this.add.image(0, 0, "fx_guide_arrow").setDepth(DEPTH_NIGHT + 2).setVisible(false);
     this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
+    this.unsub.push(bus.on("missionMarks", (m) => { this.missionMarks = m; }));
     this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG).setVisible(false);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
@@ -933,7 +941,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private destroyChar(e: CharEnt) {
-    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy();
+    e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy(); e.questMark?.destroy();
   }
 
   private syncChars<T extends { id: number; x: number; y: number; facing: string; name: string; appearance: Appearance; cosmetics: { slot: string; itemKey: string }[]; move?: Move | null; equipped?: string[]; title?: string | null; mounted?: boolean }>(
@@ -1305,6 +1313,25 @@ export class WorldScene extends Phaser.Scene {
     img.setVisible(!hide);
     if (img.input) img.input.enabled = !hide;
   }
+  /**
+   * The Common Field holds ~1,000 wheat stalks, each clickable, and Phaser
+   * hit-tests every interactive object on each pointer move. Only stalks near
+   * the camera stay on; the rest are hidden and unclickable (twice a second).
+   */
+  private cullFieldWheat(time: number): void {
+    if (time < this.fieldCullAt || !this.snapshot) return;
+    this.fieldCullAt = time + 500;
+    const v = this.cameras.main.worldView, m = 160;
+    for (const n of this.snapshot.nodes) {
+      if (n.kind !== "wheat_field" || n.ownerId != null) continue;
+      const img = this.nodes.get(n.id);
+      if (!img) continue;
+      const near = n.x > v.x - m && n.x < v.right + m && n.y > v.y - m && n.y < v.bottom + m + 64;
+      if (img.visible !== near) img.setVisible(near);
+      if (img.input && img.input.enabled !== near) img.input.enabled = near;
+    }
+  }
+
   /** Bring picked patches back (and hide fresh picks) without waiting for a snapshot. */
   private refreshForage(time: number): void {
     if (time < this.forageCheckAt || !this.snapshot) return;
@@ -1417,10 +1444,12 @@ export class WorldScene extends Phaser.Scene {
       this.noticeRelics(time);
       this.updateTargetMarker(time);
       this.refreshForage(time);
+      this.cullFieldWheat(time);
       this.drawStrikes();
     }
     for (const e of this.players.values()) this.moveChar(e, dt);
     for (const e of this.npcs.values()) this.moveChar(e, dt);
+    this.drawQuestMarks(time);
     for (const e of this.animals.values()) this.moveCritter(e, dt, time);
     for (const e of this.enemies.values()) this.moveCritter(e, dt, time);
     this.updateAtmosphere(time, deltaMs);
@@ -1452,6 +1481,9 @@ export class WorldScene extends Phaser.Scene {
   /** Toast the region's name when the player walks into a new one. */
   private announceRegion(): void {
     if (!this.player) return;
+    // Danger tiers: say so when the land gets harder (src/lib/danger.ts).
+    const tier = tierAt(Math.floor(this.player.sprite.x / 16), Math.floor(this.player.sprite.y / 16));
+    if (tier !== this.lastTier) { bus.emit("danger", { tier, prev: this.lastTier }); this.lastTier = tier; }
     const key = regionAt(this.player.sprite.x, this.player.sprite.y)?.key ?? null;
     const prev = this.lastRegionKey;
     this.lastRegionKey = key;
@@ -1786,6 +1818,22 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** A short emote bubble over a character ("!", "♪", "…"). */
+  /** Gold "!" over NPCs with a mission for you, "?" when one is ready to turn in. */
+  private drawQuestMarks(time: number) {
+    const bob = Math.abs(Math.sin(time / 260)) * 3;
+    for (const [id, e] of this.npcs) {
+      const mark = this.missionMarks[id];
+      if (!mark) { if (e.questMark) { e.questMark.destroy(); e.questMark = undefined; } continue; }
+      if (!e.questMark) {
+        e.questMark = this.add.text(0, 0, mark, {
+          fontFamily: gameFont(), fontSize: "16px", fontStyle: "bold", color: mark === "?" ? "#7CFC6A" : "#FFD23F", stroke: "#2a1a0a", strokeThickness: 4,
+        }).setOrigin(0.5, 1).setResolution(3);
+      } else if (e.questMark.text !== mark) e.questMark.setText(mark).setColor(mark === "?" ? "#7CFC6A" : "#FFD23F");
+      const { x, y } = e.sprite;
+      e.questMark.setPosition(x, y - (e.emote || e.bubble ? 84 : 66) - bob).setDepth(DEPTH_CHAR_BASE + y + 5).setVisible(!e.bubble);
+    }
+  }
+
   private showEmote(e: CharEnt, text: string, ms = 1400) {
     e.emote?.t.destroy();
     const t = this.add.text(e.sprite.x, e.sprite.y - 64, text, {

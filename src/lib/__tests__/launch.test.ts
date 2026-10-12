@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanPlayerChat, nameProblem, normalizeForMatch } from "@/lib/moderation";
 import { checkoutOpen, paymentsLive, sandboxAllowed } from "@/lib/payments";
 import { makeDailyBudget } from "@/lib/llm/budget";
-import { SlidingWindowLimiter, clientIp } from "@/lib/rateLimit";
+import { SlidingWindowLimiter, clientIp, connectionIp } from "@/lib/rateLimit";
 import { isBot } from "@/lib/bots";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -64,6 +64,12 @@ describe("sign-in limits", () => {
   it("reads the client IP from the proxy, and doesn't guess without one", () => {
     expect(clientIp(new Request("http://x/", { headers: { "x-forwarded-for": "9.9.9.9, 10.0.0.1" } }))).toBe("9.9.9.9");
     expect(clientIp(new Request("http://x/"))).toBeNull();
+  });
+  it("sees the real visitor behind the proxy, and can't be fooled by a direct connection", () => {
+    expect(connectionIp("127.0.0.1", "203.0.113.9, 10.0.0.1")).toBe("203.0.113.9");
+    expect(connectionIp("::ffff:127.0.0.1", "203.0.113.9")).toBe("203.0.113.9");
+    expect(connectionIp("198.51.100.4", "203.0.113.9")).toBe("198.51.100.4"); // direct: header ignored
+    expect(connectionIp("127.0.0.1", undefined)).toBe("127.0.0.1");
   });
   it("doesn't count link-preview bots as visitors", () => {
     expect(isBot("Twitterbot/1.0")).toBe(true);

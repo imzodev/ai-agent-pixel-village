@@ -23,42 +23,46 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     hint: "The Elder knows everyone in the grove. Walk up to him and talk (E).",
     event: "talk", match: { npcKey: "village_oswin" }, qty: 1,
     target: { kind: "npc", npcKey: "village_oswin" },
-    reward: { coins: 10, items: [{ itemKey: "radish_seeds", qty: 3 }] },
+    reward: { coins: 15, xp: 15, items: [{ itemKey: "radish_seeds", qty: 3 }] },
   },
   {
-    title: "Claim free land and plant a seed",
-    hint: "The fenced fields south of the village are free to claim. Claim one at its gate, then plant a radish seed in a plot.",
+    title: "Grow something",
+    hint: "The fenced fields south of the village are free to claim: claim one at its gate and plant a radish seed. If they're all taken, gather wheat in the Common Field just north of the village instead.",
     event: "plant", qty: 1,
+    // Fields are limited; the Common Field never runs out.
+    alt: { event: "collect", match: { itemKey: "wheat" } },
     target: { kind: "freeLand" },
-    reward: { items: [{ itemKey: "axe", qty: 1 }] },
+    reward: { coins: 15, xp: 20, items: [{ itemKey: "axe", qty: 1 }] },
   },
   {
     title: "Chop 3 logs in the oak grove",
-    hint: "Take the road west to Whisperwood. The oaks in the grove can be chopped with your new axe.",
+    hint: "Follow the road west out of the village to the oak grove, and chop the oaks with your new axe. Keep your sword handy: wisps drift through the grove at night.",
     event: "collect", match: { itemKey: "wood" }, qty: 3,
     target: { kind: "point", ...GROVE },
-    reward: { coins: 15 },
+    reward: { coins: 25, xp: 20 },
   },
   {
     title: "Drive off a slime",
-    hint: "Slimes bounce around the meadows outside the village. Attack one (J).",
+    hint: "Slimes bounce around the meadows outside the village. Attack one with your sword (J).",
     event: "defeat", match: { enemyKind: "slime" }, qty: 1,
     target: { kind: "enemy", enemyKind: "slime", fallback: SOUTH_MEADOW },
-    reward: { items: [{ itemKey: "wooden_sword", qty: 1 }] },
+    reward: { coins: 30, xp: 25, items: [{ itemKey: "berry", qty: 3 }] },
   },
   {
     title: "Sell something to a villager",
     hint: "Pip buys stones, mushrooms and crops. Walk up to him, choose Sell and sell anything from your bag.",
     event: "sell", qty: 1,
     target: { kind: "npc", npcKey: "village_pip" },
-    reward: { coins: 30, items: [{ itemKey: "bread", qty: 2 }], title: "Newcomer" },
+    reward: { coins: 50, xp: 30, items: [{ itemKey: "bread", qty: 2 }], title: "Newcomer" },
   },
 ];
 
 /** Does an event count toward a step? */
 export function stepMatches(step: TutorialStep, kind: TutorialEventKind, detail: { npcKey?: string; itemKey?: string; enemyKind?: string }): boolean {
-  if (step.event !== kind) return false;
-  const m = step.match;
-  if (!m) return true;
-  return (!m.npcKey || m.npcKey === detail.npcKey) && (!m.itemKey || m.itemKey === detail.itemKey) && (!m.enemyKind || m.enemyKind === detail.enemyKind);
+  const fits = (event: TutorialEventKind, m: TutorialStep["match"]) =>
+    event === kind && (!m || ((!m.npcKey || m.npcKey === detail.npcKey) && (!m.itemKey || m.itemKey === detail.itemKey) && (!m.enemyKind || m.enemyKind === detail.enemyKind)));
+  return fits(step.event, step.match) || (!!step.alt && fits(step.alt.event, step.alt.match));
 }
+
+/** All the XP the tutorial gives. */
+export const TUTORIAL_XP = TUTORIAL_STEPS.reduce((n, s) => n + (s.reward.xp ?? 0), 0);

@@ -9,6 +9,7 @@ import { perksOf } from "@/lib/combat";
 import { perkPoints } from "@/lib/progression";
 import { unseenMoments } from "@/lib/momentsServer";
 import { markActive } from "@/lib/track";
+import { journeyFor } from "@/lib/journeyServer";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export async function GET() {
     const me = await getCurrentCharacter();
     if (!me) return Response.json({ me: null });
     markActive(me.id); // played today (analytics: daily players, retention)
+    const journey = await journeyFor(me.id);
     const perks = await perksOf(me.id);
     const [inv, itemDefs, missionRows, decor, myLeads] = await Promise.all([
       db.select().from(inventory).where(eq(inventory.characterId, me.id)).orderBy(inventory.id),
@@ -50,6 +52,9 @@ export async function GET() {
       perkPoints: Math.max(0, perkPoints(me.level) - perks.size),
       // Proud moments not yet shown as a share card (src/lib/momentsServer.ts).
       moments: await unseenMoments(me.id),
+      // The journey after the tutorial: the current goal, and any just met.
+      journey: journey.view,
+      journeyDone: journey.done,
       // For the profile link (/u/<username>).
       username: (await db.select({ username: users.username }).from(users).where(eq(users.id, me.userId)))[0]?.username ?? null,
     });

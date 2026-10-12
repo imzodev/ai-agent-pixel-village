@@ -68,3 +68,16 @@ export function clientIp(req: Request): string | null {
   const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip")?.trim();
   return ip || null;
 }
+
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+/**
+ * The visitor's IP for a raw connection (WebSocket upgrades). Behind the
+ * reverse proxy (Caddy on the same machine) every connection comes from
+ * 127.0.0.1, so the proxy's X-Forwarded-For says who it really is. It's only
+ * believed from the local proxy: a client connecting directly can't fake it.
+ */
+export function connectionIp(remoteAddress: string | undefined, forwardedFor: string | string[] | undefined): string {
+  const remote = remoteAddress ?? "unknown";
+  const fwd = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)?.split(",")[0].trim();
+  return LOOPBACK.has(remote) && fwd ? fwd : remote;
+}

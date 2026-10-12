@@ -5,6 +5,7 @@ import { missionProgressFor, requirementTarget } from "./game";
 import type { Offer } from "./types";
 import { TRADES } from "./trade";
 import { orderOffers } from "./ordersServer";
+import { canTake } from "./missionRules";
 
 type Npc = typeof npcs.$inferSelect;
 type Character = typeof characters.$inferSelect;
@@ -28,13 +29,13 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
   let offeredOne = false;
   for (const m of npcMissions) {
     const active = mine.find((cm) => cm.missionId === m.id && cm.status === "active");
-    const completedBefore = mine.some((cm) => cm.missionId === m.id && cm.status === "completed");
+    const lastDone = lastCompletion(mine, m.id);
     if (active) {
       const progress = await missionProgressFor(character.id, m.requirement, active.progress);
       if (progress >= requirementTarget(m.requirement)) {
         offers.push({ id: `turnin:${m.id}`, type: "turnin", missionId: m.id, label: `Turn in: ${m.title}`, line: m.completeLine });
       }
-    } else if ((!completedBefore || m.repeatable) && !offeredOne) {
+    } else if (canTake(m, lastDone) && !offeredOne) {
       offers.push({ id: `mission:${m.id}`, type: "mission", missionId: m.id, label: `Accept mission: ${m.title}`, line: m.offerLine });
       offeredOne = true;
     }
@@ -70,6 +71,33 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
     if (!c || c.n === 0) offers.push({ id: `gift:${gift.itemKey}`, type: "gift", itemKey: gift.itemKey, label: `Accept ${gift.itemKey.replace("_", " ")}`, line: gift.line });
   }
   return offers;
+}
+
+/** When this player last finished a mission (null if never). */
+function lastCompletion(mine: (typeof characterMissions.$inferSelect)[], missionId: number): Date | null {
+  let last: Date | null = null;
+  for (const cm of mine) if (cm.missionId === missionId && cm.status === "completed" && cm.completedAt && (!last || cm.completedAt > last)) last = cm.completedAt;
+  return last;
+}
+
+/**
+ * Mission markers for the world: "!" over a villager with a mission you can
+ * take, "?" over one with a mission ready to turn in. The same rules as the
+ * offers in their conversation.
+ */
+export async function missionMarks(characterId: number): Promise<Record<number, "!" | "?">> {
+  const all = await db.select().from(missions).where(eq(missions.active, true));
+  const mine = await db.select().from(characterMissions).where(eq(characterMissions.characterId, characterId));
+  const marks: Record<number, "!" | "?"> = {};
+  for (const m of all) {
+    const active = mine.find((cm) => cm.missionId === m.id && cm.status === "active");
+    if (active) {
+      if ((await missionProgressFor(characterId, m.requirement, active.progress)) >= requirementTarget(m.requirement)) marks[m.npcId] = "?";
+    } else if (marks[m.npcId] !== "?" && canTake(m, lastCompletion(mine, m.id))) {
+      marks[m.npcId] = "!";
+    }
+  }
+  return marks;
 }
 
 async function countItemInBag(characterId: number, itemKey: string): Promise<number> {

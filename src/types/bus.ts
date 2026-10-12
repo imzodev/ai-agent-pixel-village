@@ -34,6 +34,10 @@ export type Events = {
   region: { name: string; key: string; /** First sight on spawn: record it, no banner. */ quiet?: boolean };
   /** Whether there's fishable water in front of the player. */
   canFish: boolean;
+  /** The player walked into land of another danger tier (prev null = first sight). */
+  danger: { tier: number; prev: number | null };
+  /** Mission markers by NPC id: "!" a mission to take, "?" one ready to turn in. */
+  missionMarks: Record<number, "!" | "?">;
   /** Tutorial guide target (arrow), or null to hide it. */
   guide: { x: number; y: number; npcId?: number } | null;
   /** The local player goes through a portal and arrives at (x, y). */

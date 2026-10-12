@@ -15,7 +15,7 @@ export default function LocationBanner() {
   }, [shown]);
   if (!shown) return null;
   return (
-    <div key={shown.n} className="location-banner pointer-events-none absolute left-3 top-14 z-40 px-5 py-2 font-pixel text-xl font-bold tracking-wide">
+    <div key={shown.n} className="location-banner pointer-events-none absolute left-3 top-[13rem] z-40 px-5 py-2 font-pixel text-xl font-bold tracking-wide">
       {shown.name}
     </div>
   );

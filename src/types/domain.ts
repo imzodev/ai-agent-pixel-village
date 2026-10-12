@@ -189,6 +189,21 @@ export type MissionRequirement =
   | { type: "visit"; buildingKey: string }
   | { type: "talk"; npcKey: string };
 
+/** A village mission as written in code (src/lib/missionDefs.ts). */
+export type MissionDef = {
+  key: string;
+  /** The villager who gives it (an NPC key). */
+  npc: string;
+  title: string;
+  description: string;
+  offerLine: string;
+  completeLine: string;
+  requirement: MissionRequirement;
+  reward: MissionReward;
+  repeatable?: boolean;
+  sponsored?: boolean;
+};
+
 export type MissionReward = {
   coins?: number;
   xp?: number;

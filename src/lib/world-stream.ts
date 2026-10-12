@@ -68,6 +68,7 @@ import type { Move, MoveWrite } from "@/types/motion";
 import { BIKE_ITEM } from "@/lib/bike";
 import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
 import { track } from "@/lib/track";
+import { connectionIp } from "@/lib/rateLimit";
 
 const WS_PATH = "/ws";
 
@@ -1339,7 +1340,8 @@ export function attachWsServer(
       return;
     }
     // Reconnect-storm protection. Sliding-window per IP.
-    const ip = (req.socket.remoteAddress ?? "unknown").split(",")[0].trim();
+    // The visitor, not the proxy: behind Caddy every socket is 127.0.0.1.
+    const ip = connectionIp(req.socket.remoteAddress, req.headers["x-forwarded-for"]);
     const now = Date.now();
     const stamps = wsUpgradeTimestamps.get(ip) ?? [];
     const recent = stamps.filter((t) => now - t < WS_IP_WINDOW_MS);

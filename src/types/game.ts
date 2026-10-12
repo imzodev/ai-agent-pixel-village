@@ -34,6 +34,8 @@ export type CharEnt = {
    *  sprite's animation; walk/idle updates wait until it has finished. */
   actingUntil?: number;
   bubble?: { c: Phaser.GameObjects.Container; until: number };
+  /** A mission marker over an NPC: "!" has work for you, "?" ready to turn in. */
+  questMark?: Phaser.GameObjects.Text;
   glow?: Phaser.GameObjects.Arc;
   /** Soft drop shadow under the feet. */
   shadow?: Phaser.GameObjects.Image;

@@ -2,10 +2,10 @@
 // a matching event happens (called from the routes that already handle
 // talking, planting, gathering, fighting and selling) and pay out rewards.
 
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters } from "@/db/schema";
-import { addCoins, addItem } from "./game";
+import { addCoins, addItem, recalcLevel } from "./game";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, stepMatches, type TutorialEventKind } from "./tutorial";
 import { track } from "./track";
 
@@ -42,9 +42,14 @@ export async function tutorialEvent(
   if (done.length === 0) return null;
   track("tutorial_step", characterId, { step: c.step + 1 });
   if (step.reward.coins) await addCoins(characterId, step.reward.coins);
+  if (step.reward.xp) {
+    await db.update(characters).set({ xp: sql`${characters.xp} + ${step.reward.xp}` }).where(eq(characters.id, characterId));
+    await recalcLevel(characterId);
+  }
   for (const it of step.reward.items ?? []) await addItem(characterId, it.itemKey, it.qty);
   const parts = [
     ...(step.reward.coins ? [`${step.reward.coins} coins`] : []),
+    ...(step.reward.xp ? [`${step.reward.xp} XP`] : []),
     ...(step.reward.items ?? []).map((i) => `${i.qty > 1 ? `${i.qty}× ` : ""}${i.itemKey.replace(/_/g, " ")}`),
     ...(step.reward.title ? [`the title “${step.reward.title}”`] : []),
   ];

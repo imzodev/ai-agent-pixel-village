@@ -15,6 +15,8 @@ import { gameFont } from "@/game/gameFont";
 import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
 import { mapMemory, tileImage } from "@/game/mapTiles";
 import { MAX_TILE_ZOOM, OPEN_LEVEL, ZOOM_LEVELS, clampCamera, maxLevelFor, tileZoomFor } from "@/lib/mapZoom";
+import { tierAt } from "@/lib/continent";
+import { suggestedLevel } from "@/lib/danger";
 
 /** The fog of war as a small image (1 px per chunk over the map bounds), plus
  *  a summed table so "is any chunk of this rectangle explored?" is one lookup. */
@@ -331,6 +333,11 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
       >
         <canvas ref={canvas} className="absolute inset-0 h-full w-full" style={{ imageRendering: "pixelated" }} />
         <div ref={drawingNote} className="pointer-events-none absolute bottom-2 left-2 rounded bg-amber-50/90 px-2 py-0.5 text-[11px] text-amber-900" style={{ display: "none" }}>✏️ drawing the map…</div>
+        {/* Danger: it rises the further you go from the village (src/lib/danger.ts). */}
+        <div className="pointer-events-none absolute bottom-2 right-2 max-w-[min(92%,420px)] rounded bg-amber-50/90 px-2 py-1 text-[11px] leading-snug text-amber-900">
+          ⚠️ Danger rises with distance from the village{me ? <> · you&apos;re in <b>danger {tierAt(Math.floor(me.x / 16), Math.floor(me.y / 16))}</b></> : null}
+          <span className="hidden sm:inline"> · suggested level by danger: {[2, 3, 4, 5, 6, 7, 8].map((t) => `${t}→${suggestedLevel(t)}`).join(" · ")}</span>
+        </div>
         {!markers && <div className="absolute inset-0 flex items-center justify-center text-amber-100">Unrolling the map…</div>}
         {hover && !pick && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-white">◆ {hover.name}{hover.attuned ? ` · travel ${cost ? `${cost} 🪙` : "free"}` : " · not attuned yet"}</div>}
         {pick && (

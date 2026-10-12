@@ -110,6 +110,8 @@ export const characters = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     /** Guided first session (src/lib/tutorial.ts): step index, 99 = done. */
     tutorialStep: integer("tutorial_step").notNull().default(0),
+    /** The journey after the tutorial (src/lib/journey.ts): the goal being worked on. */
+    journeyStep: integer("journey_step").notNull().default(0),
     tutorialProgress: integer("tutorial_progress").notNull().default(0),
     /** Nameplate title the player picked (from achievements / book pages). */
     title: text("title"),

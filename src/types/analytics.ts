@@ -6,6 +6,7 @@ export type TrackKind =
   | "login"
   | "tutorial_step"
   | "tutorial_skip"
+  | "journey_step"
   | "moment_created"
   | "share_click"
   | "profile_view"

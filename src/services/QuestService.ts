@@ -7,6 +7,7 @@ import type { DrizzleQuestRepo } from "@/db/repos/quest";
 import type { DailyQuest, QuestRequirement, QuestTemplate, StreakState } from "@/types/quest";
 import { QUEST_TEMPLATES } from "./QuestTemplates";
 import type { DrizzleGemRepo } from "@/db/repos/gem";
+import { nextStreak, streakReward } from "@/lib/streak";
 
 const utcDate = (d: Date = new Date()) => d.toISOString().slice(0, 10);
 
@@ -95,26 +96,12 @@ export class QuestService {
       lastCompletedOn: null,
       graceUsedOn: null,
     } satisfies StreakState;
-    let current = existing.current;
-    let graceUsedOn = existing.graceUsedOn;
-    if (existing.lastCompletedOn === today) {
-      // already counted today — no-op
-      return;
-    }
-    if (existing.lastCompletedOn && isYesterday(existing.lastCompletedOn, today)) {
-      current += 1;
-    } else if (existing.lastCompletedOn && !isYesterday(existing.lastCompletedOn, today)) {
-      // streak broken; allow one grace per month
-      const month = today.slice(0, 7);
-      if (existing.graceUsedOn !== month) {
-        current = 1;
-        graceUsedOn = month;
-      } else {
-        current = 1;
-      }
-    } else {
-      current = 1;
-    }
+    const next = nextStreak(existing, today);
+    if (!next.changed) return; // already counted today
+    const { current, graceUsedOn } = next;
+    // Milestones (day 3, every 7th day) pay out (src/lib/streak.ts).
+    const bonus = streakReward(current);
+    if (bonus) await this.repo.applyCharacterDelta(characterId, bonus.gems, bonus.coins, 0);
     await this.repo.upsertStreak({
       characterId,
       current,

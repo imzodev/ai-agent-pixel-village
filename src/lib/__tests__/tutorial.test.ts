@@ -3,7 +3,8 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NPC_DEFS } from "@/lib/npcDefs";
-import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, stepMatches } from "@/lib/tutorial";
+import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, TUTORIAL_XP, stepMatches } from "@/lib/tutorial";
+import { levelForXp } from "@/lib/progression";
 
 // seed.ts talks to the database on import, so read its keys as text.
 const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
@@ -38,5 +39,20 @@ describe("tutorial steps", () => {
     expect(stepMatches(slime, "defeat", { enemyKind: "wolf" })).toBe(false);
     expect(stepMatches(sell, "sell", {})).toBe(true);
     expect(stepMatches(sell, "talk", { npcKey: "village_pip" })).toBe(false);
+  });
+});
+
+describe("a tutorial that can't stall", () => {
+  it("leaves a new player at level 3", () => {
+    expect(levelForXp(TUTORIAL_XP)).toBe(3);
+  });
+  it("lets you grow something even when every field is taken: wheat from the Common Field counts", () => {
+    const grow = TUTORIAL_STEPS[1];
+    expect(stepMatches(grow, "plant", {})).toBe(true);
+    expect(stepMatches(grow, "collect", { itemKey: "wheat" })).toBe(true);
+    expect(stepMatches(grow, "collect", { itemKey: "wood" })).toBe(false);
+  });
+  it("doesn't hand out the sword you start with", () => {
+    for (const s of TUTORIAL_STEPS) expect((s.reward.items ?? []).some((i) => i.itemKey === "wooden_sword")).toBe(false);
   });
 });

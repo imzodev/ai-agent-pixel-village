@@ -14,7 +14,8 @@
 // Production deployment: run this file with `tsx` or compile to JS.
 // The `dev` and `start` scripts point here.
 
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
+import { EventEmitter } from "node:events";
 import next from "next";
 import { startMapWork } from "@/lib/worldAtlasServer";
 import { attachWsServer, closeAllWs, startPubSubBridge, stopPubSubBridge, startPeriodicRefresh, stopPeriodicRefresh } from "@/lib/world-stream";
@@ -29,7 +30,11 @@ async function main(): Promise<void> {
   await initRedis();
   await startPubSubBridge();
 
-  const app = next({ dev });
+  // Next attaches its own 'upgrade' listener to the server of the first
+  // request it handles, and that listener also gets /ws sockets and kills
+  // them. Give it an inert emitter instead: attachWsServer below already
+  // forwards every other upgrade (HMR and the like) to Next.
+  const app = next({ dev, httpServer: new EventEmitter() as Server });
   const handle = app.getRequestHandler();
   await app.prepare();
   // After prepare(), the upgrade handler is available.

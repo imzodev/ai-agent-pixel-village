@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, users, type Appearance } from "@/db/schema";
+import { characters, inventory, users, type Appearance } from "@/db/schema";
 import { createSession, destroySession, hashPassword, verifyPassword } from "@/lib/auth";
 import { ensureSeeded } from "@/lib/seed";
 import { SPAWN } from "@/lib/worldmap";
@@ -57,6 +57,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
       .values({ userId: user.id, name, appearance: cleanAppearance(body.appearance), x: SPAWN.x + (Math.random() - 0.5) * 60, y: SPAWN.y })
       .returning();
     await addItem(ch.id, "berry", 2);
+    // A starter sword in hand: the tutorial sends you past slimes and night-time wisps.
+    const sword = await addItem(ch.id, "wooden_sword", 1);
+    await db.update(inventory).set({ equipped: true }).where(eq(inventory.id, sword));
     await logEvent("arrival", `${name} arrived in the grove.`, "character", ch.id, ch.x, ch.y);
     await createSession(user.id, pickShardForPosition(ch.x, ch.y));
     // Did they arrive through a shared moment or profile? (set by RefMark)
