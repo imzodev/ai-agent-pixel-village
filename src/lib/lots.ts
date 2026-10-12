@@ -188,6 +188,13 @@ async function clearLot(lotId: number): Promise<void> {
   await db.update(lots).set({ ownerId: null, acquiredAt: null, forSale: false, bannerColor: null, bannerEmblem: null }).where(eq(lots.id, lotId));
 }
 
+/** Give up every lot a character owns, as if they'd moved out (before deleting them). */
+export async function releaseLotsOf(characterId: number): Promise<number> {
+  const owned = await db.select({ id: lots.id }).from(lots).where(eq(lots.ownerId, characterId));
+  for (const { id } of owned) await clearLot(id);
+  return owned.length;
+}
+
 /** Pick the banner an owner flies: it applies to all their lots. Owner only; indices are checked against the palette. */
 export async function setLotBanner(characterId: number, key: string, color: number, emblem: number): Promise<GardenResult> {
   if (!isBanner(color, emblem)) return { ok: false, error: "That isn't a banner you can fly." };

@@ -134,6 +134,12 @@ export default function LoadingScreen({ walker = "chicken" }: { walker?: string 
               <p className="mt-1 text-sm leading-snug">Lots of people are watching at the moment, so there&apos;s no room to look around. Make a character and walk straight in.</p>
               <PlayNowForm onLogin={() => { setPhase("gone"); bus.emit("openLogin", undefined); }} />
             </>
+          ) : busy === "network" ? (
+            <>
+              <div className="text-lg font-extrabold text-amber-900">Lots of players from your network</div>
+              <p className="mt-1 text-sm leading-snug">Several people on your connection are already playing, which is as many as one network can have at once. You&apos;ll get in as soon as one of them leaves, no need to refresh.</p>
+              <div className="mt-3 text-[12px] text-amber-900/70">Trying again every 20 seconds…</div>
+            </>
           ) : (
             <>
               <div className="text-lg font-extrabold text-amber-900">The world is full right now</div>

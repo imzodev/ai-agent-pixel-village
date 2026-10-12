@@ -180,9 +180,10 @@ export class WorldStream {
       this.opts.handlers.onClose?.();
       if (this.closed) return;
       // Full: say so, and try again calmly (not in a burst). 4429: too many
-      // visitors, a minute; 4430: too many players, 20 s (they're in line).
-      if (e.code === 4429 || e.code === 4430) {
-        this.opts.handlers.onTurnedAway?.(e.code === 4429 ? "visitors" : "players");
+      // visitors, a minute; 4430: too many players and 4431: too many from
+      // this network, 20 s.
+      if (e.code === 4429 || e.code === 4430 || e.code === 4431) {
+        this.opts.handlers.onTurnedAway?.(e.code === 4429 ? "visitors" : e.code === 4430 ? "players" : "network");
         this.reconnectTimer = setTimeout(() => this.connect(), e.code === 4429 ? 60_000 : 20_000);
       } else this.scheduleReconnect();
     };

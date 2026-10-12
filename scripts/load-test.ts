@@ -15,7 +15,6 @@
 // X-Forwarded-For address, which the server trusts from loopback only.
 
 import WebSocket from "ws";
-import { Pool } from "pg";
 import { VISITOR_CHUNK } from "../src/lib/constants";
 import { PLAYER_SPEED } from "../src/lib/speedGuard";
 import { SPAWN } from "../src/lib/worldmap";
@@ -143,28 +142,19 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-/** Deletes every bot account and its rows (local databases only). The schema
- * has no foreign keys, so this goes by column: every table with a
- * `character_id`, the world log, sessions, then characters and users. */
+/** Deletes every bot account and its rows (local databases only), with the
+ * same helper tickd uses for abandoned characters, records and all. */
 async function cleanup(): Promise<void> {
   const url = process.env.DATABASE_URL ?? "";
   if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url)) throw new Error("Refusing to clean up: DATABASE_URL isn't a local database.");
-  const pool = new Pool({ connectionString: url });
-  const users = (await pool.query<{ id: number }>(`SELECT id FROM users WHERE username LIKE $1`, [`${BOT_PREFIX}\\_%`])).rows.map((r) => r.id);
-  // Bots' characters, including any left without a user by an older cleanup.
-  const chars = (await pool.query<{ id: number }>(
-    `SELECT id FROM characters WHERE user_id = ANY($1) OR (name LIKE 'Loadbot %' AND user_id NOT IN (SELECT id FROM users))`, [users],
-  )).rows.map((r) => r.id);
-  const tables = (await pool.query<{ t: string }>(
-    `SELECT table_name AS t FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'character_id'`,
-  )).rows.map((r) => r.t);
-  let n = 0;
-  for (const t of tables) n += (await pool.query(`DELETE FROM "${t}" WHERE character_id = ANY($1)`, [chars])).rowCount ?? 0;
-  n += (await pool.query(`DELETE FROM world_events WHERE subject_type = 'character' AND subject_id = ANY($1)`, [chars])).rowCount ?? 0;
-  n += (await pool.query(`DELETE FROM sessions WHERE user_id = ANY($1)`, [users])).rowCount ?? 0;
-  n += (await pool.query(`DELETE FROM characters WHERE id = ANY($1)`, [chars])).rowCount ?? 0;
-  n += (await pool.query(`DELETE FROM users WHERE id = ANY($1)`, [users])).rowCount ?? 0;
-  console.log(`Deleted ${users.length} bot accounts and ${chars.length} characters (${n} rows in all).`);
+  const { pool } = await import("../src/db");
+  const { deleteCharacters } = await import("../src/lib/abandoned");
+  const { rows } = await pool.query<{ id: number }>(
+    `SELECT c.id FROM characters c LEFT JOIN users u ON u.id = c.user_id WHERE u.username LIKE $1 OR (c.name LIKE 'Loadbot %' AND u.id IS NULL)`,
+    [`${BOT_PREFIX}\\_%`],
+  );
+  const n = await deleteCharacters(rows.map((r) => r.id), { keepRecords: false });
+  console.log(`Deleted ${rows.length} bot characters (${n} rows in all).`);
   await pool.end();
 }
 

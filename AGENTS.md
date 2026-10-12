@@ -335,6 +335,9 @@ on `NODE_ENV` alone.
   Over the cap the client shows why on the loading screen (bus `busy`): visitors
   get "busy" plus Play now (4429), players "the world is full" and a retry every
   20 s (4430). Never let it fall through to a loading bar that never ends.
+- **Per network**: at most `PLAYERS_PER_IP` (5) players online at once from one
+  address (close 4431, "lots of players from your network", retry every 20 s).
+  Not lower: families, schools and phone networks share addresses.
 - **DB pool**: `DB_POOL_MAX` per process (server 30, tickd 10 in
   ecosystem.config.js). Every process shares Postgres's `max_connections` (100).
 - **Live positions** are relayed in batches (`flushPositions`, every 100 ms, one
@@ -360,3 +363,10 @@ villager name if blank), a random look, an automatic username
 as a reminder from level 3 or after the tutorial, and instead of signing out
 (which would lose the character). Login refuses passwordless accounts with a
 message saying how to save.
+
+Unsaved characters nobody came back for are deleted by tickd once a day
+(`pruneAbandoned`, `src/lib/abandoned.ts`): no password, not seen for 30 days
+and below `ABANDONED_MAX_LEVEL` (3). Their lots are given up first, as on moving
+out; payments, reports and analytics are kept. Saved characters are never
+touched. `deleteCharacters` is the one way to delete characters (the load test's
+`--cleanup` uses it too); the schema has no foreign keys, so it goes by column.

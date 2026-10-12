@@ -43,6 +43,7 @@ import { ensureOnlinePlayersView, refreshOnlinePlayers } from "./onlinePlayers";
 import { metrics } from "@/lib/metrics";
 import { installCrashLogging, log } from "@/lib/logger";
 import { sendAlert } from "@/lib/alerts";
+import { pruneAbandoned } from "@/lib/abandoned";
 
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
@@ -147,6 +148,20 @@ async function main(): Promise<void> {
     }
   };
 
+  // Unsaved "Play now" characters nobody came back for (src/lib/abandoned.ts), daily.
+  let lastAbandonedSweep = 0;
+  const maybePruneAbandoned = async (): Promise<void> => {
+    const now = Date.now();
+    if (now - lastAbandonedSweep < 24 * 60 * 60 * 1000) return;
+    lastAbandonedSweep = now;
+    try {
+      const gone = await pruneAbandoned(now);
+      if (gone > 0) log.info({ gone }, "deleted abandoned unsaved characters");
+    } catch (err) {
+      log.error({ err }, "abandoned character sweep failed");
+    }
+  };
+
   // Webhook call logs (agent API) are kept a week; prune hourly.
   let lastLogPrune = 0;
   const maybePruneWebhookLogs = async (): Promise<void> => {
@@ -214,6 +229,7 @@ async function main(): Promise<void> {
     await maybeRefreshView();
     await maybeReleaseInactiveLots();
     await maybePruneWebhookLogs();
+    await maybePruneAbandoned();
   }
 }
 

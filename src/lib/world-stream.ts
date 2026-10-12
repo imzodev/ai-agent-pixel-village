@@ -148,6 +148,10 @@ const SPECTATOR_MAX = Number(process.env.SPECTATOR_MAX ?? 200);
 // sized for a 1 vCPU / 2 GB droplet by scripts/load-test.ts; see AGENTS.md
 // "Alerts and capacity".
 const PLAYER_MAX = Number(process.env.PLAYER_MAX ?? 150);
+// Players online at once from one address (close 4431), so one person can't
+// fill the world with bots. Not lower: a family, a school or a phone network
+// often shares one address.
+const PLAYERS_PER_IP = Number(process.env.PLAYERS_PER_IP ?? 5);
 // Centre of the visitor chunk (as the client's chunkCenter), where a
 // visitor's camera starts; the snapshot's proximity radius covers the chunk
 // window they can pan around.
@@ -456,10 +460,19 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     await onSpectator(ws);
     return;
   }
-  // Full: a reconnecting player keeps their place, a new one waits in line.
-  if (connections.size >= PLAYER_MAX && !connections.has(auth.playerId)) {
-    ws.close(4430, "world full");
-    return;
+  // Full: a reconnecting player keeps their place, a new one waits.
+  const ip = connectionIp(req.socket.remoteAddress, req.headers["x-forwarded-for"]);
+  if (!connections.has(auth.playerId)) {
+    if (connections.size >= PLAYER_MAX) {
+      ws.close(4430, "world full");
+      return;
+    }
+    let fromIp = 0;
+    for (const c of connections.values()) if (c.ip === ip) fromIp++;
+    if (fromIp >= PLAYERS_PER_IP) {
+      ws.close(4431, "too many players from this network");
+      return;
+    }
   }
 
   // Pick up the speed guard where it left off (a reconnect may catch up on
@@ -488,6 +501,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
     homeFacing: "down",
     lastPresenceAt: 0,
     lastVersion: 0,
+    ip,
     pendingDeltas: new Set(),
     flushTimer: null,
     slowSince: 0,

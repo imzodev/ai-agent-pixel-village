@@ -29,6 +29,8 @@ export type Connection = {
   lastPresenceAt: number;
   /** Last snapshot version we sent this connection. Used for reconnect. */
   lastVersion: number;
+  /** The client's address (src/lib/rateLimit.ts connectionIp), for the per-network player cap. */
+  ip: string;
   /** Pending delta hint: chunk keys the client should refetch. */
   pendingDeltas: Set<string>;
   flushTimer: NodeJS.Timeout | null;
@@ -90,8 +92,9 @@ export type StreamHandlers = {
   onTurnedAway?: (why: TurnedAway) => void;
 };
 
-/** Why a connection was refused: too many visitors watching (4429), or too many players (4430). */
-export type TurnedAway = "visitors" | "players";
+/** Why a connection was refused: too many visitors watching (4429), too many
+ * players (4430), or too many players already online from this network (4431). */
+export type TurnedAway = "visitors" | "players" | "network";
 
 /** Client-side stream construction options. */
 export type WorldStreamOptions = {
