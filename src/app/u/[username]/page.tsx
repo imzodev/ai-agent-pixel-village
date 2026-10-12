@@ -9,6 +9,8 @@ import { loadProfile } from "@/lib/profileServer";
 import { xShareUrl } from "@/lib/moments";
 import { headers } from "next/headers";
 import { track } from "@/lib/track";
+import { getCurrentUser } from "@/lib/auth";
+import { profileShareText } from "@/lib/profileShare";
 import { isBot } from "@/lib/bots";
 import RefMark from "@/components/RefMark";
 import ShareLink from "@/components/ShareLink";
@@ -51,7 +53,9 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
   }
   if (!isBot((await headers()).get("user-agent"))) track("profile_view");
   const url = `${BASE}/u/${username}`;
-  const shareText = `${p.look.name}${p.look.title ? `, ${p.look.title},` : ""} on thegroove: level ${p.look.level}${p.trophies.length ? `, ${p.trophies.length} trophies` : ""}`;
+  // Your own profile shares in your voice; anyone else's, in a fan's.
+  const own = (await getCurrentUser())?.username === username;
+  const shareText = profileShareText(p, own);
   const days = (d: Date) => d.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" });
   return (
     <main className="min-h-dvh bg-[#141c3c] px-4 py-6 text-white">

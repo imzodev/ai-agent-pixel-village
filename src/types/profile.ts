@@ -51,3 +51,6 @@ export type Profile = {
   dearFriends: { key: string; name: string; role: string }[];
   moments: Moment[];
 };
+
+/** What a profile share phrasing is filled with (src/lib/profileShare.ts): the facts as one clause, level, name, town count. */
+export type ShareContext = { f: string; L: number; n: string; towns: number };
