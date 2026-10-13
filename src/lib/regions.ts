@@ -17,6 +17,7 @@
 
 import type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 import { FOREST_TILES } from "./forest";
+import RANCH from "./villageRanch.json";
 import { hash, noise } from "./terrain/noise";
 import { isFelled, setFelledTrees } from "./terrain/felled";
 import { PROVINCES, continentAt, continentTreeAt, inHeartland, inHomesteads, provinceAt, riverCenter } from "./continent";
@@ -47,6 +48,8 @@ export const REGIONS: Region[] = [
   { key: "silverrun", name: "the Silverrun", tx0: -648, tx1: -577, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
   { key: "brightwater", name: "Brightwater", tx0: -800, tx1: -649, ty0: BARRIER_TY0, ty1: BARRIER_TY1 },
   { key: "caverns", name: "the Greyspine Caverns", tx0: -528, tx1: -409, ty0: -480 + CAVE_DY, ty1: -436 + CAVE_DY },
+  // East of the village, inside its fence (src/lib/villageRanch.json).
+  { key: "village_ranch", name: "the Village Ranch", tx0: RANCH.origin.tx + RANCH.fence.left, tx1: RANCH.origin.tx + RANCH.fence.right, ty0: RANCH.origin.ty + RANCH.fence.top, ty1: RANCH.origin.ty + RANCH.fence.bottom },
 ];
 const regionByKey = (k: string) => REGIONS.find((r) => r.key === k)!;
 /** Inside this strip, open ground uses the detailed Wilds grass. */

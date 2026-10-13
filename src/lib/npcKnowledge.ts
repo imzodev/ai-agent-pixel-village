@@ -22,7 +22,7 @@ import type { ItemNameOf, KnowledgePlace, KnowledgeTopic } from "@/types/npc";
 
 /** The hand-written NPCs' places, by key prefix. */
 const HOME_PLACES: Readonly<Record<string, string>> = {
-  village: "the grove (the starting village, with the bakery, the cabins, the Wayfarer's Rest, and the Common Field just to the north, a great wheat field where anyone may gather)",
+  village: "the grove (the starting village, with the bakery, the cabins, the Wayfarer's Rest, the Common Field just to the north, a great wheat field where anyone may gather, and the Village Ranch just to the east, the village's own ranch open to everyone, where the cows, the pigs, the sheep, Paco and Luna the llamas, the ducks on their pond and the hens in their coop live)",
   hollowmere: "Hollowmere (the woodcutters' town among the pines, with Bjorn's forge and the Sawdust & Ale inn)",
   brightwater: "Brightwater (the harbour town on the Silverrun, with the fishing dock and the Salted Gull inn)",
 };

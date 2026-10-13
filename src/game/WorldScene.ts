@@ -218,6 +218,8 @@ export class WorldScene extends Phaser.Scene {
   private playerRunning = false;
   /** Region the player was last in (undefined until first placed). */
   private lastRegionKey: string | null | undefined = undefined;
+  /** The tile the region was last looked up on. */
+  private lastRegionTile = Number.NaN;
   private lighting!: Lighting;
   private fog!: Phaser.GameObjects.Rectangle;
   private rain!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -1470,10 +1472,13 @@ export class WorldScene extends Phaser.Scene {
   // camera bounds.
   private syncStreamingChunks(): void {
     if (!this.player) return;
+    // Places can be small (the Village Ranch's gate is mid-chunk): look up
+    // the region whenever the player steps onto a new tile, not per chunk.
+    const tileKey = Math.floor(this.player.sprite.x / 16) * 100003 + Math.floor(this.player.sprite.y / 16);
+    if (tileKey !== this.lastRegionTile) { this.lastRegionTile = tileKey; this.announceRegion(); }
     const cur = chunkAtPixel(this.player.sprite.x, this.player.sprite.y);
     if (this.lastPlayerChunk && this.lastPlayerChunk.cx === cur.cx && this.lastPlayerChunk.cy === cur.cy) return;
     this.lastPlayerChunk = cur;
-    this.announceRegion();
     void ensureChunks(this, cur);
     releaseOutside(this, cur);
     syncStampVisuals(this, cur);

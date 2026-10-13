@@ -233,6 +233,9 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       for (const [c, r] of SQUARE_LAMPS) out.push({ x: (entry.tx + c) * CHUNK_TILE_PX + 8, y: (entry.ty + r) * CHUNK_TILE_PX + 8, radius: 76, color: 0xffd27a });
       continue;
     }
+    // Other scenery (the Common Field, the Village Ranch) is cut into stamps
+    // whose template "door" is only a placeholder: no lit window there.
+    if (entry.kind === "scenery") continue;
     if (!door || entry.kind === "land" || entry.kind === "ranch" || entry.kind === "vineyard" || entry.kind === "workshop" || entry.kind === "orchard") continue;
     if (entry.kind === "waystone") {
       // the carved rune glows blue (scripts/draw-trade-buildings.mjs)

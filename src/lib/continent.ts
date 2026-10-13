@@ -39,6 +39,10 @@ export const HEARTLAND: readonly TileBox[] = [
   // above it, the north woods with the Rootking's clearing. Cleared of the
   // mountain and the forest; open meadow.
   { tx0: -21, tx1: 116, ty0: -127, ty1: -32 },
+  // East of the village: the Village Ranch (src/lib/villageRanch.json, tx
+  // 128..175) and a margin of open meadow around its fence, cleared of the
+  // forest that started at tx 151.
+  { tx0: 151, tx1: 182, ty0: -21, ty1: 50 },
   ...HOMESTEADS,
 ];
 export const inHomesteads = (tx: number, ty: number): boolean =>

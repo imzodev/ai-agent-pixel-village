@@ -1,5 +1,5 @@
 "use client";
-// A wooden sign that slides in from the top-left with the name of the
+// A wooden sign that slides in near the top with the name of the
 // region you just walked into (emitted by WorldScene on region changes).
 
 import { useEffect, useState } from "react";
@@ -15,8 +15,12 @@ export default function LocationBanner() {
   }, [shown]);
   if (!shown) return null;
   return (
-    <div key={shown.n} className="location-banner pointer-events-none absolute left-3 top-[13rem] z-40 px-5 py-2 font-pixel text-xl font-bold tracking-wide">
-      {shown.name}
+    // Centred, so it never lands on the quest card (left) or the toasts
+    // (right): just under the top bar from sm up, above the player on phones.
+    <div className="pointer-events-none absolute inset-x-0 top-[34%] z-40 flex justify-center sm:top-[calc(var(--hud-top,3.5rem)+0.75rem)]">
+      <div key={shown.n} className="location-banner px-5 py-2 font-pixel text-xl font-bold tracking-wide">
+        {shown.name}
+      </div>
     </div>
   );
 }

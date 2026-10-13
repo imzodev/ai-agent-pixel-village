@@ -1,0 +1,297 @@
+{
+ "_doc": "Written by scripts/draw-village-ranch.mjs: the Village Ranch's stamps and their tilesets.",
+ "tilesets": [
+  "VillageRanch0",
+  "VillageRanch1",
+  "VillageRanch2",
+  "VillageRanch3",
+  "VillageRanch4",
+  "VillageRanch5",
+  "VillageRanch6",
+  "VillageRanch7"
+ ],
+ "stamps": [
+  {
+   "key": "village_ranch_0_0",
+   "file": "/buildings/village_ranch_0.json",
+   "tx": 128,
+   "ty": -15
+  },
+  {
+   "key": "village_ranch_1_0",
+   "file": "/buildings/village_ranch_1.json",
+   "tx": 152,
+   "ty": -15
+  },
+  {
+   "key": "village_ranch_0_1",
+   "file": "/buildings/village_ranch_2.json",
+   "tx": 128,
+   "ty": 0
+  },
+  {
+   "key": "village_ranch_1_1",
+   "file": "/buildings/village_ranch_3.json",
+   "tx": 152,
+   "ty": 0
+  },
+  {
+   "key": "village_ranch_0_2",
+   "file": "/buildings/village_ranch_4.json",
+   "tx": 128,
+   "ty": 15
+  },
+  {
+   "key": "village_ranch_1_2",
+   "file": "/buildings/village_ranch_5.json",
+   "tx": 152,
+   "ty": 15
+  },
+  {
+   "key": "village_ranch_0_3",
+   "file": "/buildings/village_ranch_6.json",
+   "tx": 128,
+   "ty": 30
+  },
+  {
+   "key": "village_ranch_1_3",
+   "file": "/buildings/village_ranch_7.json",
+   "tx": 152,
+   "ty": 30
+  }
+ ],
+ "water": [
+  [
+   7,
+   47
+  ],
+  [
+   8,
+   47
+  ],
+  [
+   5,
+   48
+  ],
+  [
+   6,
+   48
+  ],
+  [
+   7,
+   48
+  ],
+  [
+   8,
+   48
+  ],
+  [
+   9,
+   48
+  ],
+  [
+   10,
+   48
+  ],
+  [
+   4,
+   49
+  ],
+  [
+   5,
+   49
+  ],
+  [
+   6,
+   49
+  ],
+  [
+   7,
+   49
+  ],
+  [
+   8,
+   49
+  ],
+  [
+   9,
+   49
+  ],
+  [
+   10,
+   49
+  ],
+  [
+   11,
+   49
+  ],
+  [
+   4,
+   50
+  ],
+  [
+   5,
+   50
+  ],
+  [
+   6,
+   50
+  ],
+  [
+   7,
+   50
+  ],
+  [
+   8,
+   50
+  ],
+  [
+   9,
+   50
+  ],
+  [
+   10,
+   50
+  ],
+  [
+   11,
+   50
+  ],
+  [
+   3,
+   51
+  ],
+  [
+   4,
+   51
+  ],
+  [
+   5,
+   51
+  ],
+  [
+   6,
+   51
+  ],
+  [
+   7,
+   51
+  ],
+  [
+   8,
+   51
+  ],
+  [
+   9,
+   51
+  ],
+  [
+   10,
+   51
+  ],
+  [
+   11,
+   51
+  ],
+  [
+   12,
+   51
+  ],
+  [
+   4,
+   52
+  ],
+  [
+   5,
+   52
+  ],
+  [
+   6,
+   52
+  ],
+  [
+   7,
+   52
+  ],
+  [
+   8,
+   52
+  ],
+  [
+   9,
+   52
+  ],
+  [
+   10,
+   52
+  ],
+  [
+   11,
+   52
+  ],
+  [
+   4,
+   53
+  ],
+  [
+   5,
+   53
+  ],
+  [
+   6,
+   53
+  ],
+  [
+   7,
+   53
+  ],
+  [
+   8,
+   53
+  ],
+  [
+   9,
+   53
+  ],
+  [
+   10,
+   53
+  ],
+  [
+   11,
+   53
+  ],
+  [
+   5,
+   54
+  ],
+  [
+   6,
+   54
+  ],
+  [
+   7,
+   54
+  ],
+  [
+   8,
+   54
+  ],
+  [
+   9,
+   54
+  ],
+  [
+   10,
+   54
+  ],
+  [
+   7,
+   55
+  ],
+  [
+   8,
+   55
+  ]
+ ]
+}

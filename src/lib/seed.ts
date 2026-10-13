@@ -29,6 +29,7 @@ import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
 import { commonFieldWheat } from "./commonField";
+import { FOX_DEN, paddock } from "./villageRanch";
 import { MISSION_DEFS } from "./missionDefs";
 import { NPC_DEFS } from "./npcDefs";
 import { LEGACY_NPC_KEYS } from "./npcKeys";
@@ -183,19 +184,20 @@ export const ITEM_DEFS = [
 export { NPC_DEFS };
 
 // Animal roam zones in world-tile units (tileRect, ty grows downward).
-// Village species stay near the houses (chunks 1..2, south of them);
-// wild species live in the WILD_ZONES outskirts ring.
+// The village's farm animals live at the Village Ranch east of the village,
+// each kind in its own paddock (src/lib/villageRanch.json); pets stay near
+// the houses; wild species live in the WILD_ZONES outskirts ring.
 const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: number; w: number; h: number } }[] = [
-  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: tileRect(6, 48, 24, 11) },
-  { species: "cow", names: ["Buttercup", "Juniper"], zone: tileRect(126, -12, 24, 21) },
-  // Pigs share the cows' pasture (the farm).
-  { species: "pig", names: ["Truffle", "Hamlet"], zone: tileRect(126, -12, 24, 21) },
-  // Llamas get their own meadow east of the village (chunk 3_0, fully open).
-  { species: "llama", names: ["Paco", "Luna"], zone: tileRect(76, 5, 18, 12) },
-  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: tileRect(24, 33, 20, 12) },
-  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: tileRect(0, 49, 22, 10) },
+  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: paddock("sheep") },
+  { species: "cow", names: ["Buttercup", "Juniper"], zone: paddock("cow") },
+  { species: "pig", names: ["Truffle", "Hamlet"], zone: paddock("pig") },
+  { species: "llama", names: ["Paco", "Luna"], zone: paddock("llama") },
+  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: paddock("chicken") },
+  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: paddock("duck") },
   { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
-  { species: "fox", names: ["Ember"], zone: tileRect(36, -59, 30, 24) },
+  // The fox's den: the meadow just east of the ranch fence, near enough to
+  // reach the hen yard (round by the south gate) for its egg raids.
+  { species: "fox", names: ["Ember"], zone: FOX_DEN },
   { species: "cat", names: ["Marmalade"], zone: tileRect(28, 18, 18, 9) },
   { species: "dog", names: ["Biscuit"], zone: tileRect(38, 30, 20, 14) },
   // Out west along the King's Road.

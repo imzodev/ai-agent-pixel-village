@@ -22,7 +22,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 48,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 7, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -39,7 +39,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 62, // tall neck: head reaches y≈29
     actions: {
       walk: { block: 0, frames: 4, frameRate: 7, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -56,7 +56,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 40,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 7, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -73,7 +73,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 43,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 7, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -92,7 +92,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 27,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 8, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 6, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 3, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -110,7 +110,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 21,
     actions: {
       walk: { block: 0, frames: 4, frameRate: 8, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 5, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2.5, loop: true },
     },
     stateActions: { graze: "eat" },
   },
@@ -128,7 +128,7 @@ export const ANIMAL_SPRITES: Record<string, AnimalSpriteDef> = {
     labelHeight: 24, // ears reach y≈5
     actions: {
       walk: { block: 0, frames: 4, frameRate: 9, loop: true },
-      eat: { block: 1, frames: 4, frameRate: 4, loop: true },
+      eat: { block: 1, frames: 4, frameRate: 2, loop: true },
     },
     stateActions: { graze: "eat" },
   },

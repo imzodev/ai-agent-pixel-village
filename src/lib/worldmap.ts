@@ -76,12 +76,12 @@ export const NORTH_WOODS: Rect = tileRect(-12, -126, 120, 26);
 
 /** Zones where wildlife appears. Anchored to the chunk world: the authored
  *  town spans chunks (-1..4, -2..2), i.e. x -384..1920 / y -480..720, so the
- *  wild ring sits just outside it — north woods, south meadow, east field and
- *  west woods. */
+ *  wild ring sits just outside it — north woods, south meadow, east woods
+ *  (beyond the Village Ranch) and west woods. */
 export const WILD_ZONES: Rect[] = [
   NORTH_WOODS,             // north woods, above the Common Field
   chunkRect(0, -6, 3, 2),  // south meadow (chunks 0..2, ty 90..119, south of the land lots)
-  chunkRect(5, 2, 2, 5),   // east field (chunks 5..6, cy -2..2)
+  chunkRect(8, 2, 2, 5),   // east woods (chunks 8..9, cy -2..2), past the Village Ranch
   chunkRect(-4, 2, 2, 5),  // west woods (chunks -4..-3, cy -2..2)
 ];
 

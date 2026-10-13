@@ -45,8 +45,8 @@ export async function runRandomEvents(ctx: SimCtx): Promise<void> {
 // Adding a new event? Drop a `simEvents.push({...})` here. That's the only
 // change required — the manager picks it up automatically.
 
-// The fox (Ember) lives in the north woods as a permanent animal resident.
-// When the raid fires, it walks south to the coop, steals an egg on arrival
+// The fox (Ember) lives in the meadow east of the Village Ranch as a permanent
+// animal resident. When the raid fires, it slips round to the hen yard, steals an egg on arrival
 // (handled by tickAnimals' "raid" state), and trots back home. No temp
 // entities, no despawn — the fox simply goes about its business.
 simEvents.push({
@@ -92,6 +92,6 @@ simEvents.push({
       })
       .where(eq(animals.id, fox.id));
     const { logEvent } = await import("./game");
-    await logEvent("event", "A fox left the north woods — it's eyeing the chicken yard!", undefined, undefined, fox.x, fox.y);
+    await logEvent("event", "A fox crept out of the east meadow. It's eyeing the ranch's hen yard!", undefined, undefined, fox.x, fox.y);
   },
 });

@@ -26,6 +26,7 @@ const CONTROLS: readonly [CommandId | "move", string][] = [
 const TODO: readonly [string, string][] = [
   ["🌱", "Farm: claim a field south of the village (free), plant seeds, water and harvest. Gather wheat in the Common Field to the north."],
   ["🐔", "Ranch, vineyard, orchard, workshop: claim one at its gate and grow it (animals, wine, fruit, furniture)."],
+  ["🐄", "The Village Ranch, east of the village: everyone's. Visit the cows, pigs, sheep, the llamas and the ducks, and pick up the hens' eggs."],
   ["🎣", "Fish: rods from Pip. Some fish only bite at night or in certain waters."],
   ["💬", "Talk to villagers: they remember you. Gold ! means a mission, ? means it's ready to turn in."],
   ["📜", "Bounties: every town has a board with paid jobs."],

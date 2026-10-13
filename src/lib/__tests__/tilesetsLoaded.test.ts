@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COMMON_FIELD_TILESETS } from "@/lib/commonField";
+import { VILLAGE_RANCH_TILESETS } from "@/lib/villageRanch";
 
 describe("building tilesets", () => {
   it("every template's tilesets are in TILESET_FILES, and the images exist", () => {
@@ -12,6 +13,9 @@ describe("building tilesets", () => {
     // The Common Field's stamp tilesets are spread in from its stamp list.
     expect(src).toContain("...COMMON_FIELD_TILESETS.map(");
     for (const name of COMMON_FIELD_TILESETS) loaded.set(name, `${name}.png`);
+    // So are the Village Ranch's.
+    expect(src).toContain("...VILLAGE_RANCH_TILESETS.map(");
+    for (const name of VILLAGE_RANCH_TILESETS) loaded.set(name, `${name}.png`);
     const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: { file: string }[] };
     for (const file of new Set(manifest.buildings.map((b) => b.file))) {
       const tpl = JSON.parse(fs.readFileSync(`public${file}`, "utf8")) as { tilesets: { name?: string }[] };

@@ -1,0 +1,32 @@
+{
+  "_doc": "The Village Ranch's layout (tiles from the origin), read by scripts/draw-village-ranch.mjs (the art) and src/lib/villageRanch.ts (the animals' paddocks). Rects are [col, row, w, h]. Edit here, then re-run the script.",
+  "origin": { "tx": 128, "ty": -15 },
+  "stamps": { "cols": 2, "rows": 4 },
+  "fence": { "top": 1, "bottom": 58, "left": 1, "right": 46 },
+  "gates": {
+    "west": [[14, 17], [30, 33], [42, 45]],
+    "south": [[20, 23]],
+    "north": [],
+    "east": []
+  },
+  "inner": {
+    "_doc": "Low fences between the paddocks, with gaps to walk through. h: [row, fromCol, toCol, gaps]; v: [col, fromRow, toRow, gaps].",
+    "h": [[21, 2, 45, [[7, 9], [20, 23], [38, 40]]], [40, 2, 45, [[7, 9], [20, 23], [38, 40]]]],
+    "v": [[25, 22, 39, [[29, 32]]], [26, 41, 57, [[47, 50]]]]
+  },
+  "barn": [17, 3, 14, 9],
+  "coop": [31, 42, 8, 5],
+  "pond": [3, 47, 10, 9],
+  "mud": [36, 14, 6, 4],
+  "troughs": [[8, 18], [33, 12], [30, 34]],
+  "bales": [[3, 3], [4, 3], [3, 4], [43, 3], [44, 3], [16, 19], [44, 36], [3, 37]],
+  "sign": [0, 13],
+  "paddocks": {
+    "cow": [3, 11, 13, 9],
+    "pig": [32, 13, 12, 7],
+    "sheep": [3, 23, 19, 15],
+    "llama": [27, 23, 17, 15],
+    "duck": [14, 42, 10, 14],
+    "chicken": [28, 48, 16, 8]
+  }
+}
