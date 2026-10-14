@@ -11,6 +11,7 @@ import { townAt } from "./settlements";
 import { hash } from "./terrain/noise";
 import type { Biome } from "@/types/continent";
 import type { ForageBiome } from "@/types/forage";
+import { RANCH_PICKS } from "./ranchPicks";
 
 /** How long a patch takes to come back for the player who picked it. */
 export const FORAGE_COOLDOWN_MS: Readonly<Record<string, number>> = {
@@ -18,6 +19,8 @@ export const FORAGE_COOLDOWN_MS: Readonly<Record<string, number>> = {
   mushroom_ring: 10 * 60_000,
   berry_bush: 15 * 60_000,
   rock: 15 * 60_000,
+  // The Village Ranch's garden and beehives (src/lib/ranchPicks.ts).
+  ...Object.fromEntries(Object.entries(RANCH_PICKS).map(([k, p]) => [k, p.cooldownMs])),
 };
 export const isForage = (kind: string): boolean => kind in FORAGE_COOLDOWN_MS;
 /** A patch's stable identity (node ids change when the wilds are reseeded). */

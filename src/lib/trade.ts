@@ -19,6 +19,8 @@ export const TRADES: TradeConfig = {
     { itemKey: "egg", qty: 1, price: 1, line: "Hand it here, love. A copper for a fresh egg, same as ever." },
     { itemKey: "pumpkin", qty: 1, price: 20, line: "A whole pumpkin! Twenty coppers — that's three pies." },
     { itemKey: "tomato", qty: 1, price: 3, line: "Garden tomatoes, three coppers each. Sauce day!" },
+    { itemKey: "onion", qty: 1, price: 3, line: "Onions for the savoury loaves, three coppers each." },
+    { itemKey: "bell_pepper", qty: 1, price: 5, line: "Red peppers! Five coppers. They go on the focaccia." },
     { itemKey: "berry", qty: 1, price: 2, line: "Fresh berries? Two coppers a basket. For the pie." },
   ],
   // Different character sells the crafted good — keeps the economy moving.
@@ -112,6 +114,9 @@ export const TRADES: TradeConfig = {
     ...FISH_DEFS.map((f) => ({ itemKey: f.key, qty: 1, price: f.price, line: `${f.name}? ${f.price} coppers — ${f.rarity === "legendary" ? "and a story for the whole town!" : "fresh for the stew pot."}` })),
     { itemKey: "carrot", qty: 1, price: 3, line: "Carrots for the stew — three coppers each." },
     { itemKey: "tomato", qty: 1, price: 4, line: "Tomatoes! Four coppers. The sailors love a red stew." },
+    { itemKey: "onion", qty: 1, price: 4, line: "Onions, four coppers. Can't make a stew without them." },
+    { itemKey: "cabbage", qty: 1, price: 5, line: "A good cabbage! Five coppers, for the cabbage rolls." },
+    { itemKey: "bell_pepper", qty: 1, price: 6, line: "Red peppers? Six coppers. The cook will be thrilled." },
     { itemKey: "pumpkin", qty: 1, price: 24, line: "A whole pumpkin? Twenty-four coppers, and a smile." },
   ],
   brightwater_tobias: [

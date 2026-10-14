@@ -29,7 +29,7 @@ import { syncLotsFromManifest } from "./lots";
 import { forestTrees } from "./forest";
 import { REGION_NODES } from "./regions";
 import { commonFieldWheat } from "./commonField";
-import { FOX_DEN, paddock } from "./villageRanch";
+import { FOX_DEN, paddock, ranchPickSpots } from "./villageRanch";
 import { MISSION_DEFS } from "./missionDefs";
 import { NPC_DEFS } from "./npcDefs";
 import { LEGACY_NPC_KEYS } from "./npcKeys";
@@ -53,6 +53,9 @@ export const ITEM_DEFS = [
   { key: "radish", name: "Radish", kind: "material", icon: "🔴", description: "Crisp and peppery.", value: 2 },
   { key: "carrot", name: "Carrot", kind: "material", icon: "🥕", description: "Sweet, earthy, garden-fresh.", value: 2 },
   { key: "tomato", name: "Tomato", kind: "material", icon: "🍅", description: "Sun-warm and juicy.", value: 3 },
+  { key: "bell_pepper", name: "Red Bell Pepper", kind: "material", icon: "🫑", description: "Glossy, sweet and crunchy.", value: 5 },
+  { key: "onion", name: "Onion", kind: "material", icon: "🧅", description: "Makes a stew a stew. And makes you cry.", value: 3 },
+  { key: "cabbage", name: "Cabbage", kind: "material", icon: "🥬", description: "Tight, leafy and heavy as a stone.", value: 4 },
   { key: "pumpkin", name: "Pumpkin", kind: "material", icon: "🎃", description: "Heavy. Worth it.", value: 20 },
   { key: "wood", name: "Log of Wood", kind: "material", icon: "🪵", description: "Oak, freshly chopped. Greta turns it into furniture.", value: 2 },
   { key: "fishing_rod", name: "Fishing Rod", kind: "tool", icon: "🎣", description: "Face deep water and press R (🎣 on a phone) to cast. Keep it in your bag.", value: 30 },
@@ -216,6 +219,8 @@ const NODE_DEFS: [string, string, number, number][] = [
   ["mushroom_ring", "mushroom", -76, -6], ["mushroom_ring", "mushroom", 130, 54],
   // The Common Field north-east of the village (src/lib/commonField.ts).
   ...commonFieldWheat().map(([tx, ty]): [string, string, number, number] => ["wheat_field", "wheat", tx, ty]),
+  // The Village Ranch's garden and beehives: free for anyone to pick (src/lib/ranchPicks.ts).
+  ...ranchPickSpots(),
   // The regions west of the village place their own nodes (props keep clear of them).
   ...REGION_NODES.map((n): [string, string, number, number] => [n.kind, n.itemKey, n.tx, n.ty]),
 ];

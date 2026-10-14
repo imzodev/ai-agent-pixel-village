@@ -1,4 +1,5 @@
 import type Phaser from "phaser";
+import { RANCH_PICKS } from "@/lib/ranchPicks";
 import { RELIC_ART } from "@/lib/relicArt";
 import { BUN_PALETTE, BUN_ROWS, LOAF_PALETTE, LOAF_ROWS, PIE_PALETTE, PIE_ROWS } from "./breadTable";
 import { DISPLAY_SPRITES } from "./shopDisplay";
@@ -129,6 +130,9 @@ export function nodeTextureKey(kind: string): string {
 
 export function makePropTextures(scene: Scene) {
   pixelTexture(scene, "node_berry_bush", ["...gggg....", "..gggpgg...", ".gpgggggg..", ".ggggpggpg.", "gggpggggggg", ".ggggggpgg.", "..ggpgggg..", "....dd....."], { g: "#4e9a51", p: "#7a4fb5", d: "#5a3a22" }, 2);
+  // The Village Ranch's beehives are drawn in its stamps: their pick spot is a
+  // clear 16×16 square to click (src/lib/ranchPicks.ts). Its crops have frames.
+  for (const kind of Object.keys(RANCH_PICKS)) if (!CROP_KINDS[kind]?.frames.length) pixelTexture(scene, `node_${kind}`, Array.from({ length: 8 }, () => "........"), {}, 2);
   pixelTexture(scene, "node_herb_patch", ["..g...g..g.", ".gg..gg.gg.", ".g.g.g.g.g.", "..g..g..g..", "..g..g..g..", ".dddddddddd"], { g: "#6fc36a", d: "#8a6a4a" }, 2);
   pixelTexture(scene, "node_rock", ["...sss....", "..sssss...", ".sssssss..", "sssslssss.", "sssssssss.", ".ddddddd.."], { s: "#9a9aa2", l: "#c9c9d0", d: "#5a5a62" }, 2);
   pixelTexture(scene, "node_mushroom_ring", ["rr...rr...", "rrr..rrr.r", ".w....w..r", ".w..rr.w.w", "....rrr...", ".....w...."], { r: "#d94a3a", w: "#f5efe4" }, 2);

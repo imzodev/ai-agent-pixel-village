@@ -3,7 +3,10 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import LAYOUT from "@/lib/villageRanch.json";
-import { FOX_DEN, VILLAGE_RANCH, VILLAGE_RANCH_STAMPS, paddock, paddockTiles } from "@/lib/villageRanch";
+import { FOX_DEN, VILLAGE_RANCH, VILLAGE_RANCH_STAMPS, paddock, paddockTiles, ranchPickSpots } from "@/lib/villageRanch";
+import { RANCH_PICKS } from "@/lib/ranchPicks";
+import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
+import { CROP_KINDS } from "@/lib/crops";
 import { inHeartland } from "@/lib/continent";
 import { regionAtTile, terrainWalkable } from "@/lib/regions";
 import { ENEMY_ZONES } from "@/lib/progression";
@@ -12,6 +15,7 @@ import { blockedFromChunk } from "@/lib/chunkCollision";
 import type { Rect } from "@/lib/worldmap";
 import type { RanchSpecies } from "@/types/villageRanch";
 
+const ITEM_SOURCE = fs.readFileSync("src/lib/seed.ts", "utf8"); // ITEM_DEFS (importing seed.ts needs a database)
 const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8"));
 const entries: { key: string; tx: number; ty: number; file: string }[] = Array.isArray(manifest) ? manifest : manifest.buildings;
 const templates = new Map<string, { layers: { name: string; data: number[] }[] }>();
@@ -30,15 +34,15 @@ const SPECIES = Object.keys(LAYOUT.paddocks) as RanchSpecies[];
 const { origin: o, fence } = LAYOUT;
 
 describe("the Village Ranch", () => {
-  it("is 48×60 tiles of stamps east of the village, each in the buildings manifest", () => {
-    expect([VILLAGE_RANCH.w, VILLAGE_RANCH.h]).toEqual([48, 60]);
+  it("is 72×75 tiles of stamps east of the village, each in the buildings manifest", () => {
+    expect([VILLAGE_RANCH.w, VILLAGE_RANCH.h]).toEqual([72, 75]);
     expect(VILLAGE_RANCH.tx).toBeGreaterThan(121); // past the village's last cabins
     const covered = new Set<string>();
     for (const s of VILLAGE_RANCH_STAMPS) {
       expect(entries.find((e) => e.key === s.key)).toMatchObject({ tx: s.tx, ty: s.ty, file: s.file });
       for (let r = 0; r < 15; r++) for (let c = 0; c < 24; c++) covered.add(`${s.tx + c},${s.ty + r}`);
     }
-    expect(covered.size).toBe(48 * 60);
+    expect(covered.size).toBe(72 * 75);
   });
 
   it("is cleared land: heartland with no trees, inside the fence and in a margin around it", () => {
@@ -77,8 +81,20 @@ describe("the Village Ranch", () => {
     const open = (c: number, r: number) => expect(blocked(o.tx + c, o.ty + r), `${o.tx + c},${o.ty + r}`).toBe(false);
     for (const [a, b] of LAYOUT.gates.south) for (let c = a; c <= b; c++) for (const r of [fence.bottom - 1, fence.bottom, fence.bottom + 1]) open(c, r);
     for (const [a, b] of LAYOUT.gates.west) for (let r = a; r <= b; r++) for (const c of [fence.left - 1, fence.left, fence.left + 1]) open(c, r);
+    for (const [a, b] of LAYOUT.gates.east) for (let r = a; r <= b; r++) for (const c of [fence.right - 1, fence.right, fence.right + 1]) open(c, r);
     for (const [row, , , gaps] of LAYOUT.inner.h as [number, number, number, number[][]][]) for (const [a, b] of gaps) for (let c = a; c <= b; c++) for (const r of [row - 1, row, row + 1]) open(c, r);
     for (const [col, , , gaps] of LAYOUT.inner.v as [number, number, number, number[][]][]) for (const [a, b] of gaps) for (let r = a; r <= b; r++) for (const c of [col - 1, col, col + 1]) open(c, r);
+  });
+
+  it("leaves the fox a wide way in: the east gap lines up with a gap into the hen yard", () => {
+    // Goal walks plan with a doubled foot box and a greedy search, so a
+    // narrow gap is as good as a wall: keep both openings 4+ rows and shared.
+    const hen = LAYOUT.paddocks.chicken; // local columns, like the fences
+    const henCol = (LAYOUT.inner.v as [number, number, number, number[][]][]).find(([col]) => col === hen[0] + hen[2] + 1)!;
+    const shared = (a: number[], b: number[]) => Math.min(a[1], b[1]) - Math.max(a[0], b[0]) + 1;
+    expect(LAYOUT.gates.east.some((g) => henCol[3].some((h) => shared(g, h) >= 4))).toBe(true);
+    const denRows = [FOX_DEN.y / 16, (FOX_DEN.y + FOX_DEN.h) / 16 - 1];
+    expect(LAYOUT.gates.east.some(([a, b]) => o.ty + a <= denRows[1] && o.ty + b >= denRows[0])).toBe(true); // the den is beside it
   });
 
   it("keeps enemies off the ranch, and the fox's den just outside it on open ground", () => {
@@ -88,6 +104,21 @@ describe("the Village Ranch", () => {
     for (let y = FOX_DEN.y; y < FOX_DEN.y + FOX_DEN.h; y += 16) for (let x = FOX_DEN.x; x < FOX_DEN.x + FOX_DEN.w; x += 16) {
       const tx = Math.floor(x / 16), ty = Math.floor(y / 16);
       expect(inHeartland(tx, ty) && terrainWalkable(tx, ty), `fox den ${tx},${ty}`).toBe(true);
+    }
+  });
+
+  it("lets anyone pick its garden and honey, each spot within reach of a path", () => {
+    const spots = ranchPickSpots();
+    expect(new Set(spots.map(([k]) => k))).toEqual(new Set(Object.keys(RANCH_PICKS)));
+    for (const [kind, item, tx, ty] of spots) {
+      expect(RANCH_PICKS[kind].item).toBe(item);
+      expect(isForage(kind) && FORAGE_COOLDOWN_MS[kind] > 0, kind).toBe(true); // personal, with a cooldown
+      expect(CROP_KINDS[kind]?.yield, kind).toBeGreaterThan(0);
+      expect(ITEM_SOURCE.includes(`key: "${item}"`), `${item} is an item (src/lib/seed.ts ITEM_DEFS)`).toBe(true);
+      expect(tx > o.tx + fence.left && tx < o.tx + fence.right && ty > o.ty + fence.top && ty < o.ty + fence.bottom).toBe(true);
+      // a walkable tile next to it, so it's within the 90 px gather reach
+      const near = [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([dx, dy]) => !blocked(tx + dx, ty + dy));
+      expect(near, `${kind} at ${tx},${ty}`).toBe(true);
     }
   });
 

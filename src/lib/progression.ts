@@ -105,7 +105,7 @@ export const ENEMY_ZONES: EnemyZone[] = [
   { name: "north woods", rect: NORTH_WOODS, kinds: { slime: 3, bat: 2 } },
   { name: "south meadow", rect: chunkRect(0, -6, 3, 2), kinds: { slime: 3, bat: 2 } },
   // Past the Village Ranch (src/lib/villageRanch.json), which took the old east field.
-  { name: "east woods", rect: chunkRect(8, 2, 2, 5), kinds: { slime: 3, thornling: 2 } },
+  { name: "east woods", rect: chunkRect(10, 2, 2, 5), kinds: { slime: 3, thornling: 2 } },
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
   { name: "oak forest", rect: chunkRect(-8, 1, 3, 3), kinds: { wisp: 1 } },
   // The westward journey (src/lib/regions.ts), tougher the further you go.

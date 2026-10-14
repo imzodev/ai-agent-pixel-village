@@ -1,4 +1,5 @@
 "use client";
+import { RANCH_PICKS } from "@/lib/ranchPicks";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "@/game/bus";
@@ -1492,6 +1493,8 @@ function selTitle(sel: Selection) {
     case "item": return `${ITEM_ICONS[sel.itemKey] ?? "📦"} ${sel.itemKey.replace("_", " ")}`;
     case "node": {
       const base = sel.kind.replace(/_crop$/, "").replace("_", " ");
+      const ranch = RANCH_PICKS[sel.kind]; // the Village Ranch's garden and hives
+      if (ranch) return `${ITEM_ICONS[ranch.item] ?? "🧺"} ${ranch.label}`;
       if (sel.kind === "oak_tree") return sel.stage === 0 ? "Oak stump" : "Oak tree";
       return sel.stage === 0 ? `${base} (empty)` : base;
     }

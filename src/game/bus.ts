@@ -24,7 +24,7 @@ class Bus {
 export const bus = new Bus();
 
 export const ITEM_ICONS: Record<string, string> = {
-  radish_seeds: "🌱", carrot_seeds: "🌱", tomato_seeds: "🌱", pumpkin_seeds: "🌱", radish: "🔴", carrot: "🥕", tomato: "🍅", pumpkin: "🎃",
+  radish_seeds: "🌱", carrot_seeds: "🌱", tomato_seeds: "🌱", pumpkin_seeds: "🌱", radish: "🔴", carrot: "🥕", tomato: "🍅", pumpkin: "🎃", bell_pepper: "🫑", onion: "🧅", cabbage: "🥬",
   herb: "🌿", berry: "🫐", stone: "🪨", mushroom: "🍄", flour: "🌾", egg: "🥚", wool: "🧶", slime_gel: "🟢", honey_bun: "🥐",
   recipe_cinnamon: "📜", recipe_tea: "📜", wooden_sword: "🗡️", stone_sword: "🗡️", thorn_blade: "🗡️", wisp_blade: "🗡️", axe: "🪓", sharp_axe: "🪓", wood: "🪵", fishing_rod: "🎣", silver_minnow: "🐟", river_trout: "🐟", pond_perch: "🐠", mud_carp: "🐟", bluegill: "🐠", rainbow_trout: "🐠", catfish: "🐡", golden_carp: "🐠", moonfin: "🐟", storm_eel: "🐍", ghost_koi: "🐠", silverrun_pike: "🦈", bat_wing: "🦇", thorn: "🌵", boar_hide: "🐗", wolf_pelt: "🐺", milk: "🥛", chitin: "🦂", parcel: "📦", treasure_map: "🗺️", bicycle: "🚲", sunken_cutlass: "🗡️", lost_doll: "🧸", lurker_hide: "🐸", frost_pelt: "🐺", shade_essence: "🟢", hot_stew: "🍲", wisp_essence: "✨",
   stalker_scale: "🦎", hag_charm: "🧿", troll_hide: "🧊", gloam_antler: "🦌", basalt_core: "🔥", wyvern_bone: "🦴", rime_essence: "❄️", elder_heartwood: "🌲",

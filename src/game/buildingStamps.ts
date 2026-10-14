@@ -6,6 +6,7 @@
 // anchored at the column's bottom ANCHOR_LAYERS tile (so a building's roof
 // in DecorationUpper1 sorts correctly against the player as the player
 // walks past it). Static layers keep their LAYER_DEPTH.
+import { VILLAGE_RANCH_LAMPS } from "@/lib/villageRanch";
 import type { LightSource } from "@/types/lighting";
 import type Phaser from "phaser";
 import type { GardenPlot } from "@/types/garden";
@@ -234,8 +235,17 @@ export function stampLights(stamped: StampedBuilding[]): LightSource[] {
       continue;
     }
     // Other scenery (the Common Field, the Village Ranch) is cut into stamps
-    // whose template "door" is only a placeholder: no lit window there.
-    if (entry.kind === "scenery") continue;
+    // whose template "door" is only a placeholder: no lit window there. The
+    // ranch's lamp posts glow, each from the stamp it stands in.
+    if (entry.kind === "scenery") {
+      if (entry.key.startsWith("village_ranch_")) {
+        for (const [tx, ty] of VILLAGE_RANCH_LAMPS) {
+          if (tx < entry.tx || tx >= entry.tx + 24 || ty < entry.ty || ty >= entry.ty + 15) continue;
+          out.push({ x: tx * CHUNK_TILE_PX + 8, y: ty * CHUNK_TILE_PX - 19, radius: 64, color: 0xffd27a });
+        }
+      }
+      continue;
+    }
     if (!door || entry.kind === "land" || entry.kind === "ranch" || entry.kind === "vineyard" || entry.kind === "workshop" || entry.kind === "orchard") continue;
     if (entry.kind === "waystone") {
       // the carved rune glows blue (scripts/draw-trade-buildings.mjs)

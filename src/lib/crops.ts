@@ -96,11 +96,25 @@ function gardenFrames(x: number): CropRect[] {
   ];
 }
 
+/**
+ * A crop from the sheet's lower block (y 320–512 are its growth stages, the
+ * leafy cabbages, the tomato vines…); stage 0 is the same dug soil.
+ */
+function lowerFrames(x: number): CropRect[] {
+  return [
+    { x: 0, y: 256, w: 32, h: 64 }, // stage 0 — dug soil
+    { x, y: 320, w: 32, h: 64 }, // stage 1 — sprout
+    { x, y: 384, w: 32, h: 64 }, // stage 2
+    { x, y: 448, w: 32, h: 64 }, // stage 3
+    { x, y: 512, w: 32, h: 64 }, // stage 4 — ready to harvest
+  ];
+}
+
 export const CROP_KINDS: Record<string, CropKindConfig> = {
   // Garden crops: quick → slow. Longer crops pay more per plot.
   radish_crop:  { stages: 5, regrowthMs: 5 * 60_000,  yield: 2, frames: gardenFrames(256) },
   carrot_crop:  { stages: 5, regrowthMs: 10 * 60_000, yield: 3, frames: gardenFrames(32) },
-  tomato_crop:  { stages: 5, regrowthMs: 30 * 60_000, yield: 4, frames: gardenFrames(608) },
+  tomato_crop:  { stages: 5, regrowthMs: 30 * 60_000, yield: 4, frames: lowerFrames(896) }, // the vine with big red tomatoes (x 608 is the bell pepper)
   pumpkin_crop: { stages: 5, regrowthMs: 60 * 60_000, yield: 1, frames: gardenFrames(864) },
   wheat_field: {
     stages: 5,
@@ -108,6 +122,19 @@ export const CROP_KINDS: Record<string, CropKindConfig> = {
     yield: 1,
     frames: WHEAT_FRAMES,
   },
+  // The Village Ranch's garden (src/lib/ranchPicks.ts): always ripe; a crop
+  // you pick vanishes for you alone until your cooldown ends (forage rules).
+  // The beehives' node has no frames: the hives are drawn in the stamps (an
+  // invisible texture, src/game/textures.ts).
+  ranch_radish:  { stages: 5, regrowthMs: 0, yield: 2, frames: gardenFrames(256) },
+  ranch_carrot:  { stages: 5, regrowthMs: 0, yield: 2, frames: gardenFrames(32) },
+  ranch_onion:   { stages: 5, regrowthMs: 0, yield: 2, frames: gardenFrames(384) },
+  ranch_cabbage: { stages: 5, regrowthMs: 0, yield: 1, frames: lowerFrames(192) },
+  ranch_pepper:  { stages: 5, regrowthMs: 0, yield: 2, frames: gardenFrames(608) },
+  ranch_tomato:  { stages: 5, regrowthMs: 0, yield: 2, frames: lowerFrames(896) },
+  ranch_pumpkin: { stages: 5, regrowthMs: 0, yield: 1, frames: gardenFrames(864) },
+  ranch_wheat:   { stages: 5, regrowthMs: 0, yield: 2, frames: WHEAT_FRAMES },
+  ranch_beehive: { stages: 2, regrowthMs: 0, yield: 1, frames: [] },
   // Berry bush: 4 berries per pick, no regrowth (depleted for good after first pick).
   berry_bush:    { stages: 2, regrowthMs: 0, yield: 4, frames: [] },
   // Herbs: 1 per pick, no regrowth.

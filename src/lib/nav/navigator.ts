@@ -89,7 +89,7 @@ export async function planPath(
 
   // Cap visited cells. 4× Manhattan is plenty for a sparse grid; we
   // bail earlier if the open set drains without finding the goal.
-  const visitLimit = Math.max(64, heuristic(start, goalCell) * 4);
+  const visitLimit = Math.max(400, heuristic(start, goalCell) * 12);
   let visited = 0;
 
   while (open.size() > 0) {

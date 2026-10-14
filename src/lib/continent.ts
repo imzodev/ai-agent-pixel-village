@@ -40,9 +40,9 @@ export const HEARTLAND: readonly TileBox[] = [
   // mountain and the forest; open meadow.
   { tx0: -21, tx1: 116, ty0: -127, ty1: -32 },
   // East of the village: the Village Ranch (src/lib/villageRanch.json, tx
-  // 128..175) and a margin of open meadow around its fence, cleared of the
-  // forest that started at tx 151.
-  { tx0: 151, tx1: 182, ty0: -21, ty1: 50 },
+  // 128..199, ty -15..59) and a margin of open meadow around its fence,
+  // cleared of the forest that started at tx 151.
+  { tx0: 151, tx1: 206, ty0: -21, ty1: 66 },
   ...HOMESTEADS,
 ];
 export const inHomesteads = (tx: number, ty: number): boolean =>

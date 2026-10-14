@@ -81,7 +81,7 @@ export const NORTH_WOODS: Rect = tileRect(-12, -126, 120, 26);
 export const WILD_ZONES: Rect[] = [
   NORTH_WOODS,             // north woods, above the Common Field
   chunkRect(0, -6, 3, 2),  // south meadow (chunks 0..2, ty 90..119, south of the land lots)
-  chunkRect(8, 2, 2, 5),   // east woods (chunks 8..9, cy -2..2), past the Village Ranch
+  chunkRect(10, 2, 2, 5),  // east woods (chunks 10..11, cy -2..2), past the Village Ranch
   chunkRect(-4, 2, 2, 5),  // west woods (chunks -4..-3, cy -2..2)
 ];
 
