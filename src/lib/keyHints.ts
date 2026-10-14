@@ -1,13 +1,14 @@
 // Key names in hints, for the device in hand: "(E)" on a keyboard is the "A"
-// button on a phone, "(J)" is ⚔, and so on. Built from the real bindings
+// button on a phone, "(J)" is ⚔, "(K)" (dodge) is B, and so on. Built from the real bindings
 // (src/game/input/bindings.ts) and touch buttons (touchButtons.ts), so it
 // can't drift from the controls. Used by the tutorial, the journey and help.
 
 import { DEFAULT_KEY_BINDINGS } from "@/game/input/bindings";
-import { TOUCH_BUTTONS } from "@/game/input/touchButtons";
+import { TOUCH_BUTTONS, TOUCH_LABEL } from "@/game/input/touchButtons";
 
-/** What a touch player presses for things with no on-screen button. */
-const TOUCH_ELSEWHERE: Readonly<Record<string, string>> = { "player.fish": "🎣", "ui.map": "☰ → Map", "ui.bag": "☰ → Bag", "ui.shop": "☰ → Shop" };
+/** What a touch player presses for things that share a button (dodge, the
+ *  bike and Esc are B; fishing is A) or live in the ☰ menu. */
+const TOUCH_ELSEWHERE: Readonly<Record<string, string>> = { ...TOUCH_LABEL, "ui.map": "☰ → Map", "ui.bag": "☰ → Bag", "ui.shop": "☰ → Shop" };
 
 /** Keyboard key (as shown, "E") → what a touch player presses instead. */
 export const TOUCH_KEYS: Readonly<Record<string, string>> = Object.fromEntries(

@@ -41,7 +41,8 @@ const TIPS_DESKTOP = [
   "Tip: villagers remember what you tell them.",
 ];
 const TIPS_TOUCH = [
-  "Tip: walk with the arrow pad; tap 🏃 to run.",
+  "Tip: push the stick all the way out to run.",
+  "Tip: A does what's in front of you; B goes back (or rolls). Hold B for your bike.",
   "Tip: tap a villager, then Talk, Buy or Sell.",
   "Tip: waystones let you travel to any you've visited.",
   "Tip: villagers remember what you tell them.",

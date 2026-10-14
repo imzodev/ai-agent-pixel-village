@@ -207,6 +207,9 @@ export default function Hud() {
   const [menuOpen, setMenuOpen] = useState(false);
   const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
   const [chat, setChat] = useState("");
+  // On touch screens the chat is a 💬 button that opens a text box (no bar
+  // under the thumbs); keyboards keep the bar.
+  const [chatOpen, setChatOpen] = useState(false);
   const [ask, setAsk] = useState("");
   const [canFish, setCanFish] = useState(false);
   // Wild patches you've picked: node id → when it's yours to pick again.
@@ -892,27 +895,44 @@ export default function Hud() {
   // ui.close handler closes the topmost open UI: talk → trade → craft →
   // inspect → panel → building → selection. The router dispatches ui.* even
   // when a text field is focused, so Escape always works.
-  const close = useCallback((): void => {
-    if (mapOpen) { setMapOpen(null); return; }
-    if (board) { setBoard(null); return; }
-    if (talk) { setTalk(null); return; }
-    if (trade) { setTrade(null); return; }
-    if (shop) { setShop(null); return; }
-    if (orders) { setOrders(null); return; }
-    if (farmMenu) { setFarmMenu(null); return; }
-    if (craft) { setCraft(null); return; }
-    if (inspect) { setInspect(null); return; }
-    if (panel) { setPanel(null); return; }
-    if (building) { setBuilding(null); return; }
-    if (sel) { setSel(null); return; }
-  }, [mapOpen, board, talk, trade, shop, orders, farmMenu, craft, inspect, panel, building, sel]);
+  /** Close the topmost open thing (Esc, and touch B); false if nothing was open. */
+  const close = useCallback((): boolean => {
+    if (chatOpen) { setChatOpen(false); return true; }
+    if (saveOpen) { setSaveOpen(null); return true; }
+    if (reporting) { setReporting(null); return true; }
+    if (helpOpen) { setHelpOpen(false); return true; }
+    if (menuOpen) { setMenuOpen(false); return true; }
+    if (mapOpen) { setMapOpen(null); return true; }
+    if (board) { setBoard(null); return true; }
+    if (talk) { setTalk(null); return true; }
+    if (trade) { setTrade(null); return true; }
+    if (shop) { setShop(null); return true; }
+    if (orders) { setOrders(null); return true; }
+    if (farmMenu) { setFarmMenu(null); return true; }
+    if (craft) { setCraft(null); return true; }
+    if (inspect) { setInspect(null); return true; }
+    if (panel) { setPanel(null); return true; }
+    if (building) { setBuilding(null); return true; }
+    if (sel) { setSel(null); return true; }
+    return false;
+  }, [chatOpen, saveOpen, reporting, helpOpen, menuOpen, mapOpen, board, talk, trade, shop, orders, farmMenu, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
   // re-registering on a real change keeps them in sync.
   useEffect(() => {
     const disposers = [
-      inputRouter.register({ id: "ui.close", scope: "ui", run: close }),
+      inputRouter.register({ id: "ui.close", scope: "ui", run: () => { close(); } }),
+      // Touch B: back, like Esc (a window's own keymap first, then the HUD's
+      // topmost thing); with nothing open, a dodge roll.
+      inputRouter.register({
+        id: "ui.back",
+        scope: "ui",
+        run: () => {
+          if (inputRouter.isModalOpen()) { inputRouter.trigger("ui.close"); return; }
+          if (!close()) inputRouter.trigger("player.dodge");
+        },
+      }),
       inputRouter.register({
         id: "ui.bag",
         scope: "ui",
@@ -1080,7 +1100,7 @@ export default function Hud() {
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} touch={isTouch} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Your 🧭 Journey card shows what to do next, and ❓ Help has the controls.", "info"); void refreshMe(); }} />
       )}
       {loggedIn && canFish && hasRod && !sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-[240px] left-1/2 -translate-x-1/2 sm:bottom-20">
+        <div className="pointer-events-auto absolute bottom-[170px] left-1/2 -translate-x-1/2 sm:bottom-20">
           <button onClick={() => inputRouter.trigger("player.fish")} className="pixel-btn px-3 py-1.5 font-bold">🎣 Fish {fishHint}</button>
         </div>
       )}
@@ -1113,6 +1133,7 @@ export default function Hud() {
         )}
         <div className="hidden sm:contents">{navItems(() => {})}</div>
         {!loggedIn && <Link href="/signup" className="shrink-0 rounded-lg bg-emerald-500 px-2 py-1 font-bold text-white hover:bg-emerald-400 sm:hidden">Play free</Link>}
+        {loggedIn && isTouch && !talk && <div className="shrink-0"><TopBtn on={() => setChatOpen((o) => !o)} active={chatOpen}>💬</TopBtn></div>}
         <div className="relative shrink-0 sm:hidden">
           <TopBtn on={() => setMenuOpen((o) => !o)} active={menuOpen}>☰</TopBtn>
           {navBadge && !menuOpen && <span className="pointer-events-none absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-white bg-red-500" />}
@@ -1147,7 +1168,7 @@ export default function Hud() {
 
       {/* Selection action bar */}
       {sel && !talk && (
-        <div className="pointer-events-auto absolute bottom-[240px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl sm:bottom-20">
+        <div className="pointer-events-auto absolute bottom-[170px] left-1/2 flex w-max max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center gap-2 pixel-panel p-2 shadow-xl sm:bottom-20">
           <div className="px-2">
             <div className="font-bold text-amber-900">{selTitle(sel)}</div>
             <div className="text-[11px] text-stone-500">{sel.distance < 9000 ? `${Math.round(sel.distance / 32)} tiles away` : "spectating"}</div>
@@ -1274,8 +1295,16 @@ export default function Hud() {
         </div>
       )}
 
-      {/* Chat input */}
-      {loggedIn && !talk && (
+      {/* Chat: a bar at the bottom on a keyboard; on touch, a box under the
+          top bar opened from 💬 (sending, ✕ or B closes it). */}
+      {loggedIn && !talk && isTouch && chatOpen && (
+        <form className="pointer-events-auto absolute left-2 right-2 top-[var(--hud-top,3.5rem)] z-40 flex gap-1" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); setChatOpen(false); }}>
+          <input autoFocus value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Say something to the plaza…" enterKeyHint="send" className="min-w-0 flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-2 outline-none focus:border-amber-700" maxLength={140} />
+          <button className="rounded-lg bg-amber-700 px-3 font-bold text-white">Say</button>
+          <button type="button" onClick={() => setChatOpen(false)} className="rounded-lg bg-black/50 px-3 text-white" aria-label="Close chat">✕</button>
+        </form>
+      )}
+      {loggedIn && !talk && !isTouch && (
         <form className="pointer-events-auto absolute bottom-2 left-2 right-2 flex gap-1 sm:bottom-3 sm:left-3 sm:right-auto sm:w-[min(90vw,360px)]" onSubmit={async (e) => { e.preventDefault(); if (!chat.trim()) return; await act({ action: "chat", text: chat }); setChat(""); }}>
           <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder={wide ? "Say something to the plaza… (WASD to walk, Shift to run, E to interact)" : "Say something to the plaza…"} className="flex-1 rounded-lg border-2 border-amber-900/50 bg-amber-50/95 px-2 py-1.5 outline-none focus:border-amber-700" maxLength={140} />
           <button className="rounded-lg bg-amber-700 px-3 text-white">Say</button>
@@ -1303,8 +1332,8 @@ export default function Hud() {
           onSignOut={async () => { await api("/api/auth/logout", {}); location.reload(); }} />
       )}
       {loggedIn && me?.me && me.unsaved && !saveNudgeHidden && !saveOpen && !sel && !talk && (me.me.level >= 3 || me.me.tutorialStep >= TUTORIAL_STEPS.length) && (
-        // Above the touch buttons (they reach ~236 px up) on phones and tablets.
-        <div className={`pointer-events-auto absolute ${isTouch ? "bottom-[250px]" : "bottom-[4.5rem]"} left-1/2 z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-amber-50/95 py-1 pl-3 pr-1 text-sm text-amber-950 shadow-lg ring-2 ring-amber-700/40`}>
+        // Above the touch controls (they reach ~160 px up) on phones and tablets.
+        <div className={`pointer-events-auto absolute ${isTouch ? "bottom-[176px]" : "bottom-[4.5rem]"} left-1/2 z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-amber-50/95 py-1 pl-3 pr-1 text-sm text-amber-950 shadow-lg ring-2 ring-amber-700/40`}>
           <span className="truncate">💾 Save {me.me.name} with a password</span>
           <button onClick={() => setSaveOpen("save")} className="rounded-full bg-emerald-600 px-3 py-0.5 font-bold text-white hover:bg-emerald-500">Save</button>
           <button onClick={() => setSaveNudgeHidden(true)} className="px-1.5 text-stone-500 hover:text-stone-800" aria-label="Later">✕</button>

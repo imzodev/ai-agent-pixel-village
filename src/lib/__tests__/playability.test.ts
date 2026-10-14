@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { JOURNEY } from "@/lib/journey";
 import { NPC_DEFS } from "@/lib/npcDefs";
 import { deviceKeys, TOUCH_KEYS } from "@/lib/keyHints";
+import { TOUCH_BUTTONS, TOUCH_LABEL } from "@/game/input/touchButtons";
 import { dangerNotice, suggestedLevel } from "@/lib/danger";
 import { nextStreak, streakReward } from "@/lib/streak";
 import { countdownText } from "@/lib/countdown";
@@ -27,6 +28,12 @@ describe("key hints", () => {
   it("name the touch buttons on a phone and keep the keys on a keyboard", () => {
     expect(TOUCH_KEYS.E).toBe("A");
     expect(TOUCH_KEYS.J).toBe("⚔");
+    // Three buttons: dodge and the bike share B (held for the bike), fishing is A.
+    expect(TOUCH_KEYS.K).toBe("B");
+    expect(TOUCH_KEYS.V).toBe("hold B");
+    expect(TOUCH_KEYS.R).toBe("A");
+    const labels = new Set(TOUCH_BUTTONS.map((b) => b.label));
+    for (const v of Object.values(TOUCH_LABEL)) expect(labels.has(v!.replace(/^hold /, "")) || v === "push the stick", v).toBe(true);
     expect(deviceKeys("Talk (E), then attack (J).", true)).toBe("Talk (A), then attack (⚔).");
     expect(deviceKeys("Talk (E), then attack (J).", false)).toBe("Talk (E), then attack (J).");
     for (const s of TUTORIAL_STEPS) expect(deviceKeys(s.hint, true), s.title).not.toMatch(/\((E|J)\)/);

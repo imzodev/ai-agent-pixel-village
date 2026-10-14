@@ -39,7 +39,7 @@ export default function QuestTracker({ step, progress, snap, touch, onSkip }: { 
         <div className="pixel-panel w-full max-w-sm p-4 text-amber-950">
           <div className="mb-1 text-lg font-bold">🌳 Welcome to the grove!</div>
           <p className="mb-3 text-sm leading-snug">Elder Oswin will show you around: five quick steps to farm, chop, fight and trade. Follow the golden arrow. Each step has a reward.</p>
-          <p className="mb-4 text-xs text-amber-900/80">{touch ? "Move with the arrow pad. Tap A to talk or use things, ⚔ to attack. ☰ has your bag, map and help." : "Move with WASD or the arrow keys. Press E to talk or use things, J to attack. ❓ Help shows every key."}</p>
+          <p className="mb-4 text-xs text-amber-900/80">{touch ? "Move with the stick (push it all the way to run). A talks and uses things, ⚔ attacks, B goes back. ☰ has your bag, map and help." : "Move with WASD or the arrow keys. Press E to talk or use things, J to attack. ❓ Help shows every key."}</p>
           <div className="flex gap-2">
             <button className="pixel-btn flex-1" onClick={() => { start(); void onSkip(); }}>Skip tutorial</button>
             <button className="pixel-btn flex-[2] font-bold" onClick={start}>Let&apos;s go!</button>

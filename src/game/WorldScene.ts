@@ -1090,6 +1090,8 @@ export class WorldScene extends Phaser.Scene {
     // never a walk to something far (click it, or its "Walk over", for that).
     const near = this.nearestCandidate(forInteract);
     if (near) { this.select(near); bus.emit("primaryAction", near); return; }
+    // Facing deep water with nothing else at hand: cast (one button on a phone).
+    if (this.fishing?.canFish()) { this.fishing.press(this.time.now); return; }
     bus.emit("toast", { text: "Nothing close enough to interact with.", kind: "info" });
   }
   /** Is there a loaf on this table you may still take? */

@@ -2,31 +2,30 @@
 // labels and positions, not keyboard characters — changing a keyboard
 // binding does NOT require editing this file. Only changing the set of
 // touch buttons does.
+//
+// The handheld layout: A (big, nearest the right thumb) does whatever is
+// in front of you, ⚔ attacks, B goes back (or rolls, with nothing open)
+// and, held, gets you on or off the bike. Running is pushing the stick all
+// the way (src/game/input/dpad.ts). Bag, map and shop are in the ☰ menu.
 
-import type { CommandId } from "@/types/input";
+import type { CommandId, TouchButton } from "@/types/input";
 
-export type TouchButton = {
-  readonly id: CommandId;
-  readonly label: string;
-  readonly ariaLabel: string;
-  /** Offset from the right edge (CSS length). */
-  readonly right: string;
-  /** Offset from the bottom edge (CSS length). */
-  readonly bottom: string;
-  /** Held, not tapped: the command stays held while the finger is down (attack keeps swinging). */
-  readonly hold?: boolean;
-};
-
-// A fixed grid in px (52px buttons, 60px pitch), so they never overlap on a
-// narrow phone the way percent offsets did. The bottom row sits above the
-// chat bar; A, the most used, is nearest the right thumb. Bag, map and shop
-// have no button here: they're in the ☰ menu (and on B / M / Y).
-/** The run toggle (src/game/InputSource.ts): above the attack button, still in the right thumb's reach. */
-export const RUN_BUTTON: Pick<TouchButton, "right" | "bottom"> = { right: "16px", bottom: "184px" };
+/** How long B must be held to get on or off the bike. */
+export const BIKE_HOLD_MS = 450;
 
 export const TOUCH_BUTTONS: readonly TouchButton[] = [
-  { id: "player.interact", label: "A", ariaLabel: "Interact", right: "16px", bottom: "64px" },
-  { id: "player.bike", label: "🚲", ariaLabel: "Get on or off your bike", right: "76px", bottom: "64px" },
-  { id: "player.attack", label: "⚔", ariaLabel: "Attack or chop (hold to keep going)", right: "16px", bottom: "124px", hold: true },
-  { id: "player.dodge", label: "💨", ariaLabel: "Dodge roll", right: "76px", bottom: "124px" },
+  // Near the bottom edge (on touch the chat is a 💬 button, not a bar), and
+  // B's top level with the arrow pad's (src/components/GameCanvas.tsx).
+  { id: "player.interact", label: "A", ariaLabel: "Interact: talk, pick up, open, fish", right: "16px", bottom: "22px", size: "big" },
+  { id: "player.attack", label: "⚔", ariaLabel: "Attack or chop (hold to keep going)", right: "92px", bottom: "18px", hold: true },
+  { id: "ui.back", label: "B", ariaLabel: "Back (or dodge); hold to get on or off your bike", right: "24px", bottom: "100px", longPress: "player.bike" },
 ];
+
+/** What each button stands for in hints (B also means the bike, when held). */
+export const TOUCH_LABEL: Readonly<Partial<Record<CommandId, string>>> = {
+  "player.dodge": "B",
+  "ui.close": "B",
+  "player.bike": "hold B",
+  "player.fish": "A",
+  "move.run": "push the stick",
+};

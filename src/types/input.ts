@@ -31,6 +31,9 @@ export type CommandId =
   | "ui.shop"
   | "ui.map"
   | "ui.close"
+  // Touch B: back (closes the topmost thing, like Esc) or, with nothing
+  // open, a dodge roll. Long-pressing B is the bike (src/game/InputSource.ts).
+  | "ui.back"
   | "move.up"
   | "move.down"
   | "move.left"
@@ -61,4 +64,21 @@ export type InputCommand = {
 /** Snapshot of the world the router needs to gate dispatch. */
 export type InputContext = {
   textFocused: boolean;
+};
+
+/** An on-screen touch button (src/game/input/touchButtons.ts). */
+export type TouchButton = {
+  readonly id: CommandId;
+  readonly label: string;
+  readonly ariaLabel: string;
+  /** Offset from the right edge (CSS length). */
+  readonly right: string;
+  /** Offset from the bottom edge (CSS length). */
+  readonly bottom: string;
+  /** Held, not tapped: the command stays held while the finger is down (attack keeps swinging). */
+  readonly hold?: boolean;
+  /** Held for BIKE_HOLD_MS: this command instead, and the tap is dropped. */
+  readonly longPress?: CommandId;
+  /** The main button is drawn bigger. */
+  readonly size?: "big";
 };

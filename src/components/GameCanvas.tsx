@@ -102,11 +102,11 @@ export default function GameCanvas() {
         .grove-input .grove-dpad {
           position: absolute;
           left: 16px;
-          bottom: 64px;
+          bottom: 18px;
           display: grid;
-          grid-template-columns: repeat(3, 52px);
-          grid-template-rows: repeat(3, 52px);
-          gap: 4px;
+          grid-template-columns: repeat(3, 42px);
+          grid-template-rows: repeat(3, 42px);
+          gap: 2px;
           pointer-events: auto;
           touch-action: none;
           user-select: none;
@@ -125,11 +125,38 @@ export default function GameCanvas() {
         .grove-input .grove-dpad-arrow {
           border-radius: 12px;
         }
-        /* The run toggle wears the action-button look (grove-action-btn), lit while on. */
-        .grove-input .grove-dpad-arrow.active,
-        .grove-input .grove-run-btn.active {
+        .grove-input .grove-dpad-arrow.active {
           background: rgba(255, 200, 80, 0.6);
           border-color: rgba(255, 230, 160, 0.9);
+        }
+        /* Pushed all the way out: running. The lit arrow glows hotter. */
+        .grove-input .grove-dpad.running .grove-dpad-arrow.active {
+          background: rgba(255, 150, 60, 0.75);
+          border-color: rgba(255, 220, 140, 1);
+          box-shadow: 0 0 12px rgba(255, 170, 70, 0.8);
+        }
+        /* A, the main button: bigger, warmer. */
+        .grove-input .grove-action-btn.grove-big {
+          width: 68px;
+          height: 68px;
+          border-radius: 34px;
+          font-size: 24px;
+          background: rgba(40, 110, 70, 0.6);
+        }
+        /* B held: a ring fills while the bike long-press charges. */
+        .grove-input .grove-action-btn.charging {
+          background: conic-gradient(rgba(255, 210, 90, 0.75) var(--fill, 0%), rgba(20, 28, 50, 0.55) 0);
+          animation: grove-charge 450ms linear forwards;
+        }
+        @property --fill { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+        @keyframes grove-charge { to { --fill: 100%; } }
+        .grove-input .grove-btn-badge {
+          position: absolute;
+          right: -4px;
+          bottom: -4px;
+          font-size: 13px;
+          line-height: 1;
+          pointer-events: none;
         }
       `}</style>
     </div>

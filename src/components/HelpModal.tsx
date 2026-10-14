@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { inputRouter } from "@/game/input/router";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import { TOUCH_KEYS } from "@/lib/keyHints";
+import { TOUCH_BUTTONS, TOUCH_LABEL } from "@/game/input/touchButtons";
 import type { CommandId } from "@/types/input";
 
 const CONTROLS: readonly [CommandId | "move", string][] = [
@@ -43,12 +44,15 @@ export default function HelpModal({ touch, onClose }: { touch: boolean; onClose:
   }), [onClose]);
 
   const keyFor = (c: CommandId | "move"): string => {
-    if (c === "move") return touch ? "Arrow pad" : "WASD / arrows";
+    if (c === "move") return touch ? "Stick" : "WASD / arrows";
     const k = formatBinding(c);
     if (!k) return "";
     const shown = prettyKey(k);
-    return touch ? TOUCH_KEYS[shown] ?? "Buttons on the villager's card" : shown;
+    if (!touch) return shown;
+    // The touch control for this command: its own button, a shared one (B, A), or by key.
+    return TOUCH_BUTTONS.find((b) => b.id === c)?.label ?? TOUCH_LABEL[c] ?? TOUCH_KEYS[shown] ?? "Buttons on the villager's card";
   };
+  const whatFor = (c: CommandId | "move", what: string): string => (touch && c === "move" ? "Walk (push it all the way out to run)" : what);
 
   return (
     <div role="dialog" aria-modal="true" aria-label="How to play" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
@@ -64,7 +68,7 @@ export default function HelpModal({ touch, onClose }: { touch: boolean; onClose:
               {CONTROLS.filter(([c]) => keyFor(c)).map(([c, what]) => (
                 <tr key={c} className="border-t border-amber-900/10">
                   <td className="w-32 py-1 pr-2 align-top"><span className="rounded bg-amber-100 px-1.5 py-0.5 font-bold">{keyFor(c)}</span></td>
-                  <td className="py-1">{what}</td>
+                  <td className="py-1">{whatFor(c, what)}</td>
                 </tr>
               ))}
             </tbody>
