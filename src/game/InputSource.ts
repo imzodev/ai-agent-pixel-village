@@ -89,6 +89,7 @@ export function createInputSource(opts: {
     run.classList.toggle("active", running);
     run.setAttribute("aria-pressed", String(running));
   });
+  run.addEventListener("touchend", (e) => { if (e.cancelable) e.preventDefault(); }); // no follow-up click (see the action buttons)
   opts.container.appendChild(run);
 
   // Presses on the touch controls stay there: Phaser listens on the window
@@ -109,6 +110,12 @@ export function createInputSource(opts: {
     el.style.position = "absolute";
     el.style.right = b.right;
     el.style.bottom = b.bottom;
+    // No follow-up click when the finger lifts: A acts on touch-down, and if
+    // that opened a window (the farm, a shop), the browser's click would land
+    // on the window's backdrop under the finger and close it straight away.
+    // Only cancelling touchend stops that click; preventDefault on
+    // pointerdown doesn't.
+    el.addEventListener("touchend", (e) => { if (e.cancelable) e.preventDefault(); });
     if (b.hold) {
       // Held while the finger is down (pointer capture keeps the release ours).
       el.addEventListener("pointerdown", (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); opts.router.setHeld(b.id, true); });
