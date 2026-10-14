@@ -1401,7 +1401,7 @@ export default function Hud() {
 
       {/* Side panels */}
       {panel && (
-        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
+        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] z-20 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
@@ -1446,7 +1446,7 @@ export default function Hud() {
 
       {/* Building interior */}
       {building && (
-        <div className="pointer-events-auto absolute left-1/2 top-1/2 flex max-h-[calc(100dvh-1.5rem)] w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col pixel-panel p-4 shadow-2xl">
+        <div className="pointer-events-auto absolute left-1/2 top-1/2 z-30 flex max-h-[calc(100dvh-1.5rem)] w-[min(94vw,520px)] -translate-x-1/2 -translate-y-1/2 flex-col pixel-panel p-4 shadow-2xl">
           {/* The title and ✕ stay put; everything below scrolls, so a long tab (Build, Workshop…) never pushes the window off a phone screen. */}
           <div className="flex shrink-0 items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button></div>
           <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
