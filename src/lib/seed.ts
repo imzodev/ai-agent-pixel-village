@@ -191,12 +191,12 @@ export { NPC_DEFS };
 // each kind in its own paddock (src/lib/villageRanch.json); pets stay near
 // the houses; wild species live in the WILD_ZONES outskirts ring.
 const ANIMAL_DEFS: { species: string; names: string[]; zone: { x: number; y: number; w: number; h: number } }[] = [
-  { species: "sheep", names: ["Clover", "Dumpling", "Mabel"], zone: paddock("sheep") },
-  { species: "cow", names: ["Buttercup", "Juniper"], zone: paddock("cow") },
-  { species: "pig", names: ["Truffle", "Hamlet"], zone: paddock("pig") },
-  { species: "llama", names: ["Paco", "Luna"], zone: paddock("llama") },
-  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit"], zone: paddock("chicken") },
-  { species: "duck", names: ["Puddle", "Waddles", "Quilliam"], zone: paddock("duck") },
+  { species: "sheep", names: ["Clover", "Dumpling", "Mabel", "Bramble", "Woolsey", "Pippa"], zone: paddock("sheep") },
+  { species: "cow", names: ["Buttercup", "Juniper", "Daisy", "Maple"], zone: paddock("cow") },
+  { species: "pig", names: ["Truffle", "Hamlet", "Pudding", "Rosie"], zone: paddock("pig") },
+  { species: "llama", names: ["Paco", "Luna", "Quinoa", "Pepe"], zone: paddock("llama") },
+  { species: "chicken", names: ["Nugget", "Pecky", "Henrietta", "Biscuit", "Clucky", "Poppy", "Ginger", "Sunny", "Feathers", "Eggbert", "Penny", "Goldie"], zone: paddock("chicken") },
+  { species: "duck", names: ["Puddle", "Waddles", "Quilliam", "Dabble", "Ripple", "Duckworth"], zone: paddock("duck") },
   { species: "rabbit", names: ["Thimble", "Moss"], zone: tileRect(6, -54, 30, 20) },
   // The fox's den: the meadow just east of the ranch fence, near enough to
   // reach the hen yard (round by the south gate) for its egg raids.
