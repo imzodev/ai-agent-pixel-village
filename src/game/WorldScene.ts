@@ -443,9 +443,16 @@ export class WorldScene extends Phaser.Scene {
       if (over.length > 0) return;
       this.dragging = false;
       if (this.player) {
-        const wp = this.cameras.main.getWorldPoint(p.x, p.y);
-        this.moveTarget = { x: wp.x, y: wp.y };
-        this.marker.setPosition(wp.x, wp.y).setVisible(true);
+        // A tap on the ground clears the card. Walking to the spot is for a
+        // mouse only: on a phone a thumb that just misses an arrow lands here,
+        // and would send you somewhere you never meant to go (the stick and
+        // the card's "Walk over" do that on purpose).
+        const touch = p.wasTouch || (p.event as PointerEvent | undefined)?.pointerType === "touch";
+        if (!touch) {
+          const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+          this.moveTarget = { x: wp.x, y: wp.y };
+          this.marker.setPosition(wp.x, wp.y).setVisible(true);
+        }
         bus.emit("select", null);
       }
     });

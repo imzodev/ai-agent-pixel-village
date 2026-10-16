@@ -98,11 +98,14 @@ export default function GameCanvas() {
         .grove-input .grove-action-btn:active {
           background: rgba(255, 200, 80, 0.5);
         }
-        /* Arrow pad (left thumb): arrows on a 3×3 cross. */
+        /* Arrow pad (left thumb): arrows on a 3×3 cross, with an invisible
+           16px margin that also takes touches, so a thumb that just misses
+           an arrow still steers that way (the offsets keep the arrows put). */
         .grove-input .grove-dpad {
           position: absolute;
-          left: 16px;
-          bottom: 18px;
+          left: 0;
+          bottom: 2px;
+          padding: 16px;
           display: grid;
           grid-template-columns: repeat(3, 42px);
           grid-template-rows: repeat(3, 42px);
