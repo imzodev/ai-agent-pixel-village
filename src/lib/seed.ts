@@ -139,7 +139,7 @@ export const ITEM_DEFS = [
   { key: "bookshelf", name: "Bookshelf", kind: "furniture", icon: "📚", description: "Mostly cookbooks.", value: 16, placeable: true },
   { key: "painting", name: "Landscape Painting", kind: "furniture", icon: "🖼️", description: "The grove at dusk.", value: 15, placeable: true },
   { key: "discount", name: "Discount Code", kind: "discount", icon: "🎟️", description: "A real code from a real sponsor.", value: 0 },
-  { key: "fox_charm", name: "Fox Charm", kind: "trophy", icon: "🦊", description: "The fox trusts you now.", value: 25 },
+  { key: "fox_charm", name: "Fox Charm", kind: "trophy", icon: "🦊", description: "The fox trusts you now. Wear it: your ranch animals warm to you faster.", value: 25, equippable: true },
   { key: "elder_seal", name: "Elder's Seal", kind: "trophy", icon: "🔏", description: "Proof you helped the village.", value: 30 },
   // Ranch growth (src/lib/ranchUpgrades.ts): quality goods from happy animals, workshop goods, and Bjorn's fittings.
   { key: "golden_egg", name: "Golden Egg", kind: "material", icon: "🥚", description: "From a hen who adores you. Worth a small fortune.", value: 15 },

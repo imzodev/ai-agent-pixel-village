@@ -144,6 +144,8 @@ export function applyBuild(g: RanchGrowth, s: BuildStep, now: number): RanchGrow
 
 // ── Care and quality ─────────────────────────────────────────────────────
 export const PET_AFFECTION = 8;
+/** The same pet with the Fox Charm worn (src/lib/gear.ts, the charm slot). */
+export const FOX_CHARM_AFFECTION = 12;
 /** An animal gains affection from petting once per this. */
 export const PET_COOLDOWN_MS = 20 * 3600_000;
 export const FED_AFFECTION = 2;

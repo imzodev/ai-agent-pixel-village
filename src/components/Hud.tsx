@@ -1,4 +1,5 @@
 "use client";
+import { GEAR_SLOT_LABEL, slotOf } from "@/lib/gear";
 import { RANCH_PICKS } from "@/lib/ranchPicks";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -1655,11 +1656,24 @@ function LoginModal({ onClose }: { onClose: () => void }) {
 function BagPanel({ me, onAction, onRead }: { me: Me | null; onAction: (b: Record<string, unknown>, m?: string) => Promise<void>; onRead: (mapId: number) => void }) {
   if (!me) return <div>Loading…</div>;
   if (me.inventory.length === 0) return <div className="text-stone-500">Empty. Pet a chicken, pick a berry, talk to a baker.</div>;
+  // What's worn in each gear slot (src/lib/gear.ts): a weapon, the lantern and a charm go together.
+  const worn = me.inventory.filter((i) => i.equipped);
   return (
     <div className="space-y-1.5">
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-amber-100/80 p-1.5 text-[11px]">
+        {Object.entries(GEAR_SLOT_LABEL).map(([slot, l]) => {
+          const it = worn.find((w) => slotOf(w.itemKey) === slot);
+          return (
+            <div key={slot} className="min-w-0 rounded bg-white/70 px-1.5 py-1" title={l!.name}>
+              <div className="font-bold text-amber-900">{l!.icon} {l!.name}</div>
+              <div className="truncate text-stone-600">{it ? `${it.def?.icon ?? ""} ${it.def?.name ?? it.itemKey}` : "—"}</div>
+            </div>
+          );
+        })}
+      </div>
       {me.inventory.map((i) => (
         <div key={i.id} className={`rounded-lg border-2 bg-white p-2 ${i.equipped ? "border-emerald-500" : "border-transparent"}`} style={i.itemKey === "discount" ? { borderColor: String(i.meta.color ?? "#e76f51") } : undefined}>
-          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
+          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped · {GEAR_SLOT_LABEL[slotOf(i.itemKey)]?.name.toLowerCase()}</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {i.def?.kind === "consumable" && <Sm on={() => onAction({ action: "use", inventoryId: i.id })}>Eat</Sm>}
             {i.itemKey === "treasure_map" && typeof i.meta.mapId === "number" && <Sm on={() => onRead(i.meta.mapId as number)}>🔍 Read</Sm>}

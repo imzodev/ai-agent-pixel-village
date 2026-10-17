@@ -30,7 +30,7 @@ const STAGGER_DMG_MULT = 1.5;
 /** When each player last loosed an arrow (the draw takes SHOT_COOLDOWN_MS). */
 const lastShot = new Map<number, number>();
 
-import { PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } from "@/lib/ranchUpgrades";
+import { FOX_CHARM_AFFECTION, PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } from "@/lib/ranchUpgrades";
 import { createMoment } from "@/lib/momentsServer";
 import { lairBossMoment, rootkingMoment } from "@/lib/moments";
 import { cleanPlayerChat } from "@/lib/moderation";
@@ -81,7 +81,8 @@ export async function POST(req: Request) {
       const recently = a.lastPettedAt && Date.now() - a.lastPettedAt.getTime() < 20_000;
       // Your own ranch animals grow fond of you: affection once a day (src/lib/ranchUpgrades.ts).
       const fond = a.ranchKey != null && a.ownerId === me.id && (!a.lastPettedAt || Date.now() - a.lastPettedAt.getTime() >= PET_COOLDOWN_MS);
-      await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5), ...(fond ? { affection: clampAffection(a.affection + PET_AFFECTION) } : {}) }).where(eq(animals.id, a.id));
+      const fondBy = fond && (await gearOf(me.id)).equipped.includes("fox_charm") ? FOX_CHARM_AFFECTION : PET_AFFECTION;
+      await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5), ...(fond ? { affection: clampAffection(a.affection + fondBy) } : {}) }).where(eq(animals.id, a.id));
       const reactions: Record<string, string[]> = {
         sheep: ["baas softly and leans into your hand", "closes its eyes and hums"],
         cow: ["moos approvingly", "licks your sleeve"],

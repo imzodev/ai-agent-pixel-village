@@ -131,6 +131,10 @@ export type Animal = {
   stateUntil: Date | null;
 };
 
+/** Where a worn item goes (src/lib/gear.ts): one item per slot. Cosmetics
+ *  (hat, outfit…) are separate, looks-only slots. */
+export type GearSlot = "weapon" | "offhand" | "charm" | "armor" | "feet";
+
 export type ItemKind =
   | "material"
   | "consumable"

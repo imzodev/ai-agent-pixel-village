@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { toUnequip } from "@/lib/gear";
 import { db } from "@/db";
 import { characters, groundItems, homeDecor, inventory, items, treasureMaps } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
@@ -70,9 +71,11 @@ export async function POST(req: Request) {
         await db.update(inventory).set({ equipped: false }).where(eq(inventory.id, row.id));
         return Response.json({ ok: true, message: `Unequipped ${def.name}.` });
       }
-      // one item per kind slot
-      const same = await db.select().from(inventory).innerJoin(items, eq(items.key, inventory.itemKey)).where(and(eq(inventory.characterId, me.id), eq(inventory.equipped, true), eq(items.kind, def.kind)));
-      for (const s of same) await db.update(inventory).set({ equipped: false }).where(eq(inventory.id, s.inventory.id));
+      // One item per gear slot (src/lib/gear.ts): a sword, the lantern and a
+      // charm are worn together; a second sword replaces the first.
+      const worn = await db.select({ id: inventory.id, itemKey: inventory.itemKey }).from(inventory).where(and(eq(inventory.characterId, me.id), eq(inventory.equipped, true)));
+      const off = new Set(toUnequip(worn.map((w) => w.itemKey), row.itemKey));
+      for (const w of worn) if (off.has(w.itemKey)) await db.update(inventory).set({ equipped: false }).where(eq(inventory.id, w.id));
       await db.update(inventory).set({ equipped: true }).where(eq(inventory.id, row.id));
       return Response.json({ ok: true, message: `Equipped ${def.name}.` });
     }
