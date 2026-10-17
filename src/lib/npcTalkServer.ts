@@ -24,7 +24,7 @@ import { townAt } from "@/lib/settlements";
 import { isMindNpc } from "@/lib/mind/config";
 import { remember } from "@/lib/mind/mindServer";
 import {
-  LINE_GAP_MS, RUMOUR_TTL_MS, TALKS_DAILY_MAX, clampAffinity, findPairs, isGossip, pairKey, parseTalk,
+  LINE_GAP_MS, MIN_LINES, RUMOUR_TTL_MS, TALKS_DAILY_MAX, clampAffinity, findPairs, isGossip, pairKey, parseTalk,
   rumoursToTell, startingAffinity, talkGist, talkPrompt, visitTarget, watched, witnesses, WATCH_PX,
 } from "./npcTalk";
 import type { GossipEvent, Rumour, TalkNpc, TalkPair, TalkRelation, TalkSide } from "@/types/npcTalk";
@@ -36,7 +36,8 @@ const RUN_EVERY_MS = 30_000;
 const VISIT_EVERY_MS = 90_000;
 /** A visit that hasn't led to a talk by now is given up, and the visitor goes home. */
 const VISIT_GIVE_UP_MS = 4 * 60_000;
-const LLM_TIMEOUT_MS = 15_000;
+/** Conversations run in the background: a slow provider (a reasoning model) gets time. */
+const LLM_TIMEOUT_MS = 30_000;
 
 const g = globalThis as typeof globalThis & {
   __npcTalk?: {
@@ -218,12 +219,18 @@ async function talk(a: NpcRow, b: NpcRow, p: TalkPair, now: number): Promise<voi
   const side = (n: NpcRow, doing: string, rumours: Rumour[]): TalkSide => ({ key: n.key, name: n.name, role: n.role, persona: n.persona, mood: n.mood, doing, rumours });
   const hour = ws ? gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes, now) : 12;
   const prompt = talkPrompt(side(a, doingA, tellA), side(b, doingB, tellB), rel, { place: placeOf((p.a.x + p.b.x) / 2, (p.a.y + p.b.y) / 2), hour, weather: ws?.weather ?? "clear" });
-  const res = await Promise.race([
-    chatWithFallback([{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }], { jsonMode: true, temperature: 0.95, maxTokens: 1500 }).catch(() => null),
-    new Promise<null>((r) => setTimeout(() => r(null), LLM_TIMEOUT_MS)),
-  ]);
   const offered = new Set([...tellA, ...tellB].map((r) => r.id));
-  const out = res ? parseTalk(res.text, offered) : null;
+  // A short or cut-off reply isn't a conversation: ask once more, with more room and a reminder.
+  let out = null;
+  for (const [attempt, maxTokens] of [[0, 2000], [1, 3000]] as const) {
+    const user = attempt === 0 ? prompt.user : `${prompt.user}\n\nRemember: at least ${MIN_LINES} lines, taking turns, each of them speaking at least twice.`;
+    const res = await Promise.race([
+      chatWithFallback([{ role: "system", content: prompt.system }, { role: "user", content: user }], { jsonMode: true, temperature: 0.95, maxTokens, timeoutMs: LLM_TIMEOUT_MS }).catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), LLM_TIMEOUT_MS)),
+    ]);
+    out = res ? parseTalk(res.text, offered) : null;
+    if (out) break;
+  }
   if (!out) return;
 
   // Hold them still while they talk, then say the lines one after another.

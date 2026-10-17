@@ -307,7 +307,7 @@ run by tickd every 30 s):
 - **Meetings**: two NPCs within `MEET_PX` (5 tiles), both free, the pair not within
   `NPC_TALK_PAIR_MS` (3 min) and each NPC not within `NPC_TALK_NPC_MS` (1 min).
 - **Only where a player can see** (`WATCH_PX`, about a screen): one LLM call writes a
-  3–6 line conversation (JSON, `parseTalk` checks it), held still and said as
+  4–6 line back-and-forth, each NPC speaking at least twice (JSON, `parseTalk` checks it; a short or cut-off reply is asked for once more), held still and said as
   alternating bubbles `LINE_GAP_MS` apart. Unwatched meetings only pass a rumour on,
   no LLM. `NPC_TALKS_DAILY_MAX` (600) caps them, on top of `LLM_DAILY_MAX`.
 - **Visits**: near a watching player with nobody close, an NPC walks over to a

@@ -20,8 +20,8 @@ export const PAIR_COOLDOWN_MS = env("NPC_TALK_PAIR_MS", 3 * 60_000);
 export const NPC_COOLDOWN_MS = env("NPC_TALK_NPC_MS", 60_000);
 /** Conversations a day, at most (watched ones: each is one LLM call). */
 export const TALKS_DAILY_MAX = env("NPC_TALKS_DAILY_MAX", 600);
-/** Lines in a conversation, and how far apart they're said. */
-export const MIN_LINES = 3, MAX_LINES = 6, LINE_GAP_MS = 3500;
+/** Lines in a conversation (each NPC speaks at least MIN_TURNS times, taking turns), and how far apart they're said. */
+export const MIN_LINES = 4, MAX_LINES = 6, MIN_TURNS = 2, LINE_GAP_MS = 3500;
 /** Most words in a line. */
 export const MAX_WORDS = 22;
 /** Rumours fade after this. */
@@ -130,7 +130,7 @@ ${side(b, "B")}
 
 HOW THEY TALK:
 ${TALK_RULES}
-- ${MIN_LINES} to ${MAX_LINES} lines in all, taking turns (A starts), each at most ${MAX_WORDS - 4} words.
+- A real back-and-forth: ${MIN_LINES} to ${MAX_LINES} lines, strictly taking turns (A, B, A, B…), so each of them speaks at least ${MIN_TURNS} times. Each line answers or follows on from the one before. Each at most ${MAX_WORDS - 4} words.
 - Talk about what's really going on: their work, what they're doing, each other, the weather, and any news they could pass on. Pass news on in their own words, as gossip.
 - Never invent places, people, items or events that aren't above.
 
@@ -161,7 +161,15 @@ export function parseTalk(raw: string, offered: ReadonlySet<number>): TalkResult
     lines.push({ who: l.who, text: words.length > MAX_WORDS ? `${words.slice(0, MAX_WORDS).join(" ")}…` : text });
     if (lines.length >= MAX_LINES) break;
   }
-  if (lines.length < 2 || lines[0].who === lines[1].who) return null;
+  // A real back-and-forth: taking turns (a run by the same speaker is folded into one line), each speaking at least MIN_TURNS times.
+  const turns: TalkLine[] = [];
+  for (const l of lines) {
+    const last = turns[turns.length - 1];
+    if (last && last.who === l.who) last.text = `${last.text} ${l.text}`;
+    else turns.push({ ...l });
+  }
+  lines.splice(0, lines.length, ...turns.slice(0, MAX_LINES));
+  if (lines.filter((l) => l.who === "A").length < MIN_TURNS || lines.filter((l) => l.who === "B").length < MIN_TURNS) return null;
   const told = Array.isArray(o.told) ? (o.told as unknown[]).map(Number).filter((n) => offered.has(n)) : [];
   const d = Number(o.relation?.delta);
   const delta = (d > 0 ? 1 : d < 0 ? -1 : 0) as -1 | 0 | 1;

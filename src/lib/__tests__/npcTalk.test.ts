@@ -92,18 +92,23 @@ describe("the conversation", () => {
     expect(p.user).toMatch(/in the grove.*9:00.*rain.*friendly.*2 times/);
   });
   it("takes alternating spoken lines, trims long ones, keeps only offered news", () => {
-    const raw = `<think>hmm</think>{"lines":[{"who":"A","text":"Morning! *waves* Wheat's coming in gold."},{"who":"B","text":"${"word ".repeat(40)}"},{"who":"C","text":"no"},{"who":"A","text":"Heard Mariana caught a golden trout."}],"told":[9,99],"relation":{"delta":3,"note":"old friends"}}`;
+    const raw = `<think>hmm</think>{"lines":[{"who":"A","text":"Morning! *waves* Wheat's coming in gold."},{"who":"B","text":"${"word ".repeat(40)}"},{"who":"C","text":"no"},{"who":"A","text":"Heard Mariana caught a golden trout."},{"who":"B","text":"Did she now!"}],"told":[9,99],"relation":{"delta":3,"note":"old friends"}}`;
     const r = parseTalk(raw, new Set([9]))!;
-    expect(r.lines.map((l) => l.who)).toEqual(["A", "B", "A"]);
+    expect(r.lines.map((l) => l.who)).toEqual(["A", "B", "A", "B"]);
     expect(r.lines[0].text).toBe("Morning! Wheat's coming in gold."); // the *gesture* is dropped
     expect(r.lines[1].text.endsWith("…")).toBe(true);
     expect(r.told).toEqual([9]);
     expect(r.relation).toEqual({ delta: 1, note: "old friends" });
     expect(parseTalk("not json", new Set())).toBeNull();
-    // cut off mid-reply: the whole lines are kept
-    const cut = parseTalk('{"lines":[{"who":"A","text":"Morning, Hollis!"},{"who":"B","text":"Good \\"haul\\"."},{"who":"A","text":"I got thr', new Set())!;
-    expect(cut.lines).toEqual([{ who: "A", text: "Morning, Hollis!" }, { who: "B", text: 'Good "haul".' }]);
+    // cut off mid-reply: the whole lines are kept, if it's still a back-and-forth
+    const cut = parseTalk('{"lines":[{"who":"A","text":"Morning, Hollis!"},{"who":"B","text":"Good \\"haul\\"."},{"who":"A","text":"Twelve sheaves."},{"who":"B","text":"Fine work."},{"who":"A","text":"I got thr', new Set())!;
+    expect(cut.lines.map((l) => l.text)).toEqual(["Morning, Hollis!", 'Good "haul".', "Twelve sheaves.", "Fine work."]);
+    expect(parseTalk('{"lines":[{"who":"A","text":"Morning, Hollis!"},{"who":"B","text":"Morning."},{"who":"A","text":"I got thr', new Set())).toBeNull(); // too short to be a talk
     expect(parseTalk('{"lines":[{"who":"A","text":"hi"},{"who":"A","text":"me again"}]}', new Set())).toBeNull(); // not a conversation
+    // each speaks at least twice; two lines in a row by one speaker are one turn
+    expect(parseTalk('{"lines":[{"who":"A","text":"Hi."},{"who":"B","text":"Hello."},{"who":"A","text":"Bye."}]}', new Set())).toBeNull();
+    const folded = parseTalk('{"lines":[{"who":"A","text":"Hi."},{"who":"A","text":"Busy day?"},{"who":"B","text":"Very."},{"who":"A","text":"Same."},{"who":"B","text":"Ha."}]}', new Set())!;
+    expect(folded.lines).toEqual([{ who: "A", text: "Hi. Busy day?" }, { who: "B", text: "Very." }, { who: "A", text: "Same." }, { who: "B", text: "Ha." }]);
     const many = parseTalk(JSON.stringify({ lines: Array.from({ length: 12 }, (_, i) => ({ who: i % 2 ? "B" : "A", text: `line ${i}` })) }), new Set())!;
     expect(many.lines).toHaveLength(MAX_LINES);
   });
