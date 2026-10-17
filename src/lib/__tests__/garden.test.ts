@@ -3,7 +3,8 @@
 
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isRipe, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
+import { isRipe, planRegrowth, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
+import { stageMs } from "@/lib/vineyard";
 import { gardenCellsOf, gardenPlotsAt } from "@/lib/buildingManifest";
 import { NODE_SHEETS, CROP_KINDS, FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, GARDEN_CROPS, HARVEST_SEED_CHANCE } from "@/lib/crops";
 import { SHOP_STOCK, findBuyer } from "@/lib/trade";
@@ -153,5 +154,28 @@ describe("farmPlan (Plant / Harvest / Water all)", () => {
       crop(14, 5, { ownerId: 99 }),                 // a neighbour's: yes (anyone may water)
     ];
     expect(farmPlan([], crops, 7).thirsty).toEqual([10, 14]);
+  });
+});
+
+describe("regrowth (tickd's once-a-beat pass)", () => {
+  const now = 1_000_000;
+  it("moves each due node one stage on, and times the next one by its kind", () => {
+    const radish = CROP_KINDS.radish_crop, tree = CROP_KINDS.apple_tree;
+    const w = planRegrowth([
+      { id: 1, kind: "radish_crop", stage: 1, ownerId: 7 },
+      { id: 2, kind: "radish_crop", stage: radish.stages - 2, ownerId: 7 },
+      { id: 3, kind: "apple_tree", stage: tree.perennial!.mature, ownerId: null },
+    ], new Set(), now, 0.5);
+    expect(w).toEqual([
+      { id: 1, fromStage: 1, stage: 2, nextAdvanceAt: now + radish.regrowthMs },
+      { id: 2, fromStage: radish.stages - 2, stage: radish.stages - 1, nextAdvanceAt: null }, // ripe: nothing more to time
+      { id: 3, fromStage: tree.perennial!.mature, stage: tree.perennial!.mature + 1, nextAdvanceAt: now + stageMs(tree, tree.perennial!.mature + 1) }, // the fruit's pace
+    ]);
+  });
+  it("Green Thumb owners' crops grow faster; unknown or non-growing kinds are skipped", () => {
+    const radish = CROP_KINDS.radish_crop;
+    const [w] = planRegrowth([{ id: 1, kind: "radish_crop", stage: 1, ownerId: 7 }], new Set([7]), now, 0.5);
+    expect(w.nextAdvanceAt).toBe(now + Math.round(radish.regrowthMs * 0.5));
+    expect(planRegrowth([{ id: 9, kind: "no_such_kind", stage: 0, ownerId: null }], new Set(), now, 1)).toEqual([]);
   });
 });

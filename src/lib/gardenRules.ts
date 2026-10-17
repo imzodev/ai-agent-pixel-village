@@ -1,7 +1,9 @@
 // Pure garden rules (no DB), shared by src/lib/garden.ts and the client.
 // Random rolls take `rand` (returns [0, 1)) so tests can pin them.
 
-import { FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, HARVEST_SEED_CHANCE, HARVEST_SEED_QTY } from "./crops";
+import { FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, HARVEST_SEED_CHANCE, HARVEST_SEED_QTY, getCropKind } from "./crops";
+import { stageMs } from "./vineyard";
+import type { RegrowthDue, RegrowthWrite } from "@/types/garden";
 
 /** True when a crop at `stage` of a kind with `stages` stages is ready. */
 export function isRipe(stage: number, stages: number): boolean {
@@ -56,4 +58,23 @@ export function farmPlan(
     ripe: crops.filter((c) => c.ownerId === ownerId && isRipe(c.stage, c.stages)).map((c) => c.id),
     thirsty: crops.filter((c) => waterCheck(c, c.stages) === null).map((c) => c.id),
   };
+}
+
+/**
+ * The next stage of every node due to grow (tickd, once a beat): one stage
+ * up, and when the stage after it is due (a perennial's fruit at its own
+ * pace; Green Thumb owners' crops faster), or null once it's fully grown.
+ * Kinds that don't regrow are left out.
+ */
+export function planRegrowth(due: readonly RegrowthDue[], thumbs: ReadonlySet<number>, now: number, greenThumbMult: number): RegrowthWrite[] {
+  const out: RegrowthWrite[] = [];
+  for (const row of due) {
+    const cfg = getCropKind(row.kind);
+    if (!cfg || cfg.regrowthMs <= 0) continue;
+    const stage = row.stage + 1;
+    const fullyGrown = stage >= cfg.stages - 1;
+    const ms = Math.round(stageMs(cfg, stage) * (row.ownerId != null && thumbs.has(row.ownerId) ? greenThumbMult : 1));
+    out.push({ id: row.id, fromStage: row.stage, stage, nextAdvanceAt: fullyGrown ? null : now + ms });
+  }
+  return out;
 }

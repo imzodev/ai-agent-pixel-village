@@ -111,3 +111,9 @@ export type FarmView = {
   /** The crop E was pressed on: its name, stage and how long until it's ripe. */
   hereStatus: string | null;
 };
+
+/** A resource node due to grow a stage (tickd's regrowth pass, src/lib/gardenRules.ts planRegrowth). */
+export type RegrowthDue = { id: number; kind: string; stage: number; ownerId: number | null };
+
+/** One node's next stage, written in one batched UPDATE per beat (src/lib/sim.ts). */
+export type RegrowthWrite = { id: number; fromStage: number; stage: number; nextAdvanceAt: number | null };

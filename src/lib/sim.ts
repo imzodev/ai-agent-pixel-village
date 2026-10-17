@@ -1,7 +1,7 @@
 import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, bossLairs, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks, worldChat } from "@/db/schema";
-import { getCropKind } from "@/lib/crops";
+import { planRegrowth } from "@/lib/gardenRules";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
 import { LAIR_BOSSES, lairReady, lairSpot } from "./lairs";
@@ -44,7 +44,6 @@ import { maybeOpenBlock } from "./homesteadServer";
 let lastRowCheck = 0;
 /** How long world chat is kept (the privacy policy promises this). */
 const CHAT_KEEP_MS = 30 * 24 * 3600_000;
-import { stageMs } from "./vineyard";
 import { advanceTrips, lingerSpots, npcsOnTrips } from "./nav/trips";
 import { refreshBounties } from "./bountiesServer";
 import { tickEncounters } from "./encountersServer";
@@ -370,7 +369,7 @@ async function tickWeather(ws: typeof worldState.$inferSelect, now: Date) {
   }
 }
 
-async function tickResources(now: Date) {
+export async function tickResources(now: Date) {
   // Advance stage for any resource node whose regrowth timer has
   // elapsed. Picking resets the timer, so this only ever moves nodes
   // toward (never past) `stages - 1`. Kinds with regrowthMs = 0 never
@@ -380,27 +379,28 @@ async function tickResources(now: Date) {
     .select({ id: resourceNodes.id, kind: resourceNodes.kind, stage: resourceNodes.stage, ownerId: resourceNodes.ownerId })
     .from(resourceNodes)
     .where(and(isNotNull(resourceNodes.nextAdvanceAt), lt(resourceNodes.nextAdvanceAt, now)));
+  if (!due.length) return;
   // Green Thumb owners' crops grow faster.
   const owners = [...new Set(due.map((r) => r.ownerId).filter((id): id is number => id != null))];
   const perks = await perksOfMany(owners);
-  for (const row of due) {
-    const cfg = getCropKind(row.kind);
-    const stages = cfg?.stages ?? 2;
-    const thumb = row.ownerId != null && perks.get(row.ownerId)?.has("green_thumb");
-    if (!cfg || cfg.regrowthMs <= 0) continue;
-    const nextStage = row.stage + 1;
-    // Perennials ripen their fruit at their own pace (src/lib/vineyard.ts).
-    const regrowthMs = Math.round(stageMs(cfg, nextStage) * (thumb ? GREEN_THUMB_MULT : 1));
-    const fullyGrown = nextStage >= stages - 1;
-    await db
-      .update(resourceNodes)
-      .set({
-        stage: nextStage,
-        nextAdvanceAt: fullyGrown ? null : new Date(now.getTime() + regrowthMs),
-      })
-      .where(eq(resourceNodes.id, row.id));
+  const thumbs = new Set(owners.filter((id) => perks.get(id)?.has("green_thumb")));
+  const writes = planRegrowth(due, thumbs, now.getTime(), GREEN_THUMB_MULT);
+  // One UPDATE per REGROWTH_BATCH nodes, not one per node: a crowded world
+  // has hundreds due each beat. Only a node still where it was read moves on
+  // (same stage, still due): a harvest or watering in between wins.
+  for (let i = 0; i < writes.length; i += REGROWTH_BATCH) {
+    const values = sql.join(writes.slice(i, i + REGROWTH_BATCH).map((w) =>
+      sql`(${w.id}::int, ${w.fromStage}::int, ${w.stage}::int, ${w.nextAdvanceAt == null ? null : new Date(w.nextAdvanceAt).toISOString()}::timestamp)`), sql`, `);
+    await db.execute(sql`
+      UPDATE resource_nodes AS t SET stage = v.stage, next_advance_at = v.next_advance_at
+      FROM (VALUES ${values}) AS v(id, from_stage, stage, next_advance_at)
+      WHERE t.id = v.id AND t.stage = v.from_stage AND t.next_advance_at IS NOT NULL AND t.next_advance_at < ${now.toISOString()}::timestamp
+    `);
   }
 }
+
+/** Nodes moved a stage on per UPDATE statement. */
+const REGROWTH_BATCH = 500;
 
 /** Online players heal 1 HP every this many beats (3 × 5 s = 15 s). */
 const HP_REGEN_EVERY_BEATS = 3;
