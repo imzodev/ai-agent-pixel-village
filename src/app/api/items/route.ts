@@ -67,8 +67,12 @@ export async function POST(req: Request) {
     }
     if (action === "equip") {
       if (!def?.equippable) return Response.json({ error: "Can't equip that." }, { status: 400 });
+      // What you hold shows in the world (your sword, the lantern's glow): send
+      // fresh snapshots to you and those around you now, not at the next resync.
+      const here = getLivePlayerPosition(me.id) ?? { x: me.x, y: me.y };
       if (row.equipped) {
         await db.update(inventory).set({ equipped: false }).where(eq(inventory.id, row.id));
+        markWorldDirty(here.x, here.y);
         return Response.json({ ok: true, message: `Unequipped ${def.name}.` });
       }
       // One item per gear slot (src/lib/gear.ts): a sword, the lantern and a
@@ -77,6 +81,7 @@ export async function POST(req: Request) {
       const off = new Set(toUnequip(worn.map((w) => w.itemKey), row.itemKey));
       for (const w of worn) if (off.has(w.itemKey)) await db.update(inventory).set({ equipped: false }).where(eq(inventory.id, w.id));
       await db.update(inventory).set({ equipped: true }).where(eq(inventory.id, row.id));
+      markWorldDirty(here.x, here.y);
       return Response.json({ ok: true, message: `Equipped ${def.name}.` });
     }
     if (action === "use") {
