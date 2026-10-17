@@ -27,7 +27,8 @@ export default function HomesteadPanel({ homesteadKey, onMessage, onGain, farm, 
 }) {
   const [view, setView] = useState<HomesteadView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"land" | "animals" | "farm">("land");
+  // The Farm tab first (and open) when you're on your homestead; else Land.
+  const [chosen, setTab] = useState<"land" | "animals" | "farm">("farm");
   const [pick, setPick] = useState<Pick | null>(null);
   const [confirm, setConfirm] = useState<{ use: ParcelUse; cost: UseChangeCost } | null>(null);
   const [giveUp, setGiveUp] = useState(false);
@@ -64,6 +65,9 @@ export default function HomesteadPanel({ homesteadKey, onMessage, onGain, farm, 
   }
 
   const full = view.parcels.length >= view.cap;
+  // Farm, then Barn & animals, then Land. Farm needs you on the homestead (it works the plots around you).
+  const tabs = (farm ? ["farm", "animals", "land"] : ["animals", "land"]) as ("land" | "animals" | "farm")[];
+  const tab = chosen === "farm" && !farm ? "land" : chosen;
   const pickUse = async (use: ParcelUse) => {
     if (pick?.kind !== "owned" || use === pick.use) return;
     const cost = await post({ action: "preview", ...pick.cell, use }) as UseChangeCost | null;
@@ -78,13 +82,15 @@ export default function HomesteadPanel({ homesteadKey, onMessage, onGain, farm, 
         <b>🗺️ {view.parcels.length}/{view.cap} parcels</b>
         <span>🐔 Space {view.space.used}/{view.space.total}</span>
         <span>🪙 {view.coins}</span>
-        <span className="flex-1" />
-        {(["land", "animals", ...(farm ? ["farm"] as const : [])] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`rounded px-2.5 py-1 text-xs font-bold ${tab === t ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "land" ? "🗺️ Land" : t === "animals" ? "🏚️ Barn & animals" : "🌾 Farm"}</button>
+      </div>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }} role="tablist">
+        {tabs.map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`rounded px-2 py-1.5 text-xs font-bold ${tab === t ? "bg-amber-600 text-white" : "bg-amber-200/70 text-amber-900"}`}>{t === "land" ? "🗺️ Land" : t === "animals" ? "🏚️ Barn & animals" : "🌾 Farm"}</button>
         ))}
       </div>
 
-      {tab === "animals" && <RanchPanel ranchKey={homesteadKey} onMessage={onMessage} onGain={onGain} />}
+      {/* Always mounted (hidden on other tabs): it loads in the background, so opening it doesn't shrink and regrow the window. */}
+      <div hidden={tab !== "animals"}><RanchPanel ranchKey={homesteadKey} onMessage={onMessage} onGain={onGain} /></div>
       {tab === "farm" && farm}
 
       {tab === "land" && <>
