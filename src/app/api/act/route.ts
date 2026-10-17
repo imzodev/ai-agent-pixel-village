@@ -35,6 +35,7 @@ import { createMoment } from "@/lib/momentsServer";
 import { lairBossMoment, rootkingMoment } from "@/lib/moments";
 import { cleanPlayerChat } from "@/lib/moderation";
 import { chatBurstLimiter, chatMinuteLimiter } from "@/lib/rateLimit";
+import { reactToChat } from "@/lib/npcReactServer";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,8 @@ export async function POST(req: Request) {
       await db.insert(worldChat).values({ speakerType: "player", speakerId: me.id, text });
       const p = livePos(me);
       markWorldDirty(p.x, p.y);
+      // NPCs nearby may answer (called by name, they will), a moment later, in the background.
+      void reactToChat({ id: me.id, name: me.name }, text, p);
       return Response.json({ ok: true });
     }
 

@@ -320,6 +320,11 @@ run by tickd every 30 s):
   personalities' opinions, moved by each conversation, and fed into the next.
 - The WS server saves online players' live positions every 30 s (`savePositions`)
   so tickd knows who's watching. Admin: `GET /api/npc-talks?limit=`.
+- **They answer players' chat** (`src/lib/npcReact.ts`, `npcReactServer.ts`, run by the
+  chat action in the background): an NPC called by name answers from up to 16 tiles;
+  otherwise the nearest within 8 tiles may answer (or let it pass: `SKIP`), and
+  sometimes a second chimes in. Each NPC at most every 12 s. Answers use what the NPC
+  knows (never promising gifts or deals) and go into its memory of that player.
 
 ## Homestead growth and standing orders
 

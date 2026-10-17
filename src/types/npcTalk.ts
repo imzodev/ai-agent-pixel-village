@@ -38,3 +38,9 @@ export type TalkRelation = { affinity: number; note: string; talks: number };
 
 /** A world event that may become a rumour. */
 export type GossipEvent = { id: number; kind: string; text: string; subjectType: string | null; subjectId: number | null; x: number | null; y: number | null };
+
+/** An NPC that may answer what a player said out loud nearby (src/lib/npcReact.ts). */
+export type ReactCandidate = { id: number; key: string; name: string; dist: number };
+
+/** Who answers a player's line: the NPCs addressed by name (they must reply), or the nearest (who may let it pass). */
+export type ReactPlan = { npc: ReactCandidate; addressed: boolean }[];
