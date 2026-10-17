@@ -2,6 +2,7 @@
 // waystones. Types only.
 
 import type { LotBanner, LotKind } from "./garden";
+import type { Parcel } from "./homestead";
 
 /** The part of the world (in chunks) the map renders; outside is blank. */
 export type MapBounds = { cx0: number; cx1: number; cy0: number; cy1: number };
@@ -29,6 +30,8 @@ export type MapMarkers = {
   places: MapPlace[];
   lots: MapLot[];
   regions: MapRegionLabel[];
+  /** Your homestead's parcels, drawn on the map in their use's colour. */
+  homestead?: { tx: number; ty: number; parcels: Parcel[] };
 };
 
 /** Average colour (alpha-weighted RGB) and coverage (mean alpha 0–1) of each tile in a tileset image. */

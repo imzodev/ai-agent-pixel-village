@@ -9,6 +9,7 @@
 // what players visit.
 
 import { siteByKey } from "./homesteadSites";
+import { parcelsOf } from "./homesteadServer";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -311,5 +312,8 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     y: (r.label ? r.label.ty : r.key === "caverns" ? (r.ty0 + r.ty1) / 2 : -2) * 16,
   }));
   regions.push({ name: "The Village", x: 32 * 16, y: 12 * 16 });
-  return { version: await tilesVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions };
+  // Your homestead's parcels (the map pictures never show them: they're drawn over).
+  const [home] = await db.select({ id: lots.id, tx: lots.tx, ty: lots.ty }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "homestead"))).limit(1);
+  const homestead = home ? { tx: home.tx, ty: home.ty, parcels: await parcelsOf(home.id) } : undefined;
+  return { version: await tilesVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions, ...(homestead ? { homestead } : {}) };
 }

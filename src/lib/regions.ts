@@ -388,6 +388,7 @@ function tallV(vx: number, vy: number): boolean {
   if (vx < STRIP.tx0 || vx > -52) return false;
   if (vx >= -578 && vx <= -383) return false;
   if (TOWNS.some((t) => inBox(t, vx, vy))) return false;
+  if (onSiteGrid(vx, vy) || onSiteGrid(vx - 1, vy - 1)) return false; // homestead sites are plain ground
   if (noise(vx, vy, 5, 48) < 0.66) return false;
   return !nearPath(vx, vy, 1) && !nearWater(vx, vy, 1) && !forestV(vx, vy) && !nearKeepOpen(vx, vy, 1) && !nearPlateau(vx, vy, 1);
 }

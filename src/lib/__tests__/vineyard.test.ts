@@ -2,7 +2,7 @@
 // parcel, perennials that fruit again, and the winery's steps and recipes.
 import { describe, expect, it } from "vitest";
 import { CROP_KINDS, GARDEN_CROPS, NODE_SHEETS } from "@/lib/crops";
-import { afterPerennialHarvest, fruitStepMs, plantRule, plantablesFor, plotHint, stageMs } from "@/lib/vineyard";
+import { afterPerennialHarvest, fruitStepMs, msToRipe, plantRule, plantablesFor, plotHint, ripeIn, stageMs } from "@/lib/vineyard";
 import { BUILD_STEPS, MACHINE_RECIPES } from "@/lib/ranchUpgrades";
 import { PROFILES } from "@/lib/mind/profiles";
 import { SHOP_STOCK } from "@/lib/trade";
@@ -83,5 +83,26 @@ describe("plot hints", () => {
     expect(plotHint("vineyard")).toMatch(/trellises.*Pip/);
     expect(plotHint("orchard")).toMatch(/lemon.*banana.*apple.*towns/);
     expect(plotHint("field")).toMatch(/vegetables/);
+  });
+});
+
+describe("time to ripe", () => {
+  it("counts the time to the next stage, then every stage after (a perennial's fruit at its own pace)", () => {
+    const radish = CROP_KINDS.radish_crop ?? Object.values(CROP_KINDS).find((c) => !c.perennial && c.stages >= 3)!;
+    expect(msToRipe(radish, radish.stages - 1, null, 0)).toBe(0);
+    expect(msToRipe(radish, 1, null, 0)).toBeNull();
+    expect(msToRipe(radish, radish.stages - 2, 5000, 1000)).toBe(4000);
+    expect(msToRipe(radish, 1, 5000, 1000)).toBe(4000 + (radish.stages - 3) * radish.regrowthMs);
+    const tree = CROP_KINDS.apple_tree, p = tree.perennial!;
+    let rest = 0;
+    for (let s = 2; s < tree.stages - 1; s++) rest += s >= p.mature ? fruitStepMs(tree.stages, p) : tree.regrowthMs;
+    expect(msToRipe(tree, 1, 0, 0)).toBe(rest);
+  });
+  it("says it in words", () => {
+    expect(ripeIn(0)).toBe("ripe");
+    expect(ripeIn(null)).toBe("not growing");
+    expect(ripeIn(90_000)).toBe("~2 min");
+    expect(ripeIn(80 * 60_000)).toBe("~1 h 20 min");
+    expect(ripeIn(120 * 60_000)).toBe("~2 h");
   });
 });

@@ -146,11 +146,17 @@ export function setDynamicBlocks(owner: string, tiles: readonly { tx: number; ty
   for (const list of dynamicByOwner.values()) for (const t of list) dynamic.add(`${t.tx},${t.ty}`);
 }
 
-function isTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean {
+function isStaticTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean {
   const idx = ly * CHUNK_TILE_W + lx;
   const key = chunkId(cx, cy);
-  if (registry.get(key)?.has(idx) === true || stamped.get(key)?.has(idx) === true) return true;
-  return dynamic.size > 0 && dynamic.has(`${cx * CHUNK_TILE_W + lx},${ly - cy * CHUNK_TILE_H}`); // chunk rows count up (chunkAtWorldPx)
+  return registry.get(key)?.has(idx) === true || stamped.get(key)?.has(idx) === true;
+}
+
+const isDynamicTileBlocked = (cx: number, cy: number, lx: number, ly: number): boolean =>
+  dynamic.size > 0 && dynamic.has(`${cx * CHUNK_TILE_W + lx},${ly - cy * CHUNK_TILE_H}`); // chunk rows count up (chunkAtWorldPx)
+
+function isTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean {
+  return isStaticTileBlocked(cx, cy, lx, ly) || isDynamicTileBlocked(cx, cy, lx, ly);
 }
 
 // Foot box (16×10 under the character's feet): blocked if any corner lands on
@@ -171,6 +177,26 @@ export function isWalkableAt(x: number, y: number): boolean {
     if (isTileBlocked(t.cx, t.cy, t.lx, t.ly)) return false;
   }
   return true;
+}
+
+/** isWalkableAt without the dynamic layer: terrain and stamped buildings only
+ *  (what NPC route grids cache; the dynamic layer is laid over them live). */
+export function isStaticWalkableAt(x: number, y: number): boolean {
+  for (const [dx, dy] of FOOT_CORNERS) {
+    const t = chunkAtWorldPx(x + dx, y + dy);
+    if (isStaticTileBlocked(t.cx, t.cy, t.lx, t.ly)) return false;
+  }
+  return true;
+}
+
+/** Does the dynamic layer (homestead barns and workshops) block a foot box at (x, y)? */
+export function dynamicBlocksFootAt(x: number, y: number): boolean {
+  if (dynamic.size === 0) return false;
+  for (const [dx, dy] of FOOT_CORNERS) {
+    const t = chunkAtWorldPx(x + dx, y + dy);
+    if (isDynamicTileBlocked(t.cx, t.cy, t.lx, t.ly)) return true;
+  }
+  return false;
 }
 
 // Debug/testing helper (attached to window.__walk by WorldScene).

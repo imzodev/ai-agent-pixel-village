@@ -17,6 +17,8 @@ import { mapMemory, tileImage } from "@/game/mapTiles";
 import { MAX_TILE_ZOOM, OPEN_LEVEL, ZOOM_LEVELS, clampCamera, maxLevelFor, tileZoomFor } from "@/lib/mapZoom";
 import { tierAt } from "@/lib/continent";
 import { suggestedLevel } from "@/lib/danger";
+import { PARCEL_TILES } from "@/lib/homestead";
+import type { ParcelUse } from "@/types/homestead";
 
 /** The fog of war as a small image (1 px per chunk over the map bounds), plus
  *  a summed table so "is any chunk of this rectangle explored?" is one lookup. */
@@ -57,6 +59,10 @@ function buildFog(seen: ReadonlySet<string>, extra: ReadonlySet<string>): MapFog
   };
 }
 
+/** A homestead parcel's colour on the map, by use (as the homestead window's tints). */
+const PARCEL_COLOR: Record<ParcelUse, string> = {
+  wild: "#c5e08a", field: "#d9a441", pasture: "#7bc96f", vineyard: "#b48fd6", orchard: "#5fbf8a", barn: "#d9786a", workshop: "#e0a46a",
+};
 const PLACE_ICON = { inn: "🍺", forge: "🔨", cave: "🕳️", lair: "☠️", homestead: "🏡" } as const;
 const LOT_ICON = { home: "🏡", land: "🌱", ranch: "🐔", vineyard: "🍇", workshop: "🪚", orchard: "🍑" } as const;
 
@@ -190,6 +196,19 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
     if (scale >= 0.2) for (const r of markers.regions) if (seenAt(r.x, r.y)) label(r.name, sx(r.x), sy(r.y), scale >= 1 ? 15 : 12, "#ffe7a8");
     g.font = `${scale >= 1 ? 16 : 12}px serif`;
     for (const p of markers.places) if (seenAt(p.x, p.y)) g.fillText(PLACE_ICON[p.kind], sx(p.x), sy(p.y) - 6);
+    // Your homestead's parcels, each in its use's colour, under your banner.
+    const hs = markers.homestead;
+    if (hs && scale >= 0.5) {
+      const side = PARCEL_TILES * scale;
+      for (const p of hs.parcels) {
+        const wx = (hs.tx + p.col * PARCEL_TILES) * 16, wy = (hs.ty + p.row * PARCEL_TILES) * 16;
+        if (!seenAt(wx + 80, wy + 80)) continue;
+        g.fillStyle = PARCEL_COLOR[p.use];
+        g.fillRect(sx(wx), sy(wy), side, side);
+        g.lineWidth = 1; g.strokeStyle = "rgba(60,40,20,0.7)";
+        g.strokeRect(sx(wx) + 0.5, sy(wy) + 0.5, side - 1, side - 1);
+      }
+    }
     for (const l of markers.lots) {
       // Yours, in your banner colour and emblem, so you can pick them out at a glance.
       const x = sx(l.x), y = sy(l.y) - 6, r = scale >= 1 ? 11 : 9;

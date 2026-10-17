@@ -6,13 +6,17 @@
 // the collision registry and refreshed after a few minutes (trees fall and
 // grow back). Built blocks are also saved to disk (.cache/nav, keyed by
 // the map version), so after the first time a fresh start reads them in
-// microseconds instead of regenerating chunks. Server only.
+// microseconds instead of regenerating chunks. They hold only what doesn't
+// move (terrain, stamped buildings); a homestead's barn and workshop come and
+// go, so they're laid over the grid on every lookup (chunkCollision's dynamic
+// layer). Server only.
 
 import fs from "node:fs";
 import path from "node:path";
-import { CHUNK_TILE_PX, isWalkableAt } from "@/lib/chunkCollision";
+import { CHUNK_TILE_PX, dynamicBlocksFootAt, isStaticWalkableAt } from "@/lib/chunkCollision";
 import { mapVersion } from "@/lib/worldAtlasServer";
 import { ensureChunkAt } from "@/lib/chunkCollisionServer";
+import { refreshHomesteadBlocks } from "@/lib/homesteadServer";
 import { terrainAt } from "@/lib/regions";
 import { BLOCK_H, BLOCK_W, createRouter } from "./route";
 import type { Entrance, GraphStore, NavBlock, NavGrid } from "@/types/nav";
@@ -58,7 +62,7 @@ async function build(bx: number, by: number, fresh: boolean): Promise<void> {
   const walk = new Uint8Array(BLOCK_W * BLOCK_H), cost = new Uint8Array(BLOCK_W * BLOCK_H);
   for (let j = 0; j < BLOCK_H; j++) for (let i = 0; i < BLOCK_W; i++) {
     const tx = bx * BLOCK_W + i, ty = by * BLOCK_H + j, k = j * BLOCK_W + i;
-    walk[k] = isWalkableAt(tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2, ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2) ? 1 : 0;
+    walk[k] = isStaticWalkableAt(tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2, ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2) ? 1 : 0;
     if (!walk[k]) continue;
     const up = terrainAt(tx, ty).upper ?? "";
     cost[k] = up.startsWith("path_") || up.startsWith("bridge") ? COST_ROAD : COST_OPEN;
@@ -82,7 +86,8 @@ export const worldGrid: NavGrid = {
   walkable(tx, ty) {
     const bx = Math.floor(tx / BW), by = Math.floor(ty / BH);
     const b = blockAt(bx, by);
-    return !!b && b.walk[(ty - by * BH) * BW + (tx - bx * BW)] === 1; // unbuilt: not known, not walked
+    if (!b || b.walk[(ty - by * BH) * BW + (tx - bx * BW)] !== 1) return false; // unbuilt: not known, not walked
+    return !dynamicBlocksFootAt(tx * CHUNK_TILE_PX + CHUNK_TILE_PX / 2, ty * CHUNK_TILE_PX + CHUNK_TILE_PX / 2); // a barn or workshop there now
   },
   cost(tx, ty) {
     const bx = Math.floor(tx / BW), by = Math.floor(ty / BH);
@@ -90,6 +95,7 @@ export const worldGrid: NavGrid = {
     return b ? b.cost[(ty - by * BH) * BW + (tx - bx * BW)] || COST_OPEN : COST_OPEN;
   },
   async ensureBlock(bx, by) {
+    await refreshHomesteadBlocks(); // the barns and workshops standing now (at most a read a minute)
     const k = key(bx, by);
     const have = blocks.get(k);
     if (have && Date.now() - have.at < BLOCK_TTL_MS) return;

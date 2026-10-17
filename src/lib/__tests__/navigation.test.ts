@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { searchTiles } from "@/lib/nav/tileSearch";
 import { BLOCK_H, BLOCK_W, createRouter } from "@/lib/nav/route";
+import { dynamicBlocksFootAt, isStaticWalkableAt, isWalkableAt, setDynamicBlocks } from "@/lib/chunkCollision";
 import type { NavGrid } from "@/types/nav";
 import type { GridPoint } from "@/types/world";
 
@@ -104,5 +105,33 @@ describe("router caches", () => {
     router.invalidate(Math.floor(70 / BLOCK_W), 2);
     const b = (await router.plan({ tx: 2, ty: 20 }, { tx: 140, ty: 20 }))!;
     expect(b.tiles.every((t) => !(t.tx === 70 && t.ty < 40))).toBe(true); // around the end of the wall
+  });
+});
+
+describe("homestead buildings on routes", () => {
+  // The route grid is what doesn't move; a barn (chunkCollision's dynamic
+  // layer) is laid over it on every lookup, as walkGrid's worldGrid does.
+  const T = 16;
+  const g = world(60, 40, (x, y) => !dynamicBlocksFootAt(x * T + T / 2, y * T + T / 2));
+  // A long wall across the way, with a gap at the bottom.
+  const wall = Array.from({ length: 34 }, (_, i) => ({ tx: 30, ty: i }));
+  it("walks around a barn standing in the way, and straight through once it's gone", async () => {
+    const router = createRouter(g);
+    const from = { tx: 5, ty: 5 }, to = { tx: 55, ty: 5 };
+    setDynamicBlocks("test_barn", wall);
+    const around = (await router.plan(from, to))!;
+    expect(around).not.toBeNull();
+    expect(around.tiles.some((t) => t.ty >= 34)).toBe(true); // through the gap
+    for (const t of around.tiles) expect(dynamicBlocksFootAt(t.tx * T + T / 2, t.ty * T + T / 2), `${t.tx},${t.ty}`).toBe(false);
+    setDynamicBlocks("test_barn", []);
+    const straight = (await router.plan(from, to))!;
+    expect(straight.tiles.every((t) => t.ty < 34)).toBe(true);
+    expect(straight.tiles.length).toBeLessThan(around.tiles.length);
+  });
+  it("the cached grid ignores them: the static check never sees a barn", () => {
+    setDynamicBlocks("test_barn", [{ tx: 3, ty: 3 }]);
+    expect(isWalkableAt(3 * T + T / 2, 3 * T + T / 2)).toBe(false);
+    expect(isStaticWalkableAt(3 * T + T / 2, 3 * T + T / 2)).toBe(true);
+    setDynamicBlocks("test_barn", []);
   });
 });

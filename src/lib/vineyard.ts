@@ -36,6 +36,27 @@ export function stageMs(cfg: { stages: number; regrowthMs: number; perennial?: {
   return cfg.perennial && stage >= cfg.perennial.mature ? fruitStepMs(cfg.stages, cfg.perennial) : cfg.regrowthMs;
 }
 
+/**
+ * Ms until a crop is ripe: to its next stage (`nextAdvanceAt`, which already
+ * counts watering), then every stage after that (growth, then a perennial's
+ * fruit). 0 when ripe; null when it isn't growing (no next stage set).
+ */
+export function msToRipe(cfg: { stages: number; regrowthMs: number; perennial?: { fruitMs: number; mature: number } }, stage: number, nextAdvanceAt: number | null, now: number): number | null {
+  if (stage >= cfg.stages - 1) return 0;
+  if (nextAdvanceAt == null) return null;
+  let ms = Math.max(0, nextAdvanceAt - now);
+  for (let s = stage + 1; s < cfg.stages - 1; s++) ms += stageMs(cfg, s);
+  return ms;
+}
+
+/** "ripe", "~5 min", "~1 h 20 min": how long until it's ripe, for a crop's card and the farm window. */
+export function ripeIn(ms: number | null): string {
+  if (ms == null) return "not growing";
+  if (ms <= 0) return "ripe";
+  const m = Math.max(1, Math.ceil(ms / 60_000));
+  return m < 60 ? `~${m} min` : `~${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+}
+
 /** After harvesting a perennial: back to mature, ripening again. */
 export function afterPerennialHarvest(stages: number, p: { fruitMs: number; mature: number }, now: number): { stage: number; nextAdvanceAt: number } {
   return { stage: p.mature, nextAdvanceAt: now + fruitStepMs(stages, p) };

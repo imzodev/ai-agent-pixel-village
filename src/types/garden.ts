@@ -93,6 +93,8 @@ export type FarmAction = { key: string; label: string; run: () => void };
 /** A crop type in a lot, as the farm window shows it. */
 export type FarmKindView = {
   kind: string; name: string; icon: string; total: number; ripe: number; thirsty: number;
+  /** How long until the next one of these is ripe ("~12 min"), when none is yet. */
+  nextRipe: string | null;
   /** Harvest / water just this type (null: nothing to do). */
   harvest: (() => void) | null; water: (() => void) | null;
 };
@@ -106,4 +108,6 @@ export type FarmView = {
   plant: FarmAction[];
   /** The plot / crop E was pressed on. */
   here: FarmAction[];
+  /** The crop E was pressed on: its name, stage and how long until it's ripe. */
+  hereStatus: string | null;
 };

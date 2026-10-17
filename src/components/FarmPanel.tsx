@@ -48,7 +48,7 @@ export default function FarmPanel({ view, coins }: { view: FarmView; coins: numb
             {view.kinds.map((k, i) => (
               <div key={k.kind} className="rounded border border-amber-900/20 bg-white/60 p-1.5 text-[12px]">
                 <div className="font-bold capitalize">{k.icon} {k.name} <span className="font-normal text-stone-500">×{k.total}</span></div>
-                <div className="text-[11px] text-stone-600">{k.ripe ? `${k.ripe} ripe` : "none ripe"}{k.thirsty ? ` · ${k.thirsty} thirsty` : ""}</div>
+                <div className="text-[11px] text-stone-600">{k.ripe ? `${k.ripe} ripe` : k.nextRipe ? `next ripe in ${k.nextRipe}` : "none ripe"}{k.thirsty ? ` · ${k.thirsty} thirsty` : ""}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   <button disabled={!k.harvest} onClick={() => k.harvest?.()} className="pixel-btn bg-amber-200 px-1.5 py-0.5 text-[11px] font-bold disabled:opacity-40"><FarmBadge n={kindNums[i].h} />🧺 Harvest</button>
                   <button disabled={!k.water} onClick={() => k.water?.()} className="pixel-btn bg-sky-100 px-1.5 py-0.5 text-[11px] font-bold disabled:opacity-40"><FarmBadge n={kindNums[i].w} />💧 Water</button>
@@ -66,6 +66,7 @@ export default function FarmPanel({ view, coins }: { view: FarmView; coins: numb
           ))}
         </div>
       )}
+      {view.hereStatus && <div className="rounded bg-emerald-50/90 px-2 py-1 text-[12px] font-bold capitalize text-emerald-900">{view.hereStatus}</div>}
       {view.here.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[12px] font-bold text-amber-900">This spot:</span>

@@ -27,7 +27,7 @@ describe("heartland", () => {
       seen.add(k);
       h.update(k + JSON.stringify(terrainAt(tx, ty)));
     }
-    expect(h.digest("hex")).toBe("aae69794e23506c4fdf1dac4459981d4d0062670");
+    expect(h.digest("hex")).toBe("18a0932726ec5487b7be557f448a5ae9f62f5584");
   });
   it("edges follow the tree lattice (odd west/north, even east/south)", () => {
     for (const b of HEARTLAND) {

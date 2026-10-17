@@ -6,7 +6,7 @@
 //   node scripts/draw-parcels.mjs
 //
 // Writes public/assets/parcels.png. Frames (src/game/homesteadArt.ts):
-//   y 0:   160×160 overlays, x = i × 160: wild, field, pasture, vineyard, orchard
+//   y 0:   160×160 overlays, x = i × 160: wild, field, pasture, vineyard (soil rows), orchard (mulch rings)
 //   y 160: fence_h 160×16 (x 0), fence_h_gate (x 160), sign 32×48 (x 320),
 //          fence_v 16×160 (x 352), fence_v_gate (x 368)
 //   y 320: p_plot 160×160 (x 0: a staked-out building plot), barn 96×80
@@ -100,24 +100,24 @@ function pasture(g) {
   for (let k = 0; k < 40; k++) { const x = tx - 4 + Math.floor(rand(k, 16) * 38), y = ty + 11 + Math.floor(rand(k, 17) * 8); g.put(x, y, C.straw[1 + (k % 3)]); g.put(x + 1, y, C.straw[1]); }
 }
 
-// ── Vineyard: two trellis rows (posts and wires) over soil strips ──────
+// ── Vineyard: two rows of tilled soil, where the vines stand ───────────
+// (each vine sprite carries its own trellis posts: src/lib/crops.ts vineFrames)
 function vineyard(g) {
-  for (const row of [64, 128]) {
-    for (let y = row - 6; y <= row + 3; y++) for (let x = 14; x < P - 14; x++) g.put(x, y, ramp(C.soil, 0.5 + (rand(x, y, 21) - 0.5) * 0.3, x, y), 230);
-    for (const px of [14, 80, P - 16]) {
-      g.rect(px - 1, row - 30, 4, 31, INK);
-      g.rect(px, row - 29, 2, 29, C.wood[2]);
-      g.put(px, row - 29, C.wood[4]);
+  for (const row of [40, 80, 120, 158]) { // the vines' rows (src/lib/homestead.ts VINE_ROWS)
+    for (let y = row - 6; y <= Math.min(row + 3, P - 2); y++) for (let x = 12; x < P - 12; x++) {
+      const edge = Math.min(x - 12, P - 13 - x, y - (row - 6), row + 3 - y);
+      if (edge < 1 && rand(x, y, 61) < 0.5) continue;
+      g.put(x, y, ramp(C.soil, 0.5 + (rand(x, y, 21) - 0.5) * 0.3, x, y), 230);
     }
-    for (const wy of [row - 26, row - 16]) for (let x = 16; x < P - 16; x++) g.put(x, wy + Math.round(Math.sin((x - 16) / 64 * Math.PI) * 1), PAL.stone[2]);
   }
 }
 
-// ── Orchard: a ring of mulch where each tree stands ────────────────────
+// ── Orchard: a ring of mulch where each of the 8 trees stands ──────────
 function orchard(g) {
-  for (const [cx, cy] of [[40, 64], [120, 64], [40, 144], [120, 144]]) {
-    for (let y = cy - 10; y <= cy + 6; y++) for (let x = cx - 18; x <= cx + 18; x++) {
-      const d = ((x - cx) / 18) ** 2 + ((y - cy + 2) / 8) ** 2 + (rand(x >> 1, y >> 1, 22) - 0.5) * 0.2;
+  // the trees' trunks (src/lib/homestead.ts ORCHARD_BACK / ORCHARD_FRONT)
+  for (const [cx, cy] of [...[7, 47, 87, 127].map((x) => [x + 3, 114]), ...[27, 67, 107, 147].map((x) => [x + 3, 158])]) {
+    for (let y = cy - 10; y <= Math.min(cy + 6, P - 2); y++) for (let x = Math.max(cx - 14, 1); x <= Math.min(cx + 14, P - 2); x++) {
+      const d = ((x - cx) / 14) ** 2 + ((y - cy + 2) / 8) ** 2 + (rand(x >> 1, y >> 1, 22) - 0.5) * 0.2;
       if (d > 1) continue;
       g.put(x, y, ramp(C.mulch, 0.62 - d * 0.35 + (rand(x, y, 23) - 0.5) * 0.3, x, y));
     }

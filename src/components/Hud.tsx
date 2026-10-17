@@ -31,7 +31,7 @@ import { LOT_LABELS } from "@/game/lotLabels";
 import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
 import { TEND_RANGE_PX, atLot, insideLot } from "@/lib/lotReach";
 import FurnitureSprite from "./FurnitureSprite";
-import { plantablesFor, plotHint } from "@/lib/vineyard";
+import { msToRipe, plantablesFor, plotHint, ripeIn } from "@/lib/vineyard";
 import { spotOfPlot } from "@/lib/homestead";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
@@ -483,6 +483,13 @@ export default function Hud() {
    * the plot or crop E was pressed on. Rebuilt from the snapshot each render,
    * so counts stay live.
    */
+  /** A crop's stage and how long until it's ripe (snapshot server time keeps render pure; minutes are plenty). */
+  const cropStatus = (crop: { kind: string; stage: number; stages: number; nextAdvanceAt: number | null; watered?: boolean }): string => {
+    if (crop.stage >= crop.stages - 1) return "Ready to harvest!";
+    const cfg = CROP_KINDS[crop.kind];
+    const left = cfg ? ripeIn(msToRipe(cfg, crop.stage, crop.nextAdvanceAt, snap?.now ?? 0)) : "growing";
+    return `Stage ${crop.stage}/${crop.stages - 1} · ripe in ${left}${crop.watered ? " · 💧" : ""}`;
+  };
   const farmViewFor = (lotKey: string, target: Selection | null): FarmView | null => {
     if (!farm || farm.lot.key !== lotKey || !farm.lot.bounds || !snap) return null;
     const bounds = farm.lot.bounds;
@@ -492,8 +499,11 @@ export default function Hud() {
       const produce = Object.values(GARDEN_CROPS).find((c) => c.kind === kind)?.produceKey ?? kind.replace(/_crop$/, "");
       const ripe = of.filter((n) => n.ownerId === myId && n.stage >= n.stages - 1).length;
       const thirsty = of.filter((n) => n.stage < n.stages - 1 && !n.watered && n.nextAdvanceAt != null).length;
+      const cfg = CROP_KINDS[kind];
+      const soonest = ripe || !cfg ? null : Math.min(...of.map((n) => msToRipe(cfg, n.stage, n.nextAdvanceAt, snap.now ?? 0) ?? Infinity));
       return {
         kind, name: produce.replace(/_/g, " "), icon: ITEM_ICONS[produce] ?? "🌱", total: of.length, ripe, thirsty,
+        nextRipe: soonest != null && Number.isFinite(soonest) ? ripeIn(soonest) : null,
         harvest: ripe ? () => void garden({ action: "harvest_all", lotKey, kind }) : null,
         water: thirsty ? () => void garden({ action: "water_all", lotKey, kind }) : null,
       };
@@ -516,6 +526,13 @@ export default function Hud() {
       kinds,
       plant: farm.seeds.map((i) => ({ key: i.itemKey, label: `${ITEM_ICONS[i.itemKey] ?? "🌱"} ${seedName(i.itemKey)} ×${i.qty}`, run: () => plantAllWith(lotKey, i.itemKey) })),
       here,
+      hereStatus: (() => {
+        if (t?.type !== "node") return null;
+        const crop = snap.nodes.find((n) => n.id === t.id);
+        if (!crop) return null;
+        const produce = Object.values(GARDEN_CROPS).find((c) => c.kind === crop.kind)?.produceKey ?? crop.kind;
+        return `${ITEM_ICONS[produce] ?? "🌱"} ${produce.replace(/_/g, " ")} · ${cropStatus(crop)}`;
+      })(),
     };
   };
   const farmView = farmMenu ? farmViewFor(farmMenu.lotKey, farmMenu.target) : null;
@@ -1214,11 +1231,7 @@ export default function Hud() {
             if (crop?.ownerId == null) return null;
             // Garden crop: growth status, water (anyone), harvest (owner).
             const ripe = crop.stage >= crop.stages - 1;
-            // Snapshot server time keeps render pure; minutes-level accuracy is plenty.
-            const mins = crop.nextAdvanceAt ? Math.max(1, Math.ceil((crop.nextAdvanceAt - (snap?.now ?? 0)) / 60_000)) : 0;
-            const stageMs = CROP_KINDS[crop.kind]?.regrowthMs ?? 0;
-            const left = ripe ? 0 : mins + Math.round(((crop.stages - 2 - crop.stage) * stageMs) / 60_000);
-            const status = ripe ? "Ready to harvest!" : `Stage ${crop.stage}/${crop.stages - 1} · ready in ~${left} min${crop.watered ? " · 💧" : ""}`;
+            const status = cropStatus(crop);
             if (sel.distance > TEND_RANGE_PX && !(crop.ownerId === myId && inMyLot(crop))) return <><span className="text-[11px] text-stone-600">{status}</span><WalkBtn snap={snap} sel={sel} /></>;
             return (
               <>

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { BLOCK_SIZE, SITES, SITE_TILES, onSiteLane, siteAtTile, siteByKey } from "@/lib/homesteadSites";
 import { inHeartland } from "@/lib/continent";
-import { terrainWalkable } from "@/lib/regions";
+import { terrainAt, terrainWalkable } from "@/lib/regions";
 import { ENEMY_ZONES } from "@/lib/progression";
 import { WILD_ZONES } from "@/lib/worldmap";
 
@@ -48,6 +48,12 @@ describe("homestead sites", () => {
       const hit = (z: { x: number; y: number; w: number; h: number }) => z.x < r.x + r.w && r.x < z.x + z.w && z.y < r.y + r.h && r.y < z.y + z.h;
       for (const z of ENEMY_ZONES) expect(hit(z.rect), `${z.name} / ${site.key}`).toBe(false);
       for (const z of WILD_ZONES) expect(hit(z), site.key).toBe(false);
+    }
+  });
+  it("keeps every site's ground plain: no tall grass, trees or obstacles under the parcels", () => {
+    for (const site of SITES) for (let y = site.ty; y < site.ty + SITE_TILES; y++) for (let x = site.tx; x < site.tx + SITE_TILES; x++) {
+      const c = terrainAt(x, y);
+      expect(!(c.upper ?? "").startsWith("tall") && !c.lower && !c.canopy, `${site.key} ${x},${y}`).toBe(true);
     }
   });
 });

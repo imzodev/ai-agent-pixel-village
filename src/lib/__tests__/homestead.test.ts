@@ -7,6 +7,8 @@ import {
   canSetUse, capFor, nextCapAt, onParcels, parcelAtTile, pens, plotCell, plotIndex,
   plotOffsets, spaceFree, spaceTotal, changeCost,
 } from "@/lib/homestead";
+import { PARCEL_USES } from "@/lib/homestead";
+import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import type { Parcel } from "@/types/homestead";
 
 const p = (col: number, row: number, use: Parcel["use"] = "wild"): Parcel => ({ col, row, use });
@@ -82,5 +84,14 @@ describe("homestead parcels", () => {
     for (const u of ["field", "vineyard", "orchard"] as const) for (const o of plotOffsets(u)) expect(o.x > 0 && o.x < PARCEL_TILES * 16 && o.y > 0 && o.y <= PARCEL_TILES * 16, u).toBe(true);
     const n = plotIndex({ col: 3, row: 5 }, 11);
     expect(plotCell(n)).toEqual({ cell: { col: 3, row: 5 }, i: 11 });
+  });
+  it("fits its vines and trees inside the parcel: no crown over the fence into the one above", () => {
+    for (const use of ["field", "vineyard", "orchard"] as const) expect(plotOffsets(use)).toHaveLength(PARCEL_USES[use].plots);
+    const trees = Object.values(GARDEN_CROPS).filter((c) => c.grows?.includes("orchard")).map((c) => CROP_KINDS[c.kind]);
+    const tallest = Math.max(...trees.map((c) => c.baseY ?? c.frames[0].h));
+    for (const o of plotOffsets("orchard")) expect(o.y - tallest, `tree at ${o.x},${o.y}`).toBeGreaterThanOrEqual(-8);
+    const vines = Object.values(GARDEN_CROPS).filter((c) => c.grows?.includes("vineyard")).map((c) => CROP_KINDS[c.kind]);
+    const vineH = Math.max(...vines.flatMap((c) => c.frames.map((f) => f.h)));
+    for (const o of plotOffsets("vineyard")) expect(o.y - vineH, `vine at ${o.x},${o.y}`).toBeGreaterThanOrEqual(0);
   });
 });

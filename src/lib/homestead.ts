@@ -45,8 +45,8 @@ export const PARCEL_USES: Readonly<Record<ParcelUse, ParcelUseDef>> = {
   wild: { use: "wild", icon: "🌿", name: "Wild", blurb: "Bought, not set up yet. Pick what it'll be.", plots: 0, space: 0 },
   field: { use: "field", icon: "🌾", name: "Field", blurb: "16 beds for seeds: wheat, carrots, pumpkins…", plots: 16, space: 0 },
   pasture: { use: "pasture", icon: "🐔", name: "Pasture", blurb: "Room for animals: 8 hens, 4 sheep or 2 cows. Pastures side by side make one pen.", plots: 0, space: 8 },
-  vineyard: { use: "vineyard", icon: "🍇", name: "Vineyard", blurb: "4 trellised grapevines that fruit again and again.", plots: 4, space: 0 },
-  orchard: { use: "orchard", icon: "🍎", name: "Orchard", blurb: "4 fruit trees.", plots: 4, space: 0 },
+  vineyard: { use: "vineyard", icon: "🍇", name: "Vineyard", blurb: "16 grapevines in four rows, fruiting again and again.", plots: 16, space: 0 },
+  orchard: { use: "orchard", icon: "🍎", name: "Orchard", blurb: "8 fruit trees, close planted, that fruit again and again.", plots: 8, space: 0 },
   barn: { use: "barn", icon: "🏚️", name: "Barn", blurb: "Build your barn here, then a silo and feeder for your pastures, a mill, a cheese press, a loom, hives and a winery around it. Only one.", plots: 0, space: 0 },
   workshop: { use: "workshop", icon: "🪚", name: "Workshop", blurb: "Build your carpenter's workshop here, then its benches, and show your furniture in front. Only one.", plots: 0, space: 0 },
 };
@@ -204,9 +204,11 @@ export function onParcels(site: { tx: number; ty: number }, parcels: readonly Pa
  * Crop plots of a parcel: each one's bottom-centre anchor in pixels from the
  * parcel's top-left (where the crop stands). A field has 4 rows of 4 beds,
  * each bed two tiles wide on tile rows 2, 4, 6 and 8 (scripts/draw-parcels.mjs
- * draws the soil there); a vineyard 4 vines on two trellis rows; an orchard
- * 4 trees 80 px apart (the LPC trees are ~83 px wide). Plot numbers are
- * stable per use, so crops keep their place.
+ * draws the soil there); a vineyard four rows of four vines (32×40 px each);
+ * an orchard eight trees in two staggered rows of four, close planted: the
+ * crowns (~83 px wide, the trunk ~118 px below the top) overlap their
+ * neighbours and reach a little over the side fences, but never over the
+ * fence into the parcel above. Plot numbers are stable per use.
  */
 export function plotOffsets(use: ParcelUse): { x: number; y: number }[] {
   if (use === "field") {
@@ -214,8 +216,8 @@ export function plotOffsets(use: ParcelUse): { x: number; y: number }[] {
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) out.push({ x: 32 + c * 32, y: 48 + r * 32 });
     return out;
   }
-  if (use === "vineyard") return [{ x: 40, y: 64 }, { x: 120, y: 64 }, { x: 40, y: 128 }, { x: 120, y: 128 }];
-  if (use === "orchard") return [{ x: 40, y: 64 }, { x: 120, y: 64 }, { x: 40, y: 144 }, { x: 120, y: 144 }];
+  if (use === "vineyard") return VINE_ROWS.flatMap((y) => [30, 62, 94, 126].map((x) => ({ x, y })));
+  if (use === "orchard") return [...ORCHARD_BACK.map((x) => ({ x, y: 114 })), ...ORCHARD_FRONT.map((x) => ({ x, y: 158 }))];
   return [];
 }
 
@@ -229,6 +231,11 @@ export function spotOfPlot(lot: { kind: string; parcels?: readonly Parcel[] }, p
   const p = lot.parcels?.find((q) => q.col === cell.col && q.row === cell.row);
   return p ? PLANT_SPOT[p.use] ?? null : null;
 }
+
+/** Base lines of a vineyard's four rows of vines (px from the parcel's top). */
+const VINE_ROWS = [40, 80, 120, 160];
+/** An orchard's trunks (px from the parcel's left): the back row, and the front row staggered half a gap. */
+const ORCHARD_BACK = [7, 47, 87, 127], ORCHARD_FRONT = [27, 67, 107, 147];
 
 /** Global plot number of a parcel's plot `i`: one homestead numbers all its plots. */
 export const plotIndex = (c: ParcelCell, i: number): number => (c.row * GRID + c.col) * 64 + i;
