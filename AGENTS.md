@@ -265,7 +265,11 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
   to Hollis, who mills it into the flour Marigold buys; Ansel chops logs in the
   Whisperwood for the woodpile Bjorn buys from. Buying from (or selling to) an
   NPC with a mind moves real stock and coins (`mindStock`); one without a mind
-  is an endless shop, so list both ends in `MIND_NPCS`. A new kind = a profile + its key
+  is an endless shop, so list both ends in `MIND_NPCS`.
+- **Gathering shows in the world** (`supplies[item].gather`, `src/lib/mind/gatherServer.ts`):
+  Rowan cuts real ripe wheat stalks (they regrow as when players pick them),
+  Ansel fells real trees (stumps that grow back). What an NPC carries is
+  `npcs.carry`, shown over its head ("🌾 ×12 · Farmhand") until it's home or sold. A new kind = a profile + its key
   in `PROFILE_OF` + `MIND_NPCS`; shelf items also need a `SHOP_STOCK` entry.
   A key in `MIND_NPCS` without a profile is ignored.
 - **Decide**: `feasibleActions` (`profile.ts`, shared) lists only what the NPC

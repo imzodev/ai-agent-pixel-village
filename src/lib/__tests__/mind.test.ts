@@ -8,6 +8,7 @@ import { SHOP_STOCK } from "@/lib/trade";
 import { askJev, parseJev } from "@/lib/mind/jev";
 import fs from "node:fs";
 import { npcDef } from "@/lib/npcDefs";
+import { CROP_KINDS } from "@/lib/crops";
 import type { MindOption, MindView } from "@/types/mind";
 
 const feasibleActions = (v: MindView) => feasible(BAKER, v);
@@ -130,6 +131,12 @@ describe("profiles", () => {
       }
       for (const o of Object.values(PROFILES[prof].outings ?? {})) expect(!!o.placeKey || !!o.spot, o.place).toBe(true);
       for (const d of Object.values(PROFILES[prof].sells ?? {})) expect(npcDef(d.buyerKey), d.buyerKey).toBeDefined();
+      for (const s of Object.values(PROFILES[prof].supplies)) {
+        if (!s.gather) continue;
+        expect(s.gather.radius, s.place).toBeGreaterThan(0);
+        if (s.gather.from === "nodes") expect(CROP_KINDS[s.gather.kind], s.gather.kind).toBeDefined();
+        else expect(s.gather.perTree).toBeGreaterThan(0);
+      }
     }
     expect(profileFor("village_pip")).toBeNull();
   });

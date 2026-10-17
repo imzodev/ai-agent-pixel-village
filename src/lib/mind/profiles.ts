@@ -88,7 +88,8 @@ export const WOODCUTTER: MindProfile = {
   tableStaleMs: 0,
   crafts: {},
   // Below 20 logs he goes out with his axe for 12 more.
-  supplies: { wood: { spot: { tx: -256, ty: 11 }, place: "the Whisperwood", price: 0, buy: 12, low: 20 } },
+  // He fells real trees there (stumps that grow back), 4 logs a tree.
+  supplies: { wood: { spot: { tx: -256, ty: 11 }, place: "the Whisperwood", price: 0, buy: 12, low: 20, gather: { from: "trees", perTree: 4, radius: 6 } } },
   outings: { ale: { placeKey: "building:inn_hollowmere", place: "the Sawdust & Ale", doing: "have an ale at the Sawdust & Ale", hours: [19, 22], lingerMs: 5 * MIN } },
   asks: {},
   gift: null,
@@ -108,8 +109,9 @@ export const FARMHAND: MindProfile = {
   minCraftGapMs: 10 * MIN,
   tableStaleMs: 0,
   crafts: {},
-  // A sheaf at a time in the Common Field, 12 to a load; a full load goes to the mill.
-  supplies: { wheat: { spot: { tx: 48, ty: -62 }, place: "the Common Field", price: 0, buy: 12, low: 12 } },
+  // He cuts real ripe stalks in the north half of the Common Field (they regrow as when
+  // players pick them), 12 to a load; then carries the load across the field to the mill.
+  supplies: { wheat: { spot: { tx: 48, ty: -80 }, place: "the Common Field", price: 0, buy: 12, low: 12, gather: { from: "nodes", kind: "wheat_field", radius: 8 } } },
   sells: { wheat: { buyerKey: "village_hollis", place: "Hollis's mill", price: 1, min: 12 } },
   outings: { supper: { placeKey: "building:inn_village", place: "the Wayfarer's Rest", doing: "have supper at the Wayfarer's Rest", hours: [18, 21], lingerMs: 5 * MIN } },
   asks: {},

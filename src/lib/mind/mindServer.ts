@@ -19,6 +19,7 @@ import { gameHour } from "@/lib/worldmap";
 import { BREAD_TABLES, tablePoint } from "@/lib/bakery";
 import { latestBatch, setOutBatch } from "@/lib/bakeryServer";
 import { startTrip } from "@/lib/nav/trips";
+import { gatherAt } from "./gatherServer";
 import { placeByKey } from "@/lib/nav/places";
 import { chatWithFallback } from "@/lib/llm";
 import { npcVoice, TALK_RULES } from "@/lib/npcPrompt";
@@ -28,7 +29,7 @@ import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./c
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
 import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
 import { profileFor } from "./profiles";
-import type { MindDecision, MindIntent, MindMemory, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
+import type { MindDecision, MindIntent, MindMemory, NpcCarry, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
 
 export type NpcRow = typeof npcs.$inferSelect;
 type MindRow = typeof npcMinds.$inferSelect;
@@ -67,6 +68,14 @@ export async function adjustStock(npcId: number, delta: NpcStock, purseDelta = 0
   const [row] = await db.update(npcMinds).set({ stock: stockExpr, purse: purseExpr })
     .where(and(eq(npcMinds.npcId, npcId), ...guards)).returning({ stock: npcMinds.stock, purse: npcMinds.purse });
   return row ?? null;
+}
+
+/** Show what an NPC is carrying over its head (null: nothing). Written only when it changes. */
+async function setCarry(npc: NpcRow, carry: NpcCarry | null): Promise<void> {
+  const same = (npc.carry ?? null) === null ? carry === null : !!carry && npc.carry!.item === carry.item && npc.carry!.qty === carry.qty;
+  if (same) return;
+  await db.update(npcs).set({ carry }).where(eq(npcs.id, npc.id));
+  npc.carry = carry;
 }
 
 /** Another NPC's mind (its stock and purse), when it has one: buying from it or selling to it moves real goods and coins. */
@@ -229,6 +238,7 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
     const intent: MindIntent = `deliver:${item}`;
     const r = await startTrip(npc.id, { key: intent, name: d.place, x: buyer.homeX, y: buyer.homeY });
     if (!r.ok) return { memory: `They wanted to take their ${word(p, item)} to ${d.place} but couldn't find the way.` };
+    await setCarry(npc, { item, qty: v.stock[item] ?? 0 }); // the load, on their back
     await speak(npc, await say(npc, `You're carrying your ${word(p, item)} to ${d.place} to sell.`, `Off to ${d.place} with the ${word(p, item)}!`), pos, `${npc.name} set off to ${d.place}.`);
     return { memory: `They set off to ${d.place} with their ${word(p, item)}.`, intent };
   }
@@ -295,13 +305,16 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
     const item = intent.slice(7);
     const sup = p.supplies[item];
     if (trip.status === "arrived" && sup) {
-      // Bought at the supplier's (out of their real stock, when they have a mind), or gathered there for free.
+      // Bought at the supplier's (out of their real stock, when they have a mind), or gathered there
+      // for free: with `gather`, really cut from the world (wheat stalks, trees), so it shows.
       const seller = sup.supplierKey ? await mindStock(sup.supplierKey) : null;
-      const { qty: n, cost } = errandHaul(sup, mind.purse, seller ? seller.stock[item] ?? 0 : null);
+      const cut = !sup.supplierKey && sup.gather ? await gatherAt(sup.gather, pos.x, pos.y, sup.buy, now) : null;
+      const { qty: n, cost } = errandHaul(sup, mind.purse, seller ? seller.stock[item] ?? 0 : cut);
       const sold = n > 0 && seller ? await adjustStock(seller.npcId, { [item]: -n }, cost) : true;
       if (n > 0 && sold && (await adjustStock(npc.id, { [item]: n }, -cost))) {
         await remember(npc.id, sup.supplierKey ? `They bought ${n} ${word(p, item)} at ${sup.place} for ${cost} coins.` : `They gathered ${n} ${word(p, item)} in ${sup.place}.`, now);
         if (seller) await remember(seller.npcId, `${npc.name} came by and bought ${n} ${item.replace(/_/g, " ")} for ${cost} coins.`, now);
+        await setCarry(npc, { item, qty: n }); // carried home, shown over their head
       } else if (n > 0 && seller && sold) await adjustStock(seller.npcId, { [item]: n }, -cost); // couldn't pay after all: put it back
       else if (n === 0) await remember(npc.id, sup.supplierKey ? `${sup.place} had no ${word(p, item)} to sell.` : `They found no ${word(p, item)} in ${sup.place}.`, now);
     } else await remember(npc.id, `They couldn't reach ${sup?.place ?? "the supplier"}.`, now);
@@ -318,6 +331,7 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
       const coins = qty * d.price;
       const paid = qty > 0 && buyer ? await adjustStock(buyer.npcId, { [item]: qty }, -coins) : qty > 0;
       if (paid && (await adjustStock(npc.id, { [item]: -qty }, coins))) {
+        await setCarry(npc, null);
         await remember(npc.id, `They sold ${qty} ${word(p, item)} at ${d.place} for ${coins} coins.`, now);
         if (buyer) await remember(buyer.npcId, `${npc.name} brought ${qty} ${item.replace(/_/g, " ")} and was paid ${coins} coins.`, now);
       } else await remember(npc.id, `${d.place} couldn't pay for their ${word(p, item)} today.`, now);
@@ -326,7 +340,7 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   }
   // An outing whose way was lost: just head home.
   if (intent.startsWith("outing:") && trip?.destKey === intent && trip.status !== "active" && trip.status !== "arrived") intent = "";
-  if (intent === "going_home" && atHome && !onTrip) intent = "";
+  if (intent === "going_home" && atHome && !onTrip) { intent = ""; await setCarry(npc, null); } // home: the load goes on the pile
   // Requests nobody answered close after a while.
   const requests = await openRequests(npc);
   for (const r of requests) {

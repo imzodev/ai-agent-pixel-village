@@ -1,6 +1,9 @@
 // NPC minds (src/lib/mind/): what an NPC has, what it can do right now,
 // and what it decided. Types only.
 
+/** What a working NPC is carrying, shown over its head (a load of wheat, logs, flour). */
+export type NpcCarry = { item: string; qty: number };
+
 /** Ingredients and baked goods an NPC holds, by item key. */
 export type NpcStock = Record<string, number>;
 
@@ -87,7 +90,14 @@ export type CraftRecipe = {
  * Where an NPC goes for an ingredient itself (an errand): to a supplier's
  * shop to buy it, or (no supplier, price 0) to a spot to gather it.
  */
-export type SupplyDef = { supplierKey?: string; spot?: { tx: number; ty: number }; place: string; price: number; buy: number; low: number };
+export type SupplyDef = { supplierKey?: string; spot?: { tx: number; ty: number }; place: string; price: number; buy: number; low: number; gather?: GatherDef };
+
+/**
+ * What gathering at a spot really takes from the world, so you can see it:
+ * ripe resource nodes cut down (the Common Field's wheat: they regrow as when a
+ * player picks them), or trees felled (stumps that grow back), `perTree` logs each.
+ */
+export type GatherDef = { from: "nodes"; kind: string; radius: number } | { from: "trees"; perTree: number; radius: number };
 
 /** Who an NPC carries its goods to and sells them (the farmhand's wheat to the mill): once it has `min`, at `price` each. */
 export type SellDef = { buyerKey: string; place: string; price: number; min: number };

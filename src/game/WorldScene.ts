@@ -779,7 +779,9 @@ export class WorldScene extends Phaser.Scene {
     // other players
     this.syncChars(this.players, s.players.filter((p) => p.id !== this.meId), 130, "#d6f5ff", (p) => ({ type: "player", id: p.id, name: p.name, distance: this.distTo(p.x, p.y) }));
     // npcs
-    this.syncChars(this.npcs, s.npcs, 46, "#fff2b3", (n) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) }), (n) => (n.sponsor ? `★ ${n.sponsor.businessName}` : n.kind === "remote" ? "◇ agent" : n.role));
+    // Under the name: the role (or sponsor), with what they're carrying in front ("🌾 ×12 · Farmhand").
+    this.syncChars(this.npcs, s.npcs, 46, "#fff2b3", (n) => ({ type: "npc", id: n.id, name: n.name, role: n.role, sponsored: !!n.sponsor, distance: this.distTo(n.x, n.y) }),
+      (n) => `${n.carry && n.carry.qty > 0 ? `${ITEM_ICONS[n.carry.item] ?? "📦"} ×${n.carry.qty} · ` : ""}${n.sponsor ? `★ ${n.sponsor.businessName}` : n.kind === "remote" ? "◇ agent" : n.role}`);
     // animals
     this.syncCritters(this.animals, s.animals.map((a) => ({ id: a.id, kind: a.species, x: a.x, y: a.y, facing: a.facing, state: a.state, hp: 1, maxHp: 1, name: a.name, move: a.move })), 34, (a) => ({ type: "animal", id: a.id, name: a.name!, species: a.kind, distance: this.distTo(a.x, a.y) }));
     this.syncEnemies(s.enemies);
@@ -985,6 +987,7 @@ export class WorldScene extends Phaser.Scene {
       this.applyTitle(ent, p.title ?? null);
       if (p.move !== undefined) acceptMove(ent, p.move);
       if (ent.label.text !== p.name) ent.label.setText(p.name);
+      if (badge && ent.badge) { const txt = badge(p); if (ent.badge.text !== txt) ent.badge.setText(txt); } // a load picked up or put down
       if (["up", "down", "left", "right"].includes(p.facing) && Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) < 2) ent.facing = p.facing as Facing;
       if (Math.hypot(ent.sprite.x - p.x, ent.sprite.y - p.y) > 400) ent.sprite.setPosition(p.x, p.y);
     }

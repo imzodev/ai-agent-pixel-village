@@ -3,6 +3,7 @@
 // that crosses the network boundary. Both ends import from here so TS
 // guarantees shape parity at compile time.
 
+import type { NpcCarry } from "@/types/mind";
 import type { StatusEffect, Strike } from "@/types/combat";
 import type { Appearance } from "@/types/domain";
 import type { Facing, PlayerActKind } from "@/types/world";
@@ -139,6 +140,8 @@ export type NpcSnapshot = {
   /** Currently equipped cosmetic items, slot→key. NPCs can wear cosmetics too. */
   cosmetics: { slot: string; itemKey: string }[];
   sponsor: { businessName: string; brandColor: string } | null;
+  /** What it's carrying (a load of wheat, logs), shown over its head. */
+  carry?: NpcCarry | null;
 };
 
 export type AnimalSnapshot = {

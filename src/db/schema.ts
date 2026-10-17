@@ -34,6 +34,7 @@ import type { SponsorEvent } from "@/types/sponsor";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { ParcelUse } from "@/types/homestead";
+import type { NpcCarry } from "@/types/mind";
 import type { MindDecision, MindIntent, MindMemory, NpcStock } from "@/types/mind";
 import type { RanchBuildKey, RanchJob } from "@/types/ranchGrowth";
 import type { FriendRequest, Friendship } from "@/types/social";
@@ -210,6 +211,8 @@ export const npcs = pgTable(
     // Epoch ms until which the NPC must not start a new move (a player
     // is talking to it). See holdNpc in src/lib/moveStore.ts.
     holdUntil: bigint("hold_until", { mode: "number" }),
+    /** What a working NPC is carrying (src/lib/mind/mindServer.ts): shown over its head ("🌾 ×12"). Null = nothing. */
+    carry: jsonb("carry").$type<NpcCarry>(),
     lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -400,6 +400,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
         kind: n.kind,
         cosmetics: raw.cosmeticsByChar.get(n.id) ?? [],
         sponsor: sp ? { businessName: sp.businessName, brandColor: sp.brandColor } : null,
+        ...(n.carry ? { carry: n.carry } : {}),
       };
     }),
     animals: raw.animals.map((a) => ({

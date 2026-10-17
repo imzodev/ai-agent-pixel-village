@@ -123,9 +123,9 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["farmhand"],
     role: "Farmhand",
     persona:
-      "Rowan is a cheerful young farmhand who cuts wheat in the Common Field all day and hauls it to Hollis's mill a load at a time. Sunburnt, always humming, and proud that the village's bread starts with his sheaves.",
+      "Rowan is a cheerful young farmhand who lives by the Common Field's north gate, cuts wheat in the field all day and hauls it across to Hollis's mill a load at a time. Sunburnt, always humming, and proud that the village's bread starts with his sheaves.",
     greeting: "Morning! Field's looking golden. Need a sheaf or two?",
-    tilePos: [44, -33], // by the Common Field's south gate, near Hollis
+    tilePos: [47, -95], // outside the Common Field's north gate: the mill (Hollis, south gate) is across the field
     wanderRadius: 30,
     appearance: { body: "male", skin: "#f1c9a5", hair: "spiked", hairColor: "#c8a24a", shirtColor: "#6a8f3a", pantsColor: "#5a4632" },
     mood: "cheerful",
