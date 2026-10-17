@@ -16,6 +16,7 @@ import {
 import { defaultChunk } from "./chunkGen";
 import { stampBuildingCollisions } from "./buildingStampsServer";
 import { ensureFelledLoaded } from "./treesServer";
+import { refreshHomesteadBlocks } from "./homesteadServer";
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   await ensureFelledLoaded(); // generated trees players have felled
@@ -38,6 +39,7 @@ const inFlightLoads = new Map<string, Promise<void>>();
 // (x, y) can touch. The foot box spans at most 2×2 chunks.
 export async function ensureChunkAt(x: number, y: number): Promise<void> {
   await stampBuildingCollisions();
+  await refreshHomesteadBlocks(); // homestead barns and workshops (once a minute)
   const jobs: Promise<void>[] = [];
   const seen = new Set<string>();
   for (const [dx, dy] of FOOT_CORNERS) {

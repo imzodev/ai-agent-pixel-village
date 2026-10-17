@@ -1,52 +1,33 @@
-// Vineyards: the lot's plots (vines left, trees right), what may be planted
-// where, perennials that fruit again, and the winery's steps and recipes.
-import fs from "node:fs";
+// Planting: what may go in a home's garden or a field, vineyard or orchard
+// parcel, perennials that fruit again, and the winery's steps and recipes.
 import { describe, expect, it } from "vitest";
 import { CROP_KINDS, GARDEN_CROPS, NODE_SHEETS } from "@/lib/crops";
-import { afterPerennialHarvest, fruitStepMs, plantRule, plantablesFor, plotHint, stageMs, vineyardSlot } from "@/lib/vineyard";
+import { afterPerennialHarvest, fruitStepMs, plantRule, plantablesFor, plotHint, stageMs } from "@/lib/vineyard";
 import { BUILD_STEPS, MACHINE_RECIPES } from "@/lib/ranchUpgrades";
 import { PROFILES } from "@/lib/mind/profiles";
 import { SHOP_STOCK } from "@/lib/trade";
-import { gardenCellsOf } from "@/lib/buildingManifest";
-
-const template = JSON.parse(fs.readFileSync("public/buildings/vineyard_lot.json", "utf8"));
-const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: { key: string; kind: string; tx: number; ty: number; file: string }[] };
-
-describe("the vineyard lot", () => {
-  it("has 20 vine plots and 2 tree plots", () => {
-    const cells = gardenCellsOf(template);
-    expect(cells.filter((c) => vineyardSlot(c) === "vine")).toHaveLength(20);
-    expect(cells.filter((c) => vineyardSlot(c) === "tree")).toHaveLength(2);
-  });
-  it("11 lots in a row south of the ranches", () => {
-    // The first row (more open later in the homesteads: lotDistricts.test.ts).
-    const first = (kind: string) => manifest.buildings.filter((b) => b.kind === kind && (b as { row?: string }).row === `${kind}_0`);
-    const v = first("vineyard");
-    expect(v).toHaveLength(11);
-    for (const b of v) { expect(b.ty).toBe(90); expect(b.file).toBe("/buildings/vineyard_lot.json"); }
-    const ranches = first("ranch");
-    expect(Math.max(...ranches.map((r) => r.ty)) + 15).toBeLessThanOrEqual(90); // no overlap with the ranch row
-  });
-});
 
 describe("planting", () => {
-  it("vines on trellises, trees in the orchard, vegetables in fields", () => {
+  it("vines in vineyards, trees in orchards, vegetables in fields and gardens", () => {
     const vine = GARDEN_CROPS.grape_cutting, tree = GARDEN_CROPS.apple_sapling, radish = GARDEN_CROPS.radish_seeds;
-    expect(plantRule(vine, "vineyard", "vine", 1)).toBeNull();
-    expect(plantRule(vine, "vineyard", "tree", 1)).toContain("trellises");
-    expect(plantRule(tree, "vineyard", "vine", 1)).toContain("orchard");
-    expect(plantRule(radish, "vineyard", "vine", 1)).toContain("vineyard");
-    expect(plantRule(vine, "land", null, 1)).toContain("vineyard");
-    expect(plantRule(radish, "land", null, 1)).toBeNull();
+    expect(plantRule(vine, "vineyard", 1)).toBeNull();
+    expect(plantRule(tree, "orchard", 1)).toBeNull();
+    expect(plantRule(tree, "vineyard", 1)).toContain("vineyard");
+    expect(plantRule(radish, "vineyard", 1)).toContain("vineyard");
+    expect(plantRule(vine, "field", 1)).toContain("vineyard parcel");
+    expect(plantRule(tree, "garden", 1)).toContain("orchard parcel");
+    expect(plantRule(radish, "field", 1)).toBeNull();
+    expect(plantRule(radish, "garden", 1)).toBeNull();
   });
-  it("white grapes need vineyard level 2", () => {
-    expect(plantRule(GARDEN_CROPS.white_grape_cutting, "vineyard", "vine", 1)).toContain("level 2");
-    expect(plantRule(GARDEN_CROPS.white_grape_cutting, "vineyard", "vine", 2)).toBeNull();
+  it("white grapes need farm level 2", () => {
+    expect(plantRule(GARDEN_CROPS.white_grape_cutting, "vineyard", 1)).toContain("level 2");
+    expect(plantRule(GARDEN_CROPS.white_grape_cutting, "vineyard", 2)).toBeNull();
   });
-  it("only offers what grows in the lot", () => {
+  it("only offers what grows there", () => {
     const bag = [{ itemKey: "radish_seeds", qty: 2 }, { itemKey: "grape_cutting", qty: 1 }, { itemKey: "apple_sapling", qty: 0 }];
-    expect(plantablesFor("vineyard", bag, GARDEN_CROPS).map((i) => i.itemKey)).toEqual(["grape_cutting"]);
-    expect(plantablesFor("land", bag, GARDEN_CROPS).map((i) => i.itemKey)).toEqual(["radish_seeds"]);
+    expect(plantablesFor(["vineyard"], bag, GARDEN_CROPS).map((i) => i.itemKey)).toEqual(["grape_cutting"]);
+    expect(plantablesFor(["field"], bag, GARDEN_CROPS).map((i) => i.itemKey)).toEqual(["radish_seeds"]);
+    expect(plantablesFor(["field", "vineyard"], bag, GARDEN_CROPS).map((i) => i.itemKey)).toEqual(["radish_seeds", "grape_cutting"]);
   });
   it("perennials fruit again: back to mature after a harvest", () => {
     for (const k of ["red_vine", "white_vine", "apple_tree"]) {
@@ -75,15 +56,15 @@ describe("planting", () => {
   });
   it("Pip sells every cutting and sapling", () => {
     const sold = new Set(SHOP_STOCK.village_pip.map((t) => t.itemKey));
-    for (const [seed, def] of Object.entries(GARDEN_CROPS)) if (def.lots?.includes("vineyard")) expect(sold.has(seed), seed).toBe(true);
+    for (const [seed, def] of Object.entries(GARDEN_CROPS)) if (def.grows?.includes("vineyard") || seed === "apple_sapling") expect(sold.has(seed), seed).toBe(true);
   });
 });
 
 describe("the winery", () => {
-  it("vineyard steps and recipes are separate from the ranch's", () => {
-    const steps = BUILD_STEPS.filter((s) => s.lot === "vineyard").map((s) => s.key);
-    expect(steps).toEqual(["fruit_press", "cellar", "racks", "jam"]);
-    for (const r of MACHINE_RECIPES.filter((x) => x.lot === "vineyard")) expect(steps, r.id).toContain(r.machine);
+  it("its machines are built by the barn, and every barn recipe has its machine", () => {
+    const steps = BUILD_STEPS.filter((s) => s.place === "barn").map((s) => s.key);
+    for (const k of ["fruit_press", "cellar", "racks", "jam"]) expect(steps).toContain(k);
+    for (const r of MACHINE_RECIPES.filter((x) => x.place === "barn")) expect(steps, r.id).toContain(r.machine);
     expect(BUILD_STEPS.find((s) => s.key === "racks")?.needs).toBe("cellar");
   });
   it("aging turns a bottle into an aged one", () => {
@@ -99,8 +80,8 @@ describe("the winery", () => {
 
 describe("plot hints", () => {
   it("tell a vineyard from an orchard and name what grows and who sells it", () => {
-    expect(plotHint("vineyard")).toMatch(/trellises.*apple.*Pip/);
+    expect(plotHint("vineyard")).toMatch(/trellises.*Pip/);
     expect(plotHint("orchard")).toMatch(/lemon.*banana.*apple.*towns/);
-    expect(plotHint("land")).toMatch(/vegetables/);
+    expect(plotHint("field")).toMatch(/vegetables/);
   });
 });

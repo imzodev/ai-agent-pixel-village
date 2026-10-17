@@ -76,24 +76,49 @@ each with a road to the nearest road already built. `REGEN_ALL=1` starts over
 (`townDist` / `ROAD_KEEP` in continent.ts). Re-run `scripts/gen-relics.ts`
 afterwards.
 
-## Homesteads (lot rows that open as they fill)
+## Homesteads (parcels you choose the use of)
 
-Beyond the original lots, rows of lots are **planned** in the homesteads
-(`HOMESTEADS` in continent.ts, part of the heartland: open land, no wild enemies)
-south of Hollowmere (workshops) and of the village farms (land, ranches,
-vineyards): `src/lib/lotDistricts.ts`, written into the manifest by
-`scripts/gen-lot-districts.ts`. Every lot has a `row` (`<kind>_<n>`; row 0 = the
-original lots, always open). Open rows are listed in `lot_rows`; when 80% of a
-kind's open lots are owned (`src/lib/lotRows.ts`), its next row opens for everyone
-(`lotRowsServer.ts`: on each claim, and hourly in tickd).
+What players own: a **home** (a village cottage and its garden, moved into at
+its door) and a **homestead**. The old land / ranch / vineyard / orchard /
+workshop lots are gone: everything they did is a homestead parcel now.
 
-- **`getBuildingsManifest()` returns only what's in the world** (closed rows left
-  out); `getAllBuildingsManifest()` is the whole file, used for `mapVersion`, so
-  route caches don't rebuild when rows open. Map pictures use `tilesVersion()`.
-- Processes re-read open rows at most once a minute; the WS server then sends
-  `lotsOpened` (clients re-fetch `/api/buildings` and stamp the new lots), pushes
-  anyone off new fences, and refreshes snapshots.
-- Admin: `GET/POST /api/lots/rows { kind }` lists rows / opens a kind's next row.
+- **A homestead is a `lots` row** (`kind: "homestead"`, key = its site key), so
+  crops (`resource_nodes.lot_id`, `plot = plotIndex(parcel, i)`), animals
+  (`animals.ranch_key`), growth (`ranch_state.lot_key`), banners, cheers and the
+  14-day inactivity release all work as for any lot. Its own table is
+  `homestead_parcels` (lot, col, row, use).
+- **Rules** (`src/lib/homestead.ts`, pure, every number in one place): a 6×6
+  grid of 10×10-tile parcels; the starter 2×2 is free (two fields, two
+  pastures); every other parcel costs `PARCEL_PRICE` (60), must touch one you own,
+  and the cap rises with level (`CAP_BY_LEVEL`: 4 → 36; keep `LEVEL_UNLOCKS`
+  in step). Uses: field (16 plots), pasture (8 space: hen 1, sheep 2, cow 4;
+  touching pastures are one pen), vineyard (4 vines), orchard (4 trees), barn,
+  workshop (one each). Changing a use is free; it clears the parcel's crops and
+  is refused while animals need the pasture. `MAX_HOMESTEADS` = 1 today;
+  `canClaimHomestead` already allows another once every one held is full.
+- **Sites** (`src/lib/homesteadSites.ts`, `homesteadSitesData.json` from
+  `scripts/gen-homestead-sites.ts`): a grid south of the village (`SITE_COLS` ×
+  `SITE_ROWS`, lanes between pairs and along every row), on open heartland,
+  clear of roads, towns and buildings, never in an enemy zone. **Pinned** like
+  towns: a re-run only adds sites. Sites open in blocks of 4, nearest the village
+  first, when 80% of the open ones are claimed (`homestead_blocks`;
+  `maybeOpenBlock` on each claim and hourly in tickd). The terrain keeps the whole
+  grid clear (`onSiteGrid`: no trees, bushes or rocks) and paints the lanes.
+- **Server**: `src/lib/homesteadServer.ts`, `/api/homestead` (claim at the
+  signpost, buy, preview / set a use, release); animals, growth and the
+  showroom through `/api/ranch`; crops through `/api/garden`. Planting goes by
+  where a plot is (`PlantSpot`: a home's garden, or the parcel's field /
+  vineyard / orchard: `plantRule`, `GardenCropDef.grows`).
+- **Barn and workshop**: built once (`hs_barn`, `hs_workshop`) on their parcel;
+  then the machines by them (`growthScope`: `BuildStep.place` / `MachineRecipe.place`
+  "barn" / "workshop"). Moving the parcel packs them away, never loses them.
+  Their walls block through chunkCollision's **dynamic layer**
+  (`setDynamicBlocks`, `buildingTiles`): the client from snapshots, the server
+  from the DB (`refreshHomesteadBlocks`, once a minute and on each change).
+- **Client**: `src/game/homesteadArt.ts` draws parcels, fences (art only), the
+  signpost, buildings, machines (`machineSprites.ts`) and the showroom from
+  `public/assets/parcels.png` (`scripts/draw-parcels.mjs`); the window is
+  `HomesteadPanel` (Land / Barn & animals / Farm).
 
 ## World map pictures
 
@@ -106,8 +131,7 @@ processes at the lowest CPU priority; `src/lib/mapRender.ts` draws. The server
 `mapVersion`; buildings are painted on when a tile is cut. At start the server
 deletes old versions under `.cache/map` and **draws the whole map ahead of time**
 (zoom 0–3, ~640 pictures, nearest the towns first; `scripts/build-map.ts` does it
-at deploy). When homestead rows open, the new tiles folder hard-links every
-picture the new lots don't touch (`rows.json` per folder). The panel
+at deploy). Homesteads aren't drawn on the map, so they never change it. The panel
 (`src/lib/mapZoom.ts`) has fixed zoom levels that show each picture zoom at its
 real size, can't zoom out past "the continent fits", and keeps the map on
 screen; it draws fog as one image, never requests tiles entirely under your fog,
@@ -119,7 +143,9 @@ Schema changes go through `npm run db:push` (drizzle-kit, from
 `src/db/schema.ts`). If it ever asks to **truncate** a table, answer No:
 that's drift, usually a constraint whose name differs from drizzle's
 `<table>_<col>_unique`. Fix the name instead (`scripts/fix-db-drift.sql`,
-which renamed `lots_key_key`).
+which renamed `lots_key_key`). Dropping a table or column that holds data
+also makes db:push ask, which the deploy can't answer: put the
+`DROP ... IF EXISTS` in `scripts/fix-db-drift.sql` (it runs first).
 
 ## Movement (NPCs, animals, enemies)
 
@@ -252,61 +278,47 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
 - Admin: `GET /api/mind?npcKey=…` (state, last decision with probabilities),
   `POST /api/mind { npcKey, stock?, purse?, think? }`.
 
-## Ranch growth and standing orders
+## Homestead growth and standing orders
 
-A ranch grows (`src/lib/ranchUpgrades.ts` rules, `ranchServer.ts` server,
-`ranch_state` table): farm XP from goods, processing and deliveries unlocks
-coop / barn levels (bigger caps via `capFor`), a silo and feeder (tickd's
-`tickRanches` feeds hungry animals from the silo every 5 min), and machines
-(mill, cheese press, loom, beehives) whose jobs finish on a timer. Building
-costs coins, wood, stone and Bjorn's fittings. Petting raises `animals.affection`,
-which gives a chance (up to 40%) of quality goods (golden egg, fine wool, rich milk).
-Built things are drawn on the lot from `LotSnapshot.ranch` (`src/game/ranchProps.ts`).
+A homestead grows (`src/lib/ranchUpgrades.ts` rules, `ranchServer.ts` server,
+`ranch_state` table): farm XP from crops, animal goods, machine work,
+deliveries and commissions raises its farm level, which unlocks what can be
+built by the barn (silo and feeder: tickd's `tickRanches` feeds hungry animals
+from the silo every 5 min; mill, cheese press, loom, beehives, fruit press, wine
+cellar and racks, jam kitchen) and the workshop (saw bench, lathe, upholstery
+bench, varnish shelf; the workbench comes with it). Jobs finish on a timer.
+Building costs coins, wood, stone and Bjorn's fittings. Petting raises
+`animals.affection`, which gives a chance (up to 40%) of quality goods (golden
+egg, fine wool, rich milk). Built things are drawn from `LotSnapshot.ranch`.
 
 NPCs with a mind offer **standing orders** (`profile.orders`, `ordersServer.ts`,
 `standing_orders`): a player supplies so many of an item a week. Deliveries are
 paid from the NPC's purse and go into its stock; filling the week pays a bonus.
 
-## Vineyards
+## Vines and fruit trees
 
-Vineyard lots (`kind: "vineyard"`, a row at ty 90; template from
-`scripts/draw-vineyard-lot.mjs`) grow **perennials** (`CROP_KINDS[k].perennial`):
-grapevines on the trellises (garden cells with dx < 12) and apple trees in the
-orchard. `src/lib/vineyard.ts` decides what may be planted where
-(`plantRule`: lot kind, vine/tree plot, farm level). A perennial's harvest
-doesn't remove it; it drops back to mature and fruits again after `fruitMs`.
-The winery (fruit press, wine cellar, cellar racks for aging, jam kitchen)
-is farm growth scoped by lot (`BuildStep.lot` / `MachineRecipe.lot`), shared
-with ranches through `ranch_state`, `/api/ranch` and RanchPanel. Sprites:
-`scripts/draw-orchard.mjs` (vines), the "[LPC] Fruit Trees" sheet
-`public/assets/trees/fruit-trees.png` (96×128 cells; credits in
-`public/assets/ATTRIBUTION.md`; a crop's `baseX`/`baseY` anchor its trunk), and
-`src/game/vineyardProps.ts`. Perennials grow `regrowthMs` a stage up to
+Vineyard and orchard parcels grow **perennials** (`CROP_KINDS[k].perennial`):
+grapevines (vineyard parcels) and fruit trees (orchard parcels: apple, and the
+LPC trees lemon, orange, peach, cherry, pear, plum, coconut, banana;
+`src/lib/orchard.ts` is the table items, saplings, shops and buyers are built
+from). A perennial's harvest doesn't remove it; it drops back to mature and
+fruits again after `fruitMs`. Perennials grow `regrowthMs` a stage up to
 `perennial.mature`, then ripen their fruit over `fruitMs` (`stageMs`).
-
-## Orchards
-
-Orchard lots (`kind: "orchard"`, template `scripts/draw-orchard-lot.mjs`, 6 tree
-plots) grow the LPC fruit trees beyond the apple: lemon, orange, peach, cherry,
-pear, plum, coconut, banana (`src/lib/orchard.ts` is the table items, saplings,
-shops and buyers are built from). The sheet draws growth per tree *shape* and
+Sprites: `scripts/draw-orchard.mjs` (vines) and the "[LPC] Fruit Trees" sheet
+`public/assets/trees/fruit-trees.png` (96×128 cells; credits in
+`public/assets/ATTRIBUTION.md`). The sheet draws growth per tree *shape* and
 fruit per variety, so each tree's frames come from different cells and carry
 their own trunk anchor (`CropRect.ax/ay`, measured; `nodeOrigin(kind, stage)`).
 Saplings are sold by the shops of towns whose land suits them (`families`); Pip
-sells only apples. The first homestead farm row is `orchard_0` (always open). The
-orchard's press and jam kitchen are farm growth with `lot: "orchard"`.
+sells grape cuttings and apple saplings.
 
-## Workshops (furniture)
+## Furniture
 
-Carpenter's workshop lots (`kind: "workshop"`, 4 on the road south of
-Hollowmere; `scripts/draw-workshop-lot.mjs`; `WORKSHOP_ROW` in regions.ts keeps
-trees off them) use farm growth with `lot: "workshop"`: a built-in workbench
-(`BUILT_IN`) plus a saw bench (logs → planks), lathe, upholstery bench and
-varnish shelf (polished pieces). Furniture is listed in `src/lib/furniture.ts`
+Made in a homestead's workshop. Furniture is listed in `src/lib/furniture.ts`
 with its value; every piece has a sprite on `public/assets/furniture.png`
 (`scripts/draw-furniture.mjs`, `src/game/furnitureArt.ts`, `FurnitureSprite`),
-shown in the Home panel and on the workshop's porch (`ranch_state.display`,
-6 spots, drawn from `LotSnapshot.ranch.display`). Shops buy furniture, and
+shown in the Home panel and in the showroom in front of the workshop
+(`ranch_state.display`, 6 spots: `PARCEL_SHOWROOM`). Shops buy furniture, and
 NPCs post **commissions** (`src/lib/commissions.ts`): missions keyed
 `com_<npcKey>_<ms>` from tickd's `tickCommissions`; the first delivery closes it.
 

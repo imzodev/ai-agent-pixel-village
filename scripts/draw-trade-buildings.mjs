@@ -17,11 +17,8 @@
 //           brick oven chimney, two big display windows full of bread under
 //           striped awnings, a painted BAKERY board and a hanging pretzel
 //           sign, flour sacks and a bread cart out front (bakery.json)
-//   ranch — a fenced pen for a player's animals: a hen coop on the left, a
-//           red gambrel barn on the right, trough and hay bales between,
-//           and the same road + gate as the field lots (ranch_lot.json)
 //
-//   node scripts/draw-trade-buildings.mjs [forge|inn|bakery|ranch|waystone]
+//   node scripts/draw-trade-buildings.mjs [forge|inn|bakery|waystone]
 //
 // Both are 24×15-tile templates. Routing (as in draw-houses): the wall's
 // bottom row → DecorationLower (blocks, anchors the Y-sort); everything
@@ -594,140 +591,6 @@ async function bakery() {
   });
 }
 
-// ── The ranch lot ───────────────────────────────────────────────────────
-// Same skeleton as the field lots (scripts/draw-land-lot.mjs): road on
-// rows 0–1, a fence with a 2-tile gate at cols 11–12 on row 3, sides on
-// cols 1 / 22, back on row 13. The animals' pen is cols 7–14, rows 5–12
-// (src/lib/ranch.ts RANCH_PEN).
-const BARN = [hex(0x4a1412), hex(0x6a1e1a), hex(0x8c2a22), hex(0xa83a2c), hex(0xc4553e), hex(0xdc7a5c)];
-const ROAD = { base: hex(0xb89a6c), dk: hex(0x9a7e56), lt: hex(0xcfb487), edge: hex(0x8a7048) };
-const STRAW = [hex(0x8a6a2a), hex(0xb08a3a), hex(0xd4b050), hex(0xecd078), hex(0xf8eaa8)];
-async function ranch() {
-  const groundC = new Canvas(W, H), shadowC = new Canvas(W, H), lowerC = new Canvas(W, H), upperC = new Canvas(W, H);
-  // road (rows 0–1), continuous across neighbouring lots
-  groundC.rect(0, 3, W, 26, ROAD.base);
-  for (let x = 0; x < W; x++) {
-    groundC.put(x, 3, ROAD.edge); groundC.put(x, 28, ROAD.edge);
-    if (rand(x, 1) < 0.5) groundC.put(x, 2, ROAD.edge);
-    if (rand(x, 2) < 0.5) groundC.put(x, 29, ROAD.edge);
-    for (let y = 4; y < 28; y++) if (rand(x, y) < 0.08) groundC.put(x, y, ROAD.dk);
-    for (const ry of [10, 21]) if (rand(x, ry) < 0.8) groundC.put(x, ry, ROAD.dk);
-  }
-  // trodden dirt from the gate to the coop and the barn doors
-  const dirt = (x0, y0, w, h) => {
-    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
-      const edge = Math.min(x - x0, x0 + w - 1 - x, y - y0, y0 + h - 1 - y); // ragged, grassy margins
-      if (edge < 2 && rand(x, y, 3) < 0.55 - edge * 0.2) continue;
-      groundC.put(x, y, ramp([ROAD.edge, ROAD.dk, ROAD.base, ROAD.lt], 0.55 + (rand(x, y, 8) - 0.5) * 0.35 - (edge < 2 ? 0.2 : 0), x, y));
-    }
-  };
-  dirt(11 * T + 4, 28, 24, 3 * T); // gate spur
-  dirt(4 * T, 9 * T + 4, 8 * T, 18); // to the coop
-  dirt(12 * T, 9 * T + 4, 6 * T, 18); // to the barn
-  dirt(16 * T, 10 * T, 4 * T, 3 * T); // barn apron
-  // straw strewn in the pen
-  for (let k = 0; k < 60; k++) { const x = 7 * T + Math.floor(rand(k, 41) * 8 * T), y = 5 * T + Math.floor(rand(41, k) * 7 * T); groundC.put(x, y, STRAW[2 + (k % 2)]); groundC.put(x + 1, y, STRAW[1]); }
-
-  // ── coop (cols 2–6): white board walls, red roof, ramp, nest window
-  const cx0 = 2 * T + 4, cx1 = 6 * T + 10, cBottom = 8 * T + 14;
-  for (let y = 6 * T + 6; y <= cBottom; y++) for (let x = cx0; x <= cx1; x++) {
-    const k = (x - cx0) % 5;
-    lowerC.put(x, y, ramp(PAL.board, 0.7 + (k === 0 ? 0.2 : k === 4 ? -0.3 : 0), x, y));
-  }
-  for (let y = 4 * T; y <= 6 * T + 8; y++) { // pitched roof
-    const half = ((y - 4 * T) / (2 * T + 8)) * ((cx1 - cx0) / 2 + 8);
-    const mid = (cx0 + cx1) / 2;
-    for (let x = Math.round(mid - half); x <= Math.round(mid + half); x++) lowerC.put(x, y, ramp(PAL.roofRed, 0.75 - ((y - 4 * T) % 6 === 5 ? 0.5 : 0) - (x - mid) * 0.004, x, y));
-    lowerC.put(Math.round(mid - half) - 1, y, PAL.ink); lowerC.put(Math.round(mid + half) + 1, y, PAL.ink);
-  }
-  line(lowerC, cx0 - 9, cx1 + 9, 6 * T + 9, PAL.ink);
-  shade(lowerC, cx0 + 8, 7 * T, 12, 10, PAL.glassLit, (px, py) => 0.35 + (py - 7 * T) * 0.03); // nest hole (warm, straw inside)
-  for (let x = cx0 + 9; x < cx0 + 19; x++) lowerC.put(x, 7 * T + 8, STRAW[3]);
-  const hatch = cx1 - 16; // little hen door + ramp
-  shade(lowerC, hatch, cBottom - 12, 10, 12, PAL.wood, () => 0.25);
-  for (let k = 0; k < 14; k++) { line(lowerC, hatch - 2 + k, hatch + 9 + k, cBottom - 1 + Math.floor(k / 2), k % 3 === 0 ? PAL.wood[1] : PAL.wood[3]); }
-  vline(lowerC, cx0, 6 * T + 8, cBottom, PAL.ink); vline(lowerC, cx1, 6 * T + 8, cBottom, PAL.ink); line(lowerC, cx0, cx1, cBottom, PAL.ink);
-  softShadow(shadowC, cx0 - 2, cBottom + 1, cx1 - cx0 + 5, 6, 100);
-
-  // ── barn (cols 15–21): red boards, gambrel roof, white-trimmed X doors, hay loft
-  const bx0 = 15 * T + 2, bx1 = 22 * T - 3, bTop = 7 * T, bBottom = 10 * T + 14;
-  for (let y = bTop; y <= bBottom; y++) for (let x = bx0; x <= bx1; x++) {
-    const k = (x - bx0) % 6;
-    lowerC.put(x, y, ramp(BARN, 0.6 + (k === 0 ? -0.35 : k === 1 ? 0.15 : 0) - (y - bTop) * 0.002 + (rand(x, y >> 2, 6) - 0.5) * 0.08, x, y));
-  }
-  const mid = (bx0 + bx1) / 2, rw = (bx1 - bx0) / 2 + 6;
-  const rTop = 4 * T + 6;
-  for (let y = rTop; y <= bTop + 2; y++) { // gambrel: steep lower slopes, shallow top
-    const t = (y - rTop) / (bTop + 2 - rTop);
-    const half = t < 0.4 ? 14 + (t / 0.4) * (rw * 0.55 - 14) : rw * 0.55 + ((t - 0.4) / 0.6) * (rw * 0.45);
-    for (let x = Math.round(mid - half); x <= Math.round(mid + half); x++) upperC.put(x, y, ramp(PAL.roofSlate, 0.72 - ((y - 3 * T) % 7 === 6 ? 0.5 : 0) + (t < 0.4 ? 0.08 : 0), x, y));
-    upperC.put(Math.round(mid - half) - 1, y, PAL.ink); upperC.put(Math.round(mid + half) + 1, y, PAL.ink);
-  }
-  line(upperC, Math.round(mid - 14), Math.round(mid + 14), rTop - 1, PAL.ink);
-  // hay loft door with bales peeking out
-  shade(upperC, Math.round(mid) - 9, bTop - 18, 18, 14, PAL.wood, () => 0.2);
-  for (let x = Math.round(mid) - 8; x < Math.round(mid) + 8; x++) for (let y = bTop - 10; y < bTop - 5; y++) upperC.put(x, y, ramp(STRAW, 0.6 + (rand(x, y, 2) - 0.5) * 0.4, x, y));
-  // big doors with white X bracing
-  const dx0 = Math.round(mid) - 16, dx1 = Math.round(mid) + 16, dTop = bTop + 14;
-  for (let y = dTop; y <= bBottom; y++) for (let x = dx0; x <= dx1; x++) lowerC.put(x, y, ramp(BARN, 0.45 + ((x - dx0) % 4 === 0 ? -0.2 : 0), x, y));
-  const white = PAL.white;
-  for (const [x0, x1] of [[dx0, Math.round(mid)], [Math.round(mid), dx1]]) {
-    line(lowerC, x0, x1, dTop, white); line(lowerC, x0, x1, bBottom - 1, white); vline(lowerC, x0, dTop, bBottom, white); vline(lowerC, x1, dTop, bBottom, white);
-    const n = bBottom - dTop;
-    for (let i = 0; i <= n; i++) { lowerC.put(Math.round(x0 + ((x1 - x0) * i) / n), dTop + i, white); lowerC.put(Math.round(x1 - ((x1 - x0) * i) / n), dTop + i, white); }
-  }
-  for (const x of [bx0 + 3, bx1 - 3]) vline(lowerC, x, bTop, bBottom, white); // corner trim
-  vline(lowerC, bx0, bTop, bBottom, PAL.ink); vline(lowerC, bx1, bTop, bBottom, PAL.ink); line(lowerC, bx0, bx1, bBottom, PAL.ink);
-  softShadow(shadowC, bx0 - 2, bBottom + 1, bx1 - bx0 + 5, 7, 110);
-
-  // ── trough and hay bales in the pen
-  const tx0 = 9 * T + 2, ty0 = 11 * T + 4;
-  shade(lowerC, tx0, ty0, 28, 9, PAL.wood, (px, py) => 0.55 - (py - ty0) * 0.04);
-  shade(lowerC, tx0 + 2, ty0 + 1, 24, 3, PAL.glass, () => 0.6);
-  line(lowerC, tx0 - 1, tx0 + 28, ty0 - 1, PAL.ink); line(lowerC, tx0 - 1, tx0 + 28, ty0 + 9, PAL.ink);
-  const bale = (x, y) => {
-    for (let py = y; py < y + 11; py++) for (let px = x; px < x + 16; px++) lowerC.put(px, py, ramp(STRAW, 0.7 - (py - y) * 0.035 + (rand(px, py, 4) - 0.5) * 0.25, px, py));
-    for (const by of [y + 3, y + 8]) line(lowerC, x, x + 15, by, STRAW[0]);
-    line(lowerC, x - 1, x + 16, y - 1, PAL.ink); line(lowerC, x - 1, x + 16, y + 11, PAL.ink); vline(lowerC, x - 1, y, y + 10, PAL.ink); vline(lowerC, x + 16, y, y + 10, PAL.ink);
-  };
-  bale(11 * T + 6, 5 * T + 6); bale(12 * T + 10, 6 * T + 8);
-
-  // ── fence: post-and-rail around the lot, gate open on the road side
-  const wood = (t) => ramp(PAL.wood, t, 0, 0);
-  const hRun = (row, x0, x1) => {
-    const y = row * T;
-    for (let x = x0; x <= x1; x++) { lowerC.put(x, y + 5, wood(0.7)); lowerC.put(x, y + 6, wood(0.55)); lowerC.put(x, y + 7, wood(0.25)); lowerC.put(x, y + 10, wood(0.7)); lowerC.put(x, y + 11, wood(0.55)); lowerC.put(x, y + 12, wood(0.25)); }
-    for (let x = x0; x + 3 <= x1; x += 16) postAt(x, y + 2, y + 13);
-    postAt(x1 - 3, y + 2, y + 13);
-  };
-  const vRun = (col, y0, y1) => { const x = col * T + 6; for (let y = y0; y <= y1; y++) { lowerC.put(x, y, wood(0.7)); lowerC.put(x + 1, y, wood(0.55)); lowerC.put(x + 2, y, wood(0.25)); } for (let y = y0; y + 10 <= y1; y += 16) postAt(x - 1, y, y + 9); };
-  function postAt(x, y0, y1) { for (let y = y0; y <= y1; y++) { lowerC.put(x, y, wood(0.85)); lowerC.put(x + 1, y, wood(0.6)); lowerC.put(x + 2, y, wood(0.5)); lowerC.put(x + 3, y, wood(0.25)); } }
-  const FX0 = 1 * T + 5, FX1 = 23 * T - 6;
-  vRun(1, 3 * T + 6, 13 * T + 12); vRun(22, 3 * T + 6, 13 * T + 12);
-  hRun(3, FX0, 11 * T - 3); hRun(3, 13 * T + 2, FX1); hRun(13, FX0, FX1);
-  for (const gx of [11 * T - 7, 13 * T + 2]) for (let y = 3 * T + 1; y <= 3 * T + 13; y++) for (let k = 0; k < 5; k++) lowerC.put(gx + k, y, wood(k === 0 ? 0.85 : k === 4 ? 0.25 : 0.6));
-  // sign by the gate: a little hen + cow mark
-  const SX = 14 * T + 2, SY = 3 * T - 8;
-  for (let y = SY + 10; y < SY + 22; y++) for (let x = SX + 9; x < SX + 12; x++) upperC.put(x, y, wood(0.3));
-  for (let y = SY; y < SY + 12; y++) for (let x = SX; x < SX + 22; x++) upperC.put(x, y, ramp(PAL.wood, 0.78 - (y - SY) * 0.02, x, y));
-  for (const [px, py, col] of [[SX + 5, SY + 5, PAL.white], [SX + 6, SY + 5, PAL.white], [SX + 6, SY + 4, PAL.red], [SX + 7, SY + 6, PAL.yellow], [SX + 13, SY + 5, PAL.white], [SX + 14, SY + 5, PAL.ink], [SX + 15, SY + 5, PAL.white], [SX + 16, SY + 6, PAL.white]]) upperC.put(px, py, col);
-  lowerC.outline(PAL.ink);
-
-  const collision = [];
-  for (let c = 1; c <= 22; c++) if (c < 11 || c > 12) collision.push([3, c]); // front fence (the lot's clickable face)
-  for (let r = 7; r <= 8; r++) for (let c = 2; c <= 6; c++) collision.push([r, c]); // coop
-  for (let r = 8; r <= 10; r++) for (let c = 15; c <= 21; c++) collision.push([r, c]); // barn
-  collision.push([11, 9], [11, 10]); // trough
-  // the back and side fences block too (rows 4–13 / row 13)
-  for (let r = 4; r <= 13; r++) collision.push([r, 1], [r, 22]);
-  for (let c = 2; c <= 21; c++) collision.push([13, c]);
-  await bakeCanvases({
-    name: "RanchLot", jsonName: "ranch_lot",
-    layers: { GroundUpper: groundC, DecorationLowerShadow: shadowC, DecorationLower: lowerC, DecorationUpper1: upperC },
-    collision, door: [3, 11],
-  });
-}
-
 // ── The waystone ────────────────────────────────────────────────────────
 // A tall rough-cut stone (cols 11–12, rows 9–12) on a round flagstone
 // base, a carved rune glowing blue down its face. Blocks its two base
@@ -779,4 +642,4 @@ async function waystone() {
 }
 
 const only = process.argv[2];
-for (const [name, draw] of Object.entries({ forge, inn, bakery, ranch, waystone })) if (!only || only === name) await draw();
+for (const [name, draw] of Object.entries({ forge, inn, bakery, waystone })) if (!only || only === name) await draw();

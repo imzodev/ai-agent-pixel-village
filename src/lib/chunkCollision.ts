@@ -133,10 +133,24 @@ export function chunkRegistered(cx: number, cy: number): boolean {
   return registry.has(chunkId(cx, cy));
 }
 
+// Blocks that come and go: buildings players put up (a homestead's barn and
+// workshop, src/lib/homestead.ts buildingTiles), by owner key, as world tiles.
+const dynamicByOwner = new Map<string, readonly { tx: number; ty: number }[]>();
+const dynamic = new Set<string>();
+
+/** Replace one owner's blocked tiles (empty = none). Server and client both call it. */
+export function setDynamicBlocks(owner: string, tiles: readonly { tx: number; ty: number }[]): void {
+  dynamicByOwner.set(owner, tiles);
+  if (!tiles.length) dynamicByOwner.delete(owner);
+  dynamic.clear();
+  for (const list of dynamicByOwner.values()) for (const t of list) dynamic.add(`${t.tx},${t.ty}`);
+}
+
 function isTileBlocked(cx: number, cy: number, lx: number, ly: number): boolean {
   const idx = ly * CHUNK_TILE_W + lx;
   const key = chunkId(cx, cy);
-  return registry.get(key)?.has(idx) === true || stamped.get(key)?.has(idx) === true;
+  if (registry.get(key)?.has(idx) === true || stamped.get(key)?.has(idx) === true) return true;
+  return dynamic.size > 0 && dynamic.has(`${cx * CHUNK_TILE_W + lx},${ly - cy * CHUNK_TILE_H}`); // chunk rows count up (chunkAtWorldPx)
 }
 
 // Foot box (16×10 under the character's feet): blocked if any corner lands on

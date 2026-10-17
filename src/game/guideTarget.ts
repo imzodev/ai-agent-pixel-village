@@ -3,6 +3,7 @@
 import type { Snapshot } from "@/game/bus";
 import { positionAt } from "@/lib/motion";
 import { COMMON_FIELD } from "@/lib/commonField";
+import { SITES, siteByKey } from "@/lib/homesteadSites";
 import type { TutorialTarget } from "@/types/tutorial";
 
 /** World position of a step's target, from what the snapshot shows. */
@@ -26,18 +27,17 @@ export function locateTarget(t: TutorialTarget, s: Snapshot): { x: number; y: nu
       const e = near(live);
       return e ? { x: e.x, y: e.y } : t.fallback;
     }
-    case "freeLand":
-    case "freeLot": {
-      // Your own lot first, else the nearest unclaimed one.
-      const prefix = t.kind === "freeLot" ? t.prefix : "land_";
-      const land = s.buildings.filter((b) => b.key.startsWith(prefix));
-      const lot = (key: string) => s.lots.find((l) => l.key === key);
-      const mine = land.filter((b) => me && lot(b.key)?.owner?.id === me.id);
-      const free = land.filter((b) => { const l = lot(b.key); return !l || !l.owner; });
-      const b = near((mine.length ? mine : free).map((b) => ({ ...b, x: b.doorX, y: b.doorY })));
-      if (b) return { x: b.x, y: b.y };
-      // Every field taken: the Common Field (gathering wheat counts too).
-      return t.kind === "freeLand" ? { x: (COMMON_FIELD.tx + COMMON_FIELD.w / 2) * 16, y: (COMMON_FIELD.ty + COMMON_FIELD.h) * 16 } : null;
+    case "homestead": {
+      // Your homestead first, else the nearest free site in sight; out of
+      // sight, the first sites to open (block 0, nearest the village).
+      const signOf = (key: string) => { const site = siteByKey(key); return site ? { x: site.sign.tx * 16 + 8, y: site.sign.ty * 16 + 8 } : null; };
+      const sites = s.lots.filter((l) => l.kind === "homestead");
+      const mine = sites.find((l) => me && l.owner?.id === me.id);
+      if (mine) return signOf(mine.key);
+      const free = near(sites.filter((l) => !l.owner).flatMap((l) => signOf(l.key) ?? []));
+      if (free) return free;
+      if (sites.length && t.orCommonField) return { x: (COMMON_FIELD.tx + COMMON_FIELD.w / 2) * 16, y: (COMMON_FIELD.ty + COMMON_FIELD.h) * 16 }; // every one in sight taken
+      return near(SITES.filter((x) => x.block === 0).map((x) => ({ x: x.sign.tx * 16 + 8, y: x.sign.ty * 16 + 8 })));
     }
   }
 }

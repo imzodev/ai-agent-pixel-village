@@ -27,11 +27,11 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     title: "Grow something",
-    hint: "The fenced fields south of the village are free to claim: claim one at its gate and plant a radish seed. If they're all taken, gather wheat in the Common Field just north of the village instead.",
+    hint: "South of the village, homesteads are free to claim: claim one at its \"For sale\" sign and plant a radish seed in one of its fields. If they're all taken, gather wheat in the Common Field just north of the village instead.",
     event: "plant", qty: 1,
-    // Fields are limited; the Common Field never runs out.
+    // Homesteads are limited; the Common Field never runs out.
     alt: { event: "collect", match: { itemKey: "wheat" } },
-    target: { kind: "freeLand" },
+    target: { kind: "homestead", orCommonField: true },
     reward: { coins: 15, xp: 20, items: [{ itemKey: "axe", qty: 1 }] },
   },
   {

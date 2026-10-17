@@ -1,22 +1,18 @@
-// Ranch plots (src/lib/ranch.ts): owned animals and their produce. Types only.
+// A homestead's animals (src/lib/ranch.ts): what you can raise and their produce. Types only.
 
 import type { RanchGrowthView } from "./ranchGrowth";
 
 export type RanchSpecies = "chicken" | "sheep" | "cow";
 
-/** What a ranch can raise: price, how many fit, and what each makes. */
+/** What a homestead can raise: price and what each makes (how many fit: pasture space, src/lib/homestead.ts). */
 export type RanchSpeciesDef = {
   species: RanchSpecies;
   /** What you buy ("Chick"). */
   young: string;
   icon: string;
   price: number;
-  /** Most of this species one ranch can hold. */
-  cap: number;
   /** Item key it produces. */
   produce: string;
-  /** Where it lives on the ranch (coop / barn). */
-  home: "coop" | "barn";
 };
 
 /** One animal in the ranch panel. */
@@ -35,19 +31,17 @@ export type RanchAnimalView = {
   nextInMs: number | null;
 };
 
-/** The ranch panel's data. */
+/** The homestead's animals-and-growth panel (RanchPanel). */
 export type RanchView = {
   key: string;
-  /** Ranches raise animals; vineyards only grow (their plants live in the plots). */
-  kind: "ranch" | "vineyard" | "workshop" | "orchard";
-  name: string;
   owner: { id: number; name: string } | null;
   mine: boolean;
   animals: RanchAnimalView[];
-  shop: (RanchSpeciesDef & { owned: number })[];
+  /** What you can buy: how many you have, and how many fit (`cap`, by free pasture space). */
+  shop: (RanchSpeciesDef & { owned: number; cap: number })[];
   /** Crops in your bag that animals eat. */
   feed: { itemKey: string; qty: number }[];
   coins: number;
-  /** Farm level, buildings, workshop (owner only). */
+  /** Farm level, buildings, machines (owner only). */
   growth: RanchGrowthView | null;
 };

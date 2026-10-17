@@ -456,7 +456,7 @@ async function syncLots() {
   }
 }
 
-/** The fishing dock's spot, just north of the land lots' road. */
+/** The fishing dock's spot, just north of the homesteads' road. */
 const FISHING_DOCK = { x: 1080, y: 900 };
 /** Brightwater's fishing dock, on the Silverrun's west bank by the bridge. */
 const RIVER_DOCK = tilePoint(-615, 2); // the end of the pier

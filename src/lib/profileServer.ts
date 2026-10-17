@@ -53,7 +53,7 @@ export async function loadProfile(username: string): Promise<Profile | null> {
 
   const have = new Set(owned.map((o) => o.itemKey));
   const entries = book.pages.flatMap((p) => p.entries);
-  const ranchLot = myLots.find((l) => l.kind === "ranch");
+  const ranchLot = myLots.find((l) => l.kind === "homestead");
   const [ranch] = ranchLot ? await db.select({ farmXp: ranchState.farmXp }).from(ranchState).where(eq(ranchState.lotKey, ranchLot.key)) : [];
   const foundSet = new Set(found);
 

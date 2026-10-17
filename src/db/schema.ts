@@ -33,6 +33,7 @@ import type {
 import type { SponsorEvent } from "@/types/sponsor";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
+import type { ParcelUse } from "@/types/homestead";
 import type { MindDecision, MindIntent, MindMemory, NpcStock } from "@/types/mind";
 import type { RanchBuildKey, RanchJob } from "@/types/ranchGrowth";
 import type { FriendRequest, Friendship } from "@/types/social";
@@ -236,7 +237,7 @@ export const animals = pgTable("animals", {
   lastPettedAt: timestamp("last_petted_at"),
   zone: jsonb("zone").$type<{ x: number; y: number; w: number; h: number }>().notNull(),
   stateUntil: timestamp("state_until"),
-  /** Ranch animals (src/lib/ranch.ts): owner, their ranch lot, and when
+  /** Homestead animals (src/lib/ranch.ts): owner, their homestead's lot key, and when
    *  their produce was last collected. Null for the village's own animals. */
   ownerId: integer("owner_id"),
   ranchKey: text("ranch_key"),
@@ -435,9 +436,8 @@ export const resourceNodes = pgTable(
 );
 
 // ---------- Lots (owned parcels) ----------
-// A parcel of land a player can own. Today every lot is a "home" lot (a
-// building plus its front garden); "land" lots without a building are
-// planned, as is player resale (price / for_sale). See src/lib/lots.ts.
+// What a player can own: a home (a cottage and its front garden) and a
+// homestead (a site of parcels, src/lib/homestead.ts). See src/lib/lots.ts.
 export const lots = pgTable(
   "lots",
   {
@@ -453,15 +453,11 @@ export const lots = pgTable(
     th: integer("th").notNull(),
     ownerId: integer("owner_id"),
     acquiredAt: timestamp("acquired_at"),
-    /** Coins to acquire it; 0 = free to move in. */
-    price: integer("price").notNull().default(0),
-    forSale: boolean("for_sale").notNull().default(false),
     /** The owner's banner (indices into LOT_COLORS / LOT_EMBLEMS, src/lib/lotBanner.ts); null = the default for the owner. */
     bannerColor: integer("banner_color"),
     bannerEmblem: integer("banner_emblem"),
   },
-  // Not unique: high-level players may own a second land lot (the limit
-  // lives in acquireLot, see landLotLimit in src/lib/progression.ts).
+  // Not unique: how many homesteads one may hold is a rule (MAX_HOMESTEADS), not the schema.
   (t) => [index("lots_owner_kind_idx").on(t.ownerId, t.kind)],
 );
 
@@ -789,13 +785,11 @@ export const npcPlayerNotes = pgTable(
   (t) => [uniqueIndex("npc_player_notes_pk").on(t.npcId, t.characterId)],
 );
 
-/** How a ranch has grown (src/lib/ranchUpgrades.ts): farm XP, coop / barn
- *  levels, the silo's feed, buildings and the workshop's jobs. */
+/** How a homestead has grown (src/lib/ranchUpgrades.ts), by its lot key:
+ *  farm XP, the silo's feed, buildings and machines, jobs and the showroom. */
 export const ranchState = pgTable("ranch_state", {
   lotKey: text("lot_key").primaryKey(),
   farmXp: integer("farm_xp").notNull().default(0),
-  coopLevel: integer("coop_level").notNull().default(1),
-  barnLevel: integer("barn_level").notNull().default(1),
   silo: jsonb("silo").$type<Record<string, number>>().notNull().default({}),
   machines: jsonb("machines").$type<RanchBuildKey[]>().notNull().default([]),
   jobs: jsonb("jobs").$type<RanchJob[]>().notNull().default([]),
@@ -1084,13 +1078,29 @@ export const wildChunks = pgTable(
   (t) => [primaryKey({ columns: [t.cx, t.cy] })],
 );
 
-/** Homestead lot rows that have opened (src/lib/lotRowsServer.ts). Row 0 of
- *  each kind (the original lots) is always open and never listed. */
-export const lotRows = pgTable("lot_rows", {
-  row: text("row").primaryKey(),
-  kind: text("kind").notNull(),
+/** Blocks of homestead sites that have opened (src/lib/homesteadServer.ts). Block 0 is always open and never listed. */
+export const homesteadBlocks = pgTable("homestead_blocks", {
+  block: integer("block").primaryKey(),
   openedAt: timestamp("opened_at").defaultNow().notNull(),
 });
+
+/**
+ * Homesteads (src/lib/homestead.ts) are lots of kind "homestead", one per
+ * site; these are their owned parcels and what each is used for. Crops are
+ * resource_nodes of the lot (plot = plotIndex(parcel, i)), animals have its
+ * key as ranch_key, and its machines live in ranch_state, as for any lot.
+ */
+export const homesteadParcels = pgTable(
+  "homestead_parcels",
+  {
+    lotId: integer("lot_id").notNull(),
+    col: integer("col").notNull(),
+    row: integer("row").notNull(),
+    use: text("use").$type<ParcelUse>().notNull().default("wild"),
+    boughtAt: timestamp("bought_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.lotId, t.col, t.row] })],
+);
 
 /** When each lair boss (src/lib/lairs.ts) last fell; it returns LAIR_RESPAWN_MS later. */
 export const bossLairs = pgTable("boss_lairs", {

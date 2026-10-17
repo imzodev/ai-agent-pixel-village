@@ -2,6 +2,7 @@
 // the world boss schedule, and data consistency with items / recipes / shops.
 
 import fs from "node:fs";
+import { CAP_BY_LEVEL } from "@/lib/homestead";
 import { describe, expect, it } from "vitest";
 import {
   BOSS_WINDOW_MS,
@@ -15,7 +16,6 @@ import {
   chopBonus,
   enemyHit,
   isAggressive,
-  landLotLimit,
   levelForXp,
   maxHpFor,
   perkPoints,
@@ -86,14 +86,14 @@ describe("levels, unlocks and perks", () => {
     expect(levelForXp(xpForLevel(5) - 1)).toBe(4);
   });
 
-  it("max HP, perk points and land lots grow with level", () => {
+  it("max HP, perk points and homestead parcels grow with level", () => {
     expect(maxHpFor(1, false)).toBe(20);
     expect(maxHpFor(3, true)).toBe(50);
     expect(perkPoints(4)).toBe(0);
     expect(perkPoints(5)).toBe(1);
     expect(perkPoints(10)).toBe(2);
-    expect(landLotLimit(9)).toBe(1);
-    expect(landLotLimit(10)).toBe(2);
+    // homestead parcels: capFor (src/lib/homestead.ts), listed in LEVEL_UNLOCKS
+    for (const [lv, cap] of CAP_BY_LEVEL) if (lv > 1) expect(LEVEL_UNLOCKS.find((u) => u.level === lv)?.text, `level ${lv}`).toContain(`${cap} `);
   });
 
   it("lists unlocks crossed by a level-up", () => {

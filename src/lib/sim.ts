@@ -40,7 +40,7 @@ import { thinkMinds } from "./mind/mindServer";
 import { thinkBusinessAgents } from "./mind/businessServer";
 import { tickRanches } from "./ranchServer";
 import { tickCommissions } from "./commissionsServer";
-import { maybeOpenRows } from "./lotRowsServer";
+import { maybeOpenBlock } from "./homesteadServer";
 let lastRowCheck = 0;
 /** How long world chat is kept (the privacy policy promises this). */
 const CHAT_KEEP_MS = 30 * 24 * 3600_000;
@@ -152,9 +152,9 @@ export async function tickWorld(): Promise<number | null> {
   await tickRanches(nowMs).catch((err) => console.warn("[tick] ranch feeders failed:", err instanceof Error ? err.message : err));
   await tickCommissions(nowMs).catch((err) => console.warn("[tick] commissions failed:", err instanceof Error ? err.message : err));
   if (nowMs - lastRowCheck > 3600_000) {
-    // Homestead rows: a safety net for the check each claim makes.
+    // Homestead sites: a safety net for the check each claim makes.
     lastRowCheck = nowMs;
-    await maybeOpenRows().catch((err) => console.warn("[tick] lot rows failed:", err instanceof Error ? err.message : err));
+    await maybeOpenBlock().catch((err) => console.warn("[tick] homestead sites failed:", err instanceof Error ? err.message : err));
     // World chat is kept 30 days (the privacy policy says so).
     await db.delete(worldChat).where(lt(worldChat.createdAt, new Date(nowMs - CHAT_KEEP_MS))).catch((err) => console.warn("[tick] chat cleanup failed:", err instanceof Error ? err.message : err));
   }

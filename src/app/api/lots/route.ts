@@ -1,15 +1,15 @@
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { logEvent } from "@/lib/game";
-import { acquireLot, buildingKeysOfOwner, cheerLot, releaseLot, setLotBanner } from "@/lib/lots";
+import { acquireLot, cheerLot, releaseLot, setLotBanner, signPointsOfOwner } from "@/lib/lots";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
 
 export const dynamic = "force-dynamic";
 
-/** How close to the door (a land lot's gate) you must be to acquire it. */
+/** How close to the door you must be to move in. */
 const DOOR_RANGE_PX = 160;
 
-/** Lot actions: acquire | release | banner | cheer. Body: { action, key } (banner also { color, emblem }). */
+/** Lot actions: acquire (move into a home) | release | banner | cheer. Body: { action, key } (banner also { color, emblem }). Homesteads: /api/homestead. */
 export async function POST(req: Request) {
   try {
     const me = await requireCharacter();
@@ -21,12 +21,11 @@ export async function POST(req: Request) {
     if (action === "acquire") {
       const p = getLivePlayerPosition(me.id) ?? me;
       if (door && Math.hypot(door.x - p.x, door.y - p.y) > DOOR_RANGE_PX) {
-        return Response.json({ error: key.startsWith("land_") ? "Walk up to the gate first." : "Walk up to the door first." }, { status: 400 });
+        return Response.json({ error: "Walk up to the door first." }, { status: 400 });
       }
       const r = await acquireLot(me.id, key);
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
-      if (key.startsWith("land_")) await logEvent("home", `${me.name} claimed a plot of land!`, "character", me.id, door?.x, door?.y);
-      else await logEvent("home", `${me.name} moved in!`, "character", me.id, door?.x, door?.y);
+      await logEvent("home", `${me.name} moved in!`, "character", me.id, door?.x, door?.y);
       if (door) markWorldDirty(door.x, door.y);
       return Response.json(r);
     }
@@ -41,20 +40,14 @@ export async function POST(req: Request) {
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
       await logEvent("home", `${me.name} cheered ${r.ownerName}'s place!`, "character", me.id, door?.x, door?.y);
       // The owner's total is on every one of their signs, so refresh them all.
-      for (const bk of await buildingKeysOfOwner(r.ownerId!)) {
-        const d = await getBuildingDoor(bk);
-        if (d) markWorldDirty(d.x, d.y);
-      }
+      for (const p of await signPointsOfOwner(r.ownerId!)) markWorldDirty(p.x, p.y);
       return Response.json({ ok: true, message: r.message });
     }
     if (action === "banner") {
       const r = await setLotBanner(me.id, key, Number(body.color), Number(body.emblem));
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
       // The banner is on all their lots, so refresh each one for whoever is looking.
-      for (const bk of await buildingKeysOfOwner(me.id)) {
-        const d = await getBuildingDoor(bk);
-        if (d) markWorldDirty(d.x, d.y);
-      }
+      for (const p of await signPointsOfOwner(me.id)) markWorldDirty(p.x, p.y);
       return Response.json(r);
     }
     return Response.json({ error: "Unknown action." }, { status: 400 });

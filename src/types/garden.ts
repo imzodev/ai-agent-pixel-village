@@ -1,17 +1,17 @@
-// Lots (owned parcels) and home gardens. Types only — no logic.
+// Lots (owned land) and gardens. Types only — no logic.
 //
-// A lot is a parcel of land a player can own. Today every lot is a "home"
-// lot (a building plus its front garden); "land" lots without a building
-// are planned. Garden plots belong to a lot; crops planted in them are
+// A lot is what a player can own: a home (a cottage and its front garden) or
+// a homestead (src/lib/homestead.ts). Crops planted in their plots are
 // resource_nodes rows carrying owner_id / lot_id / plot.
 
-/** What kind of parcel a lot is. */
 import type { RanchLook } from "./ranchGrowth";
+import type { Parcel } from "./homestead";
 
-export type LotKind = "home" | "land" | "ranch" | "vineyard" | "workshop" | "orchard";
+/** What kind of lot it is. */
+export type LotKind = "home" | "homestead";
 
-/** A vineyard plot: a trellis for a vine, or room for a fruit tree. */
-export type VineyardSlot = "vine" | "tree";
+/** Where a crop is planted: a home's garden, or a homestead's field, vineyard or orchard parcel. */
+export type PlantSpot = "garden" | "field" | "vineyard" | "orchard";
 
 /** A lot's parcel in world tiles (the `lots` row's tx/ty/tw/th). */
 export type LotBounds = { tx: number; ty: number; tw: number; th: number };
@@ -26,11 +26,7 @@ export type LotSnapshot = {
   /** Building the lot belongs to (home lots). */
   buildingKey: string | null;
   owner: { id: number; name: string } | null;
-  /** Coins to acquire it (0 = free to move in). */
-  price: number;
-  /** Listed for resale by its owner (reserved for a later release). */
-  forSale: boolean;
-  /** Ranch lots: the buildings to draw on it (src/lib/ranchUpgrades.ts). */
+  /** Homesteads: the buildings and machines built (src/lib/ranchUpgrades.ts), and the showroom. */
   ranch?: RanchLook;
   /** Owned lots: the banner it flies and where (the door, world px). */
   banner?: LotBanner & { x: number; y: number };
@@ -38,6 +34,10 @@ export type LotSnapshot = {
   bounds?: LotBounds;
   /** Owned lots: the cheers its owner has received in all (src/lib/cheers.ts). */
   cheers?: number;
+  /** Homesteads (src/lib/homestead.ts): the owned parcels and their uses. */
+  parcels?: Parcel[];
+  /** Homesteads: the signpost (world px) — "For sale" while unclaimed, the owner's name after. */
+  sign?: { x: number; y: number };
 };
 
 /** One plantable cell of a garden, in template tile units. */
@@ -60,11 +60,9 @@ export type GardenCropDef = {
   seedKey: string;
   /** Inventory item produced on harvest. */
   produceKey: string;
-  /** Lot kinds it can be planted in (default: land and home gardens). */
-  lots?: readonly LotKind[];
-  /** Vineyards: the kind of plot it needs. */
-  slot?: VineyardSlot;
-  /** Farm level of the lot needed to plant it (src/lib/ranchUpgrades.ts). */
+  /** Where it can be planted (default: fields and home gardens). */
+  grows?: readonly PlantSpot[];
+  /** Farm level of the homestead needed to plant it (src/lib/ranchUpgrades.ts). */
   minFarmLevel?: number;
 };
 

@@ -18,7 +18,7 @@ describe("npc knowledge", () => {
 
   it("says where animals really come from", () => {
     expect(bram).toMatch(/Nobody sells animals/);
-    expect(bram).toMatch(/ranch lot/);
+    expect(bram).toMatch(/own homestead/);
   });
 
   it("puts a townsperson in their own town, among their own neighbours", () => {

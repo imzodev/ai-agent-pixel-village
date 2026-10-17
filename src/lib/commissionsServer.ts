@@ -69,6 +69,6 @@ export async function onCommissionDone(npc: typeof npcs.$inferSelect, mission: t
     await adjustStock(npc.id, {}, -(mission.reward.coins ?? 0), true);
     await remember(npc.id, `${playerName} delivered the furniture they'd ordered.`);
   }
-  const [shop] = await db.select({ key: lots.key }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "workshop")));
-  if (shop) await addFarmXp(shop.key, COMMISSION_XP);
+  const [home] = await db.select({ key: lots.key }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "homestead"))).limit(1);
+  if (home) await addFarmXp(home.key, COMMISSION_XP); // the homestead's farm level
 }

@@ -64,6 +64,7 @@ export function makeCreatureTextures(scene: Scene) {
 // agree on the same source of truth.
 
 import { CROP_KINDS, NODE_SHEETS } from "@/lib/crops";
+import { PARCELS_SHEET, PARCELS_TEXTURE } from "./homesteadArt";
 
 const LPC_CROPS_KEY = "lpc_crops";
 
@@ -75,6 +76,8 @@ export function loadPropSprites(scene: Scene): void {
   for (const [key, url] of Object.entries(NODE_SHEETS)) scene.load.image(key, url);
   // Furniture, one 32×32 frame per piece (src/game/furnitureArt.ts): workshop showrooms.
   scene.load.spritesheet(FURNITURE_TEXTURE, FURNITURE_SHEET, { frameWidth: FURNITURE_CELL, frameHeight: FURNITURE_CELL });
+  // Homestead parcels, fences and signposts (src/game/homesteadArt.ts).
+  scene.load.image(PARCELS_TEXTURE, PARCELS_SHEET);
 }
 
 /**

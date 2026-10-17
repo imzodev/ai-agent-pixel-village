@@ -1,10 +1,8 @@
-// What players build in their vineyard's yard (src/lib/ranchUpgrades.ts):
+// The winery players build by their homestead's barn (src/lib/ranchUpgrades.ts):
 // a fruit press, the wine cellar's door in its mound, wine racks and a jam
-// kitchen. Pixel sprites at world scale; each stands at a fixed spot of the
-// vineyard template's gravel yard, bottom right under the trees (pixels,
-// bottom-left; scripts/draw-vineyard-lot.mjs).
+// kitchen. Pixel sprites at world scale; homesteadArt.ts puts each at its
+// spot (src/lib/homestead.ts PARCEL_SPOTS).
 
-import type { RanchBuildKey } from "@/types/ranchGrowth";
 
 type Sprite = { rows: string[]; palette: Record<string, string> };
 
@@ -54,12 +52,4 @@ function jamKitchen(): Sprite {
 
 export const VINEYARD_PROP_SPRITES: Readonly<Record<string, Sprite>> = {
   vy_fruit_press: fruitPress(), vy_cellar: cellar(), vy_racks: racks(), vy_jam: jamKitchen(),
-};
-
-/** Where each winery building stands in the vineyard's yard: texture and bottom-left (template px). */
-export const VINEYARD_PROP_SPOTS: Readonly<Partial<Record<RanchBuildKey, { sprite: string; x: number; y: number }>>> = {
-  fruit_press: { sprite: "vy_fruit_press", x: 212, y: 207 },
-  cellar: { sprite: "vy_cellar", x: 236, y: 207 },
-  racks: { sprite: "vy_racks", x: 272, y: 207 },
-  jam: { sprite: "vy_jam", x: 306, y: 207 },
 };

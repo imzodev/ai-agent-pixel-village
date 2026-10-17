@@ -3,14 +3,16 @@
 // passing by sees it) and the pieces in your bag you could put up.
 // Rules: src/lib/ranchServer.ts showroom().
 import FurnitureSprite from "./FurnitureSprite";
-import { SHOWROOM_SIZE } from "@/game/workshopProps";
+import { PARCEL_SHOWROOM } from "@/lib/homestead";
+
+const SHOWROOM_SIZE = PARCEL_SHOWROOM.length;
 import type { RanchGrowthView } from "@/types/ranchGrowth";
 
 export default function RanchShowroom({ g, busy, act }: { g: RanchGrowthView; busy: boolean; act: (body: Record<string, unknown>) => void }) {
   const shown = g.display ?? [];
   return (
     <div className="space-y-2">
-      <div className="text-[12px] text-stone-600">On the porch ({shown.length}/{SHOWROOM_SIZE}) — everyone walking by can see them. Click one to take it back.</div>
+      <div className="text-[12px] text-stone-600">In front of your workshop ({shown.length}/{SHOWROOM_SIZE}) — everyone walking by can see them. Click one to take it back.</div>
       <div className="flex flex-wrap gap-1.5">
         {shown.length === 0 && <span className="text-[12px] text-stone-500">Nothing on show yet.</span>}
         {shown.map((item, i) => (

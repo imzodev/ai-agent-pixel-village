@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { FIT_BOX, MAX_TILE_ZOOM, PAN_BOX, ZOOM_LEVELS, clampCamera, maxLevelFor, tileZoomFor } from "@/lib/mapZoom";
 import { MAP_MAX_ZOOM, mapTileRect } from "@/lib/worldAtlas";
-import { nearestFirst, tileTouches, tilesAt } from "@/lib/mapOverview";
+import { nearestFirst, tilesAt } from "@/lib/mapOverview";
 
 describe("zoom levels", () => {
   it("each level shows one picture zoom at its real size; the server draws exactly those", () => {
@@ -46,12 +46,5 @@ describe("the whole map, drawn ahead", () => {
     const ordered = nearestFirst(tilesAt(1), [{ tx: 32, ty: 21 }]);
     const r = mapTileRect(1, ordered[0].mx, ordered[0].my);
     expect(32 >= r.tx && 32 < r.tx + r.tw && 21 >= r.ty && 21 < r.ty + r.th).toBe(true);
-  });
-  it("a newly opened lot touches only the tiles over it", () => {
-    const lot = [{ tx: 100, ty: 200, tw: 24, th: 15 }];
-    const touched = tilesAt(0).filter((t) => tileTouches(0, t.mx, t.my, lot));
-    expect(touched.length).toBeGreaterThanOrEqual(1);
-    expect(touched.length).toBeLessThanOrEqual(4);
-    expect(tileTouches(0, 50, 50, lot)).toBe(false);
   });
 });

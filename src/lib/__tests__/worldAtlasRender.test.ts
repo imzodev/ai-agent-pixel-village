@@ -6,7 +6,6 @@ import sharp from "sharp";
 
 vi.mock("@/db", () => ({ db: {} })); // the renderer never touches the DB
 // No homestead rows open beyond the first (no DB here).
-vi.mock("@/lib/lotRowsServer", () => ({ openRows: async () => new Set(), openRowsVersion: () => 0, openRowsSig: () => "" }));
 
 import { mapTilePng, renderBase } from "@/lib/worldAtlasServer";
 import { BLOCK_TH, BLOCK_TW, blockOf, blocksIn, overviewFrame } from "@/lib/mapOverview";

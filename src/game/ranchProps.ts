@@ -1,10 +1,8 @@
-// What players build on their ranch (src/lib/ranchUpgrades.ts), drawn on
-// the lot: a silo, a feeder trough, a little windmill, a cheese press, a
-// loom and a pair of beehives. Pixel sprites at world scale, generated as
-// palette rows; each sits at a fixed spot of the ranch template (pixels,
-// bottom-left), clear of the pen, the coop, the barn and the paths.
+// What players build by their homestead's barn (src/lib/ranchUpgrades.ts):
+// a silo, a feeder trough, a little windmill, a cheese press, a loom and a
+// pair of beehives. Pixel sprites at world scale, generated as palette rows;
+// homesteadArt.ts puts each at its spot (src/lib/homestead.ts PARCEL_SPOTS).
 
-import type { RanchBuildKey } from "@/types/ranchGrowth";
 
 type Sprite = { rows: string[]; palette: Record<string, string> };
 
@@ -78,14 +76,4 @@ function hives(): Sprite {
 
 export const RANCH_PROP_SPRITES: Readonly<Record<string, Sprite>> = {
   ranch_silo: silo(), ranch_feeder: feeder(), ranch_mill: mill(), ranch_press: press(), ranch_loom: loom(), ranch_hives: hives(),
-};
-
-/** Where each building stands on the ranch template: its texture and bottom-left (template px). */
-export const RANCH_PROP_SPOTS: Readonly<Partial<Record<RanchBuildKey, { sprite: string; x: number; y: number }>>> = {
-  silo: { sprite: "ranch_silo", x: 34, y: 207 },
-  feeder: { sprite: "ranch_feeder", x: 52, y: 207 },
-  mill: { sprite: "ranch_mill", x: 72, y: 207 },
-  press: { sprite: "ranch_press", x: 241, y: 207 },
-  loom: { sprite: "ranch_loom", x: 130, y: 79 },
-  hives: { sprite: "ranch_hives", x: 318, y: 207 },
 };

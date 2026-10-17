@@ -8,21 +8,21 @@
 // Nothing is rendered until someone looks, so a huge world costs only
 // what players visit.
 
+import { siteByKey } from "./homesteadSites";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characterMapSeen, characterWaystones, lots } from "@/db/schema";
 import { PLACES } from "./regions";
 import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
-import { getAllBuildingsManifest, getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
+import { getBuildingDoor, getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { resolveBanner } from "./lotBanner";
-import { openRows, openRowsSig } from "./lotRowsServer";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "./chunkCollision";
-import { nearestFirst, tileFile, tilesAt, tileTouches } from "./mapOverview";
+import { nearestFirst, tileFile, tilesAt } from "./mapOverview";
 import { requestMapJob } from "./mapRenderPool";
 import { LAIR_SPOTS, lairBoss } from "./lairs";
 import { TOWNS } from "./settlements";
@@ -123,7 +123,7 @@ let versionMemo: Promise<string> | null = null;
 export function mapVersion(): Promise<string> {
   versionMemo ??= (async () => {
     const h = crypto.createHash("sha1").update(String(RENDER_VERSION));
-    h.update(JSON.stringify((await getAllBuildingsManifest()).buildings)); // every planned lot: stable as rows open
+    h.update(JSON.stringify((await getBuildingsManifest()).buildings));
     // the terrain generators themselves: a world change re-renders the map
     for (const f of ["src/lib/regions.ts", "src/lib/continent.ts", "src/lib/settlements.ts", "src/lib/settlementsData.json", "src/lib/terrain/noise.ts", "src/lib/terrain/wildsTiles.json"]) {
       try { h.update(fs.readFileSync(path.join(process.cwd(), f))); } catch { /* not shipped: fine */ }
@@ -135,16 +135,8 @@ export function mapVersion(): Promise<string> {
   return versionMemo;
 }
 
-/**
- * The version of the map's PICTURES: the map version plus the homestead
- * rows open now, so tiles re-render when new lots appear. (Route caches key
- * on mapVersion alone and don't rebuild for that.)
- */
-export async function tilesVersion(): Promise<string> {
-  await openRows();
-  const sig = openRowsSig();
-  return sig ? `${await mapVersion()}-${crypto.createHash("sha1").update(sig).digest("hex").slice(0, 8)}` : mapVersion();
-}
+/** The version of the map's pictures: the map's (homesteads aren't drawn on it). */
+export const tilesVersion = (): Promise<string> => mapVersion();
 
 /** Have zoom-0 tile (mx, my) drawn (a background worker does it) and read it. */
 async function baseTileRaw(mx: number, my: number): Promise<Buffer> {
@@ -219,48 +211,13 @@ async function queueWholeMap(): Promise<number> {
   return n;
 }
 
-/**
- * When homestead rows open, the tiles version changes. Its folder starts
- * from the previous version's pictures: every tile that doesn't overlap the
- * newly opened lots is hard-linked over (free), so only the few tiles
- * around the new lots are drawn again. Each folder lists its open rows.
- */
+/** Make the tiles folder once, then draw the whole map in the background. */
 let tilesReadyFor: string | null = null;
-let tilesReadying: Promise<void> | null = null;
 async function ensureTilesDir(tilesV: string): Promise<void> {
   if (tilesReadyFor === tilesV) return;
-  tilesReadying ??= carryOver(tilesV).finally(() => { tilesReadyFor = tilesV; tilesReadying = null; void queueWholeMap().catch(() => {}); });
-  await tilesReadying;
-}
-
-async function carryOver(tilesV: string): Promise<void> {
-  const dir = path.join(CACHE_DIR, tilesV), rowsFile = path.join(dir, "rows.json");
-  if (fs.existsSync(rowsFile)) return;
-  const open = [...(await openRows())].sort();
-  const mapV = await mapVersion();
-  // the previous pictures: a folder of this map version whose rows are all still open
-  let prev: { dir: string; rows: string[] } | null = null;
-  for (const d of await fs.promises.readdir(CACHE_DIR).catch(() => [] as string[])) {
-    if (d === tilesV || !d.startsWith(mapV)) continue;
-    const rows = JSON.parse(await fs.promises.readFile(path.join(CACHE_DIR, d, "rows.json"), "utf8").catch(() => "null")) as string[] | null;
-    if (rows && rows.every((r) => open.includes(r)) && (!prev || rows.length > prev.rows.length)) prev = { dir: path.join(CACHE_DIR, d), rows };
-  }
-  if (prev) {
-    const fresh = new Set(open.filter((r) => !prev!.rows.includes(r)));
-    const lotsNew = (await getAllBuildingsManifest()).buildings.filter((e) => e.row && fresh.has(e.row)).map((e) => ({ tx: e.tx, ty: e.ty, tw: 24, th: 15 }));
-    for (let z = 0; z <= MAP_MAX_ZOOM; z++) {
-      const from = path.join(prev.dir, String(z));
-      for (const f of await fs.promises.readdir(from).catch(() => [] as string[])) {
-        const m = /^(-?\d+)_(-?\d+)\.png$/.exec(f);
-        if (!m || tileTouches(z, Number(m[1]), Number(m[2]), lotsNew)) continue;
-        const to = path.join(dir, String(z), f);
-        await fs.promises.mkdir(path.dirname(to), { recursive: true });
-        await fs.promises.link(path.join(from, f), to).catch(() => fs.promises.copyFile(path.join(from, f), to).catch(() => {}));
-      }
-    }
-  }
-  await fs.promises.mkdir(dir, { recursive: true });
-  await fs.promises.writeFile(rowsFile, JSON.stringify(open));
+  await fs.promises.mkdir(path.join(CACHE_DIR, tilesV), { recursive: true });
+  tilesReadyFor = tilesV;
+  void queueWholeMap().catch(() => {});
 }
 
 /**
@@ -314,7 +271,7 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
   const manifest = (await getBuildingsManifest()).buildings;
   const [attuned, mine, stones] = await Promise.all([
     db.select({ key: characterWaystones.key }).from(characterWaystones).where(eq(characterWaystones.characterId, characterId)),
-    db.select({ kind: lots.kind, buildingKey: lots.buildingKey, bannerColor: lots.bannerColor, bannerEmblem: lots.bannerEmblem }).from(lots).where(eq(lots.ownerId, characterId)),
+    db.select({ key: lots.key, kind: lots.kind, buildingKey: lots.buildingKey, bannerColor: lots.bannerColor, bannerEmblem: lots.bannerEmblem }).from(lots).where(eq(lots.ownerId, characterId)),
     waystoneList(),
   ]);
   const have = new Set(attuned.map((a) => a.key));
@@ -327,9 +284,20 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
     if (d) places.push({ kind, name: e.name, x: d.x, y: d.y });
   }
   // Lair bosses' lairs (src/lib/lairs.ts), shown once you've explored them.
+  // Homestead sites: one marker where the open ones are, for whoever still needs a homestead.
+  if (!mine.some((l) => l.kind === "homestead")) {
+    const free = await db.select({ key: lots.key }).from(lots).where(and(eq(lots.kind, "homestead"), isNull(lots.ownerId)));
+    const spots = free.map((f) => siteByKey(f.key)).filter((s) => !!s);
+    if (spots.length) {
+      const near = spots.reduce((a, b) => (Math.hypot(a.sign.tx - 32, a.sign.ty - 21) <= Math.hypot(b.sign.tx - 32, b.sign.ty - 21) ? a : b));
+      places.push({ kind: "homestead", name: `Homesteads for sale (${spots.length} free)`, x: near.sign.tx * 16 + 8, y: near.sign.ty * 16 + 8 });
+    }
+  }
   for (const s of LAIR_SPOTS) { const b = lairBoss(s.kind); if (b) places.push({ kind: "lair", name: `${b.lair[0].toUpperCase()}${b.lair.slice(1)} (${b.name})`, x: s.tx * 16 + 8, y: s.ty * 16 + 8 }); }
   const myLots = [];
   for (const l of mine) {
+    const sign = l.kind === "homestead" ? siteByKey(l.key)?.sign : undefined;
+    if (sign) { myLots.push({ kind: l.kind, name: "Your homestead", x: sign.tx * 16 + 8, y: sign.ty * 16 + 8, banner: resolveBanner(characterId, l.bannerColor, l.bannerEmblem) }); continue; }
     if (!l.buildingKey) continue;
     const d = await getBuildingDoor(l.buildingKey);
     const e = manifest.find((b) => b.key === l.buildingKey);

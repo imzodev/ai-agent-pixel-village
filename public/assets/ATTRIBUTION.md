@@ -73,27 +73,27 @@ upstream license chain.
   variety's cells).
 - **Attribution required** when redistributing.
 
-## Grapevines and vineyard (`trees/vines.png`, `VineyardLot.png`)
+## Grapevines (`trees/vines.png`)
 
-Original art made for this project by `scripts/draw-orchard.mjs` and
-`scripts/draw-vineyard-lot.mjs`. Not derived from any third-party asset.
+Original art made for this project by `scripts/draw-orchard.mjs`. Not derived
+from any third-party asset.
 
-## Furniture and workshops (`furniture.png`, `WorkshopLot.png`)
+## Furniture and workshops (`furniture.png`)
 
 Original art made for this project by `scripts/draw-furniture.mjs` (every
-furniture piece, front view, 32×32) and `scripts/draw-workshop-lot.mjs` (the
-carpenter's yard); the stations are drawn in `src/game/workshopProps.ts`. Not
-derived from any third-party asset.
+furniture piece, front view, 32×32); the stations are drawn in
+`src/game/workshopProps.ts`. Not derived from any third-party asset.
 
 ## Far-land enemies (`animals/{dune_stalker,bog_hag,ice_troll,gloam_stag,basalt_golem,wyvern,rime_wraith,elder_treant}.png`)
 
 Original art made for this project by `scripts/draw-far-foes.mjs`. Not derived
 from any third-party asset.
 
-## Orchard lot (`OrchardLot.png`)
+## Homestead parcels (`parcels.png`)
 
-Original art made for this project by `scripts/draw-orchard-lot.mjs`. Not
-derived from any third-party asset.
+Original art made for this project by `scripts/draw-parcels.mjs`: parcel
+grounds, fences, the signpost, the barn and the workshop. Not derived from any
+third-party asset.
 
 ## Lair bosses (`animals/{sand_wyrm,frost_giant,fire_drake,the_hollow}.png`)
 

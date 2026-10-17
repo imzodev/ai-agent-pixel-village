@@ -93,3 +93,17 @@ describe("isWalkableAt", () => {
     expect(isWalkableAt(70 * CHUNK_PX_W + 8, -70 * CHUNK_PX_H + 8)).toBe(true);
   });
 });
+
+describe("dynamic blocks (homestead buildings)", () => {
+  it("block exactly their world tiles, on either side of the origin, until cleared", async () => {
+    const { setDynamicBlocks, isWalkableAt } = await import("./chunkCollision");
+    const at = (tx: number, ty: number) => isWalkableAt(tx * 16 + 8, ty * 16 + 8);
+    expect(at(40, 190)).toBe(true);
+    setDynamicBlocks("test", [{ tx: 40, ty: 190 }, { tx: -5, ty: -20 }]);
+    expect(at(40, 190)).toBe(false);
+    expect(at(-5, -20)).toBe(false);
+    expect(at(43, 190)).toBe(true);
+    setDynamicBlocks("test", []);
+    expect(at(40, 190)).toBe(true);
+  });
+});

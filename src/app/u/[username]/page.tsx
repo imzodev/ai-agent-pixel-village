@@ -18,7 +18,7 @@ import ShareLink from "@/components/ShareLink";
 export const dynamic = "force-dynamic";
 
 const PITCH = "Play free in your browser: a pixel village where the NPCs remember you.";
-const LOT_NAMES: Record<string, string> = { home: "a cottage", land: "farm land", ranch: "a ranch", vineyard: "a vineyard", orchard: "an orchard", workshop: "a workshop" };
+const LOT_NAMES: Record<string, string> = { home: "a cottage", homestead: "a homestead" };
 const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {

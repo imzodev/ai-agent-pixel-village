@@ -17,9 +17,9 @@ import { Lighting, resetLights, setLightGroup } from "./lighting";
 import { Ambience } from "./ambience";
 import { FishingController } from "./fishing";
 import type { AtmosphereState, LightSource } from "@/types/lighting";
-import { FURNITURE_TEXTURE, makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
+import { makeAllTextures, loadPropSprites, nodeFrameKey, nodeOrigin, nodeSheetKey, nodeTextureKey, registerCropFrames } from "./textures";
 import { bus, ITEM_ICONS, type Selection, type Snapshot } from "./bus";
-import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered } from "@/lib/chunkCollision";
+import { chunkAtWorldPx, debugRegistry, isWalkableAt, registerChunk, chunkRegistered, setDynamicBlocks } from "@/lib/chunkCollision";
 import { prefetchMapAround } from "./mapTiles";
 import { chimneySources, resetStampVisuals, stampBuildings, stampLights, syncStampVisuals, type StampedBuilding } from "./buildingStamps";
 import type { BuildingManifest } from "@/lib/buildingManifest";
@@ -56,12 +56,9 @@ import type { EnemySnapshot } from "@/lib/protocol";
 import type { BreadTableSnapshot } from "@/types/bakery";
 import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 import type { LotSnapshot } from "@/types/garden";
-import type { RanchBuildKey } from "@/types/ranchGrowth";
-import { RANCH_PROP_SPOTS } from "./ranchProps";
-import { VINEYARD_PROP_SPOTS } from "./vineyardProps";
-import { SHOWROOM_SPOTS, WORKSHOP_PROP_SPOTS } from "./workshopProps";
-import { ORCHARD_PROP_SPOTS } from "./orchardProps";
-import { FURNITURE_CELLS } from "./furnitureArt";
+import { drawHomestead, homesteadPlotPoints, homesteadSig, registerParcelFrames, signPoint } from "./homesteadArt";
+import { buildingTiles } from "@/lib/homestead";
+import { siteByKey } from "@/lib/homesteadSites";
 import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import { gameFont } from "./gameFont";
@@ -161,8 +158,8 @@ export class WorldScene extends Phaser.Scene {
   private relicGlints = new Map<string, { img: Phaser.GameObjects.Image; glint: Phaser.GameObjects.Image }>();
   /** The loaf images on each bakery bread table. */
   private breadLoaves = new Map<string, Phaser.GameObjects.Image[]>();
-  /** What's been built on each ranch lot, by building. */
-  private ranchProps = new Map<string, Map<string, Phaser.GameObjects.Image>>();
+  /** Homesteads drawn (src/game/homesteadArt.ts): what, and the tap zones of your empty plots. */
+  private homesteads = new Map<string, { sig: string; objs: Phaser.GameObjects.GameObject[] }>();
   /** Banner and name sign of each owned lot, with what it was drawn from. */
   private lotBanners = new Map<string, { sig: string; obj: Phaser.GameObjects.Container }>();
   /** The goods on each shop display, per item. */
@@ -311,6 +308,7 @@ export class WorldScene extends Phaser.Scene {
     // (wheat_field, …) so node rendering can pick the right one via a frame
     // name. Must run after preload, hence here in create().
     registerCropFrames(this);
+    registerParcelFrames(this);
     // One animation per species × action × direction, from the registry.
     for (const [species, def] of Object.entries(ANIMAL_SPRITES)) {
       for (const [action, a] of Object.entries(def.actions)) {
@@ -577,7 +575,6 @@ export class WorldScene extends Phaser.Scene {
           for (const c of chunks) void reloadChunk(this, c.cx, c.cy, around);
         },
         onSpawns: (enemies) => this.applySpawns(enemies),
-        onLotsOpened: () => { if (this.alive()) void this.stampWorldBuildings().catch(() => {}); },
         onEnemyAct: ({ id, x, y }) => {
           if (!this.alive()) return;
           this.playEnemyAttack(id, x, y);
@@ -668,7 +665,7 @@ export class WorldScene extends Phaser.Scene {
   private stampedAll: StampedBuilding[] = [];
 
   /** Fetch the buildings in the world and stamp the ones not stamped yet: all
-   *  of them at start, the new lots when homestead rows open (`lotsOpened`). */
+   *  of them, once at start. */
   private async stampWorldBuildings(): Promise<void> {
     const res = await fetch("/api/buildings", { cache: "no-store" });
     if (!this.alive() || !res.ok) return;
@@ -711,7 +708,7 @@ export class WorldScene extends Phaser.Scene {
     this.meId = s.me?.id ?? null;
     this.syncBreadTables(s.breadTables ?? []);
     this.syncDisplays(s.displays ?? []);
-    this.syncRanchProps(s.lots ?? []);
+    this.syncHomesteads(s.lots ?? []);
     this.syncLotBanners(s.lots ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
@@ -1070,7 +1067,7 @@ export class WorldScene extends Phaser.Scene {
    * the click to this zone even when a crop image overlaps it, so the zone
    * itself decides: a planted plot selects its crop, an empty one the plot.
    */
-  private addPlotZone(lotKey: string, p: { plot: number; x: number; y: number }) {
+  private addPlotZone(lotKey: string, p: { plot: number; x: number; y: number }): Phaser.GameObjects.Zone {
     const zone = this.add.zone(p.x, p.y - 8, 28, 16).setDepth(DEPTH_CHAR_BASE + p.y - 20);
     zone.setInteractive({ useHandCursor: true });
     zone.on("pointerdown", () => {
@@ -1082,6 +1079,7 @@ export class WorldScene extends Phaser.Scene {
       }
       this.select({ type: "plot", lotKey, plot: p.plot, x: p.x, y: p.y, distance: this.distTo(p.x, p.y) });
     });
+    return zone;
   }
   /**
    * Context-sensitive E/Space handler: act on the closest usable thing
@@ -1147,33 +1145,46 @@ export class WorldScene extends Phaser.Scene {
     for (const [key, b] of this.lotBanners) if (!live.has(key)) { b.obj.destroy(); this.lotBanners.delete(key); }
   }
 
-  /** Buildings on ranch lots (silo, mill, hives…; src/game/ranchProps.ts),
-   *  added as they're built and cleared when the ranch is given up. */
-  private syncRanchProps(lots: readonly LotSnapshot[]): void {
+  /** Homesteads near you: their parcels, fences and signpost, redrawn when
+   *  they change. On your own, every empty plot can be tapped to plant. */
+  private syncHomesteads(lots: readonly LotSnapshot[]): void {
+    const live = new Set<string>();
     for (const lot of lots) {
-      if (lot.kind !== "ranch" && lot.kind !== "vineyard" && lot.kind !== "workshop" && lot.kind !== "orchard") continue;
-      const spots = lot.kind === "vineyard" ? VINEYARD_PROP_SPOTS : lot.kind === "workshop" ? WORKSHOP_PROP_SPOTS : lot.kind === "orchard" ? ORCHARD_PROP_SPOTS : RANCH_PROP_SPOTS;
-      const have = this.ranchProps.get(lot.key) ?? new Map<string, Phaser.GameObjects.Image>();
-      // What should stand there: built stations, and a workshop's pieces on show.
-      const want = new Map<string, () => Phaser.GameObjects.Image>();
-      const r = lot.ranch;
-      if (r) {
-        for (const key of r.props) {
-          const spot = spots[key as RanchBuildKey];
-          if (!spot) continue;
-          const x = r.ox + spot.x, y = r.oy + spot.y;
-          want.set(key, () => this.add.image(x, y + 1, spot.sprite).setOrigin(0, 1).setDepth(DEPTH_CHAR_BASE + y));
-        }
-        (r.display ?? []).forEach((item, i) => {
-          const spot = SHOWROOM_SPOTS[i], frame = FURNITURE_CELLS[item];
-          if (!spot || frame == null) return;
-          const x = r.ox + spot.x, y = r.oy + spot.y;
-          want.set(`show:${i}:${item}`, () => this.add.image(x, y + 1, FURNITURE_TEXTURE, frame).setOrigin(0.5, 1).setDepth(DEPTH_CHAR_BASE + y));
-        });
+      if (lot.kind !== "homestead") continue;
+      live.add(lot.key);
+      const mine = lot.owner?.id === this.meId;
+      const sig = `${homesteadSig(lot)}|${mine}`;
+      if (this.homesteads.get(lot.key)?.sig === sig) continue;
+      for (const o of this.homesteads.get(lot.key)?.objs ?? []) o.destroy();
+      const objs = drawHomestead(this, lot);
+      // Its barn and workshop block, as on the server (src/lib/homestead.ts buildingTiles).
+      const site = siteByKey(lot.key);
+      if (site) {
+        setDynamicBlocks(lot.key, buildingTiles(site, lot.parcels ?? [], lot.ranch?.props ?? []));
+        this.stepOutOfBuildings();
       }
-      for (const [key, img] of have) if (!want.has(key)) { img.destroy(); have.delete(key); }
-      for (const [key, make] of want) if (!have.has(key)) have.set(key, make());
-      this.ranchProps.set(lot.key, have);
+      if (mine) for (const p of homesteadPlotPoints(lot)) objs.push(this.addPlotZone(lot.key, p));
+      const at = signPoint(lot.key);
+      if (at) {
+        const zone = this.add.zone(at.x, at.y - 24, 36, 48).setDepth(DEPTH_CHAR_BASE + at.y).setInteractive({ useHandCursor: true });
+        const name = lot.owner ? `${mine ? "Your" : `${lot.owner.name}'s`} homestead` : "Homestead for sale";
+        zone.on("pointerdown", () => { if (!this.modalOpen) this.select({ type: "homestead", key: lot.key, name, x: at.x, y: at.y, distance: this.distTo(at.x, at.y) }); });
+        objs.push(zone);
+      }
+      this.homesteads.set(lot.key, { sig, objs });
+    }
+    // Out of range: forget it (it's drawn again when you come back).
+    for (const [key, h] of this.homesteads) if (!live.has(key)) { for (const o of h.objs) o.destroy(); this.homesteads.delete(key); setDynamicBlocks(key, []); }
+  }
+
+  /** A building just went up where you stand: step out below it, onto open ground. */
+  private stepOutOfBuildings(): void {
+    const s = this.player?.sprite;
+    if (!s || isWalkableAt(s.x, s.y)) return;
+    for (let d = 16; d <= 160; d += 16) {
+      for (const [dx, dy] of [[0, d], [-d, 0], [d, 0], [0, -d]]) {
+        if (isWalkableAt(s.x + dx, s.y + dy)) { s.setPosition(s.x + dx, s.y + dy); return; }
+      }
     }
   }
 
@@ -1396,6 +1407,12 @@ export class WorldScene extends Phaser.Scene {
     if (this.relicsFound) for (const r of RELICS) if (!this.relicsFound.has(r.key)) { const at = relicPoint(r); add(at.x, at.y, (d) => ({ type: "relic", key: r.key, name: r.name, x: at.x, y: at.y, distance: d })); }
     // Bakery tables with a loaf left for you.
     for (const t of s.breadTables ?? []) if (this.breadOnOffer(t.key)) add(t.x, t.y, (d) => ({ type: "bread", table: t.key, name: tableByKey(t.key)?.name ?? "Bread table", x: t.x, y: t.y, distance: d }));
+    // Homestead signposts: "for sale", or whose it is.
+    for (const l of s.lots ?? []) {
+      if (l.kind !== "homestead") continue;
+      const at = signPoint(l.key);
+      if (at) add(at.x, at.y, (d) => ({ type: "homestead", key: l.key, name: l.owner ? `${l.owner.id === this.meId ? "Your" : `${l.owner.name}'s`} homestead` : "Homestead for sale", x: at.x, y: at.y, distance: d }));
+    }
     // Town bounty boards.
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
@@ -1442,6 +1459,7 @@ export class WorldScene extends Phaser.Scene {
       case "relic": return { x: sel.x, y: sel.y - 18 };
       case "bread": return { x: sel.x, y: sel.y - 26 };
       case "plot": return { x: sel.x, y: sel.y - 14 };
+      case "homestead": return { x: sel.x, y: sel.y - 44 };
     }
   }
 

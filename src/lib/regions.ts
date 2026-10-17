@@ -22,7 +22,7 @@ import { hash, noise } from "./terrain/noise";
 import { isFelled, setFelledTrees } from "./terrain/felled";
 import { PROVINCES, continentAt, continentTreeAt, inHeartland, inHomesteads, provinceAt, riverCenter } from "./continent";
 import { TOWN_REGIONS, nearRoad, roadTile, roadV, townAt } from "./settlements";
-import { onLane } from "./lotDistricts";
+import { onSiteGrid, onSiteLane, siteAtTile } from "./homesteadSites";
 
 export type { Region, RegionNode, TerrainCell, TileBox } from "@/types/regions";
 
@@ -281,7 +281,7 @@ function caveProp(tx: number, ty: number): string | null {
  *  edges, short paths to every door, and the back lanes. */
 function pathV(vx: number, vy: number): boolean {
   if (roadV(vx, vy)) return true; // roads out to the continent's towns
-  if (onLane(vx, vy)) return true; // the homesteads' lanes (src/lib/lotDistricts.ts)
+  if (onSiteLane(vx, vy)) return true; // the lane along each homestead site (src/lib/homesteadSites.ts)
   if (vx >= ROAD.tx0 && vx <= ROAD.tx1 + 1) {
     if (vy >= 6 && vy <= 9) return true;
     // The road widens gently here and there (a row more on either side).
@@ -347,10 +347,6 @@ const even = (n: number) => ((n % 2) + 2) % 2 === 0;
 // with a stump — until it regrows.
 export { setFelledTrees };
 
-/** The carpenters' workshop lots south of Hollowmere (public/buildings/buildings.json
- *  workshop_1–4, 24×15 tiles each from tx -400 to -301 at ty 38), kept clear of trees. */
-export const WORKSHOP_ROW = { tx0: -402, tx1: -299, ty0: 37, ty1: 53 } as const;
-
 /** Forest: tree walls framing the road, Whisperwood's woods, lone trees.
  *  Trees stand on corners of a 2-tile lattice, one big 2×2 tree each. */
 function forestV(vx: number, vy: number): boolean {
@@ -358,10 +354,11 @@ function forestV(vx: number, vy: number): boolean {
   if (isFelled(vx, vy)) return false;
   if (nearRoad(vx, vy, 1)) return false;
   if (inHomesteads(vx, vy) || inHomesteads(vx - 1, vy - 1)) return false; // the homesteads are open land
+  if (onSiteGrid(vx, vy) || onSiteGrid(vx - 1, vy - 1)) return false; // and so are the homestead sites near the village
   if (townTree(vx, vy)) return true;
   if (vx < STRIP.tx0 || vx > -50 || vy < BARRIER_TY0 || vy > BARRIER_TY1) return false;
   if (vx >= -578 && vx <= -383) return false; // Greyspine
-  if (vx >= -120 && vy >= 48) return false; // land lots and the way to them
+  if (vx >= -120 && vy >= 48) return false; // the homesteads nearest the village and the way to them
   if (TOWNS.some((t) => inBox({ tx0: t.tx0 - 1, tx1: t.tx1 + 1, ty0: t.ty0 - 1, ty1: t.ty1 + 1 }, vx, vy))) return false;
   if (inBox({ tx0: FOREST_TILES.tx0 - 3, tx1: FOREST_TILES.tx1 + 3, ty0: FOREST_TILES.ty0 - 3, ty1: FOREST_TILES.ty1 + 3 }, vx, vy)) return false;
   if (nearKeepOpen(vx, vy, 2) || nearWater(vx, vy, 1) || gravelV(vx, vy) || nearPlateau(vx, vy, 2)) return false;
@@ -376,8 +373,6 @@ function forestV(vx: number, vy: number): boolean {
  *  heartland box's edges follow the lattice, so a corner's whole tree is
  *  on one side of it. */
 export function treeAt(vx: number, vy: number): string | null {
-  // Hollowmere's workshop lots straddle the heartland's edge: no trees there on either side.
-  if (vx >= WORKSHOP_ROW.tx0 && vx <= WORKSHOP_ROW.tx1 && vy >= WORKSHOP_ROW.ty0 && vy <= WORKSHOP_ROW.ty1) return null;
   if (!inHeartland(vx, vy)) return continentTreeAt(vx, vy);
   return forestV(vx, vy) ? treeKind(vx, vy) : null;
 }
@@ -411,10 +406,6 @@ function underSquare(tx: number, ty: number): boolean {
   return TOWN_SQUARES.some((q) => tx >= q.tx + 1 && tx <= q.tx + 22 && ty >= q.ty && ty <= q.ty + 14);
 }
 const underCaveMouth = (tx: number, ty: number) => inBox(CAVE_MOUTH_AREA, tx, ty);
-/** The village farm rows (land, ranch and vineyard lots; public/buildings/buildings.json):
- *  yards stay free of rocks and bushes so animals and players can move about
- *  (the lot art draws over them, so they'd be invisible obstacles). */
-const FARM_ROWS = { tx0: -120, tx1: 143, ty0: 60, ty1: 104 };
 
 // ── Terrain ──────────────────────────────────────────────────────────────
 
@@ -589,11 +580,12 @@ export function terrainAt(tx: number, ty: number): TerrainCell {
     else if (h < 0.12) cell.upper = "pebbles";
     return cell;
   }
-  // (none in the farm rows or the homesteads: lots stand there, and their yards must be clear)
-  if (!town && h < 0.012 && !inBox(FARM_ROWS, tx, ty) && !inHomesteads(tx, ty) && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
+  // (none in the homesteads or on the site grid: parcels are drawn there, and must be clear)
+  if (!town && h < 0.012 && !onSiteGrid(tx, ty) && !inHomesteads(tx, ty) && !nearPath(tx, ty, 2) && !nearKeepOpen(tx, ty, 1) && !nearWater(tx, ty, 1)) {
     cell.lower = ["bush", "bush", "boulder", "stump", "rock_small"][Math.floor(hash(tx, ty, 54) * 5)];
     return cell;
   }
+  if (siteAtTile(tx, ty)) return cell; // homestead sites stay plain: parcels are drawn on them
   const flowerP = town ? 0.07 : 0.035;
   if (h < flowerP) cell.upper = ["flowers_red", "flowers_yellow", "flowers_white", "flowers_blue", "flowers_pink"][Math.floor(hash(tx, ty, 55) * 5)];
   else if (h < flowerP + 0.1) cell.upper = ["tuft_0", "tuft_1", "clover", "tuft_0"][Math.floor(hash(tx, ty, 56) * 4)];

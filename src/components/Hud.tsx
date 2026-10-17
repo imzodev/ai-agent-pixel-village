@@ -9,7 +9,7 @@ import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import type { BuyerPurse } from "@/types/trade";
-import type { FarmView } from "@/types/garden";
+import type { FarmView, LotKind, PlantSpot } from "@/types/garden";
 import { affordableQty } from "@/lib/mind/profile";
 import { profileFor } from "@/lib/mind/profiles";
 import type { OrdersPanel } from "@/types/mind";
@@ -27,12 +27,12 @@ import QuestTracker from "./QuestTracker";
 import CollectionBook from "./CollectionBook";
 import ForgePanel from "./ForgePanel";
 import InnPanel from "./InnPanel";
-import RanchPanel from "./RanchPanel";
 import { LOT_LABELS } from "@/game/lotLabels";
 import { LOT_COLORS, LOT_EMBLEMS } from "@/lib/lotBanner";
 import { TEND_RANGE_PX, atLot, insideLot } from "@/lib/lotReach";
 import FurnitureSprite from "./FurnitureSprite";
 import { plantablesFor, plotHint } from "@/lib/vineyard";
+import { spotOfPlot } from "@/lib/homestead";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
@@ -47,6 +47,7 @@ import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
 import PitchCard from "./PitchCard";
 import FarmPanel from "./FarmPanel";
+import HomesteadPanel from "./HomesteadPanel";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
 import { ENCOUNTERS } from "@/lib/encounters";
@@ -137,7 +138,10 @@ function withFinalReply(lines: TalkLine[], r: TalkReply): TalkLine[] {
 /** Stop a press on the HUD from reaching the game (see the HUD's root). */
 const keepOffCanvas = (e: React.SyntheticEvent) => e.stopPropagation();
 /** Lots with plots (the farm window): fields, home gardens, vineyards, orchards. */
-const FARM_KINDS: ReadonlySet<string> = new Set(["land", "home", "vineyard", "orchard"]);
+/** Where each kind of lot can grow things (src/lib/vineyard.ts plantRule). */
+const SPOTS_OF: Readonly<Record<LotKind, readonly PlantSpot[]>> = { home: ["garden"], homestead: ["field", "vineyard", "orchard"] };
+/** How close to a homestead's signpost its window opens. */
+const HOMESTEAD_REACH_PX = 160;
 /** How often your walking position may re-render the HUD (see the playerMoved handler). */
 const SELF_POS_EVERY_MS = 400;
 // Tailwind's `sm` breakpoint, for the few things CSS classes can't switch (placeholders).
@@ -200,6 +204,8 @@ export default function Hud() {
   const [momentsShown, setMomentsShown] = useState<ReadonlySet<string>>(new Set());
   // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
   const [farmMenu, setFarmMenu] = useState<{ lotKey: string; target: Selection } | null>(null);
+  /** The homestead window open (src/components/HomesteadPanel.tsx): its key. */
+  const [homestead, setHomestead] = useState<string | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
   const [craft, setCraft] = useState<{ npcId: number; npcName: string; recipes: Recipe[] } | null>(null);
   const [inspect, setInspect] = useState<Inspect | null>(null);
@@ -429,8 +435,6 @@ export default function Hud() {
   const garden = (body: Record<string, unknown>) => post("/api/garden", body);
   const setBanner = (key: string, color: number, emblem: number) => post("/api/lots", { action: "banner", key, color, emblem });
   const lotAction = (action: "acquire" | "release" | "cheer", key: string) => { setConfirmRelease(null); return post("/api/lots", { action, key }); };
-  // Land lots are fenced fields, not buildings you can walk into.
-  const isLandKey = (key: string) => key.startsWith("land_");
   const buy = async (npcKey: string, itemKey: string, qty = 1) => {
     const r = await api<{ ok?: boolean; spent?: number; coins?: number; notices?: string[] }>("/api/trade", { action: "buy", npcKey, itemKey, qty });
     if (r.coins != null) setCoinsLive(r.coins);
@@ -451,24 +455,19 @@ export default function Hud() {
     const self = selfPos ?? snap?.me;
     if (!self || !snap) return null;
     // Your growing lot you're in or right next to (at its gate counts): the one you stand in first.
-    const mine = snap.lots.filter((l) => l.owner?.id === myId && !!l.bounds && FARM_KINDS.has(l.kind) && atLot(l.bounds, self.x, self.y));
+    const mine = snap.lots.filter((l) => l.owner?.id === myId && !!l.bounds && atLot(l.bounds, self.x, self.y));
     const lot = mine.find((l) => insideLot(l.bounds!, self.x, self.y)) ?? mine[0];
     if (!lot?.bounds) return null;
     const crops = snap.nodes.filter((n) => n.ownerId != null && insideLot(lot.bounds!, n.x, n.y));
     const ripe = crops.filter((n) => n.ownerId === myId && n.stage >= n.stages - 1).length;
     const thirsty = crops.filter((n) => n.stage < n.stages - 1 && !n.watered && n.nextAdvanceAt != null).length;
-    const seeds = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
+    const seeds = plantablesFor(SPOTS_OF[lot.kind], seedsInBag, GARDEN_CROPS);
     return { lot, ripe, thirsty, seeds };
   })();
   const plantAllWith = (lotKey: string, seedKey: string) => void garden({ action: "plant_all", lotKey, seedKey });
   /** The lot E was pressed in (a plot or crop of the lot you stand in, with something to do), else null. */
   const farmLotOf = (s: Selection): string | null => {
     if (!farm) return null;
-    // Your meadow lot itself (E on its gate): homes keep E for going inside.
-    if (s.type === "building") {
-      const lot = snap?.lots.find((l) => l.buildingKey === s.key);
-      return lot?.kind === "land" && lot.key === farm.lot.key ? lot.key : null;
-    }
     if (s.type === "plot") return s.lotKey === farm.lot.key ? farm.lot.key : null;
     if (s.type !== "node") return null;
     const crop = snap?.nodes.find((n) => n.id === s.id);
@@ -834,6 +833,11 @@ export default function Hud() {
         });
         break;
       }
+      case "homestead":
+        if (d > HOMESTEAD_REACH_PX) { walk(); break; }
+        setHomestead(s.key);
+        setSel(null);
+        break;
       case "board":
         if (d > BOARD_REACH_PX) { walk(); break; }
         setBoard({ town: s.town, name: s.name });
@@ -857,9 +861,11 @@ export default function Hud() {
       case "plot":
         if (d > TEND_RANGE_PX && !inMyLot(pos)) { walk(); break; }
         {
-          const fit = plantablesFor(snap?.lots.find((l) => l.key === s.lotKey)?.kind, seedsInBag, GARDEN_CROPS)[0];
+          const lot = snap?.lots.find((l) => l.key === s.lotKey);
+          const spot = lot ? spotOfPlot(lot, s.plot) : null;
+          const fit = spot ? plantablesFor([spot], seedsInBag, GARDEN_CROPS)[0] : undefined;
           if (fit) void garden({ action: "plant", lotKey: s.lotKey, plot: s.plot, seedKey: fit.itemKey });
-          else toast(`Nothing to plant here. ${plotHint(snap?.lots.find((l) => l.key === s.lotKey)?.kind)}`, "info");
+          else toast(`Nothing to plant here. ${plotHint(spot ?? undefined)}`, "info");
         }
         break;
       case "animal":
@@ -879,8 +885,7 @@ export default function Hud() {
         } else walk();
         break;
       case "building":
-        if (isLandKey(s.key)) { if (d > 140) walk(); } // nothing to enter
-        else if (d <= 140) void enterBuilding(s.key, s.name);
+        if (d <= 140) void enterBuilding(s.key, s.name);
         else walk();
         break;
       case "npc":
@@ -910,13 +915,14 @@ export default function Hud() {
     if (shop) { setShop(null); return true; }
     if (orders) { setOrders(null); return true; }
     if (farmMenu) { setFarmMenu(null); return true; }
+    if (homestead) { setHomestead(null); return true; }
     if (craft) { setCraft(null); return true; }
     if (inspect) { setInspect(null); return true; }
     if (panel) { setPanel(null); return true; }
     if (building) { setBuilding(null); return true; }
     if (sel) { setSel(null); return true; }
     return false;
-  }, [chatOpen, saveOpen, reporting, helpOpen, menuOpen, mapOpen, board, talk, trade, shop, orders, farmMenu, craft, inspect, panel, building, sel]);
+  }, [chatOpen, saveOpen, reporting, helpOpen, menuOpen, mapOpen, board, talk, trade, shop, orders, farmMenu, homestead, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -1059,6 +1065,7 @@ export default function Hud() {
           <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
         </>
       ) : null}
+      {loggedIn && farm?.lot.kind === "homestead" && <TopBtn on={() => { pick(); setHomestead(homestead ? null : farm.lot.key); }} active={!!homestead}>🏡 Homestead</TopBtn>}
       {loggedIn && <TopBtn on={() => { pick(); setMapOpen(mapOpen ? null : "browse"); }} active={!!mapOpen}>🗺️ Map</TopBtn>}
       <TopBtn on={() => { pick(); togglePanel("log"); }} active={panel === "log"}>📰 World</TopBtn>
       <TopBtn on={() => { pick(); setHelpOpen(true); }} active={helpOpen}>❓ Help</TopBtn>
@@ -1223,11 +1230,12 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "plot" && (() => {
             const lot = snap?.lots.find((l) => l.key === sel.lotKey);
-            if (!lot?.owner) return <span className="text-[11px] text-stone-600">{lot?.kind === "home" ? "An empty garden plot. Move into the house to plant here." : `Empty plot. Claim this lot at its gate to plant here. ${plotHint(lot?.kind)}`}</span>;
-            if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s garden.</span>;
+            if (!lot?.owner) return <span className="text-[11px] text-stone-600">An empty garden plot. Move into the house to plant here.</span>;
+            if (lot.owner.id !== myId) return <span className="text-[11px] text-stone-600">{lot.owner.name}&apos;s {lot.kind === "home" ? "garden" : "homestead"}.</span>;
             if (sel.distance > TEND_RANGE_PX && !inMyLot(sel)) return <WalkBtn snap={snap} sel={sel} />;
-            const fits = plantablesFor(lot.kind, seedsInBag, GARDEN_CROPS);
-            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "home" ? "No seeds — the shopkeeper sells them." : `Nothing to plant. ${plotHint(lot.kind)}`}</span>;
+            const spot = spotOfPlot(lot, sel.plot);
+            const fits = spot ? plantablesFor([spot], seedsInBag, GARDEN_CROPS) : [];
+            if (fits.length === 0) return <span className="text-[11px] text-stone-600">{lot.kind === "home" ? "No seeds — the shopkeeper sells them." : `Nothing to plant. ${plotHint(spot ?? undefined)}`}</span>;
             return fits.map((i) => (
               <Btn key={i.itemKey} on={() => void garden({ action: "plant", lotKey: sel.lotKey, plot: sel.plot, seedKey: i.itemKey })}>
                 🌱 Plant {i.itemKey.replace(/_seeds$/, "").replace(/_/g, " ")} ×{i.qty}
@@ -1251,6 +1259,7 @@ export default function Hud() {
           })()}
           {loggedIn && sel.type === "relic" && (sel.distance > RELIC_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>✨ Pick it up {interactHint}</Btn>)}
           {loggedIn && sel.type === "bread" && (sel.distance > BREAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🍞 Take one, free {interactHint}</Btn>)}
+          {loggedIn && sel.type === "homestead" && (sel.distance > HOMESTEAD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>🏡 {sel.name.startsWith("Homestead for sale") ? "Look at it" : "Open"} {interactHint}</Btn>)}
           {loggedIn && sel.type === "board" && (sel.distance > BOARD_REACH_PX ? <WalkBtn snap={snap} sel={sel} /> : <Btn on={() => commitSelection(sel)}>📜 Read the board {interactHint}</Btn>)}
           {loggedIn && sel.type === "tree" && (sel.distance > 44 ? <WalkBtn snap={snap} sel={sel} />
             : hasAxe ? <Btn on={() => commitSelection(sel)}>🪓 Chop {keyHint("player.attack")}</Btn>
@@ -1258,10 +1267,9 @@ export default function Hud() {
           {loggedIn && sel.type === "enemy" && (bow
             ? (sel.distance <= bow.rangePx ? <Btn on={() => commitSelection(sel)}>🏹 Shoot {keyHint("player.attack")} <span className="text-[10px] opacity-70">➶ {arrows}</span></Btn> : <WalkBtn snap={snap} sel={sel} />)
             : (sel.distance <= 80 ? <Btn on={() => commitSelection(sel)}>⚔️ Attack {keyHint("player.attack")}</Btn> : <WalkBtn snap={snap} sel={sel} />))}
-          {loggedIn && sel.type === "building" && !isLandKey(sel.key) && (sel.distance <= 140 ? (
+          {loggedIn && sel.type === "building" && (sel.distance <= 140 ? (
             <Btn on={() => commitSelection(sel)}>{sel.key === "cave_mouth" ? "🕳️ Enter the cave" : sel.key === "cave_exit" ? "☀️ Climb out" : "🚪 Enter"} {interactHint}</Btn>
           ) : <WalkBtn snap={snap} sel={sel} />)}
-          {loggedIn && sel.type === "building" && isLandKey(sel.key) && sel.distance > 140 && <WalkBtn snap={snap} sel={sel} />}
           {loggedIn && sel.type === "building" && (() => {
             const lot = snap?.lots.find((l) => l.buildingKey === sel.key);
             if (!lot) return null;
@@ -1270,7 +1278,7 @@ export default function Hud() {
               const confirming = confirmRelease === lot.key;
               return <>
                 <span className="text-[11px] font-bold text-emerald-700">{L.icon} {L.yours}</span>
-                {farm?.lot.key === lot.key && (lot.kind === "land" || lot.kind === "home") && <Btn on={() => setFarmMenu({ lotKey: lot.key, target: sel })}>🌾 Farm {lot.kind === "land" ? interactHint : ""}</Btn>}
+                {farm?.lot.key === lot.key && <Btn on={() => setFarmMenu({ lotKey: lot.key, target: sel })}>🌾 Farm</Btn>}
                 <Btn on={() => setBannerFor(bannerFor === lot.key ? null : lot.key)} subtle>🚩 Banner</Btn>
                 {bannerFor === lot.key && lot.banner && (
                   <span className="flex w-full flex-wrap items-center gap-1">
@@ -1289,9 +1297,9 @@ export default function Hud() {
               </>;
             }
             if (lot.owner) return <><span className="text-[11px] text-stone-600">{L.icon} {L.of} {lot.owner.name}</span><Btn on={() => void lotAction("cheer", lot.key)} subtle>👏 Cheer</Btn></>;
-            return <Btn on={() => void lotAction("acquire", lot.key)}>{L.icon} {lot.price > 0 ? `${L.buy} · ${lot.price}🪙` : L.claim}</Btn>;
+            return <Btn on={() => void lotAction("acquire", lot.key)}>{L.icon} {L.claim}</Btn>;
           })()}
-          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && sel.type !== "homestead" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -1318,6 +1326,13 @@ export default function Hud() {
       {/* Trade modal — dedicated sell flow, no conversation required. */}
       {/* Farm menu: E on a plot or crop of your lot. */}
       {farmView && <FarmMenu view={farmView} coins={coins} onClose={() => setFarmMenu(null)} />}
+      {/* The homestead window: its signpost, or 🏡 while you're on your own. */}
+      {homestead && (
+        <HomesteadMenu onClose={() => setHomestead(null)}>
+          <HomesteadPanel homesteadKey={homestead} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); bus.emit("poke", undefined); }} onGain={showGain} onReleased={() => setHomestead(null)}
+            farm={(() => { const v = farm?.lot.key === homestead ? farmViewFor(homestead, null) : null; return v ? <FarmPanel view={v} coins={coins} /> : undefined; })()} />
+        </HomesteadMenu>
+      )}
 
       {/* Shop modal — everything this NPC sells, behind one Buy button. */}
       {shop && (
@@ -1481,8 +1496,6 @@ export default function Hud() {
           <div className="flex shrink-0 items-start"><div><div className="text-lg font-bold text-amber-900">{building.name}</div>{bInfo?.sponsor && <div className="text-[12px]"><span className="rounded px-2 py-0.5 font-bold text-white" style={{ background: bInfo.sponsor.brandColor }}>{bInfo.sponsor.businessName}</span> <span className="text-stone-500">— {bInfo.sponsor.tagline}</span></div>}</div><div className="flex-1" /><button onClick={() => setBuilding(null)} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button></div>
           <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">
           {bInfo?.kind === "forge" && <ForgePanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
-          {(bInfo?.kind === "ranch" || bInfo?.kind === "vineyard" || bInfo?.kind === "workshop" || bInfo?.kind === "orchard") && <RanchPanel ranchKey={bInfo.key} onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} onGain={showGain}
-            farm={(() => { const lot = snap?.lots.find((l) => l.buildingKey === bInfo.key); const v = lot && (lot.kind === "vineyard" || lot.kind === "orchard") ? farmViewFor(lot.key, null) : null; return v ? <FarmPanel view={v} coins={coins} /> : undefined; })()} />}
           {bInfo?.kind === "inn" && <InnPanel innKey={bInfo.key} myId={me?.me?.id ?? null} hurt={(hpLive?.hp ?? snap?.me?.hp ?? 0) < (hpLive?.maxHp ?? snap?.me?.maxHp ?? 0)} onMessage={(text, kind) => { toast(text, kind); setHpLive(null); void refreshMe(); }} onGain={showGain} onChanged={() => void refreshMe()} />}
           <div className="mt-3 rounded-lg p-3" style={{ background: "repeating-linear-gradient(90deg,#d9a877 0 28px,#c89463 28px 32px)" }}>
             <div className="rounded bg-amber-50/90 p-2">
@@ -1538,6 +1551,7 @@ function selTitle(sel: Selection) {
     case "board": return `📜 ${sel.name} bounty board`;
     case "relic": return "✨ Something glinting on the ground";
     case "bread": return `🍞 ${sel.name} · fresh from the oven, one each`;
+    case "homestead": return `🏡 ${sel.name}`;
   }
 }
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
@@ -1629,7 +1643,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread" || sel.type === "homestead") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {
@@ -1803,6 +1817,27 @@ function FarmMenu({ view, coins, onClose }: { view: FarmView; coins: number; onC
           <FarmPanel view={view} coins={coins} />
           <div className="mt-1 text-right text-[11px] text-stone-500">Esc closes</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The homestead window's frame: a modal like the farm's; Escape (or B) closes it. */
+function HomesteadMenu({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => inputRouter.pushKeymap({
+    label: "homestead",
+    bindings: [{ keys: ["escape"], command: "ui.close" as const, mode: "press" as const }],
+    handlers: [{ id: "ui.close" as const, scope: "ui" as const, run: () => { onClose(); } }],
+  }), [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Homestead" onClick={onClose} className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[min(88dvh,calc(100dvh-1rem))] w-[min(96vw,520px)] flex-col pixel-panel p-3 shadow-2xl sm:p-4">
+        <div className="flex shrink-0 items-start">
+          <div className="text-lg font-bold text-amber-900">🏡 Homestead</div>
+          <div className="flex-1" />
+          <button onClick={onClose} className="-m-2 p-3 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
+        </div>
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto overscroll-contain px-1">{children}</div>
       </div>
     </div>
   );

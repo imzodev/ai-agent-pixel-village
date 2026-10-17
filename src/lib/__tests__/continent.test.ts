@@ -16,7 +16,8 @@ describe("heartland", () => {
     // on purpose). If the road, its towns, the village or the fields change
     // on purpose, re-record it. (Re-recorded when the homesteads came: the
     // Greyspine now ends in a cliff onto them at ty 34–36, and the farm rows'
-    // yards lost their stray bushes and rocks.)
+    // yards lost their stray bushes and rocks. Again when homestead sites
+    // replaced the farm rows: the site grid is kept clear, with its lanes.)
     const h = crypto.createHash("sha1");
     const seen = new Set<string>();
     // The original heartland (the homesteads added later are left out).
@@ -26,7 +27,7 @@ describe("heartland", () => {
       seen.add(k);
       h.update(k + JSON.stringify(terrainAt(tx, ty)));
     }
-    expect(h.digest("hex")).toBe("87c47ab2b7c1c926d521082b9291bdc48016a9e9");
+    expect(h.digest("hex")).toBe("aae69794e23506c4fdf1dac4459981d4d0062670");
   });
   it("edges follow the tree lattice (odd west/north, even east/south)", () => {
     for (const b of HEARTLAND) {

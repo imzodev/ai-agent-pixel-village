@@ -1,11 +1,11 @@
 "use client";
-// The ranch's Build tab: farm level, then what you can build next (coop and
-// barn upgrades, silo, feeder, machines), each with its cost and what's
+// A homestead's Build tab: what you can build next (the barn, the workshop,
+// then the silo, feeder and machines by them), each with its cost and what's
 // missing. Rules: src/lib/ranchUpgrades.ts.
 import { ITEM_ICONS } from "@/game/bus";
 import type { RanchGrowthView } from "@/types/ranchGrowth";
 
-export default function RanchUpgrades({ g, busy, act }: { g: RanchGrowthView; busy: boolean; act: (body: Record<string, unknown>) => void }) {
+export default function RanchUpgrades({ g, busy, act, empty }: { g: RanchGrowthView; busy: boolean; act: (body: Record<string, unknown>) => void; /** Said when there's nothing to build. */ empty?: string }) {
   return (
     <div className="space-y-1.5">
       {g.silo && (
@@ -16,11 +16,11 @@ export default function RanchUpgrades({ g, busy, act }: { g: RanchGrowthView; bu
           {g.built.includes("feeder") && <span className="text-[11px] text-emerald-700">Feeder on: animals eat from it</span>}
         </div>
       )}
-      {g.builds.length === 0 && <div className="text-[12px] text-stone-600">Everything&apos;s built. What a farm!</div>}
+      {g.builds.length === 0 && <div className="text-[12px] text-stone-600">{empty ?? "Everything's built. What a farm!"}</div>}
       {g.builds.map((b) => (
         <div key={b.id} className="flex items-center gap-2 rounded border border-amber-900/20 bg-white/60 p-1.5 text-[12px]">
           <div className="flex-1">
-            <div className="font-bold">{b.name}{b.level > 1 ? ` (level ${b.level})` : ""}</div>
+            <div className="font-bold">{b.name}</div>
             <div className="text-[11px] text-stone-600">{b.description}</div>
             <div className="text-[11px]">🪙 {b.coins} · {Object.entries(b.items).map(([k, n]) => `${ITEM_ICONS[k] ?? ""}${n} ${k}`).join(" · ")} · farm lv {b.farmLevel}</div>
             {b.why && <div className="text-[11px] text-red-700">{b.why}</div>}

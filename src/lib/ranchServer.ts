@@ -1,6 +1,7 @@
-// Ranch growth, the server part (rules: src/lib/ranchUpgrades.ts): the
-// ranch_state row, building, the silo, workshop jobs and honey, farm XP,
-// and tickd's feeder pass. Safe for tickd: imports no seed code.
+// Homestead growth, the server part (rules: src/lib/ranchUpgrades.ts): the
+// ranch_state row (by the homestead's lot key), building, the silo, machine
+// jobs and honey, farm XP, the showroom, and tickd's feeder pass. Safe for
+// tickd: imports no seed code.
 
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -8,13 +9,20 @@ import { animals, characters, inventory, lots, ranchState } from "@/db/schema";
 import { addItem, removeItem } from "@/lib/game";
 import { FED_BELOW, FEED_ITEMS, HUNGRY_AT, afterFeed } from "@/lib/ranch";
 import {
-  BUILD_STEPS, EMPTY_GROWTH, FED_AFFECTION, MACHINE_RECIPES, SILO_CAP, STARVING_PENALTY, XP_PER_PROCESSED,
-  afterHoney, applyBuild, canBuild, clampAffection, farmLevel, hasBuilt, honeyReady, isNextStep, machineFree, newJob, nextLevelAt, recipeById, siloStored, takeFeed,
+  EMPTY_GROWTH, FED_AFFECTION, SILO_CAP, STARVING_PENALTY, XP_PER_PROCESSED,
+  afterHoney, applyBuild, canBuild, clampAffection, farmLevel, growthScope, hasBuilt, honeyReady, isNextStep, machineFree, newJob, nextLevelAt, recipeById, siloStored, takeFeed, workshopUp,
 } from "@/lib/ranchUpgrades";
+import { buildingParcels } from "@/lib/homesteadServer";
 import { FURNITURE_ITEMS } from "@/lib/furniture";
 import { lotLock, withLock } from "@/lib/locks";
-import { SHOWROOM_SIZE } from "@/game/workshopProps";
-import type { GrowthLot, RanchBuildKey, RanchGrowth, RanchGrowthView } from "@/types/ranchGrowth";
+import { PARCEL_SHOWROOM } from "@/lib/homestead";
+import type { RanchBuildKey, RanchGrowth, RanchGrowthView } from "@/types/ranchGrowth";
+
+/** A homestead's steps and recipes now (they depend on its barn and workshop parcels). */
+async function scopeOf(lotKey: string, g: RanchGrowth) {
+  const at = await buildingParcels(lotKey);
+  return { ...growthScope(g, at), at };
+}
 
 type Result = { ok: true; message: string; gained?: { itemKey: string; qty: number }[] } | { ok: false; error: string };
 
@@ -23,7 +31,7 @@ export async function loadGrowth(lotKey: string): Promise<RanchGrowth> {
   await db.insert(ranchState).values({ lotKey }).onConflictDoNothing();
   const [r] = await db.select().from(ranchState).where(eq(ranchState.lotKey, lotKey));
   if (!r) return { ...EMPTY_GROWTH };
-  return { farmXp: r.farmXp, coopLevel: r.coopLevel, barnLevel: r.barnLevel, silo: r.silo, machines: r.machines, jobs: r.jobs, hivesAt: r.hivesAt?.getTime() ?? null, display: r.display };
+  return { farmXp: r.farmXp, silo: r.silo, machines: r.machines, jobs: r.jobs, hivesAt: r.hivesAt?.getTime() ?? null, display: r.display };
 }
 
 async function saveGrowth(lotKey: string, g: Partial<RanchGrowth>): Promise<void> {
@@ -36,13 +44,13 @@ export async function addFarmXp(lotKey: string, n: number): Promise<void> {
   await db.insert(ranchState).values({ lotKey, farmXp: n }).onConflictDoUpdate({ target: ranchState.lotKey, set: { farmXp: sql`${ranchState.farmXp} + ${n}` } });
 }
 
-/** The ranch lot a character owns, if any (for XP earned elsewhere). */
+/** The homestead a character owns, if any (for farm XP earned elsewhere: deliveries). */
 export async function ranchOfOwner(characterId: number): Promise<string | null> {
-  const [l] = await db.select({ key: lots.key }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "ranch")));
+  const [l] = await db.select({ key: lots.key }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "homestead"))).limit(1);
   return l?.key ?? null;
 }
 
-/** Give the furniture on a workshop's porch back to its owner. */
+/** Give the furniture on show back to its owner. */
 export async function returnShowroom(lotKey: string, characterId: number): Promise<void> {
   const [r] = await db.select({ display: ranchState.display }).from(ranchState).where(eq(ranchState.lotKey, lotKey));
   for (const item of r?.display ?? []) await addItem(characterId, item, 1);
@@ -60,32 +68,32 @@ async function bagOf(characterId: number, keys: readonly string[]): Promise<Reco
 }
 
 // ── The panel ────────────────────────────────────────────────────────────
-export async function growthView(lotKey: string, lot: GrowthLot, characterId: number, coins: number, now = Date.now()): Promise<RanchGrowthView> {
+export async function growthView(lotKey: string, characterId: number, coins: number, now = Date.now()): Promise<RanchGrowthView> {
   const g = await loadGrowth(lotKey);
-  const steps = BUILD_STEPS.filter((s) => s.lot === lot), recipes = MACHINE_RECIPES.filter((r) => r.lot === lot);
+  const { steps, recipes, at } = await scopeOf(lotKey, g);
+  const showroom = workshopUp(g, at);
   const keys = [...new Set([...steps.flatMap((s) => Object.keys(s.items)), ...recipes.flatMap((r) => Object.keys(r.inputs))])];
   const bag = await bagOf(characterId, keys);
   return {
     farmLevel: farmLevel(g.farmXp), farmXp: g.farmXp, nextAt: nextLevelAt(g.farmXp),
-    coopLevel: g.coopLevel, barnLevel: g.barnLevel,
     silo: g.machines.includes("silo") ? { stored: siloStored(g.silo), cap: SILO_CAP } : null,
     built: g.machines,
     builds: steps.filter((s) => isNextStep(g, s)).map((s) => { const c = canBuild(g, s, bag, coins); return { ...s, can: c.ok, why: c.why }; }),
     recipes: recipes.filter((r) => hasBuilt(g, r.machine)).map((r) => ({ ...r, can: machineFree(g, r.machine) && Object.entries(r.inputs).every(([k, n]) => (bag[k] ?? 0) >= n) })),
     jobs: g.jobs.map((j) => ({ ...j, ready: j.readyAt <= now, inMs: Math.max(0, j.readyAt - now) })),
     honey: g.machines.includes("hives") ? honeyReady(g, now) : null,
-    display: lot === "workshop" ? g.display : null,
-    displayable: lot === "workshop" ? Object.entries(await bagOf(characterId, FURNITURE_ITEMS)).filter(([, n]) => n > 0).map(([itemKey, qty]) => ({ itemKey, qty })) : [],
+    display: showroom ? g.display : null,
+    displayable: showroom ? Object.entries(await bagOf(characterId, FURNITURE_ITEMS)).filter(([, n]) => n > 0).map(([itemKey, qty]) => ({ itemKey, qty })) : [],
   };
 }
 
 // ── Actions (the owner, at the ranch; checked by the route) ──────────────
-export async function build(lotKey: string, lot: GrowthLot, characterId: number, stepId: string, now = Date.now()): Promise<Result> {
+export async function build(lotKey: string, characterId: number, stepId: string, now = Date.now()): Promise<Result> {
   // One action at a time per lot: a double click must not pay or start twice.
   return withLock(lotLock(lotKey), async () => {
-    const step = BUILD_STEPS.find((s) => s.id === stepId && s.lot === lot);
-    if (!step) return { ok: false, error: "You can't build that." };
     const g = await loadGrowth(lotKey);
+    const step = (await scopeOf(lotKey, g)).steps.find((s) => s.id === stepId);
+    if (!step) return { ok: false, error: "Make a parcel your barn (or workshop) and build it first." };
     const [me] = await db.select({ coins: characters.coins }).from(characters).where(eq(characters.id, characterId));
     const bag = await bagOf(characterId, Object.keys(step.items));
     const c = canBuild(g, step, bag, me?.coins ?? 0);
@@ -103,7 +111,7 @@ export async function build(lotKey: string, lot: GrowthLot, characterId: number,
       taken.push([k, n]);
     }
     const next = applyBuild(g, step, now);
-    await saveGrowth(lotKey, { coopLevel: next.coopLevel, barnLevel: next.barnLevel, machines: next.machines, hivesAt: next.hivesAt });
+    await saveGrowth(lotKey, { machines: next.machines, hivesAt: next.hivesAt });
     return { ok: true, message: `🔨 Built: ${step.name}! ${step.description}` };
   });
 }
@@ -133,12 +141,12 @@ export async function deposit(lotKey: string, characterId: number): Promise<Resu
 }
 
 /** Start a workshop job (one per machine at a time). */
-export async function startJob(lotKey: string, lot: GrowthLot, characterId: number, recipeId: string, now = Date.now()): Promise<Result> {
+export async function startJob(lotKey: string, characterId: number, recipeId: string, now = Date.now()): Promise<Result> {
   // One action at a time per lot: a double click must not pay or start twice.
   return withLock(lotLock(lotKey), async () => {
-    const r = recipeById(recipeId);
-    if (!r || r.lot !== lot) return { ok: false, error: "No such work." };
     const g = await loadGrowth(lotKey);
+    const r = (await scopeOf(lotKey, g)).recipes.find((x) => x.id === recipeId);
+    if (!r) return { ok: false, error: "That's done in the barn or the workshop: is it up?" };
     if (!g.machines.includes(r.machine)) return { ok: false, error: "Build it first." };
     if (!machineFree(g, r.machine)) return { ok: false, error: "That's already working. Collect it first." };
     const taken: [string, number][] = [];
@@ -178,7 +186,7 @@ const FEEDER_EVERY_MS = 5 * 60_000;
 let lastFeederRun = 0;
 
 /**
- * Every 5 minutes: ranches with a feeder feed their hungry animals from the
+ * Every 5 minutes: homesteads with a feeder feed their hungry animals from the
  * silo (as if fed by hand), and starving animals lose a little affection.
  */
 export async function tickRanches(now = Date.now()): Promise<number> {
@@ -217,14 +225,14 @@ export async function tickRanches(now = Date.now()): Promise<number> {
   return fed;
 }
 
-/** What the scene draws on each lot: its buildings, and a workshop's showroom. */
+/** What the scene draws on each homestead: its buildings and machines, and the showroom. */
 export async function ranchLooks(lotKeys: readonly string[]): Promise<Map<string, { props: RanchBuildKey[]; display: string[] }>> {
   if (!lotKeys.length) return new Map();
   const rows = await db.select({ lotKey: ranchState.lotKey, machines: ranchState.machines, display: ranchState.display }).from(ranchState).where(inArray(ranchState.lotKey, [...lotKeys]));
   return new Map(rows.map((r) => [r.lotKey, { props: r.machines, display: r.display }]));
 }
 
-/** Workshops: put a piece of furniture from your bag on show, or take one back. */
+/** Put a piece of furniture from your bag on show in front of the workshop, or take one back. */
 export async function showroom(lotKey: string, characterId: number, action: "display" | "undisplay", arg: string | number): Promise<Result> {
   // One action at a time per lot: a double click must not pay or start twice.
   return withLock(lotLock(lotKey), async () => {
@@ -232,7 +240,7 @@ export async function showroom(lotKey: string, characterId: number, action: "dis
     if (action === "display") {
       const item = String(arg);
       if (!FURNITURE_ITEMS.includes(item)) return { ok: false, error: "Only furniture goes in the showroom." };
-      if (g.display.length >= SHOWROOM_SIZE) return { ok: false, error: `The porch holds ${SHOWROOM_SIZE} pieces. Take one down first.` };
+      if (g.display.length >= PARCEL_SHOWROOM.length) return { ok: false, error: `The showroom holds ${PARCEL_SHOWROOM.length} pieces. Take one down first.` };
       if (!(await removeItem(characterId, item, 1))) return { ok: false, error: "You don't have that." };
       await saveGrowth(lotKey, { display: [...g.display, item] });
       return { ok: true, message: `🪑 Put a ${item.replace(/_/g, " ")} on show.` };

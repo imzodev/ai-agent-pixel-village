@@ -23,11 +23,12 @@ export { CONTINENT };
  *  larger area), so lands, seas and biomes are proportionally bigger. */
 const WAVE = 2;
 /** The hand-made heartland (src/lib/regions.ts): the King's Road with its
- *  towns, and the village with its fields and ranches. Edges sit on the
+ *  towns, and the village with its fields and homesteads. Edges sit on the
  *  tree lattice's parity (odd west/north, even east/south), so no tree is
  *  split between the two generators. */
-/** The homesteads (src/lib/lotDistricts.ts): open land south of Hollowmere
- *  and of the village farms, for rows of lots opened as players fill them. */
+/** The homesteads: open land south of the village and of Hollowmere, where
+ *  the homestead sites stand (src/lib/homesteadSites.ts), opened block by
+ *  block as players claim them. */
 export const HOMESTEADS: readonly TileBox[] = [
   { tx0: -449, tx1: -126, ty0: 37, ty1: 92 },
   { tx0: -449, tx1: 150, ty0: 93, ty1: 296 },

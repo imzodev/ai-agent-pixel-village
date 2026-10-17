@@ -26,8 +26,8 @@ export const JOURNEY: readonly JourneyGoal[] = [
   },
   {
     key: "ranch", title: "Raise your first animal",
-    hint: "Claim a ranch south of the village at its gate, then buy a chick in its panel. Hens lay eggs while they're fed.",
-    check: { kind: "animalsOwned", n: 1 }, target: { kind: "freeLot", prefix: "ranch_" }, reward: { coins: 80, xp: 80 },
+    hint: "On your homestead, make a parcel a pasture and buy a chick (🏡 Homestead → Barn & animals). Hens lay eggs while they're fed.",
+    check: { kind: "animalsOwned", n: 1 }, target: { kind: "homestead" }, reward: { coins: 80, xp: 80 },
   },
   {
     key: "hollowmere", title: "Travel to Hollowmere",
@@ -51,9 +51,9 @@ export const JOURNEY: readonly JourneyGoal[] = [
     check: { kind: "pagesClaimed", n: 1 }, reward: { coins: 150, xp: 150 },
   },
   {
-    key: "secondLot", title: "Own two lots",
-    hint: "At level 10 you can hold a second lot: a ranch, a vineyard, an orchard or a workshop. Claim one at its gate.",
-    check: { kind: "lotsOwned", n: 2 }, target: { kind: "freeLot", prefix: "land_" }, reward: { coins: 200, xp: 250 },
+    key: "homestead9", title: "Grow your homestead to 9 parcels",
+    hint: "Buy the land next to yours (🏡 Homestead → Land), a parcel at a time. From level 10 a homestead holds 9.",
+    check: { kind: "parcelsOwned", n: 9 }, target: { kind: "homestead" }, reward: { coins: 200, xp: 250 },
   },
   {
     key: "towns", title: "Visit 5 towns",

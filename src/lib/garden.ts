@@ -15,23 +15,19 @@ import { characters, lots, resourceNodes } from "@/db/schema";
 import { CROP_KINDS, GARDEN_CROPS } from "./crops";
 import { addItem, countItem, progressMissions, recalcLevel, removeItem } from "./game";
 import { plotsOfLot } from "./lots";
+import { PLANT_SPOT } from "./homestead";
+import type { ParcelUse } from "@/types/homestead";
 import { farmPlan, isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "./gardenRules";
-import type { GardenResult } from "@/types/garden";
+import type { GardenPlot, GardenResult } from "@/types/garden";
 import { perksOf } from "./combat";
 import { tutorialEvent } from "./tutorialServer";
 import { recordCollection } from "./collectionServer";
 import { GREEN_THUMB_MULT } from "./progression";
-import { afterPerennialHarvest, plantRule, vineyardSlot } from "./vineyard";
+import { afterPerennialHarvest, plantRule } from "./vineyard";
 import { addFarmXp, loadGrowth } from "./ranchServer";
 import { XP_PER_GOOD, farmLevel } from "./ranchUpgrades";
 import { getBuildingsManifest, getTemplate } from "./buildingsServer";
 import { gardenCellsOf } from "./buildingManifest";
-
-/** The garden cells of a lot's template (which plot is where). */
-async function lotCells(lot: { buildingKey: string | null }) {
-  const entry = lot.buildingKey ? (await getBuildingsManifest()).buildings.find((b) => b.key === lot.buildingKey) : undefined;
-  return entry ? gardenCellsOf(await getTemplate(entry)) : [];
-}
 
 export { isRipe, wateredAdvanceAt, waterCheck };
 
@@ -49,13 +45,12 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   const [lot] = await db.select().from(lots).where(eq(lots.key, lotKey));
   if (!lot) return { ok: false, error: "There's no garden here." };
   if (lot.ownerId !== characterId) return { ok: false, error: "This isn't your garden." };
-  const target = (await plotsOfLot(lot)).find((p) => p.plot === plot);
+  const target: (GardenPlot & { use?: ParcelUse }) | undefined = (await plotsOfLot(lot)).find((p) => p.plot === plot);
   if (!target) return { ok: false, error: "There's no plot there." };
-  // Vines on trellises, trees in the orchard, vegetables in fields (src/lib/vineyard.ts).
-  const vineyard = lot.kind === "vineyard", orchard = lot.kind === "orchard";
-  const cell = vineyard ? (await lotCells(lot)).find((c) => c.plot === plot) : undefined;
-  // an orchard's every plot is a tree plot
-  const why = plantRule(crop, lot.kind, orchard ? "tree" : cell ? vineyardSlot(cell) : null, vineyard || orchard ? farmLevel((await loadGrowth(lot.key)).farmXp) : 1);
+  // Vegetables in a home's garden and in fields, vines in vineyards, trees in orchards (src/lib/vineyard.ts).
+  const spot = lot.kind === "homestead" ? PLANT_SPOT[target.use ?? "wild"] : "garden";
+  if (!spot) return { ok: false, error: "Nothing grows on this parcel. Make it a field, a vineyard or an orchard." };
+  const why = plantRule(crop, spot, lot.kind === "homestead" ? farmLevel((await loadGrowth(lot.key)).farmXp) : 1);
   if (why) return { ok: false, error: why };
   if ((await countItem(characterId, seedKey)) < 1) return { ok: false, error: "You don't have any of those seeds." };
   // Green Thumb shortens every stage of the owner's crops.
@@ -127,7 +122,7 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   // A vineyard grows with every harvest.
   if (cfg.perennial && node.lotId != null) {
     const [lot] = await db.select({ key: lots.key, kind: lots.kind }).from(lots).where(eq(lots.id, node.lotId));
-    if (lot?.kind === "vineyard" || lot?.kind === "orchard") await addFarmXp(lot.key, node.qty * XP_PER_GOOD);
+    if (lot?.kind === "homestead") await addFarmXp(lot.key, node.qty * XP_PER_GOOD);
   }
   await addItem(characterId, node.itemKey, node.qty);
   const gained = [{ itemKey: node.itemKey, qty: node.qty }];

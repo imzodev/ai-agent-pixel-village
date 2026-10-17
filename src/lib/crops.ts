@@ -9,7 +9,7 @@
 // same record.
 
 import { ORCHARD_FRUITS } from "./orchard";
-import type { LotKind } from "@/types/garden";
+import type { PlantSpot } from "@/types/garden";
 import type { CropKindConfig, CropRect } from "@/types/crops";
 import type { GardenCropDef } from "@/types/garden";
 
@@ -179,11 +179,11 @@ export const GARDEN_CROPS: Record<string, GardenCropDef> = {
   tomato_seeds:  { kind: "tomato_crop",  seedKey: "tomato_seeds",  produceKey: "tomato" },
   pumpkin_seeds: { kind: "pumpkin_crop", seedKey: "pumpkin_seeds", produceKey: "pumpkin" },
   // Vineyards only: perennials that fruit again and again.
-  grape_cutting:       { kind: "red_vine",   seedKey: "grape_cutting",       produceKey: "red_grape",   lots: ["vineyard"], slot: "vine", minFarmLevel: 1 },
-  white_grape_cutting: { kind: "white_vine", seedKey: "white_grape_cutting", produceKey: "white_grape", lots: ["vineyard"], slot: "vine", minFarmLevel: 2 },
-  apple_sapling:       { kind: "apple_tree", seedKey: "apple_sapling",       produceKey: "apple",       lots: ["vineyard", "orchard"], slot: "tree", minFarmLevel: 1 },
+  grape_cutting:       { kind: "red_vine",   seedKey: "grape_cutting",       produceKey: "red_grape",   grows: ["vineyard"], minFarmLevel: 1 },
+  white_grape_cutting: { kind: "white_vine", seedKey: "white_grape_cutting", produceKey: "white_grape", grows: ["vineyard"], minFarmLevel: 2 },
+  apple_sapling:       { kind: "apple_tree", seedKey: "apple_sapling",       produceKey: "apple",       grows: ["orchard"], minFarmLevel: 1 },
   // The orchard's trees (src/lib/orchard.ts): saplings from the towns whose land suits them.
-  ...Object.fromEntries(ORCHARD_FRUITS.map((f) => [f.sapling, { kind: f.tree, seedKey: f.sapling, produceKey: f.fruit, lots: ["orchard"] as LotKind[], slot: "tree" as const, minFarmLevel: 1 }])),
+  ...Object.fromEntries(ORCHARD_FRUITS.map((f) => [f.sapling, { kind: f.tree, seedKey: f.sapling, produceKey: f.fruit, grows: ["orchard"] as PlantSpot[], minFarmLevel: 1 }])),
 };
 
 /**

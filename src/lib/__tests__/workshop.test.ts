@@ -1,44 +1,23 @@
-// Carpenter's workshops: the lots south of Hollowmere, stations and recipes
-// scoped to workshops, the built-in workbench, furniture sprites, buyers
-// and the showroom.
+// A homestead's carpenter's workshop: its stations and recipes, the
+// built-in workbench, furniture sprites, buyers and the showroom.
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { BUILD_STEPS, EMPTY_GROWTH, MACHINE_RECIPES, hasBuilt, machineFree } from "@/lib/ranchUpgrades";
 import { FURNITURE_ITEMS, FURNITURE_VALUE } from "@/lib/furniture";
 import { FURNITURE_CELLS, furnitureCell } from "@/game/furnitureArt";
-import { SHOWROOM_SPOTS } from "@/game/workshopProps";
-import { WORKSHOP_ROW, treeAt } from "@/lib/regions";
+import { PARCEL_SHOWROOM, PARCEL_TILES } from "@/lib/homestead";
 import { findBuyer } from "@/lib/trade";
-
-const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8")) as { buildings: { key: string; kind: string; tx: number; ty: number; row?: string }[] };
-// The first row (the homesteads plan more rows that open later: lotDistricts.test.ts).
-const shops = manifest.buildings.filter((b) => b.kind === "workshop" && b.row === "workshop_0");
-
-describe("workshop lots", () => {
-  it("4 lots on the road south of Hollowmere, apart and clear of trees", () => {
-    expect(shops).toHaveLength(4);
-    const xs = shops.map((s) => s.tx).sort((a, b) => a - b);
-    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(24); // no overlap
-    for (const s of shops) {
-      expect(s.ty).toBe(38);
-      expect(s.tx > -352 || s.tx + 23 < -352).toBe(true); // the road at tx -352 stays open
-      for (let vy = s.ty; vy < s.ty + 15; vy += 2) for (let vx = s.tx; vx < s.tx + 24; vx += 2) expect(treeAt(vx, vy), `${vx},${vy}`).toBeNull();
-      expect(s.tx).toBeGreaterThanOrEqual(WORKSHOP_ROW.tx0);
-      expect(s.tx + 23).toBeLessThanOrEqual(WORKSHOP_ROW.tx1);
-    }
-  });
-});
 
 describe("stations and recipes", () => {
   it("the workbench is built in; the others are built", () => {
     expect(hasBuilt(EMPTY_GROWTH, "workbench")).toBe(true);
     expect(machineFree(EMPTY_GROWTH, "workbench")).toBe(true);
     expect(hasBuilt(EMPTY_GROWTH, "lathe")).toBe(false);
-    expect(BUILD_STEPS.filter((s) => s.lot === "workshop").map((s) => s.key)).toEqual(["saw", "lathe", "upholstery", "varnish"]);
+    expect(BUILD_STEPS.filter((s) => s.place === "workshop").map((s) => s.key)).toEqual(["saw", "lathe", "upholstery", "varnish"]);
   });
   it("every workshop recipe uses a workshop station and makes something real", () => {
-    const stations = new Set(["workbench", ...BUILD_STEPS.filter((s) => s.lot === "workshop").map((s) => s.key)]);
-    for (const r of MACHINE_RECIPES.filter((x) => x.lot === "workshop")) {
+    const stations = new Set(["workbench", ...BUILD_STEPS.filter((s) => s.place === "workshop").map((s) => s.key)]);
+    for (const r of MACHINE_RECIPES.filter((x) => x.place === "workshop")) {
       expect(stations.has(r.machine), r.id).toBe(true);
       expect(r.output === "plank" || FURNITURE_ITEMS.includes(r.output), r.id).toBe(true);
     }
@@ -60,8 +39,8 @@ describe("furniture", () => {
     }
     expect(new Set(Object.values(FURNITURE_CELLS)).size).toBe(FURNITURE_ITEMS.length); // one cell each
   });
-  it("the showroom has 6 spots on the porch", () => {
-    expect(SHOWROOM_SPOTS).toHaveLength(6);
-    for (const s of SHOWROOM_SPOTS) { expect(s.x).toBeGreaterThan(14 * 16); expect(s.y).toBeLessThanOrEqual(11 * 16); }
+  it("the showroom has 6 spots in front of the workshop, on its parcel", () => {
+    expect(PARCEL_SHOWROOM).toHaveLength(6);
+    for (const s of PARCEL_SHOWROOM) { expect(s.x > 0 && s.x < PARCEL_TILES * 16).toBe(true); expect(s.y > 96 && s.y <= PARCEL_TILES * 16).toBe(true); }
   });
 });

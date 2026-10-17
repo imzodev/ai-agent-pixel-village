@@ -52,7 +52,6 @@ export type WsServerMessage =
   // These chunks' terrain changed (a tree was felled or grew back): re-read them.
   | { type: "chunkReload"; chunks: { cx: number; cy: number }[] }
   /** Homestead lot rows opened: fetch the buildings again and stamp the new lots. */
-  | { type: "lotsOpened" }
   /** Enemies that just appeared nearby (wild packs, encounters): add them now, not at the next resync. */
   | { type: "spawns"; enemies: EnemySnapshot[] }
   // An enemy struck at the player standing at (x, y): plays its attack.

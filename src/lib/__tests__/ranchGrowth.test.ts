@@ -1,14 +1,11 @@
-// Ranch growth: farm levels, caps per coop / barn level, what building
-// needs, quality goods from love, the workshop's timing and the silo.
+// Homestead growth: farm levels, what building needs, quality goods from
+// love, the machines' timing and the silo. (What a homestead may build:
+// homesteadBuildings.test.ts.)
 import { describe, expect, it } from "vitest";
 import {
   BUILD_STEPS, EMPTY_GROWTH, HIVE_MAX, HIVE_MS, MACHINE_RECIPES, QUALITY_MAX,
-  afterHoney, applyBuild, canBuild, capFor, collectGoods, farmLevel, honeyReady, isNextStep, machineFree, newJob, nextLevelAt, qualityChance, takeFeed,
+  afterHoney, applyBuild, canBuild, collectGoods, farmLevel, honeyReady, isNextStep, machineFree, newJob, nextLevelAt, qualityChance, takeFeed,
 } from "@/lib/ranchUpgrades";
-import { RANCH_PROP_SPOTS, RANCH_PROP_SPRITES } from "@/game/ranchProps";
-import { VINEYARD_PROP_SPOTS, VINEYARD_PROP_SPRITES } from "@/game/vineyardProps";
-import { WORKSHOP_PROP_SPOTS, WORKSHOP_PROP_SPRITES } from "@/game/workshopProps";
-import { ORCHARD_PROP_SPOTS } from "@/game/orchardProps";
 import type { RanchGrowth } from "@/types/ranchGrowth";
 
 const step = (id: string) => BUILD_STEPS.find((s) => s.id === id)!;
@@ -21,32 +18,23 @@ describe("farm level", () => {
     expect(nextLevelAt(60)).toBe(150);
     expect(nextLevelAt(700)).toBeNull();
   });
-  it("coop and barn levels raise the caps", () => {
-    expect(capFor("chicken", g0)).toBe(6);
-    expect(capFor("chicken", { coopLevel: 3, barnLevel: 1 })).toBe(14);
-    expect([capFor("sheep", { coopLevel: 1, barnLevel: 2 }), capFor("cow", { coopLevel: 1, barnLevel: 3 })]).toEqual([5, 4]);
-  });
 });
 
 describe("building", () => {
   it("needs the farm level, coins, materials and what comes first", () => {
-    expect(canBuild(g0, step("coop2"), rich, 999).why).toBe("Needs farm level 2.");
+    expect(canBuild(g0, step("press"), rich, 999).why).toBe("Needs farm level 2.");
     const lv2 = { ...g0, farmXp: 60 };
-    expect(canBuild(lv2, step("coop2"), rich, 999).ok).toBe(true);
-    expect(canBuild(lv2, step("coop2"), rich, 10).why).toBe("Needs 150 coins.");
-    expect(canBuild(lv2, step("coop2"), { wood: 1 }, 999).why).toContain("20 wood");
+    expect(canBuild(lv2, step("press"), rich, 999).ok).toBe(true);
+    expect(canBuild(lv2, step("hs_barn"), rich, 10).why).toBe("Needs 150 coins.");
+    expect(canBuild(lv2, step("hs_barn"), { wood: 1 }, 999).why).toContain("20 wood");
     expect(canBuild(lv2, step("feeder"), rich, 999).why).toBe("Build the silo first.");
-    expect(canBuild(lv2, step("coop3"), rich, 9999).ok).toBe(false); // no skipping to level 3
   });
-  it("one level at a time, each building once", () => {
-    const built = applyBuild({ ...g0, farmXp: 999 }, step("coop2"), 0);
-    expect(built.coopLevel).toBe(2);
-    expect(isNextStep(built, step("coop2"))).toBe(false);
-    expect(isNextStep(built, step("coop3"))).toBe(true);
+  it("each building once", () => {
     const hives = applyBuild(g0, step("hives"), 1000);
     expect(hives.machines).toContain("hives");
     expect(hives.hivesAt).toBe(1000);
     expect(isNextStep(hives, step("hives"))).toBe(false);
+    expect(canBuild(hives, step("hives"), rich, 999).why).toBe("Already built.");
   });
 });
 
@@ -84,12 +72,5 @@ describe("workshop", () => {
     expect(takeFeed({ wheat: 3, carrot: 1 })).toEqual({ item: "wheat", silo: { wheat: 2, carrot: 1 } });
     expect(takeFeed({ carrot: 1 })!.silo).toEqual({});
   });
-  it("every building that can be built has a sprite spot (coop and barn are the template's)", () => {
-    for (const s of BUILD_STEPS) if (s.key !== "coop" && s.key !== "barn") {
-      const [spots, sprites] = s.lot === "vineyard" ? [VINEYARD_PROP_SPOTS, VINEYARD_PROP_SPRITES] : s.lot === "workshop" ? [WORKSHOP_PROP_SPOTS, WORKSHOP_PROP_SPRITES] : s.lot === "orchard" ? [ORCHARD_PROP_SPOTS, VINEYARD_PROP_SPRITES] : [RANCH_PROP_SPOTS, RANCH_PROP_SPRITES];
-      const spot = spots[s.key];
-      expect(spot, s.key).toBeDefined();
-      expect(sprites[spot!.sprite], spot!.sprite).toBeDefined();
-    }
-  });
+
 });

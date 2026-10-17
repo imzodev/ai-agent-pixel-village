@@ -12,7 +12,8 @@ export type JourneyCheck =
   | { kind: "ownsAnyItem"; itemKeys: string[] }
   | { kind: "bountiesDone"; n: number }
   | { kind: "pagesClaimed"; n: number }
-  | { kind: "lotsOwned"; n: number }
+  /** Parcels of your homestead (src/lib/homestead.ts). */
+  | { kind: "parcelsOwned"; n: number }
   | { kind: "townsVisited"; n: number }
   | { kind: "dearFriends"; n: number }
   | { kind: "lairBosses"; n: number };

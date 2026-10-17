@@ -1,14 +1,20 @@
-// Ranch growth (src/lib/ranchUpgrades.ts): farm level, buildings you add to
-// a ranch, the workshop's jobs, and what the panel shows. Types only.
+// Homestead growth (src/lib/ranchUpgrades.ts): farm level, the barn and the
+// workshop and what goes by them, the machines' jobs, and what the panel
+// shows. Types only.
 
-/** Something you can build on a ranch (coop / barn are upgraded by level). */
+/** Something you can build on a homestead. */
 export type RanchBuildKey =
-  | "coop" | "barn" | "silo" | "feeder" | "mill" | "press" | "loom" | "hives"
+  | "silo" | "feeder" | "mill" | "press" | "loom" | "hives"
   | "fruit_press" | "cellar" | "racks" | "jam"
-  | "workbench" | "saw" | "lathe" | "upholstery" | "varnish";
+  | "workbench" | "saw" | "lathe" | "upholstery" | "varnish"
+  // A homestead's buildings (src/lib/homestead.ts): its barn and its workshop.
+  | "hs_barn" | "hs_workshop";
 
-/** The kinds of lot that grow (ranches and vineyards share farm growth). */
-export type GrowthLot = "ranch" | "vineyard" | "workshop" | "orchard";
+/** Where a step or recipe belongs: by the barn, in the workshop, or the homestead's own buildings. */
+export type GrowthPlace = "barn" | "workshop" | "homestead";
+
+/** Which of a homestead's buildings have a parcel to stand on (src/lib/ranchUpgrades.ts homesteadScope). */
+export type BuildingParcels = { barn: boolean; workshop: boolean };
 
 /** A machine that turns goods into better goods (hives make honey alone). */
 export type MachineKey =
@@ -18,10 +24,8 @@ export type MachineKey =
 /** One step you can build: what it costs and what it needs first. */
 export type BuildStep = {
   id: string;
-  lot: GrowthLot;
+  place: GrowthPlace;
   key: RanchBuildKey;
-  /** The level it brings the building to (1 for one-off buildings). */
-  level: number;
   name: string;
   description: string;
   coins: number;
@@ -32,7 +36,7 @@ export type BuildStep = {
 
 /** A workshop recipe: inputs in, output out after `ms`. */
 export type MachineRecipe = {
-  id: string; lot: GrowthLot; machine: MachineKey; inputs: Readonly<Record<string, number>>; output: string; qty: number; ms: number; name: string;
+  id: string; place: Exclude<GrowthPlace, "homestead">; machine: MachineKey; inputs: Readonly<Record<string, number>>; output: string; qty: number; ms: number; name: string;
   /** Farm XP for one job (default: XP_PER_PROCESSED per item made). */
   xp?: number;
 };
@@ -40,11 +44,9 @@ export type MachineRecipe = {
 /** Work in progress on a machine. */
 export type RanchJob = { machine: MachineKey; recipe: string; output: string; qty: number; readyAt: number };
 
-/** A ranch's growth, as stored (ranch_state). */
+/** A homestead's growth, as stored (ranch_state). */
 export type RanchGrowth = {
   farmXp: number;
-  coopLevel: number;
-  barnLevel: number;
   /** Feed stored in the silo, by item. */
   silo: Record<string, number>;
   /** One-off buildings built. */
@@ -52,7 +54,7 @@ export type RanchGrowth = {
   jobs: RanchJob[];
   /** When the hives were last emptied (ms). */
   hivesAt: number | null;
-  /** Workshops: the furniture on show on the porch (item keys, in order). */
+  /** The furniture on show in front of the workshop (item keys, in order). */
   display: string[];
 };
 
@@ -62,8 +64,6 @@ export type RanchGrowthView = {
   farmXp: number;
   /** XP where the next level starts (null at the top). */
   nextAt: number | null;
-  coopLevel: number;
-  barnLevel: number;
   silo: { stored: number; cap: number } | null;
   built: RanchBuildKey[];
   builds: (BuildStep & { can: boolean; why: string | null })[];
@@ -71,10 +71,10 @@ export type RanchGrowthView = {
   /** Running jobs, with the time left when the view was made. */
   jobs: (RanchJob & { ready: boolean; inMs: number })[];
   honey: number | null;
-  /** Workshops: what's on show, and the furniture in your bag you could put up. */
+  /** The workshop's showroom (when it's up), and the furniture in your bag you could put up. */
   display: string[] | null;
   displayable: { itemKey: string; qty: number }[];
 };
 
-/** What the scene draws on a ranch lot: its buildings, at the template's origin (world px). */
+/** What the scene draws on a homestead: its buildings and machines, and the showroom (src/game/homesteadArt.ts). */
 export type RanchLook = { props: RanchBuildKey[]; ox: number; oy: number; display?: string[] };

@@ -17,6 +17,7 @@ import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { SHOP_STOCK, stockForNpc, tradesForNpc } from "./trade";
 import { recipesForNpc } from "./recipes";
 import { RANCH_SPECIES } from "./ranch";
+import { PARCEL_PRICE } from "./homestead";
 import { TRAVEL_COST } from "./worldAtlas";
 import type { ItemNameOf, KnowledgePlace, KnowledgeTopic } from "@/types/npc";
 
@@ -233,10 +234,10 @@ function whoToAsk(npcKey: string, topic: KnowledgeTopic): string | null {
 
 /** How a few things in the world work (every line true to the game's rules). */
 function howThingsWork(): string[] {
-  const animals = Object.values(RANCH_SPECIES).map((s) => `a ${s.young.toLowerCase()} (${s.species}) for ${s.price} coins, up to ${s.cap}`).join("; ");
+  const animals = Object.values(RANCH_SPECIES).map((s) => `${s.young.toLowerCase()}s ${s.price} coins`).join(", ");
   return [
-    `Nobody sells animals. Players buy them from the panel on their own ranch lot: ${animals}. They're fed with crops and give ${Object.values(RANCH_SPECIES).map((s) => s.produce).join(", ")}.`,
-    "Lots (homes, farm land, ranches, vineyards, orchards, workshops) are claimed at their gate.",
+    `Homesteads lie south of the village: claim a free site at its "For sale" sign, then buy land next to it at ${PARCEL_PRICE} coins a parcel. Each parcel is a field, pasture, vineyard, orchard, the barn or the workshop.`,
+    `Nobody sells animals. Players buy them on their own homestead, as many as its pastures hold (${animals}). Fed with crops, they give ${Object.values(RANCH_SPECIES).map((s) => s.produce).join(", ")}.`,
     `Waystones: walking up to one attunes it; from beside a waystone, travel to any attuned one is free (${TRAVEL_COST} coins from anywhere else, from the map).`,
     "Every town has an inn where the innkeeper sells hot food and travellers can rest by the hearth.",
     `The ${TOWNS.length} towns out on the continent (${TOWNS.slice(0, 3).map((t) => t.name).join(", ")}…) each have a bounty board with jobs that pay.`,

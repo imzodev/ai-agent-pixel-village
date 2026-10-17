@@ -62,8 +62,3 @@ export function nearestFirst<T extends { z: number; mx: number; my: number }>(ti
   return [...tiles].map((t) => ({ t, d: d(t) })).sort((a, b) => a.d - b.d).map((x) => x.t);
 }
 
-/** Does map tile (z, mx, my) overlap any of these world-tile rectangles? */
-export function tileTouches(z: number, mx: number, my: number, rects: readonly { tx: number; ty: number; tw: number; th: number }[]): boolean {
-  const r = mapTileRect(z, mx, my);
-  return rects.some((o) => o.tx < r.tx + r.tw && r.tx < o.tx + o.tw && o.ty < r.ty + r.th && r.ty < o.ty + o.th);
-}

@@ -1,6 +1,7 @@
--- One-off fixes for databases whose constraints drifted from the names
--- drizzle-kit expects (src/db/schema.ts). Safe to run any number of times;
--- no rows are touched.
+-- One-off fixes run before `db:push` (scripts/deploy.sh): constraints whose
+-- names drifted from what drizzle-kit expects (src/db/schema.ts), and drops
+-- of retired tables and columns, which db:push can't do without asking.
+-- Safe to run any number of times.
 --
 --   psql "$DATABASE_URL" -f scripts/fix-db-drift.sql
 --
@@ -27,3 +28,16 @@ DO $$ BEGIN
     ALTER TABLE npcs ADD CONSTRAINT npcs_api_key_hash_unique UNIQUE (api_key_hash);
   END IF;
 END $$;
+
+-- Homesteads replaced the land / ranch / vineyard / orchard / workshop lots
+-- (src/lib/homestead.ts). Their lot rows, crops, animals and machines are
+-- cleared by the server at boot (syncLotsFromManifest: showroom pieces go
+-- back to their owners); here go what's left unused, so `db:push` (which
+-- would ask before dropping anything with data) finds nothing to drop:
+-- the open lot rows (homestead_blocks now), resale fields nobody used, and
+-- the old ranches' coop and barn sizes (pastures set the space now).
+DROP TABLE IF EXISTS lot_rows;
+ALTER TABLE lots DROP COLUMN IF EXISTS price;
+ALTER TABLE lots DROP COLUMN IF EXISTS for_sale;
+ALTER TABLE ranch_state DROP COLUMN IF EXISTS coop_level;
+ALTER TABLE ranch_state DROP COLUMN IF EXISTS barn_level;

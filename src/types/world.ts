@@ -68,6 +68,8 @@ export type Selection =
   | { type: "relic"; key: string; name: string; x: number; y: number; distance: number }
   // A bakery's table of free bread (src/lib/bakery.ts); x/y = in front of it.
   | { type: "bread"; table: string; name: string; x: number; y: number; distance: number }
+  // A homestead's signpost (src/lib/homestead.ts): "for sale", or whose it is.
+  | { type: "homestead"; key: string; name: string; x: number; y: number; distance: number }
   // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
   | { type: "tree"; vx: number; vy: number; kind: string; x: number; y: number; distance: number };
 

@@ -1,6 +1,4 @@
-// The buildings in the world now (src/lib/buildingsServer.ts): the manifest
-// without the homestead lots whose rows haven't opened. The client stamps
-// these; when rows open, the WS server says `lotsOpened` and it asks again.
+// The buildings in the world (src/lib/buildingsServer.ts), for the client to stamp.
 
 import { getBuildingsManifest } from "@/lib/buildingsServer";
 

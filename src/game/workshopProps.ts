@@ -1,10 +1,8 @@
-// A carpenter's workshop lot (scripts/draw-workshop-lot.mjs), what's drawn
-// on it by the game: the stations players build (saw bench, lathe,
-// upholstery bench, varnish shelf) in the yard, and the furniture they put on
-// show on the porch (src/game/furnitureArt.ts). Pixel sprites at world scale;
-// spots in template pixels (stations: bottom-left; showroom: bottom-centre).
+// The stations players build by their homestead's workshop (saw bench,
+// lathe, upholstery bench, varnish shelf). Pixel sprites at world scale;
+// homesteadArt.ts puts each at its spot (src/lib/homestead.ts PARCEL_SPOTS),
+// and the furniture on show in front (src/game/furnitureArt.ts).
 
-import type { RanchBuildKey } from "@/types/ranchGrowth";
 
 type Sprite = { rows: string[]; palette: Record<string, string> };
 
@@ -55,18 +53,3 @@ function varnish(): Sprite {
 export const WORKSHOP_PROP_SPRITES: Readonly<Record<string, Sprite>> = {
   ws_saw: sawBench(), ws_lathe: lathe(), ws_upholstery: upholstery(), ws_varnish: varnish(),
 };
-
-/** Where each station stands in the yard: texture and bottom-left (template px). */
-export const WORKSHOP_PROP_SPOTS: Readonly<Partial<Record<RanchBuildKey, { sprite: string; x: number; y: number }>>> = {
-  saw: { sprite: "ws_saw", x: 82, y: 207 },
-  lathe: { sprite: "ws_lathe", x: 118, y: 207 },
-  upholstery: { sprite: "ws_upholstery", x: 222, y: 207 },
-  varnish: { sprite: "ws_varnish", x: 282, y: 207 },
-};
-
-/** The showroom's display spots on the porch, bottom-centre (template px). */
-export const SHOWROOM_SPOTS: readonly { x: number; y: number }[] = [
-  { x: 244, y: 118 }, { x: 284, y: 118 }, { x: 324, y: 118 },
-  { x: 244, y: 164 }, { x: 284, y: 164 }, { x: 324, y: 164 },
-];
-export const SHOWROOM_SIZE = SHOWROOM_SPOTS.length;

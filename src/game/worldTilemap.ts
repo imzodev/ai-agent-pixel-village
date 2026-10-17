@@ -177,7 +177,6 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "House1", file: "House1.png" },
   { name: "House2", file: "House2.png" },
   { name: "RoseCottage", file: "RoseCottage.png" },
-  { name: "LandLot", file: "LandLot.png" },
   { name: "Wilds", file: "Wilds.png" },
   { name: "TownSquare", file: "TownSquare.png" },
   // The Common Field's stamps (scripts/draw-wheat-field.mjs).
@@ -192,10 +191,6 @@ const TILESET_FILES: ReadonlyArray<{ name: string; file: string }> = [
   { name: "Forge", file: "Forge.png" },
   { name: "Inn", file: "Inn.png" },
   { name: "Bakery", file: "Bakery.png" },
-  { name: "RanchLot", file: "RanchLot.png" },
-  { name: "VineyardLot", file: "VineyardLot.png" },
-  { name: "WorkshopLot", file: "WorkshopLot.png" },
-  { name: "OrchardLot", file: "OrchardLot.png" },
   { name: "Waystone", file: "Waystone.png" },
 ];
 

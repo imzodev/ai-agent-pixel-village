@@ -4,7 +4,7 @@
 
 import { and, count, eq, gte, inArray, like, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { animals, characterBounties, characterCollection, characterMissions, characterWaystones, characters, inventory, lots, npcRegard } from "@/db/schema";
+import { animals, characterBounties, characterCollection, characterMissions, characterWaystones, characters, homesteadParcels, inventory, lots, npcRegard } from "@/db/schema";
 import { JOURNEY } from "@/lib/journey";
 import { LAIR_BOSSES } from "@/lib/lairs";
 import { TUTORIAL_STEPS } from "@/lib/tutorial";
@@ -26,7 +26,7 @@ async function measure(characterId: number, check: JourneyCheck, level: number):
     case "ownsAnyItem": return { have: Math.min(1, await one(db.select({ n: count() }).from(inventory).where(and(eq(inventory.characterId, characterId), inArray(inventory.itemKey, check.itemKeys))))), need: 1 };
     case "bountiesDone": return { have: await one(db.select({ n: count() }).from(characterBounties).where(and(eq(characterBounties.characterId, characterId), eq(characterBounties.status, "done")))), need: check.n };
     case "pagesClaimed": return { have: await one(db.select({ n: count() }).from(characterCollection).where(coll("page"))), need: check.n };
-    case "lotsOwned": return { have: await one(db.select({ n: count() }).from(lots).where(eq(lots.ownerId, characterId))), need: check.n };
+    case "parcelsOwned": return { have: await one(db.select({ n: count() }).from(homesteadParcels).innerJoin(lots, eq(lots.id, homesteadParcels.lotId)).where(eq(lots.ownerId, characterId))), need: check.n };
     case "townsVisited": return { have: await one(db.select({ n: count() }).from(characterCollection).where(and(coll("region"), like(characterCollection.key, "town_%")))), need: check.n };
     case "dearFriends": return { have: await one(db.select({ n: count() }).from(npcRegard).where(and(eq(npcRegard.characterId, characterId), gte(npcRegard.score, 10)))), need: check.n };
     case "lairBosses": return { have: await one(db.select({ n: count() }).from(characterCollection).where(and(coll("enemy"), inArray(characterCollection.key, LAIR_BOSSES.map((b) => b.kind))))), need: check.n };

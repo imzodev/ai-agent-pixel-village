@@ -103,13 +103,14 @@ export function isAggressive(kind: string): boolean {
 // which only fills with wisps at night so daytime woodcutting stays safe.
 export const ENEMY_ZONES: EnemyZone[] = [
   { name: "north woods", rect: NORTH_WOODS, kinds: { slime: 3, bat: 2 } },
-  { name: "south meadow", rect: chunkRect(0, -6, 3, 2), kinds: { slime: 3, bat: 2 } },
+  // (No south meadow: homesteads stand south of the village, and they're kept safe.)
   // Past the Village Ranch (src/lib/villageRanch.json), which took the old east field.
   { name: "east woods", rect: chunkRect(10, 2, 2, 5), kinds: { slime: 3, thornling: 2 } },
   { name: "west woods", rect: chunkRect(-4, 2, 2, 5), kinds: { thornling: 2, boar: 2 } },
   { name: "oak forest", rect: chunkRect(-8, 1, 3, 3), kinds: { wisp: 1 } },
   // The westward journey (src/lib/regions.ts), tougher the further you go.
-  { name: "whisperwood", rect: chunkRect(-12, 3, 4, 7), kinds: { thornling: 2, boar: 2, wolf: 3 }, target: 6 },
+  // Whisperwood ends at ty 36: south of it are the homesteads (continent.ts HOMESTEADS), kept safe.
+  { name: "whisperwood", rect: tileRect(-288, -45, 96, 82), kinds: { thornling: 2, boar: 2, wolf: 3 }, target: 6 },
   { name: "greyspine pass", rect: tileRect(-576, 2, 192, 11), kinds: { boar: 2, bat: 2, thornling: 1 }, target: 6 },
   { name: "silverrun banks", rect: tileRect(-648, -45, 72, 105), kinds: { slime: 3 }, target: 4 },
   { name: "greyspine caverns", rect: tileRect(-528, -480 + CAVE_DY, 120, 45), kinds: { bat: 2, wisp: 2 }, alwaysDark: true, target: 8 },
@@ -255,22 +256,19 @@ export function perkPoints(level: number): number {
   return Math.floor(level / PERK_EVERY);
 }
 
-/** Land lots a player may own at `level`. */
-export function landLotLimit(level: number): number {
-  return level >= 10 ? 2 : 1;
-}
-
 /** What each level unlocks. `minLevel` on shop stock and recipes must match. */
 export const LEVEL_UNLOCKS: LevelUnlock[] = [
   { level: 2, text: "Carrot seeds at Pip's" },
   { level: 3, text: "Tomato seeds · Stone Sword recipe" },
-  { level: 5, text: "Pumpkin seeds · Thorn Blade & Sharp Axe recipes · a perk" },
+  { level: 5, text: "Pumpkin seeds · Thorn Blade & Sharp Axe recipes · 6 homestead parcels · a perk" },
   { level: 8, text: "Wisp Blade recipe" },
-  { level: 10, text: "A second land lot · a perk" },
-  { level: 15, text: "Steel Sword recipe (far-land trophies) · a perk" },
-  { level: 20, text: "Runed Bow recipe · a perk" },
-  { level: 25, text: "Wyvernbone Blade recipe · a perk" },
+  { level: 10, text: "9 homestead parcels · a perk" },
+  { level: 15, text: "Steel Sword recipe (far-land trophies) · 12 homestead parcels · a perk" },
+  { level: 20, text: "Runed Bow recipe · 16 homestead parcels · a perk" },
+  { level: 25, text: "Wyvernbone Blade recipe · 20 homestead parcels · a perk" },
+  { level: 30, text: "25 homestead parcels · a perk" },
   { level: 32, text: "Elder Blade recipe" },
+  { level: 40, text: "The whole homestead: 36 parcels · a perk" },
 ];
 
 /** Unlocks gained going from level `from` (exclusive) to `to` (inclusive). */
