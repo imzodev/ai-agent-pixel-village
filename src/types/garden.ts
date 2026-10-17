@@ -90,6 +90,9 @@ export type OrchardFruit = {
 /** One action in the farm window (src/components/FarmPanel.tsx). */
 export type FarmAction = { key: string; label: string; run: () => void };
 
+/** A seed you can plant all of, or `count` of (null: all). */
+export type FarmPlantAction = { key: string; label: string; seeds: number; run: (count: number | null) => void };
+
 /** A crop type in a lot, as the farm window shows it. */
 export type FarmKindView = {
   kind: string; name: string; icon: string; total: number; ripe: number; thirsty: number;
@@ -104,8 +107,8 @@ export type FarmView = {
   title: string; kindLabel: string; ripe: number; thirsty: number;
   harvestAll: (() => void) | null; waterAll: (() => void) | null;
   kinds: FarmKindView[];
-  /** Plant all, one per seed that fits. */
-  plant: FarmAction[];
+  /** Plant all (or how many you pick), one per seed that fits. */
+  plant: FarmPlantAction[];
   /** The plot / crop E was pressed on. */
   here: FarmAction[];
   /** The crop E was pressed on: its name, stage and how long until it's ripe. */

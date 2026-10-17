@@ -4,6 +4,7 @@ import { lots, resourceNodes } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getContainer } from "@/lib/container";
 import { harvestAll, harvestCrop, plantAll, plantCrop, waterAll, waterCrop } from "@/lib/garden";
+import { plantCount } from "@/lib/gardenRules";
 import { plotsOfLot } from "@/lib/lots";
 import { TEND_RANGE_SERVER_PX, atLot, canTend, insideLot } from "@/lib/lotReach";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
@@ -24,7 +25,7 @@ function recordHarvestQuests(characterId: number, gained: { itemKey: string; qty
  *   plant   { lotKey, plot, seedKey }  — owner only
  *   water   { nodeId }                 — anyone, once per growth stage
  *   harvest { nodeId }                 — owner only, when ripe
- *   plant_all { lotKey, seedKey }      — every free plot it fits, while seeds last
+ *   plant_all { lotKey, seedKey, count? } — every free plot it fits, while seeds last (or `count` of them, 1–99)
  *   harvest_all { lotKey, kind? }      — every ripe crop of yours in the lot (of one kind)
  *   water_all { lotKey, kind? }        — every crop there that can be watered (of one kind)
  * The "_all" actions need you in or right next to the lot (atLot, e.g. at its gate).
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
       const [lot] = await db.select().from(lots).where(eq(lots.key, String(body.lotKey ?? "")));
       if (!lot) return Response.json({ error: "There's no garden here." }, { status: 400 });
       if (!atLot(lot, p.x, p.y)) return Response.json({ error: "Walk over to the lot first." }, { status: 400 });
-      result = action === "plant_all" ? await plantAll(me.id, lot.key, String(body.seedKey ?? ""))
+      result = action === "plant_all" ? await plantAll(me.id, lot.key, String(body.seedKey ?? ""), plantCount(body.count))
         : action === "harvest_all" ? await harvestAll(me.id, lot.key, body.kind ? String(body.kind) : undefined)
         : await waterAll(lot.key, body.kind ? String(body.kind) : undefined);
       if (result.ok && action === "harvest_all") recordHarvestQuests(me.id, result.gained);

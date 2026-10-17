@@ -162,8 +162,8 @@ async function lotGarden(lotKey: string) {
 
 const lotCenter = (lot: { tx: number; ty: number; tw: number; th: number }) => ({ x: (lot.tx + lot.tw / 2) * 16, y: (lot.ty + lot.th / 2) * 16 });
 
-/** Plant `seedKey` in every free plot of the lot it fits, until the seeds run out. */
-export async function plantAll(characterId: number, lotKey: string, seedKey: string): Promise<GardenResult> {
+/** Plant `seedKey` in every free plot of the lot it fits, until the seeds run out, or in `count` of them (null: all). */
+export async function plantAll(characterId: number, lotKey: string, seedKey: string, count: number | null = null): Promise<GardenResult> {
   const g = await lotGarden(lotKey);
   if (!g) return { ok: false, error: "There's no garden here." };
   if (g.lot.ownerId !== characterId) return { ok: false, error: "This isn't your garden." };
@@ -172,6 +172,7 @@ export async function plantAll(characterId: number, lotKey: string, seedKey: str
   let planted = 0, firstError: string | null = null, ranOut = false;
   const notices = new Set<string>();
   for (const plot of free) {
+    if (count != null && planted >= count) break;
     if ((await countItem(characterId, seedKey)) < 1) { ranOut = planted > 0; break; }
     const r = await plantCrop(characterId, lotKey, plot, seedKey);
     if (r.ok) { planted++; for (const n of r.notices ?? []) notices.add(n); }
@@ -182,7 +183,7 @@ export async function plantAll(characterId: number, lotKey: string, seedKey: str
   return {
     ok: true,
     count: planted,
-    message: `Planted ${planted} ${name}${planted > 1 ? " plots" : " plot"}.${ranOut ? " You ran out of seeds." : ""}`,
+    message: `Planted ${planted} ${name}${planted > 1 ? " plots" : " plot"}.${ranOut ? " You ran out of seeds." : count != null && planted < count ? " That's every free plot it fits." : ""}`,
     notices: [...notices],
     ...lotCenter(g.lot),
   };

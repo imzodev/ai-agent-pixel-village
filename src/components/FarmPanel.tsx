@@ -4,7 +4,7 @@
 // spot E was pressed on. Shared by the E farm menu (Hud) and a vineyard's or
 // orchard's Farm tab (RanchPanel). Every enabled button is numbered: 1–9
 // picks it from the keyboard while this is on screen.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FarmView } from "@/types/garden";
 
 /** A button's keyboard number (1–9). */
@@ -13,12 +13,16 @@ function FarmBadge({ n }: { n: number | null }) {
 }
 
 export default function FarmPanel({ view, coins }: { view: FarmView; coins: number }) {
+  // How many to plant: null = all (the default, every time the window opens).
+  const [count, setCount] = useState<number | null>(null);
+  const most = Math.max(1, ...view.plant.map((p) => p.seeds));
+  const step = (d: number) => setCount((c) => Math.max(1, Math.min(most, (c ?? 0) + d)));
   // Number every enabled action in reading order (top row, crop cards, planting, this spot).
   const actions: (() => void)[] = [];
   const num = (run: (() => void) | null) => { if (!run) return null; actions.push(run); return actions.length <= 9 ? actions.length : null; };
   const nHarvestAll = num(view.harvestAll), nWaterAll = num(view.waterAll);
   const kindNums = view.kinds.map((k) => ({ h: num(k.harvest), w: num(k.water) }));
-  const plantNums = view.plant.map((p) => num(p.run));
+  const plantNums = view.plant.map((p) => num(() => p.run(count)));
   const hereNums = view.here.map((h) => num(h.run));
   const keys = useRef(actions);
   useEffect(() => { keys.current = actions; });
@@ -59,11 +63,20 @@ export default function FarmPanel({ view, coins }: { view: FarmView; coins: numb
         )}
       </div>
       {view.plant.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[12px] font-bold text-amber-900">🌱 Plant all:</span>
-          {view.plant.map((p, i) => (
-            <button key={p.key} onClick={p.run} className="pixel-btn bg-white/80 px-2 py-1 text-xs capitalize"><FarmBadge n={plantNums[i]} />{p.label}</button>
-          ))}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[12px] font-bold text-amber-900">🌱 Plant</span>
+            <button onClick={() => setCount(null)} aria-pressed={count == null} className={`pixel-btn px-2.5 py-1 text-xs font-bold ${count == null ? "bg-amber-600 text-white" : "bg-white/80"}`}>All</button>
+            <button onClick={() => step(-1)} aria-label="Plant fewer" className="pixel-btn bg-white/80 px-2.5 py-1 text-xs font-bold">−</button>
+            <span className={`min-w-[2ch] text-center text-sm font-bold ${count == null ? "text-stone-400" : "text-amber-900"}`}>{count ?? "–"}</span>
+            <button onClick={() => step(1)} aria-label="Plant more" className="pixel-btn bg-white/80 px-2.5 py-1 text-xs font-bold">+</button>
+            <span className="text-[11px] text-stone-500">{count == null ? "every free plot it fits" : `${count} plot${count === 1 ? "" : "s"} of what you tap`}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {view.plant.map((p, i) => (
+              <button key={p.key} onClick={() => p.run(count)} className="pixel-btn bg-white/80 px-2 py-1 text-xs capitalize"><FarmBadge n={plantNums[i]} />{count == null ? p.label : `${count} × ${p.label}`}</button>
+            ))}
+          </div>
         </div>
       )}
       {view.hereStatus && <div className="rounded bg-emerald-50/90 px-2 py-1 text-[12px] font-bold capitalize text-emerald-900">{view.hereStatus}</div>}

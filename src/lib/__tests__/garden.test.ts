@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isRipe, planRegrowth, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
+import { PLANT_COUNT_MAX, isRipe, planRegrowth, plantCount, rollForageSeed, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from "@/lib/gardenRules";
 import { stageMs } from "@/lib/vineyard";
 import { gardenCellsOf, gardenPlotsAt } from "@/lib/buildingManifest";
 import { NODE_SHEETS, CROP_KINDS, FORAGE_SEED_CHANCE, FORAGE_SEED_WEIGHTS, GARDEN_CROPS, HARVEST_SEED_CHANCE } from "@/lib/crops";
@@ -177,5 +177,14 @@ describe("regrowth (tickd's once-a-beat pass)", () => {
     const [w] = planRegrowth([{ id: 1, kind: "radish_crop", stage: 1, ownerId: 7 }], new Set([7]), now, 0.5);
     expect(w.nextAdvanceAt).toBe(now + Math.round(radish.regrowthMs * 0.5));
     expect(planRegrowth([{ id: 9, kind: "no_such_kind", stage: 0, ownerId: null }], new Set(), now, 1)).toEqual([]);
+  });
+});
+
+describe("plant how many", () => {
+  it("takes a whole number 1–99; anything else means all", () => {
+    expect(plantCount(2)).toBe(2);
+    expect(plantCount("3")).toBe(3);
+    expect(plantCount(PLANT_COUNT_MAX)).toBe(PLANT_COUNT_MAX);
+    for (const v of [undefined, null, 0, -1, 1.5, 100, "", "abc", "2x", {}]) expect(plantCount(v), String(v)).toBeNull();
   });
 });

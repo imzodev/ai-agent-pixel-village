@@ -464,7 +464,7 @@ export default function Hud() {
     const seeds = plantablesFor(SPOTS_OF[lot.kind], seedsInBag, GARDEN_CROPS);
     return { lot, ripe, thirsty, seeds };
   })();
-  const plantAllWith = (lotKey: string, seedKey: string) => void garden({ action: "plant_all", lotKey, seedKey });
+  const plantAllWith = (lotKey: string, seedKey: string, count: number | null = null) => void garden({ action: "plant_all", lotKey, seedKey, ...(count != null ? { count } : {}) });
   /** The lot E was pressed in (a plot or crop of the lot you stand in, with something to do), else null. */
   const farmLotOf = (s: Selection): string | null => {
     if (!farm) return null;
@@ -524,7 +524,7 @@ export default function Hud() {
       harvestAll: farm.ripe ? () => void garden({ action: "harvest_all", lotKey }) : null,
       waterAll: farm.thirsty ? () => void garden({ action: "water_all", lotKey }) : null,
       kinds,
-      plant: farm.seeds.map((i) => ({ key: i.itemKey, label: `${ITEM_ICONS[i.itemKey] ?? "🌱"} ${seedName(i.itemKey)} ×${i.qty}`, run: () => plantAllWith(lotKey, i.itemKey) })),
+      plant: farm.seeds.map((i) => ({ key: i.itemKey, label: `${ITEM_ICONS[i.itemKey] ?? "🌱"} ${seedName(i.itemKey)} ×${i.qty}`, seeds: i.qty, run: (count: number | null) => plantAllWith(lotKey, i.itemKey, count) })),
       here,
       hereStatus: (() => {
         if (t?.type !== "node") return null;

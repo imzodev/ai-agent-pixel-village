@@ -78,3 +78,12 @@ export function planRegrowth(due: readonly RegrowthDue[], thumbs: ReadonlySet<nu
   }
   return out;
 }
+
+/** Most plots one "plant N" can ask for. */
+export const PLANT_COUNT_MAX = 99;
+
+/** How many plots a "plant all" asked for: a whole number 1–99, or null for all of them (anything else). */
+export function plantCount(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+  return Number.isInteger(n) && n >= 1 && n <= PLANT_COUNT_MAX ? n : null;
+}
