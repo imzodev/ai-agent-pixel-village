@@ -299,6 +299,28 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
 - Admin: `GET /api/mind?npcKey=…` (state, last decision with probabilities),
   `POST /api/mind { npcKey, stock?, purse?, think? }`.
 
+## NPC conversations (gossip and relationships)
+
+NPCs talk to each other (`src/lib/npcTalk.ts` rules, `src/lib/npcTalkServer.ts`,
+run by tickd every 30 s):
+
+- **Meetings**: two NPCs within `MEET_PX` (5 tiles), both free, the pair not within
+  `NPC_TALK_PAIR_MS` (3 min) and each NPC not within `NPC_TALK_NPC_MS` (1 min).
+- **Only where a player can see** (`WATCH_PX`, about a screen): one LLM call writes a
+  3–6 line conversation (JSON, `parseTalk` checks it), held still and said as
+  alternating bubbles `LINE_GAP_MS` apart. Unwatched meetings only pass a rumour on,
+  no LLM. `NPC_TALKS_DAILY_MAX` (600) caps them, on top of `LLM_DAILY_MAX`.
+- **Visits**: near a watching player with nobody close, an NPC walks over to a
+  neighbour (friends first) at most every 90 s per screen, and goes home after.
+- **Gossip**: notable `world_events` about players become `npc_rumours`, heard first
+  by NPCs within `WITNESS_PX`; they spread in conversations (`npc_heard`) and fade
+  after 2 days. NPCs bring them up with players ("GOSSIP YOU'VE HEARD" in the talk
+  prompt, `gossipFor`).
+- **Relationships**: `npc_relations` (affinity −10…10 and a note), started from the
+  personalities' opinions, moved by each conversation, and fed into the next.
+- The WS server saves online players' live positions every 30 s (`savePositions`)
+  so tickd knows who's watching. Admin: `GET /api/npc-talks?limit=`.
+
 ## Homestead growth and standing orders
 
 A homestead grows (`src/lib/ranchUpgrades.ts` rules, `ranchServer.ts` server,

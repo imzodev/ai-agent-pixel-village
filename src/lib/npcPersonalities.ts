@@ -76,7 +76,7 @@ const NAMED: Readonly<Record<string, NpcPersonality>> = {
     opinions: "Worries about anyone who goes into the Greyspine cave. Bjorn is loud but has a good heart.",
   },
   hollowmere_ansel: {
-    voice: "Few words, slow and calm, says 'aye' a lot.",
+    voice: "Few words, slow and calm; answers with a nod of a sentence and gets back to work.",
     likes: "A sharp axe, a straight-grained oak, a tall woodpile, quiet mornings in the woods.",
     quirk: "Counts his logs out loud when he stacks them.",
     opinions: "Bjorn is his best customer and pays fair; the boars in the Whisperwood are a nuisance.",

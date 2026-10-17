@@ -177,7 +177,7 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "flour", qty: 1, price: 2, line: "A bag of flour, two coppers. Ground this morning." },
   ],
   hollowmere_ansel: [
-    { itemKey: "wood", qty: 1, price: 3, line: "A good oak log, three coppers. Aye." },
+    { itemKey: "wood", qty: 1, price: 3, line: "A good oak log, three coppers. Seasoned." },
   ],
   village_rowan: [
     { itemKey: "wheat", qty: 1, price: 2, line: "A sheaf of the gold, two coppers!" },

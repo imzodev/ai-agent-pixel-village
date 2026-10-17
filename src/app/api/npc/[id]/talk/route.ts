@@ -22,6 +22,7 @@ import { recordCollection } from "@/lib/collectionServer";
 import { mindNoteFor } from "@/lib/mind/mindServer";
 import type { BrainOutput } from "@/types/agent";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
+import { gossipFor } from "@/lib/npcTalkServer";
 
 export const dynamic = "force-dynamic";
 
@@ -73,7 +74,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const message = String(body.message ?? "").trim().slice(0, 400);
 
     // Everything the reply needs, looked up together (none depends on another).
-    const [latest, offers, sponsor, [ws], mindNote, memory, names] = await Promise.all([
+    const [latest, offers, sponsor, [ws], mindNote, memory, names, gossip] = await Promise.all([
       // The latest lines (newest first, put back in order below).
       db
         .select({ role: conversations.role, text: conversations.text })
@@ -90,6 +91,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       mindNoteFor(npc, character.id, character.name),
       memoryOf(npc.id, character.id),
       itemNames(),
+      // What they've heard from the other NPCs (src/lib/npcTalkServer.ts).
+      gossipFor(npc.id, character.id).catch(() => [] as string[]),
     ]);
     const history = latest.reverse();
     const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes);
@@ -99,7 +102,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // the bill, not the gameplay.
     const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString());
     const knowledge = knowledgeFor(npc.key, (k) => names.get(k) ?? k.replace(/_/g, " "));
-    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory };
+    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory, gossip };
 
     // After the reply: save it and count the conversation, then the answer body.
     const finish = async (reply: BrainOutput): Promise<TalkReply> => {

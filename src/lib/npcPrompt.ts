@@ -51,7 +51,7 @@ export function buildSystemPrompt(input: BrainInput, now = Date.now()): string {
 
 WHAT YOU KNOW (this is the truth about the world, and all of it you know):
 ${input.knowledge ?? "You know your own home and little else."}
-
+${input.gossip?.length ? `\nGOSSIP YOU'VE HEARD (true, from neighbours; bring it up when it fits, naturally, in your own words; "I heard…", "they say…"):\n${input.gossip.map((g) => `- ${g}`).join("\n")}\n` : ""}
 HONESTY (the most important rule):
 - Facts about the world (people, places, items, prices, services) come only from WHAT YOU KNOW above, and only an exact match counts: selling an apple sapling is not selling other saplings, and knowing a town's name is not knowing its shops. Never invent a person, shop, place, item or price. If something said earlier in the conversation contradicts WHAT YOU KNOW, WHAT YOU KNOW is right: correct yourself.
 - Who sells, buys or crafts something: answer only from what WHAT YOU KNOW says each person sells, buys or makes. Keep each fact with the person it belongs to.

@@ -35,6 +35,7 @@ import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { ParcelUse } from "@/types/homestead";
 import type { NpcCarry } from "@/types/mind";
+import type { TalkLine } from "@/types/npcTalk";
 import type { MindDecision, MindIntent, MindMemory, NpcStock } from "@/types/mind";
 import type { RanchBuildKey, RanchJob } from "@/types/ranchGrowth";
 import type { FriendRequest, Friendship } from "@/types/social";
@@ -786,6 +787,61 @@ export const npcPlayerNotes = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("npc_player_notes_pk").on(t.npcId, t.characterId)],
+);
+
+// ---------- NPCs talking to each other (src/lib/npcTalkServer.ts) ----------
+
+/** A conversation two NPCs had (a < b by id), line by line. */
+export const npcTalks = pgTable(
+  "npc_talks",
+  {
+    id: serial("id").primaryKey(),
+    npcA: integer("npc_a").notNull(),
+    npcB: integer("npc_b").notNull(),
+    lines: jsonb("lines").$type<TalkLine[]>().notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("npc_talks_at_idx").on(t.at)],
+);
+
+/** Something that happened that NPCs talk about (from world_events). */
+export const npcRumours = pgTable(
+  "npc_rumours",
+  {
+    id: serial("id").primaryKey(),
+    text: text("text").notNull(),
+    aboutCharacterId: integer("about_character_id"),
+    /** The world event it came from (once each). */
+    eventId: integer("event_id").notNull().unique(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [index("npc_rumours_at_idx").on(t.at)],
+);
+
+/** Who has heard which rumour, and from whom (null: saw it themselves). */
+export const npcHeard = pgTable(
+  "npc_heard",
+  {
+    npcId: integer("npc_id").notNull(),
+    rumourId: integer("rumour_id").notNull(),
+    fromNpcId: integer("from_npc_id"),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.npcId, t.rumourId] }), index("npc_heard_rumour_idx").on(t.rumourId)],
+);
+
+/** How two NPCs get on (a < b by id): affinity −10…10 and what's between them. */
+export const npcRelations = pgTable(
+  "npc_relations",
+  {
+    npcA: integer("npc_a").notNull(),
+    npcB: integer("npc_b").notNull(),
+    affinity: integer("affinity").notNull().default(0),
+    note: text("note").notNull().default(""),
+    talks: integer("talks").notNull().default(0),
+    lastAt: timestamp("last_at"),
+  },
+  (t) => [primaryKey({ columns: [t.npcA, t.npcB] })],
 );
 
 /** How a homestead has grown (src/lib/ranchUpgrades.ts), by its lot key:

@@ -22,6 +22,8 @@ export type BrainInput = {
   knowledge?: string;
   /** What this NPC remembers about this player (src/lib/npcNotes.ts). */
   memory?: NpcMemory;
+  /** Gossip they've heard from other NPCs (src/lib/npcTalkServer.ts gossipFor), the player's first. */
+  gossip?: string[];
 };
 
 /** An NPC's memory of one player: its private note and how well they know each other. */

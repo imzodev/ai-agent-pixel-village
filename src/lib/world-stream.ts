@@ -393,6 +393,21 @@ function relayPosition(from: Connection, x: number, y: number, facing: Facing): 
   posQueue.set(from.playerId, { x, y, json: JSON.stringify({ id: from.playerId, x, y, facing, mounted: !!from.mounted }) });
 }
 
+/**
+ * Save where online players really are (characters.x / y), every
+ * SAVE_POSITIONS_MS, in one UPDATE: tickd's NPC conversations happen only
+ * where a player can watch (src/lib/npcTalkServer.ts), and live positions
+ * otherwise only reach the database on connect and teleport.
+ */
+const SAVE_POSITIONS_MS = 30_000;
+let saveTimer: NodeJS.Timeout | null = null;
+async function savePositions(): Promise<void> {
+  const rows = [...connections.values()].filter((c) => Number.isFinite(c.homePx) && Number.isFinite(c.homePy));
+  if (!rows.length) return;
+  const values = sql.join(rows.map((c) => sql`(${c.playerId}::int, ${c.homePx}::real, ${c.homePy}::real)`), sql`, `);
+  await db.execute(sql`UPDATE characters AS t SET x = v.x, y = v.y FROM (VALUES ${values}) AS v(id, x, y) WHERE t.id = v.id`);
+}
+
 function flushPositions(): void {
   if (!posQueue.size) return;
   const moved = [...posQueue.entries()];
@@ -738,6 +753,7 @@ export function startPeriodicRefresh(): void {
   periodicStarted = true;
   startCombatClock();
   posTimer = setInterval(flushPositions, POS_FLUSH_MS);
+  saveTimer = setInterval(() => void savePositions().catch((err) => log.warn({ err }, "saving live positions failed")), SAVE_POSITIONS_MS);
   log.info({ beatMs: WORLD_TICK_MS, offsetMs: BROADCAST_OFFSET_MS, resyncMs: WS_RESYNC_MS }, "beat broadcaster armed");
   scheduleNextBroadcast();
 }
@@ -745,6 +761,7 @@ export function startPeriodicRefresh(): void {
 export function stopPeriodicRefresh(): void {
   stopCombatClock();
   if (posTimer) clearInterval(posTimer);
+  if (saveTimer) clearInterval(saveTimer);
   posTimer = null;
   if (periodicTimer) clearTimeout(periodicTimer);
   periodicTimer = null;

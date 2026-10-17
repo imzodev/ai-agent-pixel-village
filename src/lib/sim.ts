@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { animals, bossLairs, characters, enemies, npcs, resourceNodes, worldState, worldEvents, groundItems, wildChunks, worldChat } from "@/db/schema";
 import { planRegrowth } from "@/lib/gardenRules";
+import { tickNpcTalks } from "./npcTalkServer";
 import { CHUNK_TILE_PX } from "@/lib/chunkCollision";
 import { gameHour, type Rect } from "./worldmap";
 import { LAIR_BOSSES, lairReady, lairSpot } from "./lairs";
@@ -149,6 +150,7 @@ export async function tickWorld(): Promise<number | null> {
   await thinkMinds(nowMs).catch((err) => console.warn("[tick] minds failed:", err instanceof Error ? err.message : err));
   await thinkBusinessAgents(nowMs).catch((err) => console.warn("[tick] business agents failed:", err instanceof Error ? err.message : err));
   await tickRanches(nowMs).catch((err) => console.warn("[tick] ranch feeders failed:", err instanceof Error ? err.message : err));
+  await tickNpcTalks(nowMs).catch((err) => console.warn("[tick] npc talks failed:", err instanceof Error ? err.message : err));
   await tickCommissions(nowMs).catch((err) => console.warn("[tick] commissions failed:", err instanceof Error ? err.message : err));
   if (nowMs - lastRowCheck > 3600_000) {
     // Homestead sites: a safety net for the check each claim makes.
