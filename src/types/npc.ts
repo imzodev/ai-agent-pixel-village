@@ -12,6 +12,8 @@ export type NpcTrade =
   | "tinker"
   | "smith"
   | "miller"
+  | "woodcutter"
+  | "farmhand"
   | "elder"
   | "fishmonger"
   | "boatwright"

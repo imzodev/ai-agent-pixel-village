@@ -171,6 +171,17 @@ export const SHOP_STOCK: TradeConfig = {
     { itemKey: "hot_stew", qty: 1, price: 8, line: "Fish stew, eight coppers. Caught this morning." },
     { itemKey: "bread", qty: 1, price: 4, line: "Bread, four coppers. Good for mopping up the stew." },
   ],
+  // Hollis sells the flour he has milled, Ansel the logs on his pile, Rowan
+  // the wheat he's cut — only while they have it (src/lib/mind/profiles.ts).
+  village_hollis: [
+    { itemKey: "flour", qty: 1, price: 2, line: "A bag of flour, two coppers. Ground this morning." },
+  ],
+  hollowmere_ansel: [
+    { itemKey: "wood", qty: 1, price: 3, line: "A good oak log, three coppers. Aye." },
+  ],
+  village_rowan: [
+    { itemKey: "wheat", qty: 1, price: 2, line: "A sheaf of the gold, two coppers!" },
+  ],
   // Bjorn sells off his rack, only while he has it (src/lib/mind/profiles.ts SMITH).
   hollowmere_bjorn: [
     { itemKey: "axe", qty: 1, price: 25, line: "A plain woodcutter's axe, twenty-five coppers." },

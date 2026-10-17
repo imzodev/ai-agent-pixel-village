@@ -23,6 +23,7 @@ import { SHOP_STOCK, stockForNpc } from "@/lib/trade";
 import { cleanAgentText } from "@/lib/moderation";
 import { isMindNpc } from "./config";
 import { askJev } from "./jev";
+import { decisionBasis, needsJev } from "./profile";
 import { MIN_CONFIDENCE, adjustStock, remember, say, shelfSale, speak, undoShelfSale, type NpcRow } from "./mindServer";
 import { businessActions, businessScriptedPick, businessStateText } from "./business";
 import { DEFAULT_COOLDOWN_MIN, type BusinessSettings } from "@/lib/businessConfig";
@@ -294,17 +295,23 @@ export async function thinkBusiness(profile: ProfileRow, now = Date.now()): Prom
   for (const o of shops) view.placeNames[o.sellerKey] ??= o.sellerKey;
 
   const options = businessActions(view);
-  const answers = await askJev(businessStateText(view), {
+  // Only ask Jev for a real choice that changed (src/lib/mind/profile.ts needsJev).
+  const prev = mind.decision ?? null;
+  const basis = decisionBasis(options, { nearby: [], intent });
+  const need = needsJev(prev, basis, options, now);
+  const answers = need !== "ask" ? null : await askJev(businessStateText(view), {
     action: { type: "choice", instructions: `What should ${npc.name} do next?`, criteria: Object.fromEntries(options.map((o) => [o.key, o.description])) },
   });
   const pick = answers?.choices.action;
   const valid = !!pick && options.some((o) => o.key === pick.choice);
   const useJev = valid && pick!.confidence >= MIN_CONFIDENCE;
-  const action = useJev ? pick!.choice : businessScriptedPick(options);
+  const action = need === "only" ? options[0].key : need === "same" ? prev!.action : useJev ? pick!.choice : businessScriptedPick(options);
   const decision: MindDecision = {
-    at: now, source: useJev ? "jev" : "scripted", action, options: options.map((o) => o.key),
-    probabilities: pick?.probabilities, confidence: pick?.confidence,
-    fallback: useJev ? undefined : !answers ? "jev unavailable" : !valid ? "invalid choice" : `low confidence ${pick!.confidence.toFixed(2)}`,
+    at: now, source: need !== "ask" ? need : useJev ? "jev" : "scripted", action, options: options.map((o) => o.key),
+    probabilities: need === "ask" ? pick?.probabilities : prev?.probabilities, confidence: need === "ask" ? pick?.confidence : prev?.confidence,
+    fallback: need !== "ask" || useJev ? undefined : !answers ? "jev unavailable" : !valid ? "invalid choice" : `low confidence ${pick!.confidence.toFixed(2)}`,
+    askedAt: need === "ask" ? now : need === "same" ? prev?.askedAt : undefined,
+    basis: need === "only" ? undefined : basis,
   };
 
   const newIntent = await act(npc, profile, cfg, sponsorName, sponsorPitch, action, view, sellers, now);

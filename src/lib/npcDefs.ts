@@ -117,6 +117,19 @@ export const NPC_DEFS: NpcDef[] = [
     appearance: { body: "male", skin: "#f1c9a5", hair: "buzzcut", hairColor: "#5a4632", shirtColor: "#c8a06a", pantsColor: "#3a3a3a" },
     mood: "steady",
   },
+  {
+    key: "village_rowan",
+    name: "Rowan",
+    trades: ["farmhand"],
+    role: "Farmhand",
+    persona:
+      "Rowan is a cheerful young farmhand who cuts wheat in the Common Field all day and hauls it to Hollis's mill a load at a time. Sunburnt, always humming, and proud that the village's bread starts with his sheaves.",
+    greeting: "Morning! Field's looking golden. Need a sheaf or two?",
+    tilePos: [44, -33], // by the Common Field's south gate, near Hollis
+    wanderRadius: 30,
+    appearance: { body: "male", skin: "#f1c9a5", hair: "spiked", hairColor: "#c8a24a", shirtColor: "#6a8f3a", pantsColor: "#5a4632" },
+    mood: "cheerful",
+  },
   // ── Hollowmere (woodcutters' town on the King's Road, west of Whisperwood)
   {
     key: "hollowmere_bjorn",
@@ -156,6 +169,19 @@ export const NPC_DEFS: NpcDef[] = [
     wanderRadius: 50,
     appearance: { body: "male", skin: "#e8c39e", hair: "plain", hairColor: "#dcdcdc", shirtColor: "#7a4a2a", pantsColor: "#4a4a5a" },
     mood: "dry",
+  },
+  {
+    key: "hollowmere_ansel",
+    name: "Ansel",
+    trades: ["woodcutter"],
+    role: "Woodcutter of Hollowmere",
+    persona:
+      "Ansel is a quiet, broad-shouldered woodcutter who spends his days in the Whisperwood with an axe over his shoulder and comes back with logs for his woodpile on the east side of town. Bjorn buys his logs for the forge; anyone else can too. Keeps an eye out for bramble boars and never walks the woods after dark.",
+    greeting: "Logs? Plenty on the pile. Mind the splinters.",
+    tilePos: [-318, 14],
+    wanderRadius: 40,
+    appearance: { body: "male", skin: "#d9a066", hair: "plain", hairColor: "#6b3f1f", shirtColor: "#8a2f2f", pantsColor: "#4a3a2a" },
+    mood: "quiet",
   },
   // ── Brightwater (fishing town past the Silverrun bridge)
   {

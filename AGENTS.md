@@ -258,8 +258,14 @@ and a purse (`npc_minds`), memories, and regard for players (`npc_regard`).
 Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
 
 - **Profiles** (`profiles.ts`): what a kind of NPC makes (`crafts`), sells
-  off its shelf, buys on errands (`supplies`), asks players for (`asks`) and
-  gifts. `BAKER` (Marigold) and `SMITH` (Bjorn). A new kind = a profile + its key
+  off its shelf, buys or gathers on errands (`supplies`), carries to a buyer
+  (`sells`), asks players for (`asks`) and gifts. `BAKER` (Marigold), `SMITH`
+  (Bjorn), `MILLER` (Hollis), `FARMHAND` (Rowan), `WOODCUTTER` (Ansel).
+- **Supply chains**: Rowan cuts wheat in the Common Field and sells full loads
+  to Hollis, who mills it into the flour Marigold buys; Ansel chops logs in the
+  Whisperwood for the woodpile Bjorn buys from. Buying from (or selling to) an
+  NPC with a mind moves real stock and coins (`mindStock`); one without a mind
+  is an endless shop, so list both ends in `MIND_NPCS`. A new kind = a profile + its key
   in `PROFILE_OF` + `MIND_NPCS`; shelf items also need a `SHOP_STOCK` entry.
   A key in `MIND_NPCS` without a profile is ignored.
 - **Decide**: `feasibleActions` (`profile.ts`, shared) lists only what the NPC
@@ -268,6 +274,17 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
   `stateText` and scores mood and urgency. If there's no key, an error, a timeout or
   confidence < 0.35, `scriptedPick` decides. Never let Jev invent an action:
   add it to `feasibleActions` and carry it out in `act()`.
+- **Jev is asked only for a real, new choice** (`needsJev`): one option (walking
+  somewhere is always one: "wait") → taken without a call; the same options,
+  people nearby and intent as when Jev last chose, under `REASK_MS` (30 min) →
+  its answer stands. The decision's `source` says which (`jev` / `only` / `same`
+  / `scripted`). A think still runs every `MIND_INTERVAL_MS`, but it's cheap: keep
+  it that way, never call Jev unconditionally.
+- **Errands and outings** give them something to do you can see: a supply is
+  bought from a supplier NPC or, with a `spot` and no supplier, gathered for free
+  (Bjorn: logs in the Whisperwood, stone in the Greyspine pass); `outings` take
+  them somewhere at times of day, once a game day, and they linger `lingerMs`
+  before heading home (Marigold: supper at the inn; Bjorn: the grove, an ale).
 - **Carry out**: the engine does it (batches on the bread table, trips,
   missions keyed `req_<npcKey>_<ms>`). The LLM only writes the line it says.
 - **Stock and purse** change only through `adjustStock` (one guarded UPDATE),

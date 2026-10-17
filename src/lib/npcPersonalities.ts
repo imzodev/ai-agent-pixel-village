@@ -75,6 +75,18 @@ const NAMED: Readonly<Record<string, NpcPersonality>> = {
     quirk: "Asks if you've eaten.",
     opinions: "Worries about anyone who goes into the Greyspine cave. Bjorn is loud but has a good heart.",
   },
+  hollowmere_ansel: {
+    voice: "Few words, slow and calm, says 'aye' a lot.",
+    likes: "A sharp axe, a straight-grained oak, a tall woodpile, quiet mornings in the woods.",
+    quirk: "Counts his logs out loud when he stacks them.",
+    opinions: "Bjorn is his best customer and pays fair; the boars in the Whisperwood are a nuisance.",
+  },
+  village_rowan: {
+    voice: "Cheerful and chatty, quick to laugh, calls the wheat 'the gold'.",
+    likes: "A good harvest, long summer days, Marigold's honey buns.",
+    quirk: "Always has a bit of straw in his hair.",
+    opinions: "Looks up to Hollis; thinks Marigold's bread is the best thing the field ever made.",
+  },
   hollowmere_sorrel: {
     voice: "Dry and blunt, few words, deadpan humour.",
     likes: "Honest work, a full woodpile before winter, the town's ledger kept straight.",

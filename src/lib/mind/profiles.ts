@@ -27,6 +27,8 @@ export const BAKER: MindProfile = {
     bake_buns: { itemKey: "honey_bun", uses: { flour: 2, egg: 4, honey: 1 }, makes: 8, toTable: 4, verb: "bake a batch of 8 honey buns", line: "Honey buns, still warm! One each, loves." },
   },
   supplies: { flour: { supplierKey: "village_hollis", place: "Hollis's mill", price: 3, buy: 8, low: 5 } },
+  // Supper at the inn after the day's baking (game hours).
+  outings: { supper: { placeKey: "building:inn_village", place: "the Wayfarer's Rest", doing: "have supper at the Wayfarer's Rest", hours: [18, 21], lingerMs: 6 * MIN } },
   asks: { egg: { qty: 6, pay: 2, low: 4 }, flour: { qty: 4, pay: 5, low: 5 }, honey: { qty: 2, pay: 7, low: 1 } },
   gift: { itemKey: "honey_bun", qty: 1 },
   // Players' farms supply her week by week (src/lib/ordersServer.ts).
@@ -35,7 +37,8 @@ export const BAKER: MindProfile = {
 };
 
 /** Bjorn: forges axes and swords and fletches arrows for his shelf from the
- *  stone and wood players bring him; no supplier nearby, so he asks. */
+ *  stone and wood players bring him, logs he buys off Ansel's woodpile, and
+ *  stone he goes out and gathers himself in the Greyspine pass. */
 export const SMITH: MindProfile = {
   key: "smith",
   trade: "the blacksmith of Hollowmere",
@@ -55,17 +58,94 @@ export const SMITH: MindProfile = {
     // Ranchers build with these (src/lib/ranchUpgrades.ts).
     forge_fittings: { itemKey: "fittings", uses: { stone: 2, wood: 1 }, makes: 4, toTable: 0, verb: "forge 4 iron fittings", line: "Hinges and nails, fresh off the anvil. Building something?" },
   },
-  supplies: {},
+  // No supplier in Hollowmere: he walks out for them (free, but the forge is shut meanwhile).
+  supplies: {
+    wood: { supplierKey: "hollowmere_ansel", place: "Ansel's woodpile", price: 2, buy: 8, low: 3 },
+    stone: { spot: { tx: -466, ty: 11 }, place: "the Greyspine pass", price: 0, buy: 10, low: 4 },
+  },
+  outings: {
+    // A walk down the King's Road to the grove, to see what the village is up to.
+    grove: { spot: { tx: 32, ty: 21 }, place: "the grove's plaza", doing: "walk to the grove to see the village", hours: [10, 14], lingerMs: 5 * MIN },
+    ale: { placeKey: "building:inn_hollowmere", place: "the Sawdust & Ale", doing: "have an ale at the Sawdust & Ale", hours: [19, 22], lingerMs: 6 * MIN },
+  },
   asks: { stone: { qty: 8, pay: 1, low: 4 }, wood: { qty: 6, pay: 2, low: 3 } },
   gift: { itemKey: "arrow", qty: 10 },
   orders: { wood: { qty: 10, pay: 2 }, stone: { qty: 12, pay: 1 } },
   words: { stone: "stones", wood: "logs", axe: "axes", arrow: "arrows", stone_sword: "stone swords", fittings: "iron fittings" },
 };
 
-export const PROFILES: Readonly<Record<string, MindProfile>> = { baker: BAKER, smith: SMITH };
+/** Ansel: chops logs in the Whisperwood and keeps his woodpile stacked;
+ *  Bjorn buys his logs from it, and so can players. */
+export const WOODCUTTER: MindProfile = {
+  key: "woodcutter",
+  trade: "the woodcutter of Hollowmere",
+  startStock: { wood: 16 },
+  startPurse: 30,
+  income: { basePerHour: 60, perPlayerPerHour: 10, baseTarget: 200, perPlayerTarget: 40 },
+  shelf: { wood: 3 },
+  shelfFull: 40,
+  minCraftGapMs: 10 * MIN,
+  tableStaleMs: 0,
+  crafts: {},
+  // Below 20 logs he goes out with his axe for 12 more.
+  supplies: { wood: { spot: { tx: -256, ty: 11 }, place: "the Whisperwood", price: 0, buy: 12, low: 20 } },
+  outings: { ale: { placeKey: "building:inn_hollowmere", place: "the Sawdust & Ale", doing: "have an ale at the Sawdust & Ale", hours: [19, 22], lingerMs: 5 * MIN } },
+  asks: {},
+  gift: null,
+  orders: {},
+  words: { wood: "logs" },
+};
+
+/** Rowan: cuts wheat in the Common Field and carries it to Hollis's mill. */
+export const FARMHAND: MindProfile = {
+  key: "farmhand",
+  trade: "a farmhand who works the Common Field for Hollis",
+  startStock: { wheat: 6 },
+  startPurse: 10,
+  income: { basePerHour: 30, perPlayerPerHour: 5, baseTarget: 100, perPlayerTarget: 20 },
+  shelf: { wheat: 2 },
+  shelfFull: 40,
+  minCraftGapMs: 10 * MIN,
+  tableStaleMs: 0,
+  crafts: {},
+  // A sheaf at a time in the Common Field, 12 to a load; a full load goes to the mill.
+  supplies: { wheat: { spot: { tx: 48, ty: -62 }, place: "the Common Field", price: 0, buy: 12, low: 12 } },
+  sells: { wheat: { buyerKey: "village_hollis", place: "Hollis's mill", price: 1, min: 12 } },
+  outings: { supper: { placeKey: "building:inn_village", place: "the Wayfarer's Rest", doing: "have supper at the Wayfarer's Rest", hours: [18, 21], lingerMs: 5 * MIN } },
+  asks: {},
+  gift: null,
+  orders: {},
+  words: { wheat: "sheaves of wheat" },
+};
+
+/** Hollis: mills the wheat Rowan (and players) bring into the flour Marigold buys. */
+export const MILLER: MindProfile = {
+  key: "miller",
+  trade: "the miller at the Common Field",
+  startStock: { wheat: 12, flour: 12 },
+  startPurse: 80,
+  income: { basePerHour: 120, perPlayerPerHour: 25, baseTarget: 500, perPlayerTarget: 80 },
+  shelf: { flour: 2 },
+  shelfFull: 30,
+  minCraftGapMs: 5 * MIN,
+  tableStaleMs: 0,
+  crafts: {
+    mill_flour: { itemKey: "flour", uses: { wheat: 3 }, makes: 2, toTable: 0, verb: "mill 3 sheaves of wheat into 2 bags of flour", line: "Fresh flour off the stones. Marigold'll be pleased." },
+  },
+  supplies: {},
+  asks: { wheat: { qty: 9, pay: 1, low: 3 } },
+  gift: null,
+  orders: { wheat: { qty: 30, pay: 1 } },
+  words: { wheat: "sheaves of wheat", flour: "bags of flour" },
+};
+
+export const PROFILES: Readonly<Record<string, MindProfile>> = { baker: BAKER, smith: SMITH, woodcutter: WOODCUTTER, farmhand: FARMHAND, miller: MILLER };
 
 /** Which NPC thinks with which profile. */
-export const PROFILE_OF: Readonly<Record<string, string>> = { village_marigold: "baker", hollowmere_bjorn: "smith" };
+export const PROFILE_OF: Readonly<Record<string, string>> = {
+  village_marigold: "baker", hollowmere_bjorn: "smith",
+  hollowmere_ansel: "woodcutter", village_rowan: "farmhand", village_hollis: "miller",
+};
 
 export function profileFor(npcKey: string): MindProfile | null {
   return PROFILES[PROFILE_OF[npcKey] ?? ""] ?? null;

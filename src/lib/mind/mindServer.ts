@@ -19,13 +19,14 @@ import { gameHour } from "@/lib/worldmap";
 import { BREAD_TABLES, tablePoint } from "@/lib/bakery";
 import { latestBatch, setOutBatch } from "@/lib/bakeryServer";
 import { startTrip } from "@/lib/nav/trips";
+import { placeByKey } from "@/lib/nav/places";
 import { chatWithFallback } from "@/lib/llm";
 import { npcVoice, TALK_RULES } from "@/lib/npcPrompt";
 import { plainSpeech } from "@/lib/streamedText";
 import { askJev } from "./jev";
 import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
-import { MOODS, REQUEST_TTL_MS, URGENCY, count, feasibleActions, incomeFor, incomeRate, purseTarget, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
+import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
 import { profileFor } from "./profiles";
 import type { MindDecision, MindIntent, MindMemory, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
 
@@ -66,6 +67,14 @@ export async function adjustStock(npcId: number, delta: NpcStock, purseDelta = 0
   const [row] = await db.update(npcMinds).set({ stock: stockExpr, purse: purseExpr })
     .where(and(eq(npcMinds.npcId, npcId), ...guards)).returning({ stock: npcMinds.stock, purse: npcMinds.purse });
   return row ?? null;
+}
+
+/** Another NPC's mind (its stock and purse), when it has one: buying from it or selling to it moves real goods and coins. */
+async function mindStock(npcKey: string): Promise<{ npcId: number; stock: NpcStock; purse: number } | null> {
+  const m = await mindNpcByKey(npcKey);
+  if (!m) return null;
+  const [row] = await db.select({ stock: npcMinds.stock, purse: npcMinds.purse }).from(npcMinds).where(eq(npcMinds.npcId, m.npc.id));
+  return row ? { npcId: m.npc.id, stock: row.stock, purse: row.purse } : null;
 }
 
 /** Remember something (newest first, the last MEMORY_KEEP kept). */
@@ -201,13 +210,38 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
   if (action.startsWith("buy_")) {
     const item = action.slice(4);
     const sup = p.supplies[item];
-    const [seller] = sup ? await db.select().from(npcs).where(eq(npcs.key, sup.supplierKey)) : [];
-    if (!sup || !seller) return { memory: "" };
+    const [seller] = sup?.supplierKey ? await db.select().from(npcs).where(eq(npcs.key, sup.supplierKey)) : [];
+    // A supplier's shop, or (gathering) a spot out in the world.
+    const at = seller ? { x: seller.homeX, y: seller.homeY } : sup?.spot ? { x: sup.spot.tx * 16 + 8, y: sup.spot.ty * 16 + 8 } : null;
+    if (!sup || !at) return { memory: "" };
     const intent: MindIntent = `errand:${item}`;
-    const r = await startTrip(npc.id, { key: intent, name: sup.place, x: seller.homeX, y: seller.homeY });
+    const r = await startTrip(npc.id, { key: intent, name: sup.place, ...at });
     if (!r.ok) return { memory: `They wanted to go to ${sup.place} but couldn't find the way.` };
-    await speak(npc, await say(npc, `You're closing up for a bit to walk to ${sup.place} for ${word(p, item)}.`, `Off to ${sup.place} for ${word(p, item)}. Back soon!`), pos, `${npc.name} set off to ${sup.place}.`);
-    return { memory: `They closed up and set off to ${sup.place} for ${word(p, item)}.`, intent };
+    const verb = seller ? "for" : "to gather";
+    await speak(npc, await say(npc, `You're closing up for a bit to walk to ${sup.place} ${verb} ${word(p, item)}.`, `Off to ${sup.place} ${verb} ${word(p, item)}. Back soon!`), pos, `${npc.name} set off to ${sup.place}.`);
+    return { memory: `They closed up and set off to ${sup.place} ${verb} ${word(p, item)}.`, intent };
+  }
+  if (action.startsWith("sell_")) {
+    const item = action.slice(5);
+    const d = p.sells?.[item];
+    const [buyer] = d ? await db.select().from(npcs).where(eq(npcs.key, d.buyerKey)) : [];
+    if (!d || !buyer) return { memory: "" };
+    const intent: MindIntent = `deliver:${item}`;
+    const r = await startTrip(npc.id, { key: intent, name: d.place, x: buyer.homeX, y: buyer.homeY });
+    if (!r.ok) return { memory: `They wanted to take their ${word(p, item)} to ${d.place} but couldn't find the way.` };
+    await speak(npc, await say(npc, `You're carrying your ${word(p, item)} to ${d.place} to sell.`, `Off to ${d.place} with the ${word(p, item)}!`), pos, `${npc.name} set off to ${d.place}.`);
+    return { memory: `They set off to ${d.place} with their ${word(p, item)}.`, intent };
+  }
+  if (action.startsWith("outing:")) {
+    const o = p.outings?.[action.slice(7)];
+    const place = o?.placeKey ? await placeByKey(o.placeKey) : undefined;
+    const at = place ? { x: place.x, y: place.y } : o?.spot ? { x: o.spot.tx * 16 + 8, y: o.spot.ty * 16 + 8 } : null;
+    if (!o || !at) return { memory: "" };
+    const intent = action as MindIntent;
+    const r = await startTrip(npc.id, { key: intent, name: o.place, ...at });
+    if (!r.ok) return { memory: `They meant to ${o.doing} but couldn't find the way.` };
+    await speak(npc, await say(npc, `You're closing up for a while to ${o.doing}.`, `Closing up for a bit: off to ${o.place}!`), pos, `${npc.name} set off to ${o.place}.`);
+    return { memory: `They closed up to ${o.doing}.`, intent };
   }
   if (action.startsWith("ask_")) {
     const item = action.slice(4);
@@ -261,11 +295,37 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
     const item = intent.slice(7);
     const sup = p.supplies[item];
     if (trip.status === "arrived" && sup) {
-      const n = Math.min(sup.buy, Math.floor(mind.purse / sup.price));
-      if (n > 0 && (await adjustStock(npc.id, { [item]: n }, -n * sup.price))) await remember(npc.id, `They bought ${n} ${word(p, item)} at ${sup.place} for ${n * sup.price} coins.`, now);
+      // Bought at the supplier's (out of their real stock, when they have a mind), or gathered there for free.
+      const seller = sup.supplierKey ? await mindStock(sup.supplierKey) : null;
+      const { qty: n, cost } = errandHaul(sup, mind.purse, seller ? seller.stock[item] ?? 0 : null);
+      const sold = n > 0 && seller ? await adjustStock(seller.npcId, { [item]: -n }, cost) : true;
+      if (n > 0 && sold && (await adjustStock(npc.id, { [item]: n }, -cost))) {
+        await remember(npc.id, sup.supplierKey ? `They bought ${n} ${word(p, item)} at ${sup.place} for ${cost} coins.` : `They gathered ${n} ${word(p, item)} in ${sup.place}.`, now);
+        if (seller) await remember(seller.npcId, `${npc.name} came by and bought ${n} ${item.replace(/_/g, " ")} for ${cost} coins.`, now);
+      } else if (n > 0 && seller && sold) await adjustStock(seller.npcId, { [item]: n }, -cost); // couldn't pay after all: put it back
+      else if (n === 0) await remember(npc.id, sup.supplierKey ? `${sup.place} had no ${word(p, item)} to sell.` : `They found no ${word(p, item)} in ${sup.place}.`, now);
     } else await remember(npc.id, `They couldn't reach ${sup?.place ?? "the supplier"}.`, now);
     intent = "going_home";
   }
+  // A delivery that got there: sell what they carried (the buyer pays from their purse when they have a mind).
+  if (intent.startsWith("deliver:") && trip?.destKey === intent && trip.status !== "active") {
+    const item = intent.slice(8);
+    const d = p.sells?.[item];
+    const carried = mind.stock[item] ?? 0;
+    if (trip.status === "arrived" && d && carried > 0) {
+      const buyer = await mindStock(d.buyerKey);
+      const qty = affordableQty(carried, d.price, buyer ? buyer.purse : null);
+      const coins = qty * d.price;
+      const paid = qty > 0 && buyer ? await adjustStock(buyer.npcId, { [item]: qty }, -coins) : qty > 0;
+      if (paid && (await adjustStock(npc.id, { [item]: -qty }, coins))) {
+        await remember(npc.id, `They sold ${qty} ${word(p, item)} at ${d.place} for ${coins} coins.`, now);
+        if (buyer) await remember(buyer.npcId, `${npc.name} brought ${qty} ${item.replace(/_/g, " ")} and was paid ${coins} coins.`, now);
+      } else await remember(npc.id, `${d.place} couldn't pay for their ${word(p, item)} today.`, now);
+    } else if (trip.status !== "arrived") await remember(npc.id, `They couldn't reach ${d?.place ?? "the buyer"}.`, now);
+    intent = "going_home";
+  }
+  // An outing whose way was lost: just head home.
+  if (intent.startsWith("outing:") && trip?.destKey === intent && trip.status !== "active" && trip.status !== "arrived") intent = "";
   if (intent === "going_home" && atHome && !onTrip) intent = "";
   // Requests nobody answered close after a while.
   const requests = await openRequests(npc);
@@ -278,9 +338,13 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   mind = (await db.select().from(npcMinds).where(eq(npcMinds.npcId, npc.id)))[0];
   const table = Object.values(p.crafts).some((r) => r.toTable > 0) ? BREAD_TABLES.find((t) => t.bakerKey === npc.key) : undefined;
   const batch = table ? await latestBatch(table.key) : null;
+  const prev = mind.decision ?? null;
   const view: MindView = {
     now, hour, weather: ws?.weather ?? "clear", name: npc.name, atHome, onTrip, intent,
-    errandArrived: intent.startsWith("errand:") && trip?.destKey === intent && trip.status === "arrived",
+    errandArrived: (intent.startsWith("errand:") || intent.startsWith("deliver:")) && trip?.destKey === intent && trip.status === "arrived",
+    arrivedAt: trip?.status === "arrived" && trip.destKey === intent ? trip.updatedAt.getTime() : null,
+    gameDay: ws ? gameDayOf(ws.epochStart.getTime(), ws.dayLengthMinutes, now) : 0,
+    outingDay: prev?.outingDay ?? {},
     stock: mind.stock, purse: mind.purse, lastCraftAt: mind.lastCraftAt?.getTime() ?? null,
     table: table ? { left: batch ? Math.max(0, batch.qty - batch.taken) : 0, itemKey: batch?.itemKey ?? null, bakedAt: batch?.bakedAt ?? null } : null,
     requests: requests.filter((r) => !r.postedAt || now - r.postedAt <= REQUEST_TTL_MS),
@@ -288,7 +352,10 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
     memories: mind.memory,
   };
   const options = feasibleActions(p, view);
-  const answers = await askJev(stateText(p, view), {
+  // Only ask Jev for a real choice that changed (src/lib/mind/profile.ts needsJev).
+  const basis = decisionBasis(options, view);
+  const need = needsJev(prev, basis, options, now);
+  const answers = need !== "ask" ? null : await askJev(stateText(p, view), {
     action: { type: "choice", instructions: `What should ${npc.name} do next?`, criteria: Object.fromEntries(options.map((o) => [o.key, o.description])) },
     mood: { type: "score", instructions: `How is ${npc.name} feeling right now?`, criteria: ["Gloomy and fed up", "Tired", "Content", "Cheerful", "Delighted"] },
     urgency: { type: "score", instructions: `How badly does ${npc.name} need more ingredients?`, criteria: ["Plenty left", "It would help", "Needs some soon", "Has run out"] },
@@ -296,15 +363,20 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   const pick = answers?.choices.action;
   const valid = !!pick && options.some((o) => o.key === pick.choice);
   const useJev = valid && pick!.confidence >= MIN_CONFIDENCE;
-  const action = useJev ? pick!.choice : scriptedPick(p, view, options);
+  const action = need === "only" ? options[0].key : need === "same" ? prev!.action : useJev ? pick!.choice : scriptedPick(p, view, options);
   const moodScore = answers?.scores.mood;
-  const mood = moodScore ? MOODS[Math.max(0, Math.min(MOODS.length - 1, Math.round(moodScore.score)))] : undefined;
+  const mood = moodScore ? MOODS[Math.max(0, Math.min(MOODS.length - 1, Math.round(moodScore.score)))] : need !== "ask" ? prev?.mood : undefined;
   const runOut = Object.keys(p.asks).some((k) => (view.stock[k] ?? 0) === 0);
-  const urgency = answers?.scores.urgency?.score ?? (runOut ? URGENCY.length - 1 : 1);
+  const urgency = answers?.scores.urgency?.score ?? (need !== "ask" ? prev?.urgency : undefined) ?? (runOut ? URGENCY.length - 1 : 1);
+  const outingDay = action.startsWith("outing:") ? { ...view.outingDay, [action.slice(7)]: view.gameDay } : view.outingDay;
   const decision: MindDecision = {
-    at: now, source: useJev ? "jev" : "scripted", action, options: options.map((o) => o.key),
-    probabilities: pick?.probabilities, confidence: pick?.confidence, mood, urgency,
-    fallback: useJev ? undefined : !answers ? "jev unavailable" : !valid ? "invalid choice" : `low confidence ${pick!.confidence.toFixed(2)}`,
+    at: now, source: need !== "ask" ? need : useJev ? "jev" : "scripted", action, options: options.map((o) => o.key),
+    probabilities: need === "ask" ? pick?.probabilities : prev?.probabilities, confidence: need === "ask" ? pick?.confidence : prev?.confidence, mood, urgency,
+    fallback: need !== "ask" || useJev ? undefined : !answers ? "jev unavailable" : !valid ? "invalid choice" : `low confidence ${pick!.confidence.toFixed(2)}`,
+    // Jev's answer stands until the situation changes (or REASK_MS): remember when, and from what.
+    askedAt: need === "ask" ? now : need === "same" ? prev?.askedAt : undefined,
+    basis: need === "only" ? undefined : basis,
+    outingDay,
   };
   if (mood && mood !== npc.mood) await db.update(npcs).set({ mood }).where(eq(npcs.id, npc.id));
   const done = await act(npc, p, action, view, urgency, now);

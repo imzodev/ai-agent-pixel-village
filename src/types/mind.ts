@@ -7,16 +7,17 @@ export type NpcStock = Record<string, number>;
 /** One thing that happened to the NPC, in plain words (newest first). */
 export type MindMemory = { at: number; text: string };
 
-/** What the NPC is in the middle of: an errand to buy an item, or heading home. */
-export type MindIntent = "" | "going_home" | `errand:${string}` | `patrol:${string}` | `shop:${string}`;
+/** What the NPC is in the middle of: an errand to buy (or gather) an item, a delivery to sell one, an outing, or heading home. */
+export type MindIntent = "" | "going_home" | `errand:${string}` | `deliver:${string}` | `outing:${string}` | `patrol:${string}` | `shop:${string}`;
 
 /** An action the NPC can take right now: Jev sees `key` + `description`. */
 export type MindOption = { key: string; description: string };
 
-/** The answer of one think, kept for the admin view. */
+/** The answer of one think, kept for the admin view and for the next think. */
 export type MindDecision = {
   at: number;
-  source: "jev" | "scripted";
+  /** jev: Jev chose; only: one thing to do, no call; same: nothing changed since Jev last chose, its answer reused; scripted: Jev unavailable or unsure. */
+  source: "jev" | "only" | "same" | "scripted";
   action: string;
   options: string[];
   probabilities?: Record<string, number>;
@@ -25,6 +26,11 @@ export type MindDecision = {
   urgency?: number;
   /** Why the scripted policy decided instead of Jev. */
   fallback?: string;
+  /** When Jev was last asked, and what the NPC's situation was then (options, people nearby, intent). */
+  askedAt?: number;
+  basis?: string;
+  /** The game day each outing was last taken (once a day each). */
+  outingDay?: Record<string, number>;
 };
 
 /** How the NPC feels about a player. */
@@ -48,6 +54,11 @@ export type MindView = {
   intent: MindIntent;
   /** The errand's trip reached its end. */
   errandArrived: boolean;
+  /** When the current trip arrived (an outing lingers a while), or null. */
+  arrivedAt: number | null;
+  /** Which game day it is, and the game day each outing was last taken. */
+  gameDay: number;
+  outingDay: Record<string, number>;
   stock: NpcStock;
   purse: number;
   /** When they last made a batch of anything. */
@@ -72,8 +83,29 @@ export type CraftRecipe = {
   line: string;
 };
 
-/** Where an NPC goes to buy an ingredient itself (an errand). */
-export type SupplyDef = { supplierKey: string; place: string; price: number; buy: number; low: number };
+/**
+ * Where an NPC goes for an ingredient itself (an errand): to a supplier's
+ * shop to buy it, or (no supplier, price 0) to a spot to gather it.
+ */
+export type SupplyDef = { supplierKey?: string; spot?: { tx: number; ty: number }; place: string; price: number; buy: number; low: number };
+
+/** Who an NPC carries its goods to and sells them (the farmhand's wheat to the mill): once it has `min`, at `price` each. */
+export type SellDef = { buyerKey: string; place: string; price: number; min: number };
+
+/** Somewhere an NPC goes at a time of day, once a game day, and stays a while (supper at the inn). */
+export type OutingDef = {
+  /** Nav place (`building:inn_village`) or a tile. */
+  placeKey?: string;
+  spot?: { tx: number; ty: number };
+  /** "the Wayfarer's Rest", for Jev and the chat line. */
+  place: string;
+  /** What they do there, for Jev ("have supper at …"). */
+  doing: string;
+  /** Game hours it's offered, [from, to). */
+  hours: [number, number];
+  /** How long they stay once there. */
+  lingerMs: number;
+};
 
 /** A standing order an NPC offers players: so many a week, at this price each. */
 export type OrderDef = { qty: number; pay: number };
@@ -114,6 +146,10 @@ export type MindProfile = {
   crafts: Readonly<Record<string, CraftRecipe>>;
   /** Item → where they buy it themselves. */
   supplies: Readonly<Record<string, SupplyDef>>;
+  /** Item → who they carry it to and sell it (gatherers). */
+  sells?: Readonly<Record<string, SellDef>>;
+  /** Places they go at times of day (key → outing). */
+  outings?: Readonly<Record<string, OutingDef>>;
   /** Item → what they ask players for. */
   asks: Readonly<Record<string, AskDef>>;
   /** What they give friends, if anything. */
