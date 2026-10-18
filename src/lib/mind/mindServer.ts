@@ -10,7 +10,7 @@
 // shop sales from the API routes and tickd's thinking never lose a change.
 // Safe for tickd: imports no seed code.
 
-import { and, eq, gte, like, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, like, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, missions, npcMinds, npcTrips, npcs, worldChat, worldState } from "@/db/schema";
 import { addItem, logEvent } from "@/lib/game";
@@ -32,6 +32,8 @@ import { localGoods, pickBuys, stopOf } from "./caravan";
 import { buyUp, gluts, marketUnit, sellInto } from "@/lib/marketServer";
 import { buyPrice, marketOf } from "@/lib/economy";
 import { TRADES, findBuyer } from "@/lib/trade";
+import { escortArrive, escortDepart, escortTick } from "@/lib/jobsServer";
+import { spawnAmbush } from "@/lib/encountersServer";
 import { profileFor } from "./profiles";
 import type { CaravanCandidate, MindDecision, MindIntent, MindMemory, NpcCarry, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest, SellDef } from "@/types/mind";
 
@@ -118,6 +120,18 @@ export async function shelfSale(npcKey: string, itemKey: string, qty: number, co
   if (!m || m.profile.shelf[itemKey] == null) return { handled: false, ok: true };
   const r = await adjustStock(m.npc.id, { [itemKey]: -qty }, coins);
   return { handled: true, ok: !!r, npcId: m.npc.id };
+}
+
+/**
+ * An employer with a mind pays a worker (src/lib/jobsServer.ts): `coins` out
+ * of its purse (never below 0: the town covers the rest) and `stock` in.
+ * Returns false for an NPC without a mind (nothing to move).
+ */
+export async function employerPays(npcKey: string, stock: NpcStock, coins: number): Promise<boolean> {
+  const m = await mindNpcByKey(npcKey);
+  if (!m) return false;
+  await adjustStock(m.npc.id, stock, -coins, true);
+  return true;
 }
 
 /** Undo a shelf sale (the player couldn't pay after all). */
@@ -256,7 +270,9 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
     const intent = action as MindIntent;
     const r = await startTrip(npc.id, { key: intent, name: stop.place, x: near.homeX, y: near.homeY });
     if (!r.ok) return { memory: `They meant to travel to ${stop.place} but couldn't find the way.`, intent: `stay:${i}` };
-    await speak(npc, await say(npc, `You're packing up the wagon and travelling on to ${stop.place} to trade.`, `Wagon's packed! On to ${stop.place}.`), pos, `${npc.name}'s caravan set off for ${stop.place}.`);
+    const riders = await escortDepart(pos, i, now).catch(() => 0);
+    if (riders > 0) rides.set(npc.id, { leg: i, at: now, ambushed: false });
+    await speak(npc, await say(npc, `You're packing up the wagon and travelling on to ${stop.place} to trade${riders ? `, with ${riders} hired guard${riders > 1 ? "s" : ""} riding along` : ""}.`, `Wagon's packed! On to ${stop.place}.`), pos, `${npc.name}'s caravan set off for ${stop.place}.`);
     return { memory: `They packed up the wagon and set off for ${stop.place}.`, intent };
   }
   if (action.startsWith("outing:")) {
@@ -302,6 +318,28 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
     return r.ok ? { memory: "They headed home to work.", intent: "going_home" } : { memory: "" };
   }
   return { memory: "" }; // tend_shop, rest, wait
+}
+
+// ── Caravan escorts (jobs: src/lib/jobs.ts) ───────────────────────────────
+/** The road a caravan is on with escorts (tickd's memory: a restart just skips that leg's ambush). */
+const rides = new Map<number, { leg: number; at: number; ambushed: boolean }>();
+/** The ambush springs this long after setting off. */
+const AMBUSH_AFTER_MS = 2 * 60_000;
+
+async function roadTick(npc: NpcRow, leg: number, pos: { x: number; y: number }, now: number): Promise<void> {
+  const riders = await escortTick(pos, leg, now);
+  const ride = rides.get(npc.id);
+  if (!riders || !ride || ride.leg !== leg || ride.ambushed || now - ride.at < AMBUSH_AFTER_MS) return;
+  ride.ambushed = true;
+  const n = await spawnAmbush(pos, 2 + Math.floor(Math.random() * 3));
+  if (n) await speak(npc, await say(npc, "Beasts are leaping out at your wagon on the road! Call to your guards.", "Ambush! Guards, to the wagon!"), pos, `${npc.name}'s caravan was ambushed on the road.`);
+}
+
+async function payEscorts(npc: NpcRow, p: MindProfile, leg: number, pos: { x: number; y: number }, now: number): Promise<void> {
+  const paid = await escortArrive(pos, leg, now);
+  if (!paid.size) return;
+  const names = (await db.select({ name: characters.name }).from(characters).where(inArray(characters.id, [...paid.keys()]))).map((c) => c.name);
+  await speak(npc, await say(npc, `Your caravan reached ${p.circuit?.[leg]?.place ?? "town"} safely thanks to your hired guards ${names.join(" and ")}; you've paid them.`, `Safe and sound! Thank you, ${names.join(" and ")}: here's your pay.`), pos, `${names.join(" and ")} escorted ${npc.name}'s caravan to ${p.circuit?.[leg]?.place ?? "town"}.`);
 }
 
 /** Which of a delivery's buyers pays most right now (a buyer with a mind pays the agreed price; one without, its market's). */
@@ -442,10 +480,15 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   // A caravan at a stop: trade there, then mind the stall a while (src/lib/mind/caravan.ts).
   if (intent.startsWith("travel:") && trip?.destKey === intent && trip.status !== "active") {
     const i = stopOf(intent) ?? 0;
-    if (trip.status === "arrived") await tradeAtMarket(npc, p, i, now).catch((e) => console.warn(`[mind] ${npc.key} trade:`, e instanceof Error ? e.message : e));
-    else await remember(npc.id, `They couldn't reach ${p.circuit?.[i]?.place ?? "the next town"}.`, now);
+    if (trip.status === "arrived") {
+      await payEscorts(npc, p, i, pos, now).catch((e) => console.warn(`[mind] ${npc.key} escorts:`, e instanceof Error ? e.message : e));
+      await tradeAtMarket(npc, p, i, now).catch((e) => console.warn(`[mind] ${npc.key} trade:`, e instanceof Error ? e.message : e));
+    } else await remember(npc.id, `They couldn't reach ${p.circuit?.[i]?.place ?? "the next town"}.`, now);
+    rides.delete(npc.id);
     intent = `stay:${i}`;
   }
+  // A caravan on the road: count who's riding along, and spring the ambush partway (src/lib/jobsServer.ts escorts).
+  if (onTrip && intent.startsWith("travel:")) await roadTick(npc, stopOf(intent) ?? 0, pos, now).catch((e) => console.warn(`[mind] ${npc.key} road:`, e instanceof Error ? e.message : e));
   // An outing whose way was lost: just head home.
   if (intent.startsWith("outing:") && trip?.destKey === intent && trip.status !== "active" && trip.status !== "arrived") intent = "";
   if (intent === "going_home" && atHome && !onTrip) { intent = ""; await setCarry(npc, null); } // home: the load goes on the pile

@@ -49,6 +49,9 @@ import type { ToastKind } from "@/types/notifications";
 import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
+import JobsPanel from "./JobsPanel";
+import { jobsOfEmployer } from "@/lib/jobs";
+import type { JobView, JobsResponse } from "@/types/jobs";
 import PitchCard from "./PitchCard";
 import FarmPanel from "./FarmPanel";
 import HomesteadPanel from "./HomesteadPanel";
@@ -236,6 +239,8 @@ export default function Hud() {
   /** Hidden relics already found (the scene stops drawing their glints). */
   const relicsFound = useRef<Set<string>>(new Set());
   const [myBounties, setMyBounties] = useState<BountyView[]>([]);
+  const [myJobs, setMyJobs] = useState<JobView[]>([]);
+  const [jobsPanel, setJobsPanel] = useState<{ npcKey: string; npcName: string } | null>(null);
   const bountiesRef = useRef<BountyView[]>([]);
   const arriving = useRef(new Map<number, number>());
   // The world map (M): open / opened at a waystone, the quest star, and
@@ -272,6 +277,9 @@ export default function Hud() {
   const loadBounties = useCallback(async () => {
     const r = await api<{ bounties?: BountyView[] }>("/api/bounties?mine=1");
     if (r.bounties) { setMyBounties(r.bounties); bountiesRef.current = r.bounties; }
+    // Today's shifts ride along (src/lib/jobs.ts).
+    const j = await api<JobsResponse>("/api/jobs");
+    if (j.jobs) setMyJobs(j.jobs);
   }, []);
   /** Tutorial steps, book discoveries and the like ride along on responses. */
   const notify = useCallback((notices?: string[]) => { for (const n of notices ?? []) toast(n, "good"); }, [toast]);
@@ -593,6 +601,16 @@ export default function Hud() {
     setTalk((t) => t && { ...t, lines: [...t.lines, { role: "npc", text: r.text }], offers: t.offers.filter((o) => o.id !== offerId && r.offers.some((x) => x.id === o.id)) });
     void refreshMe();
     toast(offerId.startsWith("discount") ? "Discount code added to your bag 🎟️" : offerId.startsWith("mission") ? "Mission accepted" : offerId.startsWith("turnin") ? "Mission complete!" : "Received", "good");
+  };
+
+  /** Hand a courier's letter to this NPC (src/lib/jobsServer.ts). */
+  const deliverLetter = async (npcKey: string) => {
+    const r = await api<{ message?: string; notices?: string[] }>("/api/jobs", { action: "deliver", npcKey });
+    if (r.error) { toast(r.error, "bad"); return; }
+    toast(r.message ?? "Delivered.", "good");
+    notify(r.notices);
+    void loadBounties();
+    void refreshMe();
   };
 
   const openTrade = (npcId: number, npcName: string, npcKey: string) => {
@@ -935,6 +953,7 @@ export default function Hud() {
     if (trade) { setTrade(null); return true; }
     if (shop) { setShop(null); return true; }
     if (orders) { setOrders(null); return true; }
+    if (jobsPanel) { setJobsPanel(null); return true; }
     if (farmMenu) { setFarmMenu(null); return true; }
     if (homestead) { setHomestead(null); return true; }
     if (craft) { setCraft(null); return true; }
@@ -943,7 +962,7 @@ export default function Hud() {
     if (building) { setBuilding(null); return true; }
     if (sel) { setSel(null); return true; }
     return false;
-  }, [chatOpen, saveOpen, reporting, helpOpen, menuOpen, mapOpen, board, talk, trade, shop, orders, farmMenu, homestead, craft, inspect, panel, building, sel]);
+  }, [chatOpen, saveOpen, reporting, helpOpen, menuOpen, mapOpen, board, talk, trade, shop, orders, jobsPanel, farmMenu, homestead, craft, inspect, panel, building, sel]);
 
   // Register UI commands with the input router. The effect depends on the
   // state each handler reads, so closures always see current values and
@@ -1113,7 +1132,7 @@ export default function Hud() {
           📍 {Math.floor((selfPos ?? snap!.me!).x / 16)}, {Math.floor((selfPos ?? snap!.me!).y / 16)}
         </div>
       )}
-      {loggedIn && !(isTouch && sel) && <BountyTracker list={myBounties} />}
+      {loggedIn && !(isTouch && sel) && <BountyTracker list={myBounties} jobs={myJobs} />}
       {loggedIn && board && (
         <BountyPanel town={board.town} name={board.name} activeCount={myBounties.length} onClose={() => setBoard(null)}
           onMessage={(text, kind, notices) => { toast(text, kind); notify(notices); void refreshMe(); }} onChanged={() => void loadBounties()} />
@@ -1222,6 +1241,12 @@ export default function Hud() {
                 )}
                 {npcKey && takesOrders(npcKey) && (
                   <Btn on={() => setOrders({ npcId: sel.id, npcName: sel.name })}>📋 Orders {keyHint("player.orders")}</Btn>
+                )}
+                {npcKey && jobsOfEmployer(npcKey).length > 0 && (
+                  <Btn on={() => setJobsPanel({ npcKey, npcName: sel.name })}>💼 Jobs</Btn>
+                )}
+                {npcKey && (me?.inventory ?? []).some((i) => i.itemKey === "letter" && i.meta?.to === npcKey) && (
+                  <Btn on={() => void deliverLetter(npcKey)}>✉️ Deliver letter</Btn>
                 )}
               </>
             );
@@ -1381,6 +1406,8 @@ export default function Hud() {
         return <MomentModal key={next.id} moment={next} onClose={() => { setMomentsShown((s) => new Set(s).add(next.id)); void api(`/api/moments/${next.id}/seen`, {}); }} />;
       })()}
 
+      {/* Jobs — work for this NPC, a shift a day (src/lib/jobs.ts). */}
+      {jobsPanel && <JobsPanel npcKey={jobsPanel.npcKey} npcName={jobsPanel.npcName} onClose={() => setJobsPanel(null)} onMessage={(text, kind, notices, gained) => { toast(text, kind); notify(notices); if (gained?.length) showGain(gained); void loadBounties(); void refreshMe(); }} />}
       {/* Standing orders — supply this NPC every week (their own menu, not the chat). */}
       {orders && <OrdersModal npcId={orders.npcId} npcName={orders.npcName} onDone={(text, gained) => { toast(text, "good"); if (gained.length) showGain(gained); void refreshMe(); }} onClose={() => setOrders(null)} />}
 

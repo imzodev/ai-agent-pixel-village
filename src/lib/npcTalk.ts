@@ -78,7 +78,7 @@ export function visitTarget(n: TalkNpc, npcs: readonly TalkNpc[], affinity: (a: 
 // ── Gossip ────────────────────────────────────────────────────────────────
 
 /** World events worth talking about: about a player, of a kind people notice. */
-const NOTABLE = new Set(["boss_defeated", "boss", "catch", "home", "lots", "bounty", "commission", "mission", "pet", "level", "arrival", "lead", "trade"]);
+const NOTABLE = new Set(["boss_defeated", "boss", "catch", "home", "lots", "bounty", "commission", "mission", "pet", "level", "arrival", "lead", "trade", "job"]);
 export function isGossip(e: GossipEvent): boolean {
   if (e.subjectType !== "character" || !NOTABLE.has(e.kind)) return false;
   if (e.kind === "level") { const m = /level (\d+)/i.exec(e.text); return !!m && Number(m[1]) >= 10 && Number(m[1]) % 5 === 0; }

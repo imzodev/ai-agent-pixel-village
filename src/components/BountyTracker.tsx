@@ -2,11 +2,14 @@
 // Your bounties at a glance (bottom-left; on phones, above the arrow pad
 // and narrower, so it stays clear of them): what's left to do on each.
 import type { BountyView } from "@/types/bounty";
+import type { JobView } from "@/types/jobs";
+import JobsTracker from "./JobsTracker";
 
-export default function BountyTracker({ list }: { list: BountyView[] }) {
-  if (list.length === 0) return null;
+export default function BountyTracker({ list, jobs = [] }: { list: BountyView[]; jobs?: JobView[] }) {
+  if (list.length === 0 && jobs.length === 0) return null;
   return (
     <div className="pointer-events-none absolute bottom-[240px] left-2 z-10 w-48 max-w-[calc(100vw-1rem)] space-y-1 sm:bottom-14 sm:w-60">
+      <JobsTracker list={jobs} />
       {list.map((b) => {
         const m = b.mine!;
         const done = m.progress >= m.target;

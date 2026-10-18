@@ -37,6 +37,7 @@ import { cleanPlayerChat } from "@/lib/moderation";
 import { chatBurstLimiter, chatMinuteLimiter, gatherLimiter } from "@/lib/rateLimit";
 import { axeKeyOf, weaponKeyOf, wornDamage, wornYield } from "@/lib/wear";
 import { wearTool } from "@/lib/wearServer";
+import { progressGuard } from "@/lib/jobsServer";
 import { reactToChat } from "@/lib/npcReactServer";
 
 export const dynamic = "force-dynamic";
@@ -342,6 +343,7 @@ export async function POST(req: Request) {
           notices.push(`📜 ${e.title} is down — claim the bounty at its town's board.`);
         }
         notices.push(...(await progressHunts(me.id, e.kind)));
+        notices.push(...(await progressGuard(me.id, ep.x, ep.y))); // guard jobs keep the roads near their town (src/lib/jobs.ts)
         // The last attacker of an encounter: everyone who fought is paid.
         const won = e.encounterId ? await attackerFell(e.encounterId, me.id) : null;
         if (e.encounterId && won) {

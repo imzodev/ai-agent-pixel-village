@@ -426,6 +426,32 @@ One value per item (`src/lib/itemDefs.ts`, which `seed.ts` re-exports as
   never break. Bjorn repairs the most worn copy at the forge
   (`POST /api/forge { action: "repair" }`) for `REPAIR_K` × √value × wear.
 
+## Jobs (hired by an NPC, a shift a day)
+
+`src/lib/jobs.ts` (rules, every number), `src/lib/jobsServer.ts`, `/api/jobs`,
+`jobs` table. Up to `MAX_JOBS` (3), one per employer. A day is a **real UTC
+day** (`dayKey`, like daily quests). Each finished shift pays `FLAT_WAGE[kind]`
+× rank plus the work; employers with a mind pay from their purse
+(`employerPays`). Ranks at `RANK_AT` 0/5/15 shifts (titles per job; pay and
+quotas × `RANK_MULT`). Missing `FIRE_AFTER_DAYS` (3) days in a row lets you go
+(checked lazily in `settle`); rehire after `REHIRE_MS`. Job rows change under a
+row lock (`locked`), so double clicks can't pay twice.
+
+- **Courier** (Hettie, the Grove Post): today's letters (`letter` items, `meta.to`)
+  go to `pickRecipients` (wider with rank); "Deliver letter" on the recipient.
+  Yesterday's letters are recalled.
+- **Supplier** (Hollis, Maren, Bjorn, Della, Fenwick, Marina): hand in the day's
+  quota; goods go into the employer's real stock and pay `SUPPLY_PREMIUM` (1.2) ×
+  value: more than selling them, under any shop's price (tested).
+- **Guard** (Old Sorrel, Mayor Wynn, each town's bounty keeper): kills within
+  `GUARD_RADIUS` of the town, from the attack route (`progressGuard`).
+- **Escort** (Tamsin): tickd's caravan code calls `escortDepart` / `escortTick` /
+  `escortArrive`; an ambush springs `AMBUSH_AFTER_MS` into a leg with riders
+  (`spawnAmbush`). `jobsServer` must stay free of WS-server imports (tickd uses it):
+  routes pass live positions in.
+- Employers know you work for them (`jobNoteFor` in the talk prompt); promotions
+  and firings are `job` world events, so gossip.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

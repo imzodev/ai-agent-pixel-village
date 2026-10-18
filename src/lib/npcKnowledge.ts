@@ -252,6 +252,7 @@ function howThingsWork(): string[] {
   return [
     `Homesteads lie south of the village: claim a free site at its "For sale" sign, then buy land next to it at ${PARCEL_PRICE} coins a parcel. Each parcel is a field, pasture, vineyard, orchard, the barn or the workshop.`,
     `Nobody sells animals. Players buy them on their own homestead, as many as its pastures hold (${animals}). Fed with crops, they give ${Object.values(RANCH_SPECIES).map((s) => s.produce).join(", ")}.`,
+    "Jobs: Hettie (the post), the makers (suppliers), Old Sorrel, Mayor Wynn and the bounty keepers (guards) and Tamsin (escorts) hire for a daily shift and a wage.",
     "Selling: specialists pay most; Odo (village plaza) buys nearly anything for less; Vesna (Hollowmere) buys far-land curios and boss trophies. A town that's had plenty of something pays less for it for a while.",
     `Waystones: walking up to one attunes it; from beside a waystone, travel to any attuned one is free (${TRAVEL_COST} coins from anywhere else, from the map).`,
     "Every town has an inn where the innkeeper sells hot food and travellers can rest by the hearth.",

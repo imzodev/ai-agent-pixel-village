@@ -23,6 +23,7 @@ import { mindNoteFor } from "@/lib/mind/mindServer";
 import type { BrainOutput } from "@/types/agent";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import { marketNews } from "@/lib/marketServer";
+import { jobNoteFor } from "@/lib/jobsServer";
 import { gossipFor } from "@/lib/npcTalkServer";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +90,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       buildOffers(npc, character).then((all) => all.filter((o) => o.type !== "sell" && o.type !== "order" && o.type !== "deliver")),
       loadSponsor(npc),
       db.select().from(worldState).where(eq(worldState.id, 1)),
-      mindNoteFor(npc, character.id, character.name),
+      // How the NPC sees this player: its mind, and whether they work for it (src/lib/jobsServer.ts).
+      Promise.all([mindNoteFor(npc, character.id, character.name), jobNoteFor(npc.key, character.id, character.name).catch(() => null)]).then(([a, b]) => [a, b].filter(Boolean).join(" ") || null),
       memoryOf(npc.id, character.id),
       itemNames(),
       // What they've heard from the other NPCs (src/lib/npcTalkServer.ts).

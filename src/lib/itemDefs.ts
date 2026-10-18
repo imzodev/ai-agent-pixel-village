@@ -50,6 +50,7 @@ export const ITEM_DEFS = [
   { key: "bicycle", name: "Bicycle", kind: "tool", icon: "🚲", description: "Press V to ride: more than twice as fast as walking. You'll get off to fight, fish or go indoors.", value: 150 },
   { key: "treasure_map", name: "Treasure Map", kind: "material", icon: "🗺️", description: "A hand-drawn scrap with a red X. Read it, find the spot, and dig.", value: 0 },
   { key: "sunken_cutlass", name: "Sunken Cutlass", kind: "tool", icon: "🗡️", description: "+12 attack. Pulled from a legendary cache; there's salt in its grain still.", value: 200, equippable: true },
+  { key: "letter", name: "Sealed Letter", kind: "material", icon: "✉️", description: "Post from the Grove Post. Hand it to whoever it's addressed to.", value: 0 },
   { key: "parcel", name: "Sealed Parcel", kind: "material", icon: "📦", description: "A bounty delivery. Take it to the bounty board of the town it's addressed to.", value: 0 },
   { key: "chitin", name: "Scorpion Chitin", kind: "material", icon: "🦂", description: "A plate of hard, sun-bleached shell from a sand scorpion.", value: 4 },
   { key: "lurker_hide", name: "Lurker Hide", kind: "material", icon: "🐸", description: "Slick, warty hide from a bog lurker. Waterproof, and smelly.", value: 7 },

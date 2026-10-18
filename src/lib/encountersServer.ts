@@ -59,6 +59,20 @@ async function spawnAttackers(encounterId: number, around: Point, n: number, nig
   }
 }
 
+/** An ambush on the caravan's road (src/lib/jobsServer.ts escorts): `n` beasts of the land around a spot. Returns how many came. */
+export async function spawnAmbush(around: Point, n: number, now = new Date()): Promise<number> {
+  let made = 0;
+  for (let i = 0; i < n; i++) {
+    const at = await spotNear(around, 3, 6);
+    if (!at) continue;
+    const kind = attackerKind(at, false);
+    const hp = enemyHpAt(kind, tierAt(Math.floor(at.x / 16), Math.floor(at.y / 16)));
+    await db.insert(enemies).values({ kind, x: at.x, y: at.y, targetX: at.x, targetY: at.y, hp, maxHp: hp, spawnedAt: now, wild: true, nearAt: now });
+    made++;
+  }
+  return made;
+}
+
 /** Start an encounter near a travelling player; `group` is how many players
  *  are with them (fights grow with it). Returns where it is. */
 async function spawn(player: Point, group: number, now: Date, night: boolean): Promise<Point | null> {

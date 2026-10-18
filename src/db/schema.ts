@@ -1,6 +1,7 @@
 import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloon";
 import type { ShoppingRule } from "@/types/businessAgent";
 import type { MomentData, MomentKind } from "@/types/moments";
+import type { JobProgress, JobStatus } from "@/types/jobs";
 import {
   bigint,
   pgMaterializedView,
@@ -843,6 +844,25 @@ export const npcRelations = pgTable(
     lastAt: timestamp("last_at"),
   },
   (t) => [primaryKey({ columns: [t.npcA, t.npcB] })],
+);
+
+/** Jobs (src/lib/jobs.ts): who works for whom, at what rank, and today's shift. */
+export const jobs = pgTable(
+  "jobs",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    jobKey: text("job_key").notNull(),
+    status: text("status").$type<JobStatus>().notNull().default("active"),
+    shiftsDone: integer("shifts_done").notNull().default(0),
+    streak: integer("streak").notNull().default(0),
+    lastShiftDay: text("last_shift_day"),
+    hiredDay: text("hired_day").notNull(),
+    progress: jsonb("progress").$type<JobProgress | null>(),
+    endedAt: timestamp("ended_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("jobs_char_job_idx").on(t.characterId, t.jobKey), index("jobs_job_idx").on(t.jobKey)],
 );
 
 /** Supply and demand (src/lib/market.ts): how much of an item each market
