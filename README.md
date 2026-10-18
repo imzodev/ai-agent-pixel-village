@@ -1,14 +1,110 @@
 # thegroove
 
-A persistent pixel-art village where humans and AI agents share one world. Sponsored agents are
-friendly NPCs **and** brand ambassadors in the same breath: they hand out missions and items, mention
-the sponsor's offer the way a shopkeeper naturally would, and turn accepted pitches into discount-code
-items for the player and leads for the business.
+A persistent pixel-art world where humans and AI share one village, and a whole continent around it.
+The villagers aren't scripted shopkeepers: they have minds. They keep real stock and purses, run
+errands, trade with each other, gossip about what you did, remember you, and answer when you talk in
+chat. Play it at [thegroove.fun](https://thegroove.fun).
+
+## What you can do in thegroove
+
+### Start playing in seconds
+- **Play now** with just a name (no password); save your character with a username and password
+  whenever you like. Or build a look in the **LPC character creator** at `/signup`.
+- A **guided tutorial** (five short steps: farming, woodcutting, fighting, trading), then a
+  **journey** of goals that always points at a good next thing to do, with a guide arrow.
+- **Daily quests** with a streak (one forgiven miss a month) and milestone rewards.
+
+### Explore a living continent
+- The **grove** (the starting village), the woodcutters' town of **Hollowmere**, the fishing town of
+  **Brightwater**, and **20 towns** across the continent, joined by roads: ports, desert outposts,
+  snowy holds, swamp villages, darkwood hamlets and hill towns, each with its people, inn, shop and
+  bounty board.
+- **Day and night, weather** (rain brings out the storm eel), and danger that grows the farther you
+  go: **tiers 1–8**, from the safe heartland to the far lands.
+- A **world map** (M) that you uncover as you explore, **waystones** to attune and fast-travel
+  between, and a **bicycle** (V) to cross the land at more than twice walking pace.
+- **Hidden relics** (four sets of ten) glinting across the continent, **treasure maps** to read and
+  dig up (three chain into a legendary cache), and **random encounters** on the road: a cornered
+  traveller, a merchant with a broken cart, a lost child, an ambush. Help and get paid.
+
+### Meet villagers with minds
+- Talk to anyone (💬): AI dialogue in each person's own voice, grounded in what they really know
+  about the world, with **memories of you** and **regard** that grows when you help (dear friends
+  get gifts and a discount).
+- **Living traders and supply chains**: Rowan cuts wheat and carries it to Hollis's mill, Marigold
+  buys his flour and bakes (and sets free loaves out on her table); Ansel fells trees for Bjorn's
+  forge and Maren's carpentry; Della milks, shears, presses cheese and weaves cloth; Fenwick turns
+  fruit into cider and wine; **Tamsin's caravan** travels between towns buying what one town has
+  too much of and selling it where it's short. You can watch them walk, carry loads and work.
+- NPCs **talk to each other** when you're nearby: real back-and-forth conversations, **gossip**
+  about what players did, and friendships and grudges that change over time.
+- They **answer what you say in chat** when you're near (call them by name).
+- Requests, **commissions** for furniture, **standing orders** (supply someone every week) and
+  first-meeting gifts.
+
+### Work, earn and trade
+- **Jobs**: be hired (up to three at once), work a shift a day for a wage and get promoted
+  (Apprentice → Hand → Foreman); miss three days and you're let go.
+  - **Courier** for Hettie's Grove Post: deliver letters, farther as you rise.
+  - **Supplier** for Hollis, Maren, Bjorn, Della, Fenwick or Marina: their daily quota, paid
+    better than the market.
+  - **Guard** for Hollowmere, Brightwater or any town: keep the roads clear of beasts.
+  - **Caravan escort** for Tamsin: ride along between towns and fight off the ambush.
+- **Gather**: wheat in the Common Field, the Village Ranch's garden and hives, herbs, berries,
+  mushrooms and stones in the wild (each patch regrows for you alone), logs with an axe.
+- **Fish** (R): twelve fish by water, hour and weather, landed with a reel minigame.
+- **A real economy**: one value per item and prices that respond to **supply and demand in each
+  town** (flood a market and its price falls; the next town pays full price). Specialists pay
+  most, **Odo** buys nearly anything, **Vesna** buys far-land curios and boss trophies. No item
+  can be bought and sold back at a profit.
+- **Bounties** on every town's board (hunts, gathering, deliveries, exploring, wanted beasts) and
+  **town reputation** (Friendly → Revered: discounts and the title "Friend of <town>").
+- **The saloon**: blackjack, liar's dice and arm wrestling for small stakes.
+- **The inns**: rest by the hearth, hot stew for the road, the rumour board and who's around.
+
+### Build a homestead
+- Claim a **homestead** south of the village and grow it a parcel at a time (2,000 coins each,
+  the first four free; more as you level). Make each parcel a **field**, **pasture**,
+  **vineyard**, **orchard**, the **barn** or the **workshop**.
+- Grow crops, grapevines and **fruit trees** (apple, lemon, orange, peach, cherry, pear, plum,
+  coconut, banana: saplings sold in the towns whose land suits them).
+- Raise **hens, sheep and cows**; pet them for **golden eggs, fine wool and rich milk**.
+- Grow your farm level and build the **silo and feeder, mill, cheese press, loom, beehives, fruit
+  press, wine cellar and aging racks, jam kitchen**.
+- Make **furniture** in your workshop (saw bench, lathe, upholstery, varnish), show it in your
+  showroom, sell it or fill NPCs' commissions; decorate your **cottage** in the village.
+- Visit and **cheer** other players' homesteads.
+
+### Fight and grow stronger
+- Combat (J) with **telegraphed attacks** you can interrupt for a stagger, **bows** and arrows,
+  beasts that fit each land and pack up ahead of travellers, and the far lands' own foes (dune
+  stalkers, ice trolls, wyverns, rime wraiths…).
+- **Lair bosses** in each far land (the Sand Wyrm, the Frost Giant, the Fire Drake, the Hollow),
+  shared by everyone who fights, with trophies and unique weapons; the **Old Rootking** wakes for
+  everyone once a week.
+- Levels, **perks** (Green Thumb, Lumberjack, Fighter, Tough, Forager, Haggler), gear slots, and
+  **Bjorn's forge**: upgrade swords, axes and rods (+1 to +3), and forge far-land gear. Tools
+  **wear with use**; Bjorn repairs them.
+
+### Collect, show off and play together
+- A **collection book** (fish, crops, creatures, places, folk, relics) with page rewards,
+  achievements and **nameplate titles**.
+- **Moments**: proud milestones become cards you can share; a public **profile** at `/u/<name>`.
+- **Friends** with online presence, world **chat**, **cosmetics** in the shop, and reporting.
+
+### For businesses and AI agents
+- **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
+  offer naturally, accepted pitches become **discount-code items** for players and **leads** for
+  the business, all managed from `/sponsor/dashboard`.
+- **External AI agents** can join the world through the agent API (`/agents`): look around, move,
+  talk, offer missions.
+
+For how each system works in the code, see `AGENTS.md`.
 
 ## Stack
 
 - **Next.js (App Router) + PostgreSQL via Drizzle** — auth, world state, simulation, agent HTTP API, Stripe.
-- **Phaser 3** in the browser — tilemap-style ground, sprites, camera (zoom/pan/follow), input, weather, day/night.
+- **Phaser 4** in the browser — tilemap-style ground, sprites, camera (zoom/pan/follow), input, weather, day/night.
 - **Universal LPC Spritesheet** layers (`public/lpc/*`) composited + recolored live in the browser for every human and agent.
 - Buildings, trees, animals, enemies, props: procedurally drawn pixel art (`src/game/textures.ts`) in one soft palette.
 
@@ -18,17 +114,16 @@ items for the player and leads for the business.
 |---|---|
 | `src/db/schema.ts` | users, characters, buildings, sponsors, npcs (agents), animals, items, inventory, missions, leads, conversations, world state/events, resource nodes, enemies |
 | `src/lib/worldmap.ts` | shared geometry (buildings, trees, pond, collision, game clock) used by server **and** client |
-| `src/lib/seed.ts` | idempotent world seed: 8 buildings, 7 NPCs (1 sponsored demo: the bakery), 17 animals, missions, nodes |
+| `src/lib/seed.ts` | idempotent world seed: buildings, NPCs (from `npcDefs.ts`), animals, missions, items (from `itemDefs.ts`), resource nodes |
 | `src/lib/sim.ts` | world tick (animals wander/sleep/hunger, NPC wander, weather, respawns, enemy spawns, unattended events). Emits `world_change` pub/sub events on every entity update. |
 | `src/lib/world-tickd.ts` | standalone sim worker — runs `tickWorld` at 1 Hz, advisory-locked to a single primary |
 | `src/lib/world-stream.ts` | WebSocket server (`/ws`) — cookie auth, proximity-filtered snapshot fan-out, slow-client backpressure |
 | `src/lib/protocol.ts` | wire protocol (`WsClientMessage`, `WsServerMessage`, `WorldSnapshot`) shared by server + client |
-| `src/lib/agent.ts` | NPC brain: scripted (always), LLM (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`), or remote webhook. Pitch weaving lives here. |
+| `src/lib/agent.ts` | NPC brain: scripted (always), LLM (`src/lib/llm/`), or remote webhook. Pitch weaving lives here. |
 | `src/lib/offers.ts` | which missions / turn-ins / gifts / discount an NPC can extend right now |
 | `src/server.ts` | custom Node server — boots Next.js + WS on the same port so the browser sends the session cookie on WS upgrade |
 | `src/app/api/world` | HTTP fallback for clients without WS (GET public, POST with position) |
-| ~~`src/app/api/health`~~ | Removed — the underlying `isDraining()` flag and DB/Upstash probes live in `src/lib/lifecycle.ts` and `src/lib/redis.ts`; a future authenticated endpoint can re-expose them. |
-
+| `src/app/api/health` | health check: DB, event-loop lag, memory (used by the uptime monitor) |
 | `src/app/api/npc/[id]/talk`, `/accept` | conversation + applying offers (mission, turn-in, gift, discount → item + lead) |
 | `src/app/api/act` | pet / gather / attack / enter / chat |
 | `src/app/api/items` | pickup / drop / equip / use / place (home decor) |
@@ -89,7 +184,8 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (**optional**) — Redis is **off the hot path**. Snapshots and player presence are served from in-process memory and Postgres, so a normal run issues zero Upstash commands. Redis is only used when you opt in with `SNAPSHOT_REDIS_CACHE=1` (cross-process snapshot cache) or `ENABLE_REDIS_PUBSUB=1` (the `world_changes` bridge). With no URL set, the in-process memory client is used and nothing is billed.
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
-- `OPENAI_API_KEY` (+ `OPENAI_MODEL`) or `ANTHROPIC_API_KEY` (+ `ANTHROPIC_MODEL`) — LLM-driven NPC dialogue. Without them the scripted brain runs.
+- `MINIMAX_API_KEY`, `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` (+ `<KEY>_MODEL`, `<KEY>_BASE_URL`, `LLM_PROVIDER`, `LLM_FALLBACK`) — LLM-driven NPC dialogue and conversations (see `AGENTS.md`). Without any, the scripted brain runs.
+- `MIND_NPCS` — which NPCs have a mind (real stock, purse, errands); `TYPESAFE_API_KEY` lets Jev pick their actions (a scripted policy otherwise).
 
 ### Performance / cost tunables
 
