@@ -5,9 +5,9 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { marketDemand } from "@/db/schema";
-import { DEMAND_HALF_LIFE_MS, decayGlut, demandFactor, trendOf, unitPrice } from "./market";
+import { DEMAND_HALF_LIFE_MS, bulkPay, decayGlut, demandFactor, trendOf, unitPrice } from "./market";
 import { marketName, marketOf } from "./economy";
-import { marketDepth, tradesForNpc } from "./trade";
+import { findBuyer, marketDepth, tradesForNpc } from "./trade";
 import { itemDef } from "./itemDefs";
 import type { MarketPrice } from "@/types/economy";
 
@@ -48,6 +48,26 @@ export async function undoSale(market: string, itemKey: string, qty: number): Pr
     .update(marketDemand)
     .set({ glut: sql`greatest(0, ${marketDemand.glut} - ${qty})` })
     .where(and(eq(marketDemand.market, market), eq(marketDemand.itemKey, itemKey)));
+}
+
+// ── Traders with minds (src/lib/mind/): selling into a town, and buying its flood up ──
+
+/** Sell `qty` into a market at `base` each before demand: the sale is recorded there, and this is what it fetches. */
+export async function sellInto(market: string, itemKey: string, qty: number, base: number): Promise<number> {
+  if (qty <= 0) return 0;
+  const glut = await recordSale(market, itemKey, qty);
+  return Math.round(bulkPay(base, glut, marketDepth(market, itemKey), qty));
+}
+
+/** A trader buys `qty` of what a market has had too much of: the flood goes down by that much. */
+export const buyUp = undoSale;
+
+/** What the best buyer in a market pays for the next one right now (0: nobody there buys it). */
+export async function marketUnit(market: string, itemKey: string): Promise<number> {
+  const b = findBuyer(itemKey, market);
+  if (!b) return 0;
+  const glut = (await gluts(market, [itemKey])).get(itemKey) ?? 0;
+  return unitPrice(b.trade.price, glut, marketDepth(market, itemKey));
 }
 
 /** What a buyer pays now for each item it takes. */

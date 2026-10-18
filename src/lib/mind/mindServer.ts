@@ -27,9 +27,13 @@ import { plainSpeech } from "@/lib/streamedText";
 import { askJev } from "./jev";
 import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
-import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, stateText, word } from "./profile";
+import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, deliveryOf, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, sellTargets, stateText, word } from "./profile";
+import { localGoods, pickBuys, stopOf } from "./caravan";
+import { buyUp, gluts, marketUnit, sellInto } from "@/lib/marketServer";
+import { buyPrice, marketOf } from "@/lib/economy";
+import { TRADES, findBuyer } from "@/lib/trade";
 import { profileFor } from "./profiles";
-import type { MindDecision, MindIntent, MindMemory, NpcCarry, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest } from "@/types/mind";
+import type { CaravanCandidate, MindDecision, MindIntent, MindMemory, NpcCarry, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest, SellDef } from "@/types/mind";
 
 export type NpcRow = typeof npcs.$inferSelect;
 type MindRow = typeof npcMinds.$inferSelect;
@@ -233,14 +237,27 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
   if (action.startsWith("sell_")) {
     const item = action.slice(5);
     const d = p.sells?.[item];
-    const [buyer] = d ? await db.select().from(npcs).where(eq(npcs.key, d.buyerKey)) : [];
-    if (!d || !buyer) return { memory: "" };
-    const intent: MindIntent = `deliver:${item}`;
-    const r = await startTrip(npc.id, { key: intent, name: d.place, x: buyer.homeX, y: buyer.homeY });
-    if (!r.ok) return { memory: `They wanted to take their ${word(p, item)} to ${d.place} but couldn't find the way.` };
-    await setCarry(npc, { item, qty: v.stock[item] ?? 0 }); // the load, on their back
-    await speak(npc, await say(npc, `You're carrying your ${word(p, item)} to ${d.place} to sell.`, `Off to ${d.place} with the ${word(p, item)}!`), pos, `${npc.name} set off to ${d.place}.`);
-    return { memory: `They set off to ${d.place} with their ${word(p, item)}.`, intent };
+    const ti = d ? await bestTarget(item, d) : 0;
+    const to = d ? sellTargets(d)[ti] : undefined;
+    const [buyer] = to ? await db.select().from(npcs).where(eq(npcs.key, to.buyerKey)) : [];
+    if (!d || !to || !buyer) return { memory: "" };
+    const intent: MindIntent = d.to?.length ? `deliver:${item}@${ti}` : `deliver:${item}`;
+    const r = await startTrip(npc.id, { key: intent, name: to.place, x: buyer.homeX, y: buyer.homeY });
+    if (!r.ok) return { memory: `They wanted to take their ${word(p, item)} to ${to.place} but couldn't find the way.` };
+    await setCarry(npc, { item, qty: Math.max(0, (v.stock[item] ?? 0) - (d.keep ?? 0)) }); // the load, on their back
+    await speak(npc, await say(npc, `You're carrying your ${word(p, item)} to ${to.place} to sell${d.to && d.to.length > 1 ? ", where they pay most right now" : ""}.`, `Off to ${to.place} with the ${word(p, item)}!`), pos, `${npc.name} set off to ${to.place}.`);
+    return { memory: `They set off to ${to.place} with their ${word(p, item)}.`, intent };
+  }
+  if (action.startsWith("travel:")) {
+    const i = stopOf(action) ?? 0;
+    const stop = p.circuit?.[i];
+    const [near] = stop ? await db.select().from(npcs).where(eq(npcs.key, stop.nearKey)) : [];
+    if (!stop || !near) return { memory: "" };
+    const intent = action as MindIntent;
+    const r = await startTrip(npc.id, { key: intent, name: stop.place, x: near.homeX, y: near.homeY });
+    if (!r.ok) return { memory: `They meant to travel to ${stop.place} but couldn't find the way.`, intent: `stay:${i}` };
+    await speak(npc, await say(npc, `You're packing up the wagon and travelling on to ${stop.place} to trade.`, `Wagon's packed! On to ${stop.place}.`), pos, `${npc.name}'s caravan set off for ${stop.place}.`);
+    return { memory: `They packed up the wagon and set off for ${stop.place}.`, intent };
   }
   if (action.startsWith("outing:")) {
     const o = p.outings?.[action.slice(7)];
@@ -287,6 +304,87 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
   return { memory: "" }; // tend_shop, rest, wait
 }
 
+/** Which of a delivery's buyers pays most right now (a buyer with a mind pays the agreed price; one without, its market's). */
+async function bestTarget(item: string, d: SellDef): Promise<number> {
+  const targets = sellTargets(d);
+  let best = 0, bestPay = -1;
+  for (let i = 0; i < targets.length; i++) {
+    const pay = isMindNpc(targets[i].buyerKey) ? d.price : await marketUnit(marketOf(targets[i].buyerKey), item);
+    if (pay > bestPay) { best = i; bestPay = pay; }
+  }
+  return best;
+}
+
+/**
+ * A caravan arrives at stop `i`: it drops off what the town's makers are
+ * short of, sells what this town pays well for, and buys up what the town has
+ * had too much of (and its own goods) when another stop pays more.
+ */
+async function tradeAtMarket(npc: NpcRow, p: MindProfile, i: number, now: number): Promise<void> {
+  const stop = p.circuit?.[i];
+  if (!stop) return;
+  const market = stop.market;
+  const others = (p.circuit ?? []).filter((_, j) => j !== i).map((s) => s.market);
+  const said: string[] = [];
+  const mine = async () => (await db.select({ stock: npcMinds.stock, purse: npcMinds.purse }).from(npcMinds).where(eq(npcMinds.npcId, npc.id)))[0];
+
+  // 1. Makers here with a mind who are short of something she carries (the brewer's fruit).
+  for (const key of mindNpcKeys()) {
+    const prof = profileFor(key);
+    if (key === npc.key || !prof || marketOf(key) !== market) continue;
+    const wants = new Set([...Object.keys(prof.asks), ...Object.values(prof.crafts).flatMap((r) => Object.keys(r.uses))]);
+    for (const [item, have] of Object.entries((await mine()).stock)) {
+      if (have <= 0 || !wants.has(item)) continue;
+      const them = await mindStock(key);
+      if (!them) continue;
+      const need = Math.max(0, (prof.asks[item]?.low ?? 4) * 3 - (them.stock[item] ?? 0));
+      const unit = prof.asks[item]?.pay ?? buyPrice(item, true);
+      const qty = affordableQty(Math.min(have, need), unit, them.purse);
+      if (qty <= 0) continue;
+      if (!(await adjustStock(them.npcId, { [item]: qty }, -qty * unit))) continue;
+      if (!(await adjustStock(npc.id, { [item]: -qty }, qty * unit))) { await adjustStock(them.npcId, { [item]: -qty }, qty * unit, true); continue; }
+      await remember(them.npcId, `${npc.name}'s caravan came by; they bought ${qty} ${item.replace(/_/g, " ")} for ${qty * unit} coins.`, now);
+      said.push(`${qty} ${word(p, item)} to ${(await db.select({ name: npcs.name }).from(npcs).where(eq(npcs.key, key)))[0]?.name ?? key}`);
+    }
+  }
+  // 2. Sell here what this town pays about as well as anywhere on the circuit.
+  for (const [item, qty] of Object.entries((await mine()).stock)) {
+    const here = qty > 0 ? await marketUnit(market, item) : 0;
+    if (here <= 0) continue;
+    let elsewhere = 0;
+    for (const m of others) elsewhere = Math.max(elsewhere, await marketUnit(m, item));
+    if (here < elsewhere * 0.9) continue; // another stop pays clearly more: keep it for there
+    const base = findBuyer(item, market)?.trade.price ?? 0;
+    const coins = await sellInto(market, item, qty, base);
+    if (await adjustStock(npc.id, { [item]: -qty }, coins)) said.push(`sold ${qty} ${word(p, item)} for ${coins}`);
+  }
+  // 3. Buy up the flood and the town's own goods, where another stop pays more.
+  const flood = await gluts(market);
+  const items = [...new Set([...localGoods(market), ...[...flood.entries()].filter(([, g]) => g >= 1).map(([k]) => k)])];
+  const cands: CaravanCandidate[] = [];
+  for (const item of items) {
+    const here = (await marketUnit(market, item)) || buyPrice(item, false);
+    let elsewhere = 0;
+    for (const m of others) elsewhere = Math.max(elsewhere, await marketUnit(m, item));
+    cands.push({ itemKey: item, here, elsewhere, glut: flood.get(item) ?? 0 });
+  }
+  const now2 = await mine();
+  const load = Object.values(now2.stock).reduce((a, b) => a + Math.max(0, b), 0);
+  for (const b of pickBuys(cands, load, now2.purse)) {
+    if (!(await adjustStock(npc.id, { [b.itemKey]: b.qty }, -b.qty * b.unit))) continue;
+    if ((flood.get(b.itemKey) ?? 0) >= 1) await buyUp(market, b.itemKey, b.qty); // the town's flood, off its hands
+    said.push(`bought ${b.qty} ${word(p, b.itemKey)}`);
+  }
+  // The biggest load shows over the wagon.
+  const after = await mine();
+  const top = Object.entries(after.stock).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1])[0];
+  await setCarry(npc, top ? { item: top[0], qty: top[1] } : null);
+  const summary = said.length ? said.join("; ") : "nothing worth the trouble";
+  await remember(npc.id, `At ${stop.place}: ${summary}.`, now);
+  const pos = rowPositionAt(npc, now);
+  await speak(npc, await say(npc, `Your caravan just pulled into ${stop.place}. You traded: ${summary}. Invite people to look at the wagon.`, `The caravan's in! Fresh goods from the road — come and look.`), pos, `${npc.name}'s caravan reached ${stop.place}: ${summary}.`);
+}
+
 /** One think for one NPC: look, decide, act, remember. */
 export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision | null> {
   const p = profileFor(npc.key);
@@ -322,21 +420,31 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   }
   // A delivery that got there: sell what they carried (the buyer pays from their purse when they have a mind).
   if (intent.startsWith("deliver:") && trip?.destKey === intent && trip.status !== "active") {
-    const item = intent.slice(8);
+    const { item, target: ti } = deliveryOf(intent)!;
     const d = p.sells?.[item];
-    const carried = mind.stock[item] ?? 0;
-    if (trip.status === "arrived" && d && carried > 0) {
-      const buyer = await mindStock(d.buyerKey);
+    const to = d ? sellTargets(d)[ti] ?? sellTargets(d)[0] : undefined;
+    const carried = Math.max(0, (mind.stock[item] ?? 0) - (d?.keep ?? 0));
+    if (trip.status === "arrived" && d && to && carried > 0) {
+      // A buyer with a mind pays the agreed price from its purse; one without, its town's market price (and the town takes note).
+      const buyer = await mindStock(to.buyerKey);
       const qty = affordableQty(carried, d.price, buyer ? buyer.purse : null);
-      const coins = qty * d.price;
+      const base = TRADES[to.buyerKey]?.find((t) => t.itemKey === item)?.price ?? d.price;
+      const coins = buyer ? qty * d.price : await sellInto(marketOf(to.buyerKey), item, qty, base);
       const paid = qty > 0 && buyer ? await adjustStock(buyer.npcId, { [item]: qty }, -coins) : qty > 0;
       if (paid && (await adjustStock(npc.id, { [item]: -qty }, coins))) {
         await setCarry(npc, null);
-        await remember(npc.id, `They sold ${qty} ${word(p, item)} at ${d.place} for ${coins} coins.`, now);
+        await remember(npc.id, `They sold ${qty} ${word(p, item)} at ${to.place} for ${coins} coins.`, now);
         if (buyer) await remember(buyer.npcId, `${npc.name} brought ${qty} ${item.replace(/_/g, " ")} and was paid ${coins} coins.`, now);
-      } else await remember(npc.id, `${d.place} couldn't pay for their ${word(p, item)} today.`, now);
-    } else if (trip.status !== "arrived") await remember(npc.id, `They couldn't reach ${d?.place ?? "the buyer"}.`, now);
+      } else await remember(npc.id, `${to.place} couldn't pay for their ${word(p, item)} today.`, now);
+    } else if (trip.status !== "arrived") await remember(npc.id, `They couldn't reach ${to?.place ?? "the buyer"}.`, now);
     intent = "going_home";
+  }
+  // A caravan at a stop: trade there, then mind the stall a while (src/lib/mind/caravan.ts).
+  if (intent.startsWith("travel:") && trip?.destKey === intent && trip.status !== "active") {
+    const i = stopOf(intent) ?? 0;
+    if (trip.status === "arrived") await tradeAtMarket(npc, p, i, now).catch((e) => console.warn(`[mind] ${npc.key} trade:`, e instanceof Error ? e.message : e));
+    else await remember(npc.id, `They couldn't reach ${p.circuit?.[i]?.place ?? "the next town"}.`, now);
+    intent = `stay:${i}`;
   }
   // An outing whose way was lost: just head home.
   if (intent.startsWith("outing:") && trip?.destKey === intent && trip.status !== "active" && trip.status !== "arrived") intent = "";
@@ -356,7 +464,7 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
   const view: MindView = {
     now, hour, weather: ws?.weather ?? "clear", name: npc.name, atHome, onTrip, intent,
     errandArrived: (intent.startsWith("errand:") || intent.startsWith("deliver:")) && trip?.destKey === intent && trip.status === "arrived",
-    arrivedAt: trip?.status === "arrived" && trip.destKey === intent ? trip.updatedAt.getTime() : null,
+    arrivedAt: trip?.status === "arrived" && (trip.destKey === intent || (intent.startsWith("stay:") && trip.destKey === `travel:${intent.slice(5)}`)) ? trip.updatedAt.getTime() : null,
     gameDay: ws ? gameDayOf(ws.epochStart.getTime(), ws.dayLengthMinutes, now) : 0,
     outingDay: prev?.outingDay ?? {},
     stock: mind.stock, purse: mind.purse, lastCraftAt: mind.lastCraftAt?.getTime() ?? null,

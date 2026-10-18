@@ -266,6 +266,21 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
   Whisperwood for the woodpile Bjorn buys from. Buying from (or selling to) an
   NPC with a mind moves real stock and coins (`mindStock`); one without a mind
   is an endless shop, so list both ends in `MIND_NPCS`.
+- **Traders who move goods** (all listed in `MIND_NPCS` on the droplet too): Maren
+  (`hollowmere_maren`, carpenter) buys Ansel's logs and Bjorn's fittings, saws planks and
+  makes furniture; Della (`village_della`) milks and shears at the Village Ranch (free
+  gathering) and presses cheese and weaves cloth; Fenwick (`village_fenwick`) presses the
+  apples, grapes and pears players bring into cider and wine. A delivery (`sells`) with
+  `to` goes to whichever buyer pays most now (`bestTarget`): a buyer without a mind pays its
+  market's price and the sale lands in that market (`sellInto`); `keep` leaves some on the
+  shelf. Their shelf prices come from the price model (`shopPrice`).
+- **The caravan** (`village_tamsin`, `profile.circuit`, `src/lib/mind/caravan.ts`): a
+  wagon round the grove, Hollowmere, Brightwater and Coralwick (`travel:<i>` while on the
+  road, `stay:<i>` while trading, `STOP_LINGER_MS`); one option at a time, so never a Jev
+  call. At each stop `tradeAtMarket` drops off what makers there with a mind are short of
+  (Fenwick's fruit), sells what this town pays about as well as anywhere on the circuit,
+  and buys up the town's flood and its own goods (`localGoods`) when another stop pays
+  `MIN_MARGIN` more (`pickBuys`; the flood's glut goes down, `buyUp`). Her wagon is her shelf.
 - **Gathering shows in the world** (`supplies[item].gather`, `src/lib/mind/gatherServer.ts`):
   Rowan cuts real ripe wheat stalks (they regrow as when players pick them),
   Ansel fells real trees (stumps that grow back). What an NPC carries is
@@ -295,7 +310,7 @@ Every `MIND_INTERVAL_MS` tickd calls `thinkMinds`.
   never read-modify-write: shop sales (`shelfSale`), sales to the NPC
   (`npcBuys`) and tickd can run at once.
 - **Regard** is counters, not Jev: helping raises it, free loaves
-  past `FREEBIE_GRACE` lower it. Tiers feed the talk prompt, gifts and a 20% discount.
+  past `FREEBIE_GRACE` lower it. Tiers feed the talk prompt, gifts and a 15% discount (`DEAR_DISCOUNT`).
 - Admin: `GET /api/mind?npcKey=…` (state, last decision with probabilities),
   `POST /api/mind { npcKey, stock?, purse?, think? }`.
 
@@ -386,7 +401,7 @@ One value per item (`src/lib/itemDefs.ts`, which `seed.ts` re-exports as
   seeds at their value).
 - **No loops** (`economy.test.ts`): the most anyone pays (specialist ×
   Haggler) is below the least anything sells for after every discount (town
-  reputation, a mind NPC's "dear" 20%, rounded up). Every good with a value
+  reputation, a mind NPC's "dear" 15%, rounded up). Every good with a value
   has a buyer. A new item needs a value and a category.
 - **Supply & demand** (`src/lib/market.ts`, `marketServer.ts`,
   `market_demand`): a market is the NPC key's place (`village`,

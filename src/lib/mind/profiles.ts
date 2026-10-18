@@ -3,7 +3,8 @@
 // the key listed in MIND_NPCS. Shelf items also need a SHOP_STOCK entry
 // (src/lib/trade.ts) so players can buy them.
 
-import type { MindProfile } from "@/types/mind";
+import { buyPrice, shopPrice } from "../economy";
+import type { MindProfile, SellDef, SellTarget } from "@/types/mind";
 
 const MIN = 60_000;
 
@@ -141,12 +142,157 @@ export const MILLER: MindProfile = {
   words: { wheat: "sheaves of wheat", flour: "bags of flour" },
 };
 
-export const PROFILES: Readonly<Record<string, MindProfile>> = { baker: BAKER, smith: SMITH, woodcutter: WOODCUTTER, farmhand: FARMHAND, miller: MILLER };
+// ── Traders who move goods (src/lib/economy.ts prices) ─────────────────
+/** A shelf priced from the model: what players pay for each. */
+const shelfOf = (...keys: string[]): Record<string, number> => Object.fromEntries(keys.map((k) => [k, shopPrice(k)]));
+const INNS: readonly SellTarget[] = [
+  { buyerKey: "village_hettie", place: "the Wayfarer's Rest" },
+  { buyerKey: "hollowmere_ivy", place: "the Sawdust & Ale" },
+  { buyerKey: "brightwater_coral", place: "the Salted Gull" },
+];
+const FURNITURE_BUYERS: readonly SellTarget[] = [
+  { buyerKey: "village_pip", place: "Pip's in the grove" },
+  { buyerKey: "hollowmere_ivy", place: "the Sawdust & Ale" },
+];
+/** Delivered to whichever buyer pays most: a buyer without a mind pays its market's price (`price` is for one with). */
+const toBest = (item: string, to: readonly SellTarget[], min: number, keep = 0): SellDef => ({ buyerKey: to[0].buyerKey, place: to[0].place, price: buyPrice(item, true), min, to, keep });
+
+/** Maren: saws Ansel's logs into planks and makes furniture with Bjorn's fittings; sells it off her shelf and carries it to Pip's or the inn. */
+export const CARPENTER: MindProfile = {
+  key: "carpenter",
+  trade: "the carpenter of Hollowmere",
+  startStock: { wood: 10, plank: 6, fittings: 2, stool: 1, chair: 1, table: 0, bookshelf: 0 },
+  startPurse: 60,
+  income: { basePerHour: 80, perPlayerPerHour: 15, baseTarget: 300, perPlayerTarget: 60 },
+  shelf: shelfOf("plank", "stool", "chair", "table", "bookshelf"),
+  shelfFull: 4,
+  shelfCap: { plank: 24 },
+  minCraftGapMs: 8 * MIN,
+  tableStaleMs: 0,
+  crafts: {
+    saw_planks: { itemKey: "plank", uses: { wood: 2 }, makes: 3, toTable: 0, verb: "saw 2 logs into 3 planks", line: "Fresh planks, straight and true." },
+    make_stool: { itemKey: "stool", uses: { plank: 2 }, makes: 1, toTable: 0, verb: "make a stool", line: "A stool. Three legs, no wobble." },
+    make_chair: { itemKey: "chair", uses: { plank: 4 }, makes: 1, toTable: 0, verb: "make an oak chair", line: "A new chair on the porch. Sit, try it." },
+    make_table: { itemKey: "table", uses: { plank: 6, fittings: 1 }, makes: 1, toTable: 0, verb: "make a round table", line: "A table, fit for four friends." },
+    make_bookshelf: { itemKey: "bookshelf", uses: { plank: 8, fittings: 2 }, makes: 1, toTable: 0, verb: "make a bookshelf", line: "A bookshelf. Now you need books." },
+  },
+  supplies: {
+    wood: { supplierKey: "hollowmere_ansel", place: "Ansel's woodpile", price: 2, buy: 10, low: 6 },
+    fittings: { supplierKey: "hollowmere_bjorn", place: "Bjorn's forge", price: shopPrice("fittings"), buy: 4, low: 1 },
+  },
+  sells: {
+    chair: toBest("chair", FURNITURE_BUYERS, 2, 1),
+    table: toBest("table", FURNITURE_BUYERS, 2, 1),
+    bookshelf: toBest("bookshelf", FURNITURE_BUYERS, 2, 1),
+  },
+  outings: { ale: { placeKey: "building:inn_hollowmere", place: "the Sawdust & Ale", doing: "have an ale at the Sawdust & Ale", hours: [19, 22], lingerMs: 5 * MIN } },
+  asks: { wood: { qty: 8, pay: 2, low: 4 } },
+  gift: { itemKey: "stool", qty: 1 },
+  orders: { wood: { qty: 12, pay: 2 }, plank: { qty: 12, pay: 1 } },
+  words: { wood: "logs", plank: "planks", fittings: "iron fittings", stool: "stools", chair: "chairs", table: "tables", bookshelf: "bookshelves" },
+};
+
+/** Della: milks the cows and shears the sheep at the Village Ranch, presses cheese and weaves cloth; the inns buy her cheese, Pip her cloth. */
+export const DAIRY: MindProfile = {
+  key: "dairy",
+  trade: "the dairymaid and weaver at the Village Ranch",
+  startStock: { milk: 6, wool: 4, rich_milk: 0, fine_wool: 0, cheese: 2, cloth: 1 },
+  startPurse: 50,
+  income: { basePerHour: 80, perPlayerPerHour: 15, baseTarget: 300, perPlayerTarget: 60 },
+  shelf: shelfOf("cheese", "cloth", "milk"),
+  shelfFull: 8,
+  shelfCap: { milk: 20 },
+  minCraftGapMs: 8 * MIN,
+  tableStaleMs: 0,
+  crafts: {
+    press_cheese: { itemKey: "cheese", uses: { milk: 6 }, makes: 2, toTable: 0, verb: "press 6 jugs of milk into 2 wheels of cheese", line: "Two wheels of cheese, pressed and salted." },
+    press_rich_cheese: { itemKey: "cheese", uses: { rich_milk: 1 }, makes: 1, toTable: 0, verb: "press a jug of rich milk into a wheel of cheese", line: "Rich milk makes the best cheese. Smell that." },
+    weave_cloth: { itemKey: "cloth", uses: { wool: 4 }, makes: 1, toTable: 0, verb: "weave 4 tufts of wool into a bolt of cloth", line: "A bolt of cloth off the loom. Soft, isn't it?" },
+    weave_fine_cloth: { itemKey: "cloth", uses: { fine_wool: 1 }, makes: 1, toTable: 0, verb: "weave fine wool into a bolt of cloth", line: "Fine wool weaves itself, nearly." },
+  },
+  // Out to the paddocks with her pail and shears (free, but a walk).
+  supplies: {
+    milk: { spot: { tx: 166, ty: 11 }, place: "the cow paddock", price: 0, buy: 6, low: 6 },
+    wool: { spot: { tx: 166, ty: 27 }, place: "the sheep paddock", price: 0, buy: 8, low: 4 },
+  },
+  sells: {
+    cheese: toBest("cheese", INNS, 3, 2),
+    cloth: toBest("cloth", [{ buyerKey: "village_pip", place: "Pip's in the grove" }], 2, 1),
+  },
+  outings: { supper: { placeKey: "building:inn_village", place: "the Wayfarer's Rest", doing: "have supper at the Wayfarer's Rest", hours: [18, 21], lingerMs: 5 * MIN } },
+  asks: {},
+  gift: { itemKey: "milk", qty: 1 },
+  // Players' homesteads supply her week by week.
+  orders: { milk: { qty: 10, pay: 4 }, wool: { qty: 12, pay: 3 }, rich_milk: { qty: 2, pay: 14 }, fine_wool: { qty: 2, pay: 12 } },
+  words: { milk: "jugs of milk", wool: "tufts of wool", rich_milk: "jugs of rich milk", fine_wool: "tufts of fine wool", cheese: "wheels of cheese", cloth: "bolts of cloth" },
+};
+
+/** Fenwick: presses players' apples, grapes and pears into cider and wine and carries them to the inn that pays most. */
+export const BREWER: MindProfile = {
+  key: "brewer",
+  trade: "the village brewer and cider-maker",
+  startStock: { apple: 8, red_grape: 6, white_grape: 0, pear: 0, cider: 2, red_wine: 1 },
+  startPurse: 80,
+  income: { basePerHour: 100, perPlayerPerHour: 20, baseTarget: 400, perPlayerTarget: 80 },
+  shelf: shelfOf("cider", "pear_cider", "red_wine", "white_wine", "grape_juice"),
+  shelfFull: 6,
+  minCraftGapMs: 10 * MIN,
+  tableStaleMs: 0,
+  crafts: {
+    press_cider: { itemKey: "cider", uses: { apple: 4 }, makes: 2, toTable: 0, verb: "press 4 apples into 2 bottles of cider", line: "Two bottles of cider, sharp and cold." },
+    press_pear_cider: { itemKey: "pear_cider", uses: { pear: 3 }, makes: 1, toTable: 0, verb: "press 3 pears into a bottle of pear cider", line: "Perry! Pears, pressed and patient." },
+    make_red_wine: { itemKey: "red_wine", uses: { red_grape: 6 }, makes: 1, toTable: 0, verb: "make a bottle of red wine from 6 bunches of red grapes", line: "A young red. Give it a year and it'll sing." },
+    make_white_wine: { itemKey: "white_wine", uses: { white_grape: 6 }, makes: 1, toTable: 0, verb: "make a bottle of white wine from 6 bunches of white grapes", line: "White wine, pale as morning." },
+    press_juice: { itemKey: "grape_juice", uses: { red_grape: 3 }, makes: 1, toTable: 0, verb: "press 3 bunches of grapes into juice", line: "Grape juice, for the little ones." },
+  },
+  supplies: {},
+  sells: {
+    cider: toBest("cider", INNS, 3, 2),
+    pear_cider: toBest("pear_cider", INNS, 2, 1),
+    red_wine: toBest("red_wine", INNS, 2, 1),
+    white_wine: toBest("white_wine", INNS, 2, 1),
+  },
+  outings: { supper: { placeKey: "building:inn_village", place: "the Wayfarer's Rest", doing: "have a pint at the Wayfarer's Rest", hours: [19, 22], lingerMs: 6 * MIN } },
+  // The fruit comes from players' vineyards and orchards (and the caravan).
+  asks: { apple: { qty: 8, pay: 2, low: 4 }, red_grape: { qty: 12, pay: 2, low: 6 }, pear: { qty: 6, pay: 4, low: 3 } },
+  gift: { itemKey: "grape_juice", qty: 1 },
+  orders: { apple: { qty: 16, pay: 2 }, red_grape: { qty: 24, pay: 2 }, white_grape: { qty: 12, pay: 2 }, pear: { qty: 8, pay: 4 } },
+  words: { apple: "apples", red_grape: "bunches of red grapes", white_grape: "bunches of white grapes", pear: "pears", cider: "bottles of cider", pear_cider: "bottles of pear cider", red_wine: "bottles of red wine", white_wine: "bottles of white wine", grape_juice: "bottles of grape juice" },
+};
+
+/** Tamsin: a caravan between the grove, Hollowmere, Brightwater and Coralwick (src/lib/mind/caravan.ts). */
+export const CARAVAN: MindProfile = {
+  key: "caravan",
+  trade: "a travelling trader with a wagon, going round the grove, Hollowmere, Brightwater and Coralwick",
+  startStock: { orange: 6, banana: 4 },
+  startPurse: 150,
+  income: { basePerHour: 60, perPlayerPerHour: 10, baseTarget: 300, perPlayerTarget: 40 },
+  // What she may have in the wagon for players, while she has it.
+  shelf: shelfOf("apple", "orange", "lemon", "peach", "cherry", "pear", "plum", "coconut", "banana", "honey", "cheese", "cloth", "river_trout", "catfish"),
+  shelfFull: 99,
+  minCraftGapMs: 0,
+  tableStaleMs: 0,
+  crafts: {},
+  supplies: {},
+  circuit: [
+    { market: "village", place: "the grove's plaza", nearKey: "village_odo" },
+    { market: "hollowmere", place: "Hollowmere", nearKey: "hollowmere_ivy" },
+    { market: "brightwater", place: "Brightwater", nearKey: "brightwater_coral" },
+    { market: "coralwick", place: "Coralwick", nearKey: "coralwick_lena" },
+  ],
+  asks: {},
+  gift: null,
+  orders: {},
+  words: { orange: "oranges", banana: "bananas", lemon: "lemons", peach: "peaches", cherry: "cherries", pear: "pears", plum: "plums", coconut: "coconuts", apple: "apples", river_trout: "river trout", catfish: "catfish", wheat: "sheaves of wheat", wood: "logs" },
+};
+
+export const PROFILES: Readonly<Record<string, MindProfile>> = { baker: BAKER, smith: SMITH, woodcutter: WOODCUTTER, farmhand: FARMHAND, miller: MILLER, carpenter: CARPENTER, dairy: DAIRY, brewer: BREWER, caravan: CARAVAN };
 
 /** Which NPC thinks with which profile. */
 export const PROFILE_OF: Readonly<Record<string, string>> = {
   village_marigold: "baker", hollowmere_bjorn: "smith",
   hollowmere_ansel: "woodcutter", village_rowan: "farmhand", village_hollis: "miller",
+  hollowmere_maren: "carpenter", village_della: "dairy", village_fenwick: "brewer", village_tamsin: "caravan",
 };
 
 export function profileFor(npcKey: string): MindProfile | null {

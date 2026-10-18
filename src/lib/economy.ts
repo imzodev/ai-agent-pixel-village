@@ -22,8 +22,9 @@ export type { BuyerSpec, GoodsCategory, MarketPrice, MarketTrend } from "@/types
 export const BUY_RATE = 0.7;
 /** Shops sell goods for this × value. */
 export const SELL_MARKUP = 1.5;
-/** What an NPC with a mind takes off for a dear friend (src/lib/mind/regard.ts tiers). */
-export const DEAR_DISCOUNT = 0.2;
+/** What an NPC with a mind takes off for a dear friend (src/lib/mind/regard.ts tiers). Under
+ *  1 − (Haggler × full value) / SELL_MARKUP = 20%, or a dear-friend Haggler could sell back at cost. */
+export const DEAR_DISCOUNT = 0.15;
 
 const set = (...keys: string[]) => new Set(keys);
 const CATEGORY_SETS: readonly [GoodsCategory, ReadonlySet<string>][] = [

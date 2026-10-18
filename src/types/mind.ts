@@ -11,7 +11,7 @@ export type NpcStock = Record<string, number>;
 export type MindMemory = { at: number; text: string };
 
 /** What the NPC is in the middle of: an errand to buy (or gather) an item, a delivery to sell one, an outing, or heading home. */
-export type MindIntent = "" | "going_home" | `errand:${string}` | `deliver:${string}` | `outing:${string}` | `patrol:${string}` | `shop:${string}`;
+export type MindIntent = "" | "going_home" | `errand:${string}` | `deliver:${string}` | `outing:${string}` | `patrol:${string}` | `shop:${string}` | `travel:${string}` | `stay:${string}`;
 
 /** An action the NPC can take right now: Jev sees `key` + `description`. */
 export type MindOption = { key: string; description: string };
@@ -99,8 +99,25 @@ export type SupplyDef = { supplierKey?: string; spot?: { tx: number; ty: number 
  */
 export type GatherDef = { from: "nodes"; kind: string; radius: number } | { from: "trees"; perTree: number; radius: number };
 
-/** Who an NPC carries its goods to and sells them (the farmhand's wheat to the mill): once it has `min`, at `price` each. */
-export type SellDef = { buyerKey: string; place: string; price: number; min: number };
+/** One buyer an NPC can carry its goods to. */
+export type SellTarget = { buyerKey: string; place: string };
+
+/**
+ * Who an NPC carries its goods to and sells them (the farmhand's wheat to the
+ * mill): once it has `min`. A buyer with a mind pays `price` each from its
+ * purse; one without pays its town's market price (src/lib/market.ts). With
+ * `to`, it goes to whichever of them pays most right now.
+ */
+export type SellDef = { buyerKey: string; place: string; price: number; min: number; to?: readonly SellTarget[]; /** Left on the shelf for players (the rest is carried off). */ keep?: number };
+
+/** A stop on a caravan's circuit: a market, and the NPC there it pulls up by. */
+export type CircuitStop = { market: string; place: string; nearKey: string };
+
+/** What a caravan buys at a stop: an item, how many, and what it pays for each. */
+export type CaravanBuy = { itemKey: string; qty: number; unit: number };
+
+/** An item a caravan could buy at a stop: what it costs here and the best another stop pays, and the glut here. */
+export type CaravanCandidate = { itemKey: string; here: number; elsewhere: number; glut: number };
 
 /** Somewhere an NPC goes at a time of day, once a game day, and stays a while (supper at the inn). */
 export type OutingDef = {
@@ -168,6 +185,8 @@ export type MindProfile = {
   orders: Readonly<Record<string, OrderDef>>;
   /** Item → plural words ("bags of flour"). */
   words: Readonly<Record<string, string>>;
+  /** A caravan: the markets it travels between, trading at each (src/lib/mind/caravan.ts). */
+  circuit?: readonly CircuitStop[];
 };
 
 /** A parsed Jev answer. */

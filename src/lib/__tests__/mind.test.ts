@@ -2,8 +2,9 @@
 // policy is sensible, her situation reads right, and Jev's answers parse
 // (and failures fall back instead of throwing).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { REASK_MS, decisionBasis, errandHaul, feasibleActions as feasible, gameDayOf, needsJev, regardTier, requestReward, scriptedPick as scripted, stateText as state } from "@/lib/mind/profile";
-import { BAKER, FARMHAND, MILLER, PROFILE_OF, PROFILES, SMITH, WOODCUTTER, profileFor } from "@/lib/mind/profiles";
+import { REASK_MS, decisionBasis, deliveryOf, errandHaul, feasibleActions as feasible, sellTargets, gameDayOf, needsJev, regardTier, requestReward, scriptedPick as scripted, stateText as state } from "@/lib/mind/profile";
+import { BAKER, BREWER, CARAVAN, CARPENTER, DAIRY, FARMHAND, MILLER, PROFILE_OF, PROFILES, SMITH, WOODCUTTER, profileFor } from "@/lib/mind/profiles";
+import { LOAD_MAX, STOP_LINGER_MS, caravanActions, localGoods, nextStop, pickBuys, stopOf } from "@/lib/mind/caravan";
 import { SHOP_STOCK } from "@/lib/trade";
 import { askJev, parseJev } from "@/lib/mind/jev";
 import fs from "node:fs";
@@ -280,5 +281,71 @@ describe("the supply chains", () => {
   it("the scripted policy sells a full load before going back for more", () => {
     const v = view({ table: null, stock: { wheat: 12 } });
     expect(scripted(FARMHAND, v, feasible(FARMHAND, v))).toBe("sell_wheat");
+  });
+});
+
+describe("traders who move goods", () => {
+  const at = (p: typeof BAKER, over: Partial<MindView>) => feasible(p, view({ table: null, ...over })).map((o) => o.key);
+  it("logs → planks → furniture: Maren buys Ansel's logs and Bjorn's fittings, and carries furniture to whoever pays most", () => {
+    expect(CARPENTER.supplies.wood.supplierKey).toBe("hollowmere_ansel");
+    expect(CARPENTER.supplies.fittings.supplierKey).toBe("hollowmere_bjorn");
+    expect(at(CARPENTER, { stock: { wood: 4, plank: 0 } })).toContain("saw_planks");
+    expect(at(CARPENTER, { stock: { plank: 6, fittings: 0 } })).not.toContain("make_table"); // needs a fitting
+    expect(at(CARPENTER, { stock: { wood: 2, plank: 0 }, purse: 50 })).toContain("buy_wood");
+    expect(sellTargets(CARPENTER.sells!.chair).map((t) => t.buyerKey)).toEqual(["village_pip", "hollowmere_ivy"]);
+    // keeps one on the porch: a delivery only once there's a load beyond it
+    expect(at(CARPENTER, { stock: { chair: 2 } })).not.toContain("sell_chair");
+    expect(at(CARPENTER, { stock: { chair: 3 } })).toContain("sell_chair");
+  });
+  it("Della milks, shears, presses and weaves; Fenwick presses what players bring", () => {
+    expect(DAIRY.supplies.milk.spot).toBeTruthy();
+    expect(at(DAIRY, { stock: { milk: 2 } })).toContain("buy_milk");
+    expect(at(DAIRY, { stock: { milk: 6, cheese: 0 } })).toContain("press_cheese");
+    expect(at(DAIRY, { stock: { wool: 4, cloth: 0 } })).toContain("weave_cloth");
+    expect(at(BREWER, { stock: { apple: 4, cider: 0 } })).toContain("press_cider");
+    expect(at(BREWER, { stock: { apple: 1 } })).toContain("ask_apple");
+    expect(Object.keys(BREWER.supplies)).toEqual([]); // no wild fruit: players and the caravan bring it
+  });
+  it("a delivery to several buyers says so, and its intent remembers which", () => {
+    expect(feasible(DAIRY, view({ table: null, stock: { cheese: 5 } })).find((o) => o.key === "sell_cheese")!.description).toMatch(/whichever pays most/);
+    expect(deliveryOf("deliver:cheese@2")).toEqual({ item: "cheese", target: 2 });
+    expect(deliveryOf("deliver:wheat")).toEqual({ item: "wheat", target: 0 });
+    expect(deliveryOf("errand:wheat")).toBeNull();
+    expect(sellTargets(FARMHAND.sells!.wheat)).toEqual([{ buyerKey: "village_hollis", place: "Hollis's mill" }]);
+  });
+  it("every chain's other end has a mind too", () => {
+    for (const p of [CARPENTER, DAIRY, BREWER]) {
+      for (const s of Object.values(p.supplies)) if (s.supplierKey) expect(PROFILE_OF[s.supplierKey], s.supplierKey).toBeTruthy();
+    }
+  });
+});
+
+describe("the caravan", () => {
+  const n = CARAVAN.circuit!.length;
+  it("goes round its circuit, one thing to do at a time (never a Jev call)", () => {
+    expect(caravanActions(CARAVAN, view({ intent: "" })).map((o) => o.key)).toEqual(["travel:0"]);
+    expect(caravanActions(CARAVAN, view({ onTrip: true, intent: "travel:1" })).map((o) => o.key)).toEqual(["wait"]);
+    expect(caravanActions(CARAVAN, view({ intent: "stay:1", arrivedAt: NOW - 1000 })).map((o) => o.key)).toEqual(["tend_shop"]);
+    expect(caravanActions(CARAVAN, view({ intent: "stay:1", arrivedAt: NOW - STOP_LINGER_MS })).map((o) => o.key)).toEqual(["travel:2"]);
+    expect(nextStop(CARAVAN, `stay:${n - 1}`)).toBe(0);
+    expect(stopOf("travel:3")).toBe(3);
+    expect(feasible(CARAVAN, view({ intent: "" })).length).toBe(1);
+  });
+  it("stops at real NPCs, in real markets", () => {
+    for (const s of CARAVAN.circuit!) expect(npcDef(s.nearKey), s.nearKey).toBeTruthy();
+    expect(localGoods("coralwick")).toContain("orange");
+    expect(localGoods("village")).toContain("wheat");
+  });
+  it("buys only what another stop pays more for, the best margins first, within her wagon and purse", () => {
+    const buys = pickBuys([
+      { itemKey: "wheat", here: 0.2, elsewhere: 1, glut: 100 },
+      { itemKey: "orange", here: 2, elsewhere: 4, glut: 0 },
+      { itemKey: "egg", here: 2, elsewhere: 2.2, glut: 0 }, // not worth the road
+    ], 0, 200);
+    expect(buys.map((b) => b.itemKey)).toEqual(["wheat", "orange"]);
+    expect(buys[0].qty).toBe(20); // most of a flood, capped
+    expect(buys[1].qty).toBe(6);
+    expect(pickBuys([{ itemKey: "orange", here: 2, elsewhere: 4, glut: 0 }], LOAD_MAX, 200)).toEqual([]); // wagon full
+    expect(pickBuys([{ itemKey: "orange", here: 10, elsewhere: 20, glut: 0 }], 0, 20)).toEqual([{ itemKey: "orange", qty: 1, unit: 10 }]); // 60% of 20 coins
   });
 });

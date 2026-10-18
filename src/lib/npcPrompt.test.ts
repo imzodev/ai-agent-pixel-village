@@ -137,14 +137,17 @@ describe("knowledge is spread out, and always true", () => {
   it("lets anyone who knows the trade find every item sold anywhere", () => {
     for (const key of everyone.filter((k) => topicsOf(k).has("trade"))) {
       const k = knowledgeFor(key);
-      for (const item of soldAnywhere) expect(k, `${key} / ${item}`).toContain(`- ${item}:`);
+      // items with the same sellers share a line: "- plank, stool, chair: Maren (Hollowmere)"
+      const listed = new Set([...k.matchAll(/^- ([^:\n]+):/gm)].flatMap((m) => m[1].split(", ")));
+      for (const item of soldAnywhere) expect(listed.has(item), `${key} / ${item}`).toBe(true);
     }
   });
 
   it("puts lemon saplings in the desert towns, never with Pip", () => {
     const k = knowledgeFor("village_hettie");
-    expect(k).toContain("lemon sapling: the general stores of Sunrest, Miragespring, Scorchrest and Sunspring");
-    expect(k).toMatch(/apple sapling: Pip \(the grove\)\n/);
+    expect(k).toMatch(/lemon sapling: the general stores of Sunrest, Miragespring, Scorchrest and Sunspring\n/);
+    expect(k).toMatch(/apple sapling[^:\n]*: Pip \(the grove\)\n/);
+    expect(k).not.toMatch(/lemon sapling[^\n]*Pip/);
   });
 
   it("names, for each thing they don't know, someone who really does", () => {

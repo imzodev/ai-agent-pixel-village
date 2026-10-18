@@ -16,6 +16,7 @@ import { NPC_DEFS, npcDef } from "./npcDefs";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { BUYERS, SHOP_STOCK, stockForNpc } from "./trade";
 import { CATEGORY_WORDS } from "./economy";
+import { profileFor } from "./mind/profiles";
 import type { GoodsCategory } from "@/types/economy";
 import { recipesForNpc } from "./recipes";
 import { RANCH_SPECIES } from "./ranch";
@@ -142,6 +143,9 @@ function bearing(from: KnowledgePlace, to: KnowledgePlace): string {
 
 /** One line about what an NPC does: sells, buys, makes. */
 function tradeLine(npcKey: string, detailed: boolean, itemName: ItemNameOf): string {
+  // A caravan's wagon changes as she travels: say what she does, not a list (src/lib/mind/caravan.ts).
+  const circuit = profileFor(npcKey)?.circuit;
+  if (circuit?.length) return `takes a wagon round ${circuit.map((c) => c.place).join(", ")}, selling goods from other towns and buying up what a town has too much of`;
   const sells = stockForNpc(npcKey).map((t) => (detailed ? `${itemName(t.itemKey)}${t.qty > 1 ? ` ×${t.qty}` : ""} (${t.price} coins)` : itemName(t.itemKey)));
   // What they buy, in words (categories stay categories); prices move with demand (src/lib/market.ts).
   const spec = BUYERS[npcKey];
@@ -183,18 +187,22 @@ const placeName = (npcKey: string) => placeByKey.get(placeKeyOf(npcKey) ?? "")?.
 /** "Pip (the grove)" — or, when they're all town shops, "the general stores of A, B and C". */
 function describeSellers(keys: string[]): string {
   if (keys.every((k) => jobOf(k) === "shopkeeper")) return `the general store${keys.length > 1 ? "s" : ""} of ${and(keys.map(placeName))}`;
-  return and(keys.map((k) => `${npcDef(k)?.name ?? k} (${placeName(k)})`));
+  // A caravan is never in one place for long (src/lib/mind/caravan.ts).
+  return and(keys.map((k) => profileFor(k)?.circuit?.length ? `${npcDef(k)?.name ?? k}'s travelling wagon, when she has them` : `${npcDef(k)?.name ?? k} (${placeName(k)})`));
 }
 
 /** Where every item in the world is sold. */
 function tradeIndex(itemName: ItemNameOf): string[] {
-  const lines: string[] = [];
+  // Items with the same sellers share a line ("plank, stool, chair: Maren (Hollowmere)").
+  const byWho = new Map<string, string[]>();
   for (const [item, sellers] of sellersByItem()) {
     const groups = commonGroups(sellers);
     const covered = new Set([...(groups.includes("every inn") ? TOWN_INNS : []), ...(groups.includes("every town's general store") ? TOWN_SHOPS : [])]);
     const others = sellers.filter((k) => !covered.has(k));
-    lines.push(`${itemName(item)}: ${groups.length ? `${and(groups)}${others.length ? `, plus ${describeSellers(others)}` : ""}` : describeSellers(others)}`);
+    const who = groups.length ? `${and(groups)}${others.length ? `, plus ${describeSellers(others)}` : ""}` : describeSellers(others);
+    byWho.set(who, [...(byWho.get(who) ?? []), itemName(item)]);
   }
+  const lines = [...byWho].map(([who, items]) => `${items.join(", ")}: ${who}`);
   lines.push("Fruit tree saplings (other than apple) are sold only in towns whose land suits them, as listed here.");
   return lines;
 }

@@ -84,6 +84,22 @@ export const BUYERS: Record<string, BuyerSpec> = {
     specialty: ["fish", "carrot", "tomato", "onion", "cabbage", "bell_pepper", "pumpkin"],
     line: "Fish for the market, veg for the stew pot. I pay better than anyone east of the river.",
   },
+  // Living traders (src/lib/mind/profiles.ts): they pay from their purse for what they make things from.
+  hollowmere_maren: {
+    buys: ["wood", "plank"],
+    specialty: ["wood", "plank"],
+    line: "Logs and planks, always. Good timber makes good chairs.",
+  },
+  village_della: {
+    buys: ["milk", "wool", "rich_milk", "fine_wool"],
+    specialty: ["milk", "wool", "rich_milk", "fine_wool"],
+    line: "Milk for the cheese press, wool for the loom. I pay fair for good stuff.",
+  },
+  village_fenwick: {
+    buys: ["apple", "red_grape", "white_grape", "pear"],
+    specialty: ["apple", "red_grape", "white_grape", "pear"],
+    line: "Apples, grapes, pears — the press is hungry!",
+  },
   brightwater_tobias: {
     buys: ["wood", "plank"],
     specialty: ["wood", "plank"],
@@ -173,6 +189,35 @@ export const SHOP_STOCK: TradeConfig = {
   ],
   village_rowan: [
     sells("wheat", "A sheaf of the gold!"),
+  ],
+  // The living traders sell off their shelves, only while they have it (src/lib/mind/profiles.ts).
+  hollowmere_maren: [
+    sells("plank", "A plank, sawn this morning."),
+    sells("stool", "A stool. Three legs, no wobble."),
+    sells("chair", "An oak chair. Sturdy as they come."),
+    sells("table", "A round table, fits four friends."),
+    sells("bookshelf", "A bookshelf. Now you need books."),
+  ],
+  village_della: [
+    sells("cheese", "A wheel of my cheese. Pressed this week."),
+    sells("cloth", "A bolt of cloth, off the loom."),
+    sells("milk", "Fresh milk, this morning's."),
+  ],
+  village_fenwick: [
+    sells("cider", "A bottle of cider, sharp and cold."),
+    sells("pear_cider", "Pear cider. Goes down easy."),
+    sells("red_wine", "A young red."),
+    sells("white_wine", "A white, pale as morning."),
+    sells("grape_juice", "Grape juice, for the little ones."),
+  ],
+  // Tamsin's wagon: whatever she's carrying from the last towns, while she has it.
+  village_tamsin: [
+    ...["apple", "orange", "lemon", "peach", "cherry", "pear", "plum", "coconut", "banana"].map((k) => sells(k, "Fruit from the road, fresh as it travels.")),
+    sells("honey", "Honey from the grove's hives."),
+    sells("cheese", "Cheese from the ranch, aged on the road."),
+    sells("cloth", "Cloth for your sewing."),
+    sells("river_trout", "Trout from Brightwater, on ice."),
+    sells("catfish", "Catfish, caught at night."),
   ],
   // Bjorn sells off his rack, only while he has it (src/lib/mind/profiles.ts SMITH).
   hollowmere_bjorn: [

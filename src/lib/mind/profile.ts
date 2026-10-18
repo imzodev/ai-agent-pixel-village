@@ -4,7 +4,8 @@
 // unsure, and the plain-words state Jev decides from. No DB here
 // (src/lib/mind/mindServer.ts carries the decision out).
 
-import type { CraftRecipe, MindDecision, MindOption, MindProfile, MindView, NpcStock, RegardTier, SupplyDef } from "@/types/mind";
+import { caravanActions } from "./caravan";
+import type { CraftRecipe, MindDecision, MindOption, MindProfile, MindView, NpcStock, RegardTier, SellDef, SellTarget, SupplyDef } from "@/types/mind";
 
 /** The five moods Jev scores, low to high. */
 export const MOODS = ["gloomy", "tired", "content", "cheerful", "delighted"] as const;
@@ -110,8 +111,23 @@ export function requestReward(p: MindProfile, itemKey: string, qty: number, urge
   return Math.max(3, Math.round((p.asks[itemKey]?.pay ?? 2) * qty * mult));
 }
 
+/** Who a delivery can go to: its `to` list, or its one buyer. */
+export const sellTargets = (d: SellDef): readonly SellTarget[] => (d.to?.length ? d.to : [{ buyerKey: d.buyerKey, place: d.place }]);
+
+/** "Hettie's inn or Ivy's inn": the places a delivery may go, in words. */
+const placesOf = (d: SellDef) => { const t = sellTargets(d).map((x) => x.place); return t.length > 1 ? `${t.slice(0, -1).join(", ")} or ${t[t.length - 1]}` : t[0]; };
+
+/** The item of a delivery intent (`deliver:cheese@1` → cheese) and which buyer it's for. */
+export function deliveryOf(intent: string): { item: string; target: number } | null {
+  if (!intent.startsWith("deliver:")) return null;
+  const [item, i] = intent.slice(8).split("@");
+  return { item, target: Number(i) || 0 };
+}
+
 /** The actions they can take right now, each with what it means. */
 export function feasibleActions(p: MindProfile, v: MindView): MindOption[] {
+  // A caravan travels its circuit (src/lib/mind/caravan.ts).
+  if (p.circuit?.length) return caravanActions(p, v);
   // Walking somewhere: nothing to decide until they get there (and no Jev call: one option).
   if (v.onTrip) return [{ key: "wait", description: "Keep walking" }];
   const out: MindOption[] = [];
@@ -129,8 +145,10 @@ export function feasibleActions(p: MindProfile, v: MindView): MindOption[] {
   const errand = v.intent.startsWith("errand:") || v.intent.startsWith("deliver:");
   // Gatherers carry what they've gathered to whoever buys it (the farmhand's wheat to the mill).
   for (const [item, d] of Object.entries(p.sells ?? {})) {
-    const n = have(v.stock, item);
-    if (working && !errand && n >= d.min) out.push({ key: `sell_${item}`, description: `Carry their ${n} ${word(p, item)} to ${d.place} and sell them (${d.price} coins each)` });
+    const n = have(v.stock, item) - (d.keep ?? 0);
+    if (working && !errand && n >= d.min) {
+      out.push({ key: `sell_${item}`, description: d.to?.length ? `Carry their ${n} ${word(p, item)} to ${placesOf(d)}, whichever pays most now, and sell them` : `Carry their ${n} ${word(p, item)} to ${d.place} and sell them (${d.price} coins each)` });
+    }
   }
   for (const [item, s] of Object.entries(p.supplies)) {
     if (working && !errand && have(v.stock, item) < s.low && v.purse >= s.price * 2) {
@@ -187,9 +205,11 @@ export function stateText(p: MindProfile, v: MindView): string {
   const s = v.stock;
   const ingredients = [...new Set([...Object.values(p.crafts).flatMap((r) => Object.keys(r.uses)), ...Object.keys(p.supplies), ...Object.keys(p.asks), ...Object.keys(p.sells ?? {})])];
   const errandItem = v.intent.startsWith("errand:") ? v.intent.slice(7) : null;
-  const deliverItem = v.intent.startsWith("deliver:") ? v.intent.slice(8) : null;
+  const delivery = deliveryOf(v.intent);
+  const deliverItem = delivery?.item ?? null;
+  const deliverTo = deliverItem && p.sells?.[deliverItem] ? sellTargets(p.sells[deliverItem])[delivery!.target]?.place : undefined;
   const errand = errandItem ? ` (to ${p.supplies[errandItem]?.place ?? "buy supplies"} for ${word(p, errandItem)})`
-    : deliverItem ? ` (to ${p.sells?.[deliverItem]?.place ?? "a buyer"} to sell ${word(p, deliverItem)})` : "";
+    : deliverItem ? ` (to ${deliverTo ?? "a buyer"} to sell ${word(p, deliverItem)})` : "";
   const outing = v.intent.startsWith("outing:") ? p.outings?.[v.intent.slice(7)] : undefined;
   const t = v.table;
   const lines = [

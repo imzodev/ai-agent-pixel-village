@@ -263,6 +263,59 @@ export const NPC_DEFS: NpcDef[] = [
     appearance: { body: "female", skin: "#c68e5a", hair: "long", hairColor: "#1a1a1a", shirtColor: "#5a3a6a", pantsColor: "#2e2e3a" },
     mood: "curious",
   },
+  // ── Living traders who move goods between makers, inns and towns (src/lib/mind/profiles.ts)
+  {
+    key: "hollowmere_maren",
+    name: "Maren",
+    trades: ["carpenter"],
+    role: "Carpenter of Hollowmere",
+    persona:
+      "Maren is a wiry, sawdust-dusted carpenter with a workshop beside Ansel's woodpile in Hollowmere. She buys his logs and Bjorn's iron fittings, saws planks and makes stools, chairs, tables and bookshelves, sells them from her porch and carries the rest to Pip in the grove or to Ivy's inn, wherever they pay best.",
+    greeting: "Mind the shavings. Looking for a chair, or have you got logs to sell?",
+    tilePos: [-322, 18],
+    wanderRadius: 30,
+    appearance: { body: "female", skin: "#e8c39e", hair: "bob", hairColor: "#8c5a2b", shirtColor: "#6b4a2a", pantsColor: "#3a3a3a" },
+    mood: "focused",
+  },
+  {
+    key: "village_della",
+    name: "Della",
+    trades: ["dairy"],
+    role: "Dairymaid of the Village Ranch",
+    persona:
+      "Della keeps the dairy and the loom at the Village Ranch. Mornings she milks the cows and shears the sheep in their paddocks; afternoons she presses cheese and weaves cloth. The inns buy her cheese and Pip her cloth, and she pays homesteaders well for good milk and wool.",
+    greeting: "Fresh cheese today! And if your homestead has milk or wool to spare, I'm buying.",
+    tilePos: [164, 7],
+    wanderRadius: 30,
+    appearance: { body: "female", skin: "#f1c9a5", hair: "long", hairColor: "#c8a24a", shirtColor: "#8fb3d9", pantsColor: "#4a3a2a" },
+    mood: "cheerful",
+  },
+  {
+    key: "village_fenwick",
+    name: "Fenwick",
+    trades: ["brewer"],
+    role: "Brewer of the Grove",
+    persona:
+      "Fenwick is a round, red-cheeked brewer with a cider press and a few barrels by the Wayfarer's Rest. He buys apples, grapes and pears from the homesteads' vineyards and orchards (and from the caravan), presses cider and makes wine, and carries the bottles to whichever inn pays best: Hettie's, Ivy's in Hollowmere or the Salted Gull in Brightwater.",
+    greeting: "Apples? Grapes? I'll turn 'em into something worth drinking. What've you brought?",
+    tilePos: [27, 22],
+    wanderRadius: 25,
+    appearance: { body: "male", skin: "#f1c9a5", hair: "plain", hairColor: "#a04a2a", shirtColor: "#7a2f3a", pantsColor: "#4a3a2a" },
+    mood: "jolly",
+  },
+  {
+    key: "village_tamsin",
+    name: "Tamsin",
+    trades: ["caravan"],
+    role: "Caravan Trader",
+    persona:
+      "Tamsin drives a painted wagon round the grove, Hollowmere, Brightwater and Coralwick. In each town she sells what the last one had plenty of, buys up what this one has too much of, and brings oranges, coconuts and bananas from the coast. Where she's been, prices even out. Her wagon is a little shop while she's in town.",
+    greeting: "Roll up! Fresh from the coast and the hills — and if your town's drowning in something, I'm buying.",
+    tilePos: [30, 25],
+    wanderRadius: 20,
+    appearance: { body: "female", skin: "#a86a3d", hair: "long", hairColor: "#2b1d14", shirtColor: "#c27c2c", pantsColor: "#264653" },
+    mood: "lively",
+  },
   // ── The village inn
   {
     key: "village_hettie",

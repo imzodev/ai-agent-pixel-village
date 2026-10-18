@@ -52,7 +52,7 @@ export async function POST(req: Request) {
       // A continent town's people give their friends a discount.
       const town = townOfNpc(npcKey);
       let unit = town ? discounted(offer.price, await reputationWith(me.id, town)) : offer.price;
-      // A baker with a mind gives her dear friends 20% off (src/lib/mind/).
+      // An NPC with a mind gives dear friends DEAR_DISCOUNT off (src/lib/mind/).
       const [seller] = isMindNpc(npcKey) ? await db.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, npcKey)) : [];
       if (seller && (await tierFor(seller.id, me.id)) === "dear") unit = Math.max(1, Math.ceil(unit * (1 - DEAR_DISCOUNT)));
       const cost = unit * qty;

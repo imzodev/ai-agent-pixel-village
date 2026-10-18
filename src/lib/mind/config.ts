@@ -1,10 +1,12 @@
 // Which NPCs have a mind, and how often they think (env-tunable).
 //
-//   MIND_NPCS=village_marigold,hollowmere_bjorn,hollowmere_ansel,village_rowan,village_hollis
+//   MIND_NPCS=village_marigold,hollowmere_bjorn,hollowmere_ansel,village_rowan,village_hollis,
+//             hollowmere_maren,village_della,village_fenwick,village_tamsin
 //                                NPC keys ("" = none); each needs a profile
 //                                (src/lib/mind/profiles.ts). The supply chains
-//                                (Rowan → Hollis → Marigold, Ansel → Bjorn) are
-//                                real only when both ends are listed.
+//                                (Rowan → Hollis → Marigold, Ansel → Bjorn and
+//                                Maren, Bjorn → Maren) are real only when both
+//                                ends are listed.
 //   MIND_INTERVAL_MS=60000       how often each one thinks (asks Jev)
 //   MIND_INCOME_SCALE=1          multiplies every mind's income and purse
 //                                target (profiles.ts `income`)

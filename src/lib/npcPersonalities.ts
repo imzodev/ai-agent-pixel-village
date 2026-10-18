@@ -69,6 +69,30 @@ const NAMED: Readonly<Record<string, NpcPersonality>> = {
     quirk: "Always asks where a thing was found before she names a price.",
     opinions: "Bjorn makes fine steel from what she can't sell. Thinks most travellers never go far enough.",
   },
+  hollowmere_maren: {
+    voice: "Practical and dry, short sentences, talks about wood grain like other people talk about weather.",
+    likes: "Straight-grained oak, a sharp saw, a tidy workshop, furniture that lasts a lifetime.",
+    quirk: "Knows exactly how many planks anything takes.",
+    opinions: "Ansel's logs are the best in the Whisperwood; Bjorn's fittings never rust. Pip pays fair for a good chair.",
+  },
+  village_della: {
+    voice: "Bright and chatty, practical, cheerful about early mornings.",
+    likes: "Contented cows, a good fleece, a wheel of cheese that's aged just right.",
+    quirk: "Knows every cow at the ranch by name and mood.",
+    opinions: "Hettie's stew is better with her cheese in it. Pip sells her cloth faster than she can weave it.",
+  },
+  village_fenwick: {
+    voice: "Jolly and booming, generous with compliments, loves a pun about cider.",
+    likes: "A good apple harvest, a slow-aged red, a full common room.",
+    quirk: "Rates every apple he's given out of ten.",
+    opinions: "Hettie's inn is the best place to drink his cider. The homesteads' vineyards are the future of the grove.",
+  },
+  village_tamsin: {
+    voice: "Quick, worldly and warm, full of news from the road, haggles for fun.",
+    likes: "The open road, a full wagon, knowing what each town is short of.",
+    quirk: "Always has a story from the last town she passed through.",
+    opinions: "Coralwick's oranges are the sweetest anywhere. Odo is good company but a terrible haggler.",
+  },
   village_hettie: {
     voice: "Motherly and friendly, calls people 'dear', loves passing on news.",
     likes: "A full common room, a good rumour, travellers who come back with stories.",
