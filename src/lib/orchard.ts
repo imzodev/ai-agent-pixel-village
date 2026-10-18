@@ -27,6 +27,6 @@ export const ORCHARD_PRODUCTS: readonly { key: string; name: string; icon: strin
   { key: "cherry_jam", name: "Cherry Jam", icon: "🫙", value: 13, heal: 10, description: "Dark and sweet. Restores 10 HP." },
   { key: "peach_jam", name: "Peach Jam", icon: "🫙", value: 13, heal: 10, description: "Sunshine in a jar. Restores 10 HP." },
   { key: "plum_jam", name: "Plum Jam", icon: "🫙", value: 13, heal: 10, description: "From the darkwood's plums. Restores 10 HP." },
-  { key: "cherry_pie", name: "Cherry Pie", icon: "🥧", value: 10, heal: 16, description: "Marigold's, from your cherries. Restores 16 HP." },
-  { key: "peach_pie", name: "Peach Pie", icon: "🥧", value: 10, heal: 16, description: "Marigold's, from your peaches. Restores 16 HP." },
+  { key: "cherry_pie", name: "Cherry Pie", icon: "🥧", value: 6, heal: 16, description: "Marigold's, from your cherries. Restores 16 HP." },
+  { key: "peach_pie", name: "Peach Pie", icon: "🥧", value: 6, heal: 16, description: "Marigold's, from your peaches. Restores 16 HP." },
 ];

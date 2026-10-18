@@ -12,6 +12,7 @@ import {
   timestamp,
   jsonb,
   real,
+  doublePrecision,
   uniqueIndex,
   index,
   varchar,
@@ -842,6 +843,20 @@ export const npcRelations = pgTable(
     lastAt: timestamp("last_at"),
   },
   (t) => [primaryKey({ columns: [t.npcA, t.npcB] })],
+);
+
+/** Supply and demand (src/lib/market.ts): how much of an item each market
+ *  (village, hollowmere, a town key…) has been sold lately. `glut` decays
+ *  from `updated_at` with DEMAND_HALF_LIFE_MS. */
+export const marketDemand = pgTable(
+  "market_demand",
+  {
+    market: text("market").notNull(),
+    itemKey: text("item_key").notNull(),
+    glut: doublePrecision("glut").notNull().default(0),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.market, t.itemKey] })],
 );
 
 /** How a homestead has grown (src/lib/ranchUpgrades.ts), by its lot key:

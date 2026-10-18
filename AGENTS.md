@@ -89,7 +89,7 @@ workshop lots are gone: everything they did is a homestead parcel now.
   `homestead_parcels` (lot, col, row, use).
 - **Rules** (`src/lib/homestead.ts`, pure, every number in one place): a 6×6
   grid of 10×10-tile parcels; the starter 2×2 is free (two fields, two
-  pastures); every other parcel costs `PARCEL_PRICE` (60), must touch one you own,
+  pastures); every other parcel costs `PARCEL_PRICE` (2000), must touch one you own,
   and the cap rises with level (`CAP_BY_LEVEL`: 4 → 36; keep `LEVEL_UNLOCKS`
   in step). Uses: field (16 plots), pasture (8 space: hen 1, sheep 2, cow 4;
   touching pastures are one pen), vineyard (4 vines), orchard (4 trees), barn,
@@ -369,6 +369,47 @@ shown in the Home panel and in the showroom in front of the workshop
 (`ranch_state.display`, 6 spots: `PARCEL_SHOWROOM`). Shops buy furniture, and
 NPCs post **commissions** (`src/lib/commissions.ts`): missions keyed
 `com_<npcKey>_<ms>` from tickd's `tickCommissions`; the first delivery closes it.
+
+## Economy (prices, markets, land)
+
+One value per item (`src/lib/itemDefs.ts`, which `seed.ts` re-exports as
+`ITEM_DEFS`) drives every NPC price (`src/lib/economy.ts`):
+
+- **Buying from players**: `BUYERS` in `trade.ts` says what each NPC takes
+  (categories like `fish`, `drink`, `farland`, or item keys) and its
+  `specialty`. Specialists pay full value; others `BUY_RATE` (0.7). `TRADES` is
+  built from it; lines carry no numbers. Odo (village plaza) buys nearly
+  anything at the general rate; Vesna (Hollowmere) buys far-land materials and
+  boss trophies; each town's shopkeeper buys its land's goods.
+- **Selling to players**: `SHOP_STOCK` lists who sells what; prices are
+  `shopPrice` (goods `SELL_MARKUP` 1.5 × value, at least value + 1; gear and
+  seeds at their value).
+- **No loops** (`economy.test.ts`): the most anyone pays (specialist ×
+  Haggler) is below the least anything sells for after every discount (town
+  reputation, a mind NPC's "dear" 20%, rounded up). Every good with a value
+  has a buyer. A new item needs a value and a category.
+- **Supply & demand** (`src/lib/market.ts`, `marketServer.ts`,
+  `market_demand`): a market is the NPC key's place (`village`,
+  `hollowmere`, a town key). Each unit sold adds to its `glut`, which halves
+  every `DEMAND_HALF_LIFE_MS` (3 h); buyers pay `base / (1 + glut / depth)`,
+  never under `PRICE_FLOOR` (10%), each unit priced after the one before.
+  A market's `depth` grows with its buyers of that item (`marketDepth`: per-item
+  `depthOf` × `buyerWeight`, a specialist 1, anyone else 0.5), so adding NPCs who
+  buy something makes that town take more of it.
+  `recordSale` is one atomic upsert. All selling goes through
+  `performSell` (`src/lib/sellServer.ts`): the player must be within
+  `SELL_REACH_PX` of the buyer. NPCs mention flooded markets in talk (`marketNews`).
+- **Pace**: gather/chop at most 5 per 3.5 s, a cast every 2 s
+  (`gatherLimiter`, `castLimiter`).
+- **Land**: `PARCEL_PRICE` 2000, flat; the starter 4 are free.
+- `scripts/economy-report.ts` prints coins an hour per activity and hours per
+  parcel; run it after changing values, rates or demand.
+- **Tool wear** (`src/lib/wear.ts`, `wearServer.ts`): axes, blades, bows and
+  the rod carry `meta.wear` (0–100, like `meta.plus`); each chop, hit, shot or
+  cast adds `WEAR_PER_USE` to the copy in hand (split off a stack first). From
+  `WORN_AT` (75) they work a little worse, at 100 ("dull") much worse; they
+  never break. Bjorn repairs the most worn copy at the forge
+  (`POST /api/forge { action: "repair" }`) for `REPAIR_K` × √value × wear.
 
 ## Admin endpoints
 

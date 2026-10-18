@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { GEAR_SLOT, GEAR_SLOT_LABEL, slotOf, toUnequip } from "@/lib/gear";
 
-const SEED = fs.readFileSync("src/lib/seed.ts", "utf8"); // ITEM_DEFS (importing seed.ts needs a database)
+const SEED = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")); // ITEM_DEFS (importing seed.ts needs a database)
 const equippable = [...SEED.matchAll(/key: "([a-z_]+)",[^\n]*equippable: true/g)].map((m) => m[1]);
 
 describe("gear slots", () => {

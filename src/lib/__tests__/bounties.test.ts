@@ -6,7 +6,7 @@ import { GATHER, boardPoint, describe as describeBounty, pickKind, rewardFor, ta
 import { TOWNS, townAt, townDecorAt } from "@/lib/settlements";
 import type { BountyData } from "@/types/bounty";
 
-const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
+const SEED_KEYS = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
 
 describe("bounties", () => {
   const samples: BountyData[] = [

@@ -29,8 +29,8 @@ export const STARTER: readonly ParcelCell[] = [
   { col: 0, row: 0 }, { col: 1, row: 0 },
   { col: 0, row: 1 }, { col: 1, row: 1 },
 ];
-/** Every parcel past the starter ones costs the same, like real land. */
-export const PARCEL_PRICE = 60;
+/** Every parcel past the starter ones costs the same, like real land: a real goal, hours of play each. */
+export const PARCEL_PRICE = 2000;
 /** How many homesteads a player may hold. One for now; see canClaimHomestead. */
 export const MAX_HOMESTEADS = 1;
 /** Owners away this long lose their homestead (like lots). */

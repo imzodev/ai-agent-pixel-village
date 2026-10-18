@@ -7,7 +7,7 @@ import { RECIPES } from "@/lib/recipes";
 import { stockForNpc } from "@/lib/trade";
 import { WEAPON_LAYERS, SHEET_W, SHEET_H, SHOOT_ROW, SHOOT_FRAMES } from "@/game/lpc";
 
-const SEED = fs.readFileSync("src/lib/seed.ts", "utf8");
+const SEED = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8"));
 
 describe("archery", () => {
   it("every bow and arrows are items, and every bow has art", () => {

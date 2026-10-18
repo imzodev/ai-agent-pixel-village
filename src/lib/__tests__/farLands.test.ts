@@ -11,7 +11,7 @@ import { wantedName } from "@/lib/bounties";
 import { RECIPES } from "@/lib/recipes";
 import type { Biome } from "@/types/continent";
 
-const SEED = fs.readFileSync("src/lib/seed.ts", "utf8");
+const SEED = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8"));
 const FAR = ["dune_stalker", "bog_hag", "ice_troll", "gloam_stag", "basalt_golem", "wyvern", "rime_wraith", "elder_treant"];
 const BIOMES: Biome[] = ["beach", "meadow", "forest", "darkwood", "swamp", "desert", "badlands", "snow", "peak", "snowpeak", "mesa"];
 

@@ -9,7 +9,7 @@ const RIVER = { tx: -621, ty: -111 };
 const POND = { tx: -297, ty: 26 };
 
 // seed.ts talks to the database on import, so read its keys as text.
-const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
+const SEED_KEYS = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
 
 describe("fish data", () => {
   it("12 fish, each an item Marina buys", () => {

@@ -8,6 +8,9 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, worldState } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
+import { castLimiter } from "@/lib/rateLimit";
+import { wornRodZone } from "@/lib/wear";
+import { wearTool } from "@/lib/wearServer";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
 import { gearOf } from "@/lib/combat";
 import { BITE_MAX_MS, BITE_MIN_MS, CAST_TTL_MS, CATCH_ZONE, FISHING_ROD, fishDef, rollFish, waterInFront } from "@/lib/fishing";
@@ -32,7 +35,8 @@ export async function POST(req: Request) {
     for (const [id, c] of casts) if (now - c.createdAt > CAST_TTL_MS) casts.delete(id);
 
     if (body.action === "cast") {
-      const { bag, plus } = await gearOf(me.id);
+      if (!castLimiter.allow(String(me.id))) return Response.json({ error: "Let the line settle a moment." }, { status: 429 });
+      const { bag, plus, wear } = await gearOf(me.id);
       if (!bag.includes(FISHING_ROD)) return Response.json({ error: "You need a fishing rod. Pip and Marina sell them." }, { status: 400 });
       const p = getLivePlayerPosition(me.id) ?? me;
       const facing = String(body.facing ?? "down");
@@ -49,9 +53,11 @@ export async function POST(req: Request) {
         createdAt: now,
       };
       casts.set(me.id, cast);
+      // The rod wears with each cast; a worn one gives a narrower catch zone (src/lib/wear.ts).
+      const worn = await wearTool(me.id, FISHING_ROD, "cast");
       return Response.json({
-        ok: true, castId: cast.id, biteInMs: Math.round(cast.biteAt - now),
-        zone: Math.min(0.6, CATCH_ZONE[fish.rarity] + (plus[FISHING_ROD] ?? 0) * ROD_ZONE_PER_PLUS), water: spot.water,
+        ok: true, castId: cast.id, biteInMs: Math.round(cast.biteAt - now), notices: worn ? [worn] : [],
+        zone: Math.max(0.06, Math.min(0.6, CATCH_ZONE[fish.rarity] + (plus[FISHING_ROD] ?? 0) * ROD_ZONE_PER_PLUS - wornRodZone(wear[FISHING_ROD] ?? 0))), water: spot.water,
         bobber: { x: spot.tx * 16 + 8, y: spot.ty * 16 + 8 },
       });
     }

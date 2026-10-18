@@ -59,6 +59,12 @@ export const signupIpLimiter = new SlidingWindowLimiter({ max: envInt("SIGNUP_PE
 export const chatBurstLimiter = new SlidingWindowLimiter({ max: 1, windowMs: 2_000 });
 export const chatMinuteLimiter = new SlidingWindowLimiter({ max: 15, windowMs: 60_000 });
 
+// Gathering, chopping and casting: about as fast as a person clicks, not a
+// bot (src/app/api/act, src/app/api/fish). A short burst is fine; the average is
+// one gather or chop per 0.7 s and one cast per 2 s.
+export const gatherLimiter = new SlidingWindowLimiter({ max: 5, windowMs: 3_500 });
+export const castLimiter = new SlidingWindowLimiter({ max: 1, windowMs: 2_000 });
+
 // Reports (/api/report): a few an hour per player.
 export const reportLimiter = new SlidingWindowLimiter({ max: 6, windowMs: 3_600_000 });
 

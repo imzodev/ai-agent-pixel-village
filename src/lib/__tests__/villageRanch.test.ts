@@ -15,7 +15,7 @@ import { blockedFromChunk } from "@/lib/chunkCollision";
 import type { Rect } from "@/lib/worldmap";
 import type { RanchSpecies } from "@/types/villageRanch";
 
-const ITEM_SOURCE = fs.readFileSync("src/lib/seed.ts", "utf8"); // ITEM_DEFS (importing seed.ts needs a database)
+const ITEM_SOURCE = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")); // ITEM_DEFS (importing seed.ts needs a database)
 const manifest = JSON.parse(fs.readFileSync("public/buildings/buildings.json", "utf8"));
 const entries: { key: string; tx: number; ty: number; file: string }[] = Array.isArray(manifest) ? manifest : manifest.buildings;
 const templates = new Map<string, { layers: { name: string; data: number[] }[] }>();

@@ -6,7 +6,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, inventory, items } from "@/db/schema";
 import { FORGE_ITEMS, plusOf, upgradeCost, withPlus } from "./forge";
-import type { ForgeItemView, ForgeView } from "@/types/forge";
+import { mostWorn, repairCost, wearOf, wears } from "./wear";
+import type { ForgeItemView, ForgeView, RepairView } from "@/types/forge";
 
 /** Your upgradable gear (one entry per row, best first), coins and materials. */
 export async function forgeView(characterId: number): Promise<ForgeView> {
@@ -30,7 +31,18 @@ export async function forgeView(characterId: number): Promise<ForgeView> {
     const d = byKey.get(r.itemKey);
     list.push({ itemKey: r.itemKey, name: withPlus(d?.name ?? r.itemKey, plus), icon: d?.icon ?? "📦", family: f.family, plus, next: upgradeCost(r.itemKey, plus) });
   }
-  return { items: list, coins: c?.coins ?? 0, have };
+  // Worn tools Bjorn can repair: the most worn copy of each (src/lib/wear.ts).
+  const repairs: RepairView[] = [];
+  for (const key of new Set(rows.map((r) => r.itemKey))) {
+    if (!wears(key)) continue;
+    const used = mostWorn(rows.filter((r) => r.itemKey === key));
+    const wear = wearOf(used.meta);
+    if (wear <= 0) continue;
+    const d = byKey.get(key);
+    repairs.push({ itemKey: key, name: withPlus(d?.name ?? key, plusOf(used.meta)), icon: d?.icon ?? "📦", wear: Math.round(wear), cost: repairCost(key, wear) });
+  }
+  repairs.sort((a, b) => b.wear - a.wear);
+  return { items: list, repairs, coins: c?.coins ?? 0, have };
 }
 
 /**

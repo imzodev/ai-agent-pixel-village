@@ -20,8 +20,17 @@ export type ForgeItemView = {
   next: ForgeCost | null;
 };
 
-/** The forge panel's data: your upgradable gear, coins and materials on hand. */
-export type ForgeView = { items: ForgeItemView[]; coins: number; have: Record<string, number> };
+/** A worn tool Bjorn can repair: how worn the copy you use is (0–100) and what it costs. */
+export type RepairView = { itemKey: string; name: string; icon: string; wear: number; cost: number };
 
-/** Gear the character carries: item keys, what's equipped, and each key's best upgrade level. */
-export type Gear = { bag: string[]; equipped: string[]; plus: Record<string, number> };
+/** The forge panel's data: your upgradable gear, worn tools, coins and materials on hand. */
+export type ForgeView = { items: ForgeItemView[]; repairs: RepairView[]; coins: number; have: Record<string, number> };
+
+/** Gear the character carries: item keys, what's equipped, and each key's best upgrade level and that copy's wear. */
+export type Gear = { bag: string[]; equipped: string[]; plus: Record<string, number>; wear: Record<string, number> };
+
+/** How worn a tool is: fine, worn (from WORN_AT) or dull (at WEAR_MAX). */
+export type WearLevel = "fine" | "worn" | "dull";
+
+/** What a use of a tool is: a chop, a melee hit, a bow shot or a cast. */
+export type WearUse = "chop" | "hit" | "shot" | "cast";

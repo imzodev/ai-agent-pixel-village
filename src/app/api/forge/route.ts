@@ -1,11 +1,13 @@
-// The Hollowmere forge: GET your upgradable gear; POST { itemKey } to have
-// Bjorn upgrade it (you must be standing at the forge).
+// The Hollowmere forge: GET your upgradable gear and worn tools; POST
+// { itemKey } to have Bjorn upgrade it, { action: "repair", itemKey } to
+// repair it (you must be standing at the forge).
 
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { getBuildingDoor } from "@/lib/buildingsServer";
 import { getLivePlayerPosition } from "@/lib/world-stream";
 import { FORGE_KEY, FORGE_REACH_PX } from "@/lib/forge";
 import { forgeUpgrade, forgeView } from "@/lib/forgeServer";
+import { repairTool } from "@/lib/wearServer";
 import { logEvent } from "@/lib/game";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,12 @@ export async function POST(req: Request) {
     const door = await getBuildingDoor(FORGE_KEY);
     const p = getLivePlayerPosition(me.id) ?? me;
     if (!door || Math.hypot(door.x - p.x, door.y - p.y) > FORGE_REACH_PX) return Response.json({ error: "Walk up to the forge first." }, { status: 400 });
+    // { action: "repair", itemKey }: Bjorn takes the wear off a tool for coins (src/lib/wear.ts).
+    if (body.action === "repair") {
+      const fix = await repairTool(me.id, String(body.itemKey ?? ""));
+      if (!fix.ok) return Response.json({ error: fix.error }, { status: 400 });
+      return Response.json({ ok: true, message: `🔧 Bjorn hones it back to new, for ${fix.cost} coins.`, view: await forgeView(me.id) });
+    }
     const r = await forgeUpgrade(me.id, String(body.itemKey ?? ""));
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
     if (r.plus === 3) await logEvent("craft", `${me.name}'s ${r.name} rang out from Bjorn's anvil!`, "character", me.id, me.x, me.y);

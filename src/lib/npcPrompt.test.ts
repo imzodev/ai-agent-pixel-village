@@ -169,7 +169,7 @@ describe("knowledge is spread out, and always true", () => {
   });
 
   it("keeps every sheet small enough for the prompt", () => {
-    for (const key of everyone) expect(knowledgeFor(key).length, key).toBeLessThan(6000);
+    for (const key of everyone) expect(knowledgeFor(key).length, key).toBeLessThan(6500); // ~1.6k tokens
   });
 
   it("tells them to say they don't know rather than guess", () => {

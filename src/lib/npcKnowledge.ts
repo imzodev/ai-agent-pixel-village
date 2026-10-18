@@ -14,7 +14,9 @@
 
 import { NPC_DEFS, npcDef } from "./npcDefs";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
-import { SHOP_STOCK, stockForNpc, tradesForNpc } from "./trade";
+import { BUYERS, SHOP_STOCK, stockForNpc } from "./trade";
+import { CATEGORY_WORDS } from "./economy";
+import type { GoodsCategory } from "@/types/economy";
 import { recipesForNpc } from "./recipes";
 import { RANCH_SPECIES } from "./ranch";
 import { PARCEL_PRICE } from "./homestead";
@@ -141,13 +143,17 @@ function bearing(from: KnowledgePlace, to: KnowledgePlace): string {
 /** One line about what an NPC does: sells, buys, makes. */
 function tradeLine(npcKey: string, detailed: boolean, itemName: ItemNameOf): string {
   const sells = stockForNpc(npcKey).map((t) => (detailed ? `${itemName(t.itemKey)}${t.qty > 1 ? ` ×${t.qty}` : ""} (${t.price} coins)` : itemName(t.itemKey)));
-  const buys = tradesForNpc(npcKey).map((t) => (detailed ? `${itemName(t.itemKey)} (pays ${t.price})` : itemName(t.itemKey)));
+  // What they buy, in words (categories stay categories); prices move with demand (src/lib/market.ts).
+  const spec = BUYERS[npcKey];
+  const word = (k: string) => CATEGORY_WORDS[k as GoodsCategory] ?? itemName(k);
+  const buys = spec ? spec.buys.map(word) : [];
+  const best = detailed && spec?.specialty?.length ? `; best prices for ${list(spec.specialty.map(word), 4)}` : "";
   const makes = recipesForNpc(npcKey).map((r) => r.name);
   const parts: string[] = [];
   // Everything they sell, always: "who sells X?" must find X here.
   if (sells.length) parts.push(`sells ${sells.join(", ")}`);
-  if (buys.length) parts.push(`buys ${list(buys, detailed ? 12 : 6)}`);
-  if (makes.length) parts.push(`crafts ${list(makes, detailed ? 12 : 6)}`);
+  if (buys.length) parts.push(`buys ${list(buys, detailed ? 8 : 4)}${best}`);
+  if (makes.length) parts.push(`crafts ${list(makes, detailed ? 12 : 3)}`);
   return parts.join("; ");
 }
 
@@ -238,10 +244,11 @@ function howThingsWork(): string[] {
   return [
     `Homesteads lie south of the village: claim a free site at its "For sale" sign, then buy land next to it at ${PARCEL_PRICE} coins a parcel. Each parcel is a field, pasture, vineyard, orchard, the barn or the workshop.`,
     `Nobody sells animals. Players buy them on their own homestead, as many as its pastures hold (${animals}). Fed with crops, they give ${Object.values(RANCH_SPECIES).map((s) => s.produce).join(", ")}.`,
+    "Selling: specialists pay most; Odo (village plaza) buys nearly anything for less; Vesna (Hollowmere) buys far-land curios and boss trophies. A town that's had plenty of something pays less for it for a while.",
     `Waystones: walking up to one attunes it; from beside a waystone, travel to any attuned one is free (${TRAVEL_COST} coins from anywhere else, from the map).`,
     "Every town has an inn where the innkeeper sells hot food and travellers can rest by the hearth.",
     `The ${TOWNS.length} towns out on the continent (${TOWNS.slice(0, 3).map((t) => t.name).join(", ")}…) each have a bounty board with jobs that pay.`,
-    "Bjorn at the forge in Hollowmere upgrades swords, axes and fishing rods (up to +3) for coin and materials.",
+    "Bjorn at the forge in Hollowmere upgrades swords, axes and fishing rods (up to +3) for coin and materials, and repairs worn tools (they wear with use and work worse when worn).",
   ];
 }
 

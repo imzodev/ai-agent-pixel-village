@@ -1,15 +1,14 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { characters, characterMissions, conversations, missions, npcs } from "@/db/schema";
+import { characterMissions, conversations, missions, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { addItem, emitLead, grantReward, logEvent, removeItem } from "@/lib/game";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
-import { adjustStock, mindPurse, npcBuys, onRequestTurnedIn } from "@/lib/mind/mindServer";
-import { cantAffordText } from "@/lib/mind/profile";
-import { regardHelped } from "@/lib/mind/regard";
+import { onRequestTurnedIn } from "@/lib/mind/mindServer";
 import { deliverOrder, takeOrder } from "@/lib/ordersServer";
+import { performSell } from "@/lib/sellServer";
 import { onCommissionDone } from "@/lib/commissionsServer";
 import { isCommissionKey } from "@/lib/commissions";
 
@@ -75,21 +74,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (m.sponsorId) await emitLead({ sponsorId: m.sponsorId, characterId: character.id, npcId: npc.id, kind: "mission_completed", note: m.title });
       await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Mission complete: ${m.title})` });
     } else if (offer.type === "sell") {
-      // An NPC with a mind pays from its own purse (src/lib/mind/).
-      const purse = await npcBuys(npc.key, offer.itemKey, offer.qty, offer.price);
-      if (!purse.ok) return Response.json({ error: cantAffordText(npc.name, (await mindPurse(npc.key)) ?? 0, offer.itemKey, offer.price / Math.max(1, offer.qty)) }, { status: 400 });
-      const ok = await removeItem(character.id, offer.itemKey, offer.qty);
-      if (!ok) {
-        if (purse.npcId) await adjustStock(purse.npcId, { [offer.itemKey]: -offer.qty }, offer.price, true);
-        return Response.json({ error: "You don't have that anymore." }, { status: 400 });
-      }
-      if (purse.npcId) await regardHelped(purse.npcId, character.id, 1);
-      const newCoins = (character.coins ?? 0) + offer.price;
-      await db.update(characters).set({ coins: newCoins }).where(eq(characters.id, character.id));
-      gained.push({ itemKey: "coins", qty: offer.price, label: `${offer.price} coin` });
-      text = `${npc.name} counts out ${offer.price} coin and tucks the ${offer.itemKey.replace("_", " ")} away. "${offer.line}"`;
-      await logEvent("trade", `${character.name} sold ${offer.qty} ${offer.itemKey} to ${npc.name} for ${offer.price} coin.`, "npc", npc.id, npc.x, npc.y);
-      await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Bought ${offer.qty} ${offer.itemKey} for ${offer.price} coin)` });
+      // The same sale as the Sell window: market price, Haggler, purse, atomic coins (src/lib/sellServer.ts).
+      const r = await performSell({ characterId: character.id, at: character, itemKey: offer.itemKey, qty: offer.qty, npcKey: npc.key });
+      if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+      gained.push({ itemKey: "coins", qty: r.gained, label: `${r.gained} coin` });
+      text = `${npc.name} counts out ${r.gained} coin and tucks the ${offer.itemKey.replace(/_/g, " ")} away. "${offer.line}"`;
+      await logEvent("trade", `${character.name} sold ${r.qty} ${offer.itemKey} to ${npc.name} for ${r.gained} coin.`, "npc", npc.id, npc.x, npc.y);
+      await db.insert(conversations).values({ characterId: character.id, npcId: npc.id, role: "npc", text: `(Bought ${r.qty} ${offer.itemKey} for ${r.gained} coin)` });
     } else if (offer.type === "discount") {
       const sponsor = await loadSponsor(npc);
       if (!sponsor) return Response.json({ error: "Sponsor inactive." }, { status: 400 });

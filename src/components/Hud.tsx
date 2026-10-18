@@ -9,14 +9,18 @@ import { formatBinding, prettyKey } from "@/game/input/bindings";
 import type { ConversationSource, Offer, Recipe, TalkLine, TradeItem } from "@/lib/types";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
 import type { BuyerPurse } from "@/types/trade";
+import type { MarketPrice, MarketTrend } from "@/types/economy";
+import { affordableBulk, bulkPay } from "@/lib/market";
+import { marketOf } from "@/lib/economy";
+import { wearOf, wears } from "@/lib/wear";
+import WearBar from "./WearBar";
 import type { FarmView, LotKind, PlantSpot } from "@/types/garden";
-import { affordableQty } from "@/lib/mind/profile";
 import { profileFor } from "@/lib/mind/profiles";
 import type { OrdersPanel } from "@/types/mind";
 import type { MomentNotice } from "@/types/moments";
 import MomentModal from "./MomentModal";
 import { REPORT_REASONS } from "@/lib/moderation";
-import { TRADES, stockForNpc } from "@/lib/trade";
+import { TRADES, marketDepth, stockForNpc } from "@/lib/trade";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
 import { RECIPES, canCraft, maxCraftable, recipesForNpc } from "@/lib/recipes";
 import { ARROW_ITEM, AXE_ITEMS, HAGGLER_MULT, PERKS, bowOf, enemyKind, levelForXp, nextUnlock, unlocksBetween, xpForLevel } from "@/lib/progression";
@@ -1700,7 +1704,7 @@ function BagPanel({ me, onAction, onRead }: { me: Me | null; onAction: (b: Recor
       </div>
       {me.inventory.map((i) => (
         <div key={i.id} className={`rounded-lg border-2 bg-white p-2 ${i.equipped ? "border-emerald-500" : "border-transparent"}`} style={i.itemKey === "discount" ? { borderColor: String(i.meta.color ?? "#e76f51") } : undefined}>
-          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped · {GEAR_SLOT_LABEL[slotOf(i.itemKey)]?.name.toLowerCase()}</span>}</div><div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
+          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped · {GEAR_SLOT_LABEL[slotOf(i.itemKey)]?.name.toLowerCase()}</span>}</div>{wears(i.itemKey) && <WearBar wear={wearOf(i.meta)} />}<div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {i.def?.kind === "consumable" && <Sm on={() => onAction({ action: "use", inventoryId: i.id })}>Eat</Sm>}
             {i.itemKey === "treasure_map" && typeof i.meta.mapId === "number" && <Sm on={() => onRead(i.meta.mapId as number)}>🔍 Read</Sm>}
@@ -2044,19 +2048,26 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
   const firstQtyRef = useRef<HTMLInputElement | null>(null);
   // What the buyer can pay with: undefined while loading, null for no limit.
   const [purse, setPurse] = useState<number | null | undefined>(undefined);
+  // What it pays now: prices fall as its town fills up with something (src/lib/market.ts).
+  const [prices, setPrices] = useState<Record<string, MarketPrice>>({});
+  const [pricesAt, setPricesAt] = useState(0);
   useEffect(() => {
     let live = true;
-    void api<BuyerPurse>(`/api/trade?npcKey=${encodeURIComponent(trade.npcKey)}`).then((r) => { if (live && !r.error) setPurse(r.purse); });
+    void api<BuyerPurse>(`/api/trade?npcKey=${encodeURIComponent(trade.npcKey)}`).then((r) => { if (live && !r.error) { setPurse(r.purse); setPrices(r.prices ?? {}); } });
     return () => { live = false; };
-  }, [trade.npcKey]);
+  }, [trade.npcKey, pricesAt]);
+  /** The market for a row: its base price, the glut now and how deep the market is. */
+  const marketFor = (row: { trade: TradeItem }) => ({ base: prices[row.trade.itemKey]?.base ?? row.trade.price, glut: prices[row.trade.itemKey]?.glut ?? 0, depth: prices[row.trade.itemKey]?.depth ?? marketDepth(marketOf(trade.npcKey), row.trade.itemKey) });
+  /** What `qty` of a row fetch together, Haggler included. */
+  const quote = (row: { trade: TradeItem }, qty: number) => { const m = marketFor(row); return Math.round(bulkPay(m.base, m.glut, m.depth, qty) * mult); };
   /** How many of a row the buyer can pay for (all while unknown or unlimited). */
-  const affordable = (row: { trade: TradeItem; have: number }) => (purse == null ? row.have : affordableQty(row.have, row.trade.price * mult, purse));
+  const affordable = (row: { trade: TradeItem; have: number }) => { const m = marketFor(row); return affordableBulk(m.base, m.glut, m.depth, row.have, purse ?? null, mult); };
 
   const doSell = async (row: { trade: TradeItem; have: number }, qty: number) => {
     if (busy) return;
     setBusy(true);
     const after = await performTrade(row.trade.itemKey, qty);
-    if (after !== undefined) setPurse(after);
+    if (after !== undefined) { setPurse(after); setPricesAt(Date.now()); }
     setBusy(false);
   };
 
@@ -2085,7 +2096,7 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
             if (!firstRow || busy) return;
             const input = firstQtyRef.current;
             const qty = input ? Math.max(1, Math.min(firstRow.have, Number(input.value) || 1)) : 1;
-            if (purse != null && affordableQty(qty, firstRow.trade.price * mult, purse) === 0) return;
+            if (affordable({ ...firstRow, have: qty }) === 0) return;
             void doSell(firstRow, qty);
           },
         },
@@ -2127,7 +2138,7 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
             <div className="rounded bg-stone-100 p-3 text-center text-stone-500">You have nothing {trade.npcName} buys right now.</div>
           )}
           {trade.rows.map((r, i) => (
-            <TradeRow key={r.trade.itemKey} row={r} unit={r.trade.price * mult} canAfford={affordable(r)} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
+            <TradeRow key={r.trade.itemKey} row={r} quote={(qty) => quote(r, qty)} trend={prices[r.trade.itemKey]?.trend} canAfford={affordable(r)} busy={busy} firstQtyRef={i === 0 ? firstQtyRef : undefined} onSell={(qty) => doSell(r, qty)} />
           ))}
         </div>
         <div className="mt-3 flex shrink-0 justify-end"><Btn on={onClose} subtle>Done (Esc)</Btn></div>
@@ -2136,10 +2147,12 @@ function TradeModal({ trade, performTrade, mult, onClose }: {
   );
 }
 
-function TradeRow({ row, unit, canAfford, busy, onSell, firstQtyRef }: {
+function TradeRow({ row, quote, trend, canAfford, busy, onSell, firstQtyRef }: {
   row: { trade: TradeItem; have: number };
-  /** What the buyer pays for one (with Haggler). */
-  unit: number;
+  /** What the buyer pays for so many together (with Haggler; each after the one before). */
+  quote: (qty: number) => number;
+  /** How the buyer's town feels about it now. */
+  trend?: MarketTrend;
   /** How many the buyer can pay for right now (≤ have). */
   canAfford: number;
   busy: boolean;
@@ -2151,7 +2164,8 @@ function TradeRow({ row, unit, canAfford, busy, onSell, firstQtyRef }: {
   // Keep the quantity within what the player holds and the buyer can pay for.
   const clampedQty = Math.min(Math.max(1, qty), Math.max(1, max));
   if (clampedQty !== qty) setQty(clampedQty);
-  const total = Math.round(qty * unit);
+  const total = quote(qty);
+  const unit = quote(1);
   const broke = max === 0;
   return (
     <div className={`flex items-center gap-2 rounded-lg bg-white p-2 shadow ${broke ? "opacity-60" : ""}`}>
@@ -2159,6 +2173,7 @@ function TradeRow({ row, unit, canAfford, busy, onSell, firstQtyRef }: {
       <div className="flex-1">
         <div className="font-bold capitalize">{row.trade.itemKey.replace(/_/g, " ")}</div>
         <div className="text-[11px] text-stone-500">you have {row.have}{!broke && canAfford < row.have ? ` · can afford ${canAfford}` : ""}</div>
+        {trend && trend !== "fresh" && <div className={`text-[11px] font-bold ${trend === "glut" ? "text-rose-700" : "text-amber-700"}`} title="Prices recover over a few hours; another town pays full price.">↓ {trend === "glut" ? "they're swimming in it here" : "they've had plenty lately"}</div>}
       </div>
       {broke ? (
         <div className="text-right text-[11px] font-bold text-stone-500">Can&apos;t afford one<br />right now ({Math.round(unit)} 🪙)</div>
@@ -2180,7 +2195,7 @@ function TradeRow({ row, unit, canAfford, busy, onSell, firstQtyRef }: {
           </div>
           <div className="w-20 text-right">
             <div className="text-[11px] text-stone-500">= {total} 🪙</div>
-            <div className="text-[11px] text-stone-500">{Math.round(unit * 10) / 10} ea</div>
+            <div className="text-[11px] text-stone-500">{qty > 1 ? `from ${unit} ea` : `${unit} ea`}</div>
           </div>
           <div className="flex flex-col gap-1">
             <button disabled={busy || qty < 1} onClick={() => onSell(qty)} className="rounded bg-yellow-600 px-2 py-1 text-[11px] font-bold text-white shadow hover:brightness-110 disabled:opacity-40">Sell {qty}</button>

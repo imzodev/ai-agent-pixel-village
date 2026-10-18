@@ -46,7 +46,7 @@ export async function buildOffers(npc: Npc, character: Character): Promise<Offer
   for (const t of trades) {
     const have = await countItemInBag(character.id, t.itemKey);
     if (have >= t.qty) {
-      offers.push({ id: `sell:${t.itemKey}`, type: "sell", itemKey: t.itemKey, qty: t.qty, price: t.price, label: `Sell 1 ${t.itemKey.replace("_", " ")} for ${t.price} coin`, line: t.line });
+      offers.push({ id: `sell:${t.itemKey}`, type: "sell", itemKey: t.itemKey, qty: t.qty, price: t.price, label: `Sell 1 ${t.itemKey.replace(/_/g, " ")} (up to ${t.price} coin)`, line: t.line });
     }
   }
 

@@ -75,6 +75,7 @@ export class FishingController {
     this.s = { phase: "casting", castId: "", biteAt: Infinity, deadline: Infinity, zone: 0.3, zoneAt: 0.5, t: 0, bobber: { x: p.x, y: p.y } };
     const r = await post({ action: "cast", facing: p.facing });
     if (r.error || !this.s) { this.s = null; if (r.error) this.host.toast(r.error, "bad"); return; }
+    for (const n of (r.notices as string[] | undefined) ?? []) this.host.toast(n, "info"); // the rod is wearing (src/lib/wear.ts)
     const bob = r.bobber as { x: number; y: number };
     const now = this.scene.time.now;
     this.s = { phase: "waiting", castId: String(r.castId), biteAt: now + Number(r.biteInMs), deadline: Infinity, zone: Number(r.zone), zoneAt: 0.5, t: 0, bobber: bob };

@@ -6,7 +6,7 @@ import { FORGE_ITEMS, FORGE_MAX_PLUS, plusOf, upgradeCost, withPlus } from "@/li
 import { chopBonus, weaponBonus, WEAPONS } from "@/lib/progression";
 
 // seed.ts talks to the database on import, so read its keys as text.
-const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
+const SEED_KEYS = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
 
 describe("forge costs", () => {
   it("every upgradable item and material is a real item", () => {

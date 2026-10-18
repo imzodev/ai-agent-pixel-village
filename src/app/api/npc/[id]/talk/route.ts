@@ -22,6 +22,7 @@ import { recordCollection } from "@/lib/collectionServer";
 import { mindNoteFor } from "@/lib/mind/mindServer";
 import type { BrainOutput } from "@/types/agent";
 import type { TalkErrorEvent, TalkReply, TalkTextEvent } from "@/types/talk";
+import { marketNews } from "@/lib/marketServer";
 import { gossipFor } from "@/lib/npcTalkServer";
 
 export const dynamic = "force-dynamic";
@@ -92,7 +93,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       memoryOf(npc.id, character.id),
       itemNames(),
       // What they've heard from the other NPCs (src/lib/npcTalkServer.ts).
-      gossipFor(npc.id, character.id).catch(() => [] as string[]),
+      // …plus what their town's buyers have had too much of lately (src/lib/marketServer.ts).
+      Promise.all([gossipFor(npc.id, character.id), marketNews(npc.key)]).then(([g, m]) => [...g, ...m]).catch(() => [] as string[]),
     ]);
     const history = latest.reverse();
     const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes);

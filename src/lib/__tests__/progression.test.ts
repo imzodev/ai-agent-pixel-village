@@ -29,7 +29,7 @@ import {
 import { RECIPES } from "@/lib/recipes";
 import { SHOP_STOCK } from "@/lib/trade";
 
-const itemKeys = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\{ key: "([a-z_]+)", name:/g)].map((m) => m[1]));
+const itemKeys = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\{ key: "([a-z_]+)", name:/g)].map((m) => m[1]));
 
 describe("damage", () => {
   it("adds base roll, weapon, level and Fighter", () => {

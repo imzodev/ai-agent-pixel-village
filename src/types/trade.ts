@@ -1,5 +1,7 @@
 // Selling to NPCs (src/app/api/trade/route.ts). Types only — no logic.
 
+import type { MarketPrice } from "./economy";
+
 /** The outcome of selling to an NPC. A buyer with a purse may take fewer than `wanted`. */
 export type SellResult =
   | {
@@ -17,5 +19,5 @@ export type SellResult =
     }
   | { ok: false; error: string };
 
-/** GET /api/trade?npcKey=…: what a buyer can pay with (null = no limit). */
-export type BuyerPurse = { purse: number | null };
+/** GET /api/trade?npcKey=…: what a buyer can pay with (null = no limit), and what it pays now per item. */
+export type BuyerPurse = { purse: number | null; prices: Record<string, MarketPrice> };

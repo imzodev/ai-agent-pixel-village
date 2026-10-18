@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { characterPerks, characters, inventory } from "@/db/schema";
 import { isPerkKey, maxHpFor, type PerkKey } from "./progression";
 import { plusOf } from "./forge";
+import { usedCopy, wearOf } from "./wear";
 import type { Gear } from "@/types/forge";
 import { SPAWN } from "./worldmap";
 
@@ -42,13 +43,16 @@ export async function gearOf(characterId: number): Promise<Gear> {
     .where(and(eq(inventory.characterId, characterId), sql`${inventory.qty} > 0`));
   // Forge levels (meta.plus), per item key: the equipped copy's when one
   // is equipped (that's the one you swing), else the best in the bag.
-  const plus: Record<string, number> = {};
+  // Wear (meta.wear, src/lib/wear.ts) is that same copy's.
+  const plus: Record<string, number> = {}, wear: Record<string, number> = {};
   for (const key of new Set(rows.map((r) => r.itemKey))) {
     const mine = rows.filter((r) => r.itemKey === key);
     const pool = mine.some((r) => r.equipped) ? mine.filter((r) => r.equipped) : mine;
-    plus[key] = Math.max(...pool.map((r) => plusOf(r.meta)));
+    const used = usedCopy(pool);
+    plus[key] = plusOf(used.meta);
+    wear[key] = wearOf(used.meta);
   }
-  return { bag: rows.map((r) => r.itemKey), equipped: rows.filter((r) => r.equipped).map((r) => r.itemKey), plus };
+  return { bag: rows.map((r) => r.itemKey), equipped: rows.filter((r) => r.equipped).map((r) => r.itemKey), plus, wear };
 }
 
 /**

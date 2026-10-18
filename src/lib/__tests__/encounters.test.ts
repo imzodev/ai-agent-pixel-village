@@ -6,7 +6,7 @@ import { ENCOUNTERS, ENCOUNTER_PITY_BEATS, MERCHANT_STOCK, attackersFor, encount
 import { stockForNpc } from "@/lib/trade";
 import type { EncounterKind } from "@/types/encounter";
 
-const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
+const SEED_KEYS = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
 
 describe("encounters", () => {
   it("every kind has a call, thanks and a reward; needs are real items", () => {

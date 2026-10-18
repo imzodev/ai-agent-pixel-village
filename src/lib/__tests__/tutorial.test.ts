@@ -7,7 +7,7 @@ import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS, TUTORIAL_XP, stepMatch
 import { levelForXp } from "@/lib/progression";
 
 // seed.ts talks to the database on import, so read its keys as text.
-const SEED_KEYS = new Set([...fs.readFileSync("src/lib/seed.ts", "utf8").matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
+const SEED_KEYS = new Set([...(fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8")).matchAll(/\bkey: "([a-z_]+)"/g)].map((m) => m[1]));
 
 describe("tutorial steps", () => {
   it("has five steps, ending in the Newcomer title", () => {

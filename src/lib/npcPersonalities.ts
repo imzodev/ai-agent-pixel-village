@@ -57,6 +57,18 @@ const NAMED: Readonly<Record<string, NpcPersonality>> = {
     quirk: "Likes exact numbers (sacks, coins, days).",
     opinions: "Makes sure Marigold never runs out of flour; she's his best customer.",
   },
+  village_odo: {
+    voice: "Fast and cheerful, a salesman's patter, talks about himself as 'Odo'.",
+    likes: "A full handcart, a good deal, news of which town is short of what.",
+    quirk: "Always tells you which specialist would pay more, then buys it anyway.",
+    opinions: "Marigold pays best for eggs and veg, Pip for fruit and furniture; Odo pays for everything.",
+  },
+  hollowmere_vesna: {
+    voice: "Dry and precise, asks pointed questions, savours the name of each rare thing.",
+    likes: "Far-land curios, a good story about how they were won, collectors who pay on time.",
+    quirk: "Always asks where a thing was found before she names a price.",
+    opinions: "Bjorn makes fine steel from what she can't sell. Thinks most travellers never go far enough.",
+  },
   village_hettie: {
     voice: "Motherly and friendly, calls people 'dear', loves passing on news.",
     likes: "A full common room, a good rumour, travellers who come back with stories.",

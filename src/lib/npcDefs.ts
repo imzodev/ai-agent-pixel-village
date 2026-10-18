@@ -236,6 +236,33 @@ export const NPC_DEFS: NpcDef[] = [
     appearance: { body: "female", skin: "#8d5524", hair: "long", hairColor: "#1a1a1a", shirtColor: "#2a6a7a", pantsColor: "#3a3a3a" },
     mood: "wry",
   },
+  // ── Traders: the grove's all-round buyer, and Hollowmere's curio dealer (src/lib/trade.ts BUYERS)
+  {
+    key: "village_odo",
+    name: "Odo",
+    trades: ["trader"],
+    role: "Trader of the Grove",
+    persona:
+      "Odo is a round, fast-talking trader with a handcart on the village plaza. He buys nearly anything the grove makes — crops, fish, eggs, honey, furniture, pies — and carts it off to the towns. He pays less than the specialists and says so cheerfully, but he always pays, and he knows which markets are short of what.",
+    greeting: "Odo buys everything! Not always at the best price, mind. What've you got?",
+    tilePos: [35, 22],
+    wanderRadius: 30,
+    appearance: { body: "male", skin: "#e8b48a", hair: "messy1", hairColor: "#6b3f1f", shirtColor: "#c27c2c", pantsColor: "#4a3a2a" },
+    mood: "brisk",
+  },
+  {
+    key: "hollowmere_vesna",
+    name: "Vesna",
+    trades: ["curio"],
+    role: "Curio Dealer of Hollowmere",
+    persona:
+      "Vesna is a sharp-eyed curio dealer who keeps a cluttered stall of oddities in Hollowmere. She buys what the far lands leave behind — stalker scale, troll hide, wyvern bone, rime essence, elder heartwood — and the trophies of the great beasts in their lairs, and sells them on to collectors in places nobody here has heard of. Pays what a thing is worth, and wants to hear how you got it.",
+    greeting: "Ah, a traveller. Been anywhere dangerous? Show me what you brought back.",
+    tilePos: [-350, 12],
+    wanderRadius: 25,
+    appearance: { body: "female", skin: "#c68e5a", hair: "long", hairColor: "#1a1a1a", shirtColor: "#5a3a6a", pantsColor: "#2e2e3a" },
+    mood: "curious",
+  },
   // ── The village inn
   {
     key: "village_hettie",

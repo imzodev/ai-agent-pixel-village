@@ -18,7 +18,9 @@ export type NpcTrade =
   | "fishmonger"
   | "boatwright"
   | "mayor"
-  | "bounty";
+  | "bounty"
+  | "trader"
+  | "curio";
 
 /** One seeded NPC. `key` is `<place>_<name>` (e.g. `village_marigold`). */
 export type NpcDef = {

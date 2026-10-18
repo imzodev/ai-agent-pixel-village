@@ -34,7 +34,9 @@ import { FOX_CHARM_AFFECTION, PET_AFFECTION, PET_COOLDOWN_MS, clampAffection } f
 import { createMoment } from "@/lib/momentsServer";
 import { lairBossMoment, rootkingMoment } from "@/lib/moments";
 import { cleanPlayerChat } from "@/lib/moderation";
-import { chatBurstLimiter, chatMinuteLimiter } from "@/lib/rateLimit";
+import { chatBurstLimiter, chatMinuteLimiter, gatherLimiter } from "@/lib/rateLimit";
+import { axeKeyOf, weaponKeyOf, wornDamage, wornYield } from "@/lib/wear";
+import { wearTool } from "@/lib/wearServer";
 import { reactToChat } from "@/lib/npcReactServer";
 
 export const dynamic = "force-dynamic";
@@ -122,6 +124,8 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, message: `${a.name} ${pick(reactions[a.species] ?? ["seems pleased"])}.${drops.length ? " You got " + drops.map((d) => d.itemKey.replace("_", " ")).join(", ") + "!" : ""}`, gained: drops, missions: touched });
     }
 
+    // Gathering and chopping at a person's pace, not a bot's (src/lib/rateLimit.ts).
+    if ((action === "gather" || action === "chop_tree") && !gatherLimiter.allow(String(me.id))) return Response.json({ error: "Easy — one swing at a time." }, { status: 429 });
     if (action === "gather") {
       const [n] = await db.select().from(resourceNodes).where(eq(resourceNodes.id, Number(body.id)));
       if (!n) return Response.json({ error: "Nothing here." }, { status: 404 });
@@ -172,8 +176,10 @@ export async function POST(req: Request) {
         }).where(eq(resourceNodes.id, n.id));
       }
 
-      // Better axes and the Lumberjack perk add wood per chop.
-      if (chop) yieldAmt += chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
+      // Better axes and the Lumberjack perk add wood per chop; a worn axe gives less (src/lib/wear.ts).
+      const axe = chop ? axeKeyOf(gear.bag, gear.plus) : null;
+      if (chop) yieldAmt = wornYield(yieldAmt + chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0), gear.wear[axe ?? ""] ?? 0);
+      const worn = await wearTool(me.id, axe, "chop");
       await addItem(me.id, n.itemKey, yieldAmt);
       // Foraging now and then turns up seeds for a home garden (not chopping).
       const found = chop ? null : rollForageSeed(Math.random, perks.has("forager") ? 2 : 1);
@@ -186,7 +192,7 @@ export async function POST(req: Request) {
       const step = await tutorialEvent(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
       return Response.json({
         ok: true,
-        notices: step ? [step] : [],
+        notices: [...(step ? [step] : []), ...(worn ? [worn] : [])],
         message: `${chop ? "Chopped" : "Gathered"} ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
         gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
       });
@@ -203,7 +209,9 @@ export async function POST(req: Request) {
       if (!gear.bag.some((k) => AXE_ITEMS.includes(k))) return Response.json({ error: "You need an axe. Pip sells them." }, { status: 400 });
       const r = await chopTree(vx, vy);
       if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
-      const yieldAmt = 1 + chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0);
+      const axe = axeKeyOf(gear.bag, gear.plus);
+      const yieldAmt = wornYield(1 + chopBonus(gear.bag, gear.plus) + (perks.has("lumberjack") ? 1 : 0), gear.wear[axe ?? ""] ?? 0);
+      const worn = await wearTool(me.id, axe, "chop");
       await addItem(me.id, "wood", yieldAmt);
       await progressMissions(me.id, (q) => q.type === "collect" && q.itemKey === "wood", yieldAmt);
       await db.update(characters).set({ xp: sql`${characters.xp} + ${r.felled ? 5 : 3}` }).where(eq(characters.id, me.id));
@@ -214,7 +222,7 @@ export async function POST(req: Request) {
       return Response.json({
         ok: true,
         felled: r.felled,
-        notices: step ? [step] : [],
+        notices: [...(step ? [step] : []), ...(worn ? [worn] : [])],
         message: r.felled ? `🌲 Timber! The tree comes down (+${yieldAmt} wood). It'll grow back in time.` : `Chopped ${yieldAmt} wood. ${r.hitsLeft} more to fell it.`,
         gained: [{ itemKey: "wood", qty: yieldAmt }],
       });
@@ -240,10 +248,14 @@ export async function POST(req: Request) {
       }
       const def = enemyKind(e.kind);
       const weapon = bow ? bow.damage + (gear.plus[bow.key] ?? 0) : weaponBonus(gear.equipped, gear.plus);
+      // The blade or bow wears with each blow, and a worn one hits softer (src/lib/wear.ts).
+      const tool = bow ? bow.key : weaponKeyOf(gear.equipped, gear.plus);
+      const toolWear = tool ? gear.wear[tool] ?? 0 : 0;
       // Hit it while it's winding up an attack: the attack breaks off, it
       // reels, and the blow lands harder.
       const staggered = interruptStrike(e.id);
-      const dmg = Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1));
+      const dmg = Math.max(1, Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1) * wornDamage(toolWear)));
+      const worn = await wearTool(me.id, tool, bow ? "shot" : "hit");
       const boss = isBossKind(e.kind); // the world boss or a lair boss: damage tallied, reward shared
       const who = String(me.id);
       // Atomic hit: many players may strike at once (the boss especially).
@@ -263,7 +275,7 @@ export async function POST(req: Request) {
       let taken = 0;
       let knockout: { x: number; y: number; coinsLost: number } | null = null;
       const gained: { itemKey: string; qty: number }[] = [];
-      const notices: string[] = [];
+      const notices: string[] = worn ? [worn] : [];
       let encounterResolved: number | null = null;
       // Only the request that removes the row gets the kill.
       const killed = after.hp <= 0 ? await db.delete(enemies).where(eq(enemies.id, e.id)).returning({ id: enemies.id }) : [];

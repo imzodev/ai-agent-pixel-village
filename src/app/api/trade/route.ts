@@ -5,75 +5,31 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, npcs } from "@/db/schema";
 import { handleApiError, requireCharacter } from "@/lib/auth";
-import { TRADES, findBuyer, stockForNpc } from "@/lib/trade";
-import { addCoins, addItem, logEvent, removeItem } from "@/lib/game";
-import { perksOf } from "@/lib/combat";
+import { stockForNpc } from "@/lib/trade";
+import { performSell } from "@/lib/sellServer";
+import { pricesAt } from "@/lib/marketServer";
+import { addItem, logEvent } from "@/lib/game";
 import { tutorialEvent } from "@/lib/tutorialServer";
 import { REP_PER_TRADE, discounted, townName, townOfNpc } from "@/lib/reputation";
 import { addReputation, reputationWith } from "@/lib/reputationServer";
-import { HAGGLER_MULT } from "@/lib/progression";
 import { getLivePlayerPosition, markWorldDirty, refreshBikeOwnership } from "@/lib/world-stream";
 import { BIKE_ITEM } from "@/lib/bike";
 
-import { adjustStock, mindPurse, npcBuys, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
-import { affordableQty, cantAffordText } from "@/lib/mind/profile";
-import type { BuyerPurse, SellResult } from "@/types/trade";
+import { mindPurse, shelfSale, undoShelfSale } from "@/lib/mind/mindServer";
+import type { BuyerPurse } from "@/types/trade";
 import { isMindNpc } from "@/lib/mind/config";
+import { DEAR_DISCOUNT } from "@/lib/economy";
 import { regardHelped, tierFor } from "@/lib/mind/regard";
 
 export const dynamic = "force-dynamic";
 
 
-async function performSell(opts: {
-  characterId: number;
-  itemKey: string;
-  qty: number;
-  npcKey?: string;
-}): Promise<SellResult> {
-  const wanted = Math.max(1, Math.min(99, Math.floor(opts.qty || 1)));
-  if (!opts.itemKey) return { ok: false, error: "What are you selling?" };
-
-  const buyer = opts.npcKey
-    ? { npcKey: opts.npcKey, trade: TRADES[opts.npcKey]?.find((t) => t.itemKey === opts.itemKey) ?? null }
-    : findBuyer(opts.itemKey);
-  if (!buyer || !buyer.trade) return { ok: false, error: "Nobody here buys that." };
-
-  const [npc] = await db.select().from(npcs).where(eq(npcs.key, buyer.npcKey));
-  if (!npc) return { ok: false, error: "Nobody here buys that." };
-
-  // Haggler: NPCs pay 20% more.
-  const haggler = (await perksOf(opts.characterId)).has("haggler");
-  const unit = buyer.trade.price * (haggler ? HAGGLER_MULT : 1);
-  // An NPC with a mind pays from its own purse (src/lib/mind/): it takes as
-  // many as it can pay for, and says what it has when that's none.
-  const before = await mindPurse(buyer.npcKey);
-  let sold = affordableQty(wanted, unit, before);
-  while (sold > 0 && before != null && Math.round(unit * sold) > before) sold--; // rounding
-  if (sold === 0) return { ok: false, error: cantAffordText(npc.name, before ?? 0, opts.itemKey, unit) };
-  const qty = sold;
-  const gained = Math.round(unit * qty);
-  const purse = await npcBuys(buyer.npcKey, opts.itemKey, qty, gained);
-  if (!purse.ok) return { ok: false, error: cantAffordText(npc.name, (await mindPurse(buyer.npcKey)) ?? 0, opts.itemKey, unit) };
-  const ok = await removeItem(opts.characterId, opts.itemKey, qty);
-  if (!ok) {
-    if (purse.npcId) await adjustStock(purse.npcId, { [opts.itemKey]: -qty }, gained, true);
-    return { ok: false, error: "You don't have that." };
-  }
-  if (purse.npcId) await regardHelped(purse.npcId, opts.characterId, 1);
-  await addCoins(opts.characterId, gained);
-  const [row] = await db
-    .select({ coins: sql<number>`coalesce(${characters.coins}, 0)::int` })
-    .from(characters)
-    .where(eq(characters.id, opts.characterId));
-  return { ok: true, soldTo: npc.name, itemKey: opts.itemKey, qty, wanted, gained, coins: row?.coins ?? 0, purse: before == null ? null : await mindPurse(buyer.npcKey) };
-}
-
-/** What an NPC can pay with: GET /api/trade?npcKey=… → { purse } (null = no limit). */
+/** What an NPC pays now and can pay with: GET /api/trade?npcKey=… → { purse, prices } (purse null = no limit). */
 export async function GET(req: Request) {
   try {
     await requireCharacter();
     const npcKey = new URL(req.url).searchParams.get("npcKey") ?? "";
-    const body: BuyerPurse = { purse: npcKey ? await mindPurse(npcKey) : null };
+    const body: BuyerPurse = { purse: npcKey ? await mindPurse(npcKey) : null, prices: npcKey ? await pricesAt(npcKey) : {} };
     return Response.json(body);
   } catch (e) {
     return handleApiError(e);
@@ -98,7 +54,7 @@ export async function POST(req: Request) {
       let unit = town ? discounted(offer.price, await reputationWith(me.id, town)) : offer.price;
       // A baker with a mind gives her dear friends 20% off (src/lib/mind/).
       const [seller] = isMindNpc(npcKey) ? await db.select({ id: npcs.id }).from(npcs).where(eq(npcs.key, npcKey)) : [];
-      if (seller && (await tierFor(seller.id, me.id)) === "dear") unit = Math.max(1, Math.round(unit * 0.8));
+      if (seller && (await tierFor(seller.id, me.id)) === "dear") unit = Math.max(1, Math.ceil(unit * (1 - DEAR_DISCOUNT)));
       const cost = unit * qty;
       // …and only sells what's on her shelf.
       const shelf = await shelfSale(npcKey, itemKey, offer.qty * qty, cost);
@@ -125,7 +81,8 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, itemKey, qty: offer.qty * qty, spent: cost, coins: paid[0].coins, notices: rep?.reached ? [`🏘️ ${townName(town!)} now sees you as ${rep.reached}!`] : [] });
     }
 
-    const r = await performSell({ characterId: me.id, itemKey, qty, npcKey });
+    if (!npcKey) return Response.json({ error: "Who are you selling to?" }, { status: 400 });
+    const r = await performSell({ characterId: me.id, at: me, itemKey, qty, npcKey });
     if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
 
     await logEvent(

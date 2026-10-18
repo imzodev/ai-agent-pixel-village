@@ -12,7 +12,7 @@ import { biomeAt, tierAt } from "@/lib/continent";
 import { terrainWalkable } from "@/lib/regions";
 import { wildKindFor } from "@/lib/wildlife";
 
-const SEED = fs.readFileSync("src/lib/seed.ts", "utf8");
+const SEED = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8"));
 
 describe("lair bosses", () => {
   it("one per far tier, each a boss with attacks, art, a trophy and a unique weapon", () => {

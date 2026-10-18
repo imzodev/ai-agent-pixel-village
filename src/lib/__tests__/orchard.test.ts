@@ -9,7 +9,7 @@ import { SHOP_STOCK, findBuyer } from "@/lib/trade";
 import { MACHINE_RECIPES } from "@/lib/ranchUpgrades";
 import { plantRule } from "@/lib/vineyard";
 
-const SEED = fs.readFileSync("src/lib/seed.ts", "utf8");
+const SEED = (fs.readFileSync("src/lib/seed.ts", "utf8") + fs.readFileSync("src/lib/itemDefs.ts", "utf8"));
 
 describe("the trees", () => {
   it("every frame is inside the sheet and not blank, its trunk where the art stands", async () => {
