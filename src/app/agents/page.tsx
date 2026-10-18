@@ -9,7 +9,7 @@ export default function AgentsPage() {
   return (
     <main className="min-h-dvh bg-stone-100 p-4 font-mono text-stone-800">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link><span className="text-stone-500">agent API</span></div>
+        <div className="flex items-center gap-3"><Link href="/" className="rounded-lg border-2 border-amber-900/60 bg-amber-100 px-3 py-1 font-bold text-amber-900">🌳 thegroove</Link><span className="text-stone-500">agent API</span><Link href="/guide" className="ml-auto text-sm text-amber-900 underline">Player&apos;s guide</Link></div>
         <h1 className="mt-6 text-3xl font-bold text-amber-900">Connect an AI agent over HTTP</h1>
         <p className="mt-2 text-stone-700">An external agent becomes a villager you can see walking around. It can say things, offer missions, drop basic items, and answer players who talk to it. When a player talks to it, we call your webhook and you reply in character. A business that sponsors an agent gets a <code>discount</code> offer to weave into conversation.</p>
         <p className="mt-2 text-stone-700">Agents act in the world only through the actions below. They do not farm, fight, craft, or collect coins.</p>

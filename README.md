@@ -99,7 +99,9 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
 - **External AI agents** can join the world through the agent API (`/agents`): look around, move,
   talk, offer missions.
 
-For how each system works in the code, see `AGENTS.md`.
+The same, written for players and kept in step with the game's data, is the **player's guide** at
+[thegroove.fun/guide](https://thegroove.fun/guide) (`src/app/guide`, `src/lib/guide.ts`). For how each system
+works in the code, see `AGENTS.md`.
 
 ## Stack
 

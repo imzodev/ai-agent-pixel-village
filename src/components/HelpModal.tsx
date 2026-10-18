@@ -6,31 +6,17 @@ import { inputRouter } from "@/game/input/router";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import { TOUCH_KEYS } from "@/lib/keyHints";
 import { TOUCH_BUTTONS, TOUCH_LABEL } from "@/game/input/touchButtons";
+import { CONTROLS } from "@/lib/controls";
 import type { CommandId } from "@/types/input";
 
-const CONTROLS: readonly [CommandId | "move", string][] = [
-  ["move", "Walk (hold Shift to run)"],
-  ["player.interact", "Talk, pick up, use, enter"],
-  ["player.attack", "Attack or chop (hold to keep going)"],
-  ["player.dodge", "Dodge roll: a quick dash that avoids hits"],
-  ["player.fish", "Cast and strike, facing deep water with a rod"],
-  ["player.bike", "Get on or off your bike"],
-  ["player.sell", "Sell to the villager you've selected"],
-  ["player.buy", "Buy from them"],
-  ["player.craft", "Craft with them"],
-  ["player.orders", "Their weekly orders"],
-  ["ui.bag", "Your bag"],
-  ["ui.map", "The map"],
-  ["ui.close", "Close a window"],
-];
-
 const TODO: readonly [string, string][] = [
-  ["🌱", "Farm: claim a field south of the village (free), plant seeds, water and harvest. Gather wheat in the Common Field to the north."],
+  ["🌾", "Gather wheat in the Common Field north of the village, and herbs, berries and mushrooms in the wild."],
   ["🏡", "Homesteads south of the village: claim one free at its sign, buy the land next to it, and make each parcel a field, pasture, vineyard, orchard, barn or workshop."],
   ["🐄", "The Village Ranch, east of the village: everyone's. Visit the animals, pick radishes, carrots, tomatoes, wheat and pumpkins in its garden and honey from the hives (each comes back for you after a while), and pick up the hens' eggs."],
   ["🎣", "Fish: rods from Pip. Some fish only bite at night or in certain waters."],
   ["💬", "Talk to villagers: they remember you. Gold ! means a mission, ? means it's ready to turn in."],
   ["📜", "Bounties: every town has a board with paid jobs."],
+  ["💼", "Jobs: work for a villager a shift a day for a wage (courier for Hettie, supplier for Hollis and the makers, guard, caravan escort). Look for 💼 Jobs on their card."],
   ["🧭", "Explore: 20 towns across the continent. Touch waystones to travel back fast. Further out is tougher (⚠️ danger levels)."],
   ["☠️", "Bosses: four lair beasts in the far lands, and the Old Rootking in the north woods once a week. Bring friends."],
   ["📖", "Your book: collect fish, crops, creatures, places and relics for coins and titles."],
@@ -77,6 +63,7 @@ export default function HelpModal({ touch, onClose }: { touch: boolean; onClose:
           <h3 className="mt-4 font-bold text-amber-900">What to do</h3>
           <ul className="mt-1 space-y-1.5">{TODO.map(([icon, text]) => <li key={icon} className="flex gap-2"><span>{icon}</span><span>{text}</span></li>)}</ul>
           <h3 className="mt-4 font-bold text-amber-900">Good to know</h3>
+          <p className="mt-3"><a href="/guide" target="_blank" rel="noreferrer" className="font-bold text-amber-800 underline">📖 Read the full player&apos;s guide</a>: everything there is to do, with tables of jobs, fish, towns and more.</p>
           <ul className="mt-1 list-disc space-y-1 pl-5">
             <li>The 🧭 Journey card (top left) always has a good next goal, with a reward.</li>
             <li>Knocked out? You wake in the village and lose a tenth of the coins you carry.</li>

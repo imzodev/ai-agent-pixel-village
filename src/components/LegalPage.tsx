@@ -12,7 +12,7 @@ export default function LegalPage({ title, children }: { title: string; children
         <h1 className="mt-4 text-3xl font-extrabold text-white">{title}</h1>
         <p className="text-sm text-stone-400">Last updated {LEGAL_UPDATED}</p>
         {children}
-        <p className="mt-10 text-sm text-stone-400"><Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/">Back to the village</Link></p>
+        <p className="mt-10 text-sm text-stone-400"><Link href="/guide">Player&apos;s guide</Link> · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link> · <Link href="/">Back to the village</Link></p>
       </article>
     </main>
   );
