@@ -72,6 +72,9 @@ export default function GameCanvas() {
         style={{
           position: "absolute",
           inset: 0,
+          // Above every HUD window (they go up to z 60): on a phone the stick
+          // and the buttons, B to close above all, must always be reachable.
+          zIndex: 70,
           pointerEvents: "none",
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",

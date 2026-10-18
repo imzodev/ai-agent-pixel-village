@@ -1490,7 +1490,7 @@ export default function Hud() {
 
       {/* Side panels */}
       {panel && (
-        <div className="pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] z-20 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)]">
+        <div className={`pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] z-20 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)] ${isTouch ? "pb-44" : ""}`}>{/* on a phone, room to scroll the last rows up above the stick and buttons */}
           <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
