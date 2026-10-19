@@ -1,11 +1,11 @@
 // The numbers that say how the launch is going (GET /api/admin/stats):
-// signups, daily players, visitors, retention, the tutorial funnel and
-// sharing, from our own tables (src/lib/track.ts and the game's own data).
+// signups, daily players, visitors, retention, the tutorial funnel,
+// sharing and where people come from, from our own tables (src/lib/track.ts and the game's own data).
 
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS } from "@/lib/tutorial";
-import type { DayCount, StatsView } from "@/types/analytics";
+import type { DayCount, SourceRow, StatsView } from "@/types/analytics";
 
 const DAY_MS = 86_400_000;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -57,6 +57,22 @@ export async function statsView(now = Date.now()): Promise<StatsView> {
   for (const r of share.filter((x) => x.kind === "share_click")) shareClicks[String(r.via)] = num(r.n);
   const sum = (kind: string) => share.filter((r) => r.kind === kind).reduce((s, r) => s + num(r.n), 0);
 
+  // By source (src/lib/acquisition.ts): first visits, signups, and how many of those came back.
+  const landings = await rows(sql`select coalesce(meta->>'src', 'direct') as src, count(*) as n, array_remove(array_agg(distinct nullif(meta->>'campaign', '')), null) as campaigns
+    from events where kind = 'landing' and at >= ${since30} group by 1`);
+  const bySignup = await rows(sql`
+    select coalesce(e.meta->>'src', 'unknown') as src, count(*) as signups,
+      count(*) filter (where e.at < ${new Date(now - DAY_MS)}) as d1_of,
+      count(*) filter (where e.at < ${new Date(now - DAY_MS)} and exists (select 1 from active_days a where a.character_id = e.character_id and a.day = to_char((e.at at time zone 'UTC') + interval '1 day', 'YYYY-MM-DD'))) as d1,
+      count(*) filter (where e.at < ${new Date(now - 7 * DAY_MS)}) as d7_of,
+      count(*) filter (where e.at < ${new Date(now - 7 * DAY_MS)} and exists (select 1 from active_days a where a.character_id = e.character_id and a.day = to_char((e.at at time zone 'UTC') + interval '7 day', 'YYYY-MM-DD'))) as d7
+    from events e where e.kind = 'signup' and e.at >= ${since30} group by 1`);
+  const sources = new Map<string, SourceRow>();
+  const row = (src: string) => sources.get(src) ?? sources.set(src, { src, landings: 0, signups: 0, d1: 0, d1Of: 0, d7: 0, d7Of: 0, campaigns: [] }).get(src)!;
+  for (const r of landings) Object.assign(row(String(r.src)), { landings: num(r.n), campaigns: (r.campaigns as string[] | null) ?? [] });
+  for (const r of bySignup) Object.assign(row(String(r.src)), { signups: num(r.signups), d1: num(r.d1), d1Of: num(r.d1_of), d7: num(r.d7), d7Of: num(r.d7_of) });
+  const bySource = [...sources.values()].sort((a, b) => b.landings + b.signups - (a.landings + a.signups));
+
   return {
     generatedAt: new Date(now).toISOString(),
     totals: { players: num(totals?.players), signups30d: num(totals?.signups30d), activeToday: num(totals?.active_today), active7d: num(totals?.active7d) },
@@ -66,5 +82,6 @@ export async function statsView(now = Date.now()): Promise<StatsView> {
     retention,
     tutorial,
     sharing: { momentsCreated: sum("moment_created"), shareClicks, profileViews: sum("profile_view"), momentViews: sum("moment_view"), signupsFromShares: num(fromShares?.n) },
+    bySource,
   };
 }

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Nunito } from "next/font/google";
 import "./globals.css";
 import ClientShell from "@/components/ClientShell";
+import SourceMark from "@/components/SourceMark";
 
 // The UI font: a clean, readable sans (self-hosted by next/font at build time).
 const sansFont = Nunito({ subsets: ["latin"], weight: ["400", "600", "700", "800"], variable: "--font-ui", display: "swap" });
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={sansFont.variable}>
       <body className="bg-[#6fae5f] text-stone-900 antialiased">
+        <SourceMark />
         {children}
         <ClientShell />
       </body>

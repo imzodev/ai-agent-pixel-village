@@ -1,8 +1,10 @@
-// Share clicks from the browser (src/lib/shareTracking.ts). Public, but it
-// accepts only share clicks, short known values, and a few per minute per IP.
+// From the browser: share clicks (src/lib/shareTracking.ts) and first visits
+// with where they came from (src/components/SourceMark.tsx). Public, but it
+// accepts only those, short clean values, and a few per minute per IP.
 import { getCurrentCharacter } from "@/lib/auth";
 import { track } from "@/lib/track";
 import { SlidingWindowLimiter, clientIp } from "@/lib/rateLimit";
+import { cleanTag } from "@/lib/acquisition";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,11 @@ const PAGE = new Set(["moment", "profile"]);
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
+  if (body.kind === "landing") {
+    const src = cleanTag(body.src), campaign = cleanTag(body.campaign);
+    if (src && limiter.allow(clientIp(req) ?? "anon")) track("landing", null, campaign ? { src, campaign } : { src });
+    return new Response(null, { status: 204 });
+  }
   if (body.kind !== "share_click" || !VIA.has(body.via) || !PAGE.has(body.page)) return new Response(null, { status: 204 });
   if (!limiter.allow(clientIp(req) ?? "anon")) return new Response(null, { status: 204 });
   const me = await getCurrentCharacter().catch(() => null);

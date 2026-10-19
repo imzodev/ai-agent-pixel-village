@@ -12,7 +12,9 @@ import { nameProblem } from "@/lib/moderation";
 import { clientIp, loginFailLimiter, loginIpLimiter, signupIpLimiter } from "@/lib/rateLimit";
 import { cookies } from "next/headers";
 import { track, markActive } from "@/lib/track";
-import { REF_COOKIE } from "@/lib/site";
+import { REF_COOKIE, SRC_COOKIE } from "@/lib/site";
+import { decodeAcquisition } from "@/lib/acquisition";
+import type { Acquisition } from "@/types/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +44,15 @@ async function createCharacter(userId: number, name: string, appearance: Appeara
   await db.update(inventory).set({ equipped: true }).where(eq(inventory.id, sword));
   await logEvent("arrival", `${name} arrived in the grove.`, "character", ch.id, ch.x, ch.y);
   await createSession(userId, pickShardForPosition(ch.x, ch.y), sessionDays);
-  // Did they arrive through a shared moment or profile? (set by RefMark)
-  const ref = (await cookies()).get(REF_COOKIE)?.value;
-  return { ch, ref: ref ? ref.slice(0, 40) : undefined };
+  // Did they arrive through a shared moment or profile? (set by RefMark) And from where (SourceMark)?
+  const jar = await cookies();
+  const ref = jar.get(REF_COOKIE)?.value;
+  const from = decodeAcquisition(jar.get(SRC_COOKIE)?.value);
+  return { ch, ref: ref ? ref.slice(0, 40) : undefined, from };
 }
+
+/** A signup's source for the stats (none when unknown). */
+const sourceMeta = (from: Acquisition | null): Record<string, string> => (from ? { src: from.src, ...(from.campaign ? { campaign: from.campaign } : {}) } : {});
 
 const cleanName = (raw: unknown): string => String(raw ?? "").trim().replace(/\s+/g, " ").slice(0, 24);
 const badUsername = () => Response.json({ error: "Username must be 3–24 chars, letters/numbers/underscore." }, { status: 400 });
@@ -76,8 +83,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
       [user] = await db.insert(users).values({ username: quickUsername(name) }).onConflictDoNothing().returning();
     }
     if (!user) return Response.json({ error: "Couldn't make your character, please try again." }, { status: 500 });
-    const { ch, ref } = await createCharacter(user.id, name, randomAppearance(), QUICK_SESSION_DAYS);
-    track("signup", ch.id, { quick: true, ...(ref ? { ref } : {}) });
+    const { ch, ref, from } = await createCharacter(user.id, name, randomAppearance(), QUICK_SESSION_DAYS);
+    track("signup", ch.id, { quick: true, ...(ref ? { ref } : {}), ...sourceMeta(from) });
     markActive(ch.id);
     return Response.json({ ok: true, character: ch });
   }
@@ -117,8 +124,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
     const [existing] = await db.select().from(users).where(eq(users.username, username));
     if (existing) return Response.json({ error: "That username is taken." }, { status: 409 });
     const [user] = await db.insert(users).values({ username, passwordHash: hashPassword(password) }).returning();
-    const { ch, ref } = await createCharacter(user.id, name, cleanAppearance(body.appearance));
-    track("signup", ch.id, ref ? { ref } : {});
+    const { ch, ref, from } = await createCharacter(user.id, name, cleanAppearance(body.appearance));
+    track("signup", ch.id, { ...(ref ? { ref } : {}), ...sourceMeta(from) });
     markActive(ch.id);
     return Response.json({ ok: true, character: ch });
   }

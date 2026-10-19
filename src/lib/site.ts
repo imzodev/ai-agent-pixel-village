@@ -9,3 +9,5 @@ export const LEGAL_UPDATED = "October 11, 2026";
 
 /** Cookie a shared page (/m, /u) leaves, so a signup can be credited to it (RefMark). */
 export const REF_COOKIE = "grove_ref";
+/** Where a visitor first came from (src/lib/acquisition.ts): "source|campaign", kept 30 days. */
+export const SRC_COOKIE = "grove_src";

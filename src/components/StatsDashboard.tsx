@@ -102,6 +102,26 @@ export default function StatsDashboard() {
           <Stat label="Profile views" v={s.sharing.profileViews} />
           <Stat label="Joined from a share" v={s.sharing.signupsFromShares} />
         </div>
+
+        <h2 className="mt-8 text-lg font-extrabold text-amber-300">Where people come from <span className="text-sm font-normal text-stone-400">(last 30 days · tag links with ?ref=x or utm_source / utm_campaign)</span></h2>
+        <div className="mt-2 overflow-x-auto rounded-lg bg-white/5">
+          <table className="w-full min-w-[560px] text-left text-sm">
+            <thead className="text-stone-400"><tr><th className="px-3 py-2">Source</th><th className="px-3 py-2 text-right">First visits</th><th className="px-3 py-2 text-right">Signups</th><th className="px-3 py-2 text-right">Signup rate</th><th className="px-3 py-2 text-right">Back next day</th><th className="px-3 py-2 text-right">Back a week later</th></tr></thead>
+            <tbody>
+              {(s.bySource ?? []).length === 0 && <tr><td colSpan={6} className="px-3 py-3 text-stone-400">No visits recorded yet.</td></tr>}
+              {(s.bySource ?? []).map((r) => (
+                <tr key={r.src} className="border-t border-white/5">
+                  <td className="px-3 py-1.5 font-bold">{r.src}{r.campaigns.length > 0 && <span className="ml-2 text-xs font-normal text-stone-400">{r.campaigns.join(", ")}</span>}</td>
+                  <td className="px-3 py-1.5 text-right">{r.landings}</td>
+                  <td className="px-3 py-1.5 text-right">{r.signups}</td>
+                  <td className="px-3 py-1.5 text-right">{r.landings ? pct(r.signups, r.landings) : "—"}</td>
+                  <td className="px-3 py-1.5 text-right">{r.d1Of ? `${r.d1}/${r.d1Of} ${pct(r.d1, r.d1Of)}` : "—"}</td>
+                  <td className="px-3 py-1.5 text-right">{r.d7Of ? `${r.d7}/${r.d7Of} ${pct(r.d7, r.d7Of)}` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </main>
   );
