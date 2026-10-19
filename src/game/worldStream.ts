@@ -41,6 +41,8 @@ export class WorldStream {
   private clock: ClockSample | null = null;
   /** Rough offset from message stamps, used until the first pong lands. */
   private roughOffsetMs: number | null = null;
+  /** The server's last `correct` we applied (this connection); reports echo it as `cs`. */
+  private correctSeq = 0;
 
   constructor(private readonly opts: WorldStreamOptions) {}
 
@@ -111,6 +113,7 @@ export class WorldStream {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
+      this.correctSeq = 0; // the server counts corrections per connection
       this.opts.handlers.onOpen?.();
       this.startHeartbeat();
       this.startPositionStream();
@@ -160,6 +163,8 @@ export class WorldStream {
       } else if (msg.type === "strikeCancel") {
         this.opts.handlers.onStrikeCancel?.(msg.id);
       } else if (msg.type === "correct") {
+        // First, so the corrected position (set by the handler) goes out with it.
+        if (typeof msg.seq === "number") this.correctSeq = msg.seq;
         this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
       } else if (msg.type === "saloon") {
         this.opts.handlers.onSaloon?.({ inn: msg.inn });
@@ -209,6 +214,7 @@ export class WorldStream {
         y: this.lastPosition.y,
         facing: this.lastPosition.facing,
         t: this.lastPosition.t,
+        cs: this.correctSeq,
       });
     };
     // Send immediately so the server's proximity bbox is anchored on the
@@ -235,7 +241,7 @@ export class WorldStream {
       if (!p) return;
       if (sent && p.x === sent.x && p.y === sent.y && p.facing === sent.facing && p.mounted === sent.mounted) return;
       sent = { ...p };
-      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing, mounted: p.mounted, t: p.t });
+      this.send({ type: "pos", x: p.x, y: p.y, facing: p.facing, mounted: p.mounted, t: p.t, cs: this.correctSeq });
     };
     this.posTimer = setInterval(tick, POS_INTERVAL_MS);
   }

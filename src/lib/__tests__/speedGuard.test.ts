@@ -1,7 +1,7 @@
 // The server-side speed limit: honest movement (even jittery) passes; speed
 // hacks and teleports are clamped; the bike only counts if you own one.
 import { describe, expect, it } from "vitest";
-import { BIKE_SPEED_MULT, BURST_S, PLAYER_SPEED, RUN_SPEED_MULT, SLACK_PX, guardStep, maxSpeedPx, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
+import { BIKE_SPEED_MULT, BURST_S, PLAYER_SPEED, RUN_SPEED_MULT, SLACK_PX, guardStep, isStaleReport, maxSpeedPx, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
 
 /** Walk at `speed` px/s for `secs`, reporting every `every` ms; how many reports were refused. */
 function walk(speed: number, secs: number, every: number, mounted = false, jitter = 0): number {
@@ -23,8 +23,8 @@ describe("speed guard", () => {
     expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT, 20, 200, true)).toBe(0);
   });
   it("clamps a speed hack, and riding speed without a bike", () => {
-    expect(walk(PLAYER_SPEED * 3, 10, 200)).toBeGreaterThan(5);
-    expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT, 60, 200, false)).toBeGreaterThan(5);
+    expect(walk(PLAYER_SPEED * 4, 10, 200)).toBeGreaterThan(5);
+    expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT, 120, 200, false)).toBeGreaterThan(5);
   });
   it("a teleport is cut short to what the budget allows", () => {
     const g = newGuard(0, 0, 0);
@@ -60,14 +60,14 @@ describe("speed guard: timed by each report's own stamp", () => {
   }
 
   it("a sprint the network held up and then delivered at once passes when stamped (the snap-back bug)", () => {
-    expect(heldThenBurst(RUN, 2.5, 2500, false)).toBeGreaterThan(0); // timed by arrival: snapped back
-    expect(heldThenBurst(RUN, 2.5, 2500, true)).toBe(0); // timed by the stamps: fine
+    expect(heldThenBurst(RUN, 5, 5000, false)).toBeGreaterThan(0); // timed by arrival: snapped back
+    expect(heldThenBurst(RUN, 5, 5000, true)).toBe(0); // timed by the stamps: fine
   });
 
   it("still clamps a speed hack with honest stamps", () => {
     const g = newGuard(0, 0, 0);
     let refused = 0;
-    for (let t = 200; t <= 10_000; t += 200) if (!guardStep(g, (PLAYER_SPEED * 3 * t) / 1000, 0, t, false, t).ok) refused++;
+    for (let t = 200; t <= 10_000; t += 200) if (!guardStep(g, (PLAYER_SPEED * 4 * t) / 1000, 0, t, false, t).ok) refused++;
     expect(refused).toBeGreaterThan(5);
   });
 
@@ -82,18 +82,51 @@ describe("speed guard: timed by each report's own stamp", () => {
     expect(r.x).toBeCloseTo(allowed, 0);
   });
 
-  it("a stamp older than the last report counts as no time passing", () => {
+  it("a stamp older than the last report (the clock jumped back) goes by arrival time", () => {
     const g = newGuard(0, 0, 0);
     g.budget = 0;
     guardStep(g, 0, 0, 1000, false, 1000);
     expect(g.budget).toBeCloseTo(maxSpeedPx(false), 0);
     const before = g.budget;
     guardStep(g, 0, 0, 1200, false, 500); // stamped before the previous report
-    expect(g.budget).toBeCloseTo(before, 5);
+    expect(g.budget).toBeCloseTo(before + maxSpeedPx(false) * 0.2, 5);
   });
 
   it("an old client without stamps behaves as before (arrival time)", () => {
     expect(walk(RUN, 20, 200)).toBe(0);
-    expect(walk(PLAYER_SPEED * 3, 10, 200)).toBeGreaterThan(5);
+    expect(walk(PLAYER_SPEED * 4, 10, 200)).toBeGreaterThan(5);
+  });
+  it("running and riding for a minute pass, even a third too fast with late packets (hitches)", () => {
+    expect(walk(PLAYER_SPEED * RUN_SPEED_MULT, 60, 200, false, 1000)).toBe(0);
+    expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT, 60, 200, true, 1000)).toBe(0);
+    expect(walk(PLAYER_SPEED * RUN_SPEED_MULT * 1.3, 60, 200, false, 1000)).toBe(0);
+    expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT * 1.3, 60, 200, true, 1000)).toBe(0);
+  });
+  it("double speed is caught within ten seconds", () => {
+    expect(walk(PLAYER_SPEED * RUN_SPEED_MULT * 2, 10, 200)).toBeGreaterThan(0);
+    expect(walk(PLAYER_SPEED * BIKE_SPEED_MULT * 2, 10, 200, true)).toBeGreaterThan(0);
+  });
+  it("a client clock that jumps back a second mid-run doesn't starve the budget", () => {
+    const speed = PLAYER_SPEED * BIKE_SPEED_MULT;
+    const g = newGuard(0, 0, 0, true);
+    let refused = 0;
+    for (let now = 200; now <= 60_000; now += 200) {
+      const stamp = now < 20_000 ? now + 200 : now - 1000; // ahead, then a better ping puts it a second behind
+      if (!guardStep(g, (speed * now) / 1000, 0, now, true, stamp).ok) refused++;
+    }
+    expect(refused).toBe(0);
+  });
+  it("a refusal says why", () => {
+    const g = newGuard(0, 0, 0);
+    const r = guardStep(g, 5000, 0, 100, false, 90);
+    expect(r.ok).toBe(false);
+    expect(r.why).toMatchObject({ d: 5000, stampLagMs: 10 });
+  });
+  it("reports made before the last correction are ignored, old clients aren't", () => {
+    expect(isStaleReport(0, 0)).toBe(false);
+    expect(isStaleReport(2, 1)).toBe(true);
+    expect(isStaleReport(2, 2)).toBe(false);
+    expect(isStaleReport(2, undefined)).toBe(false);
+    expect(isStaleReport(2, "1")).toBe(false);
   });
 });

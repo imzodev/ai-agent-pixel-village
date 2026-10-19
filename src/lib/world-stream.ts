@@ -56,7 +56,7 @@ import type { ChunkRef } from "@/types/trees";
 import { isWalkableServer, nearestOpenGround } from "@/lib/chunkCollisionServer";
 import type { WorldChange, WorldSnapshot, Facing, ScheduledMove } from "@/lib/protocol";
 import { WANTED_DMG_MULT } from "@/lib/bounties";
-import { guardStep, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
+import { guardStep, isStaleReport, newGuard, placeGuard, resumeGuard } from "@/lib/speedGuard";
 import { buildGrid, nearby } from "@/lib/spatialGrid";
 import type { SpatialGrid } from "@/types/world";
 import { CHIP_EVERY_MS, ROLL_LATE_MS, ROLL_PX, canRoll, chipDamage, dirVec, dodged, inShape } from "@/lib/combat/strikes";
@@ -212,6 +212,8 @@ async function spectatorBeat(): Promise<void> {
 /** How long a "does this player own a bike" answer is trusted. */
 const BIKE_CHECK_MS = 20_000;
 const CORRECT_MIN_INTERVAL_MS = 250;
+/** At most one "corrected" log line per player this often. */
+const CORRECT_LOG_MS = 10_000;
 
 /** Look up (again) whether a player owns a bicycle. */
 export async function refreshBikeOwnership(playerId: number): Promise<void> {
@@ -242,7 +244,12 @@ function acceptPosition(conn: Connection, x: number, y: number, mounted: boolean
   const r = guardStep(g, x, y, now, conn.mounted, t);
   if (!r.ok && now - (conn.lastCorrectAt ?? 0) >= CORRECT_MIN_INTERVAL_MS) {
     conn.lastCorrectAt = now;
-    try { conn.ws.send(JSON.stringify({ type: "correct", x: r.x, y: r.y })); } catch { /* socket closed */ }
+    conn.correctSeq = (conn.correctSeq ?? 0) + 1;
+    if (now - (conn.lastCorrectLogAt ?? 0) >= CORRECT_LOG_MS) {
+      conn.lastCorrectLogAt = now;
+      log.warn({ playerId: conn.playerId, ...r.why, mounted, ownsBike: bikes.get(conn.playerId)?.has ?? null }, "speed guard corrected a player");
+    }
+    try { conn.ws.send(JSON.stringify({ type: "correct", x: r.x, y: r.y, seq: conn.correctSeq })); } catch { /* socket closed */ }
   }
   return r;
 }
@@ -614,6 +621,8 @@ if (msg.type === "roll") {
     onRoll(conn, Number(msg.t));
     return;
   }
+  // Sent before the client took our last correction: it would only snap it back again.
+  if ((msg.type === "pos" || msg.type === "heartbeat") && isStaleReport(conn.correctSeq ?? 0, msg.cs)) return;
   if (msg.type === "pos" && Number.isFinite(msg.x) && Number.isFinite(msg.y)) {
     // Fast in-memory movement update. Never writes the DB for position —
     // presence (below) stays on its own slow cadence. Relay to nearby

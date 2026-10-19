@@ -25,6 +25,10 @@ export type Connection = {
   mounted?: boolean;
   /** Last time we told this client to snap back (throttle). */
   lastCorrectAt?: number;
+  /** How many corrections we've sent; reports made before the latest are ignored. */
+  correctSeq?: number;
+  /** Last time a correction for this player was logged (throttle). */
+  lastCorrectLogAt?: number;
   /** Last time we persisted this player's presence (in-memory throttle). */
   lastPresenceAt: number;
   /** Last snapshot version we sent this connection. Used for reconnect. */
@@ -108,8 +112,15 @@ export type StreamPosition = { x: number; y: number; facing: Facing; mounted: bo
 export type ClockSample = { offsetMs: number; rttMs: number };
 
 /** A client message as it arrives, before validation (any field may be missing). */
-export type WsInbound = { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string; mounted?: boolean };
+export type WsInbound = { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string; mounted?: boolean; cs?: number };
 
 /** A player's last accepted position and how far they may still move
  *  (src/lib/speedGuard.ts). Kept per player, across reconnects. */
 export type SpeedGuard = { x: number; y: number; t: number; budget: number };
+/** A guard check: where to believe the player is; `why` (on a refusal) is for the log. */
+export type GuardResult = {
+  x: number;
+  y: number;
+  ok: boolean;
+  why?: { d: number; budget: number; sinceLastMs: number; stampLagMs: number | null };
+};

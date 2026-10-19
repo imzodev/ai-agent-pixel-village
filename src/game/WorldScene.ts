@@ -65,6 +65,7 @@ import { gameFont } from "./gameFont";
 import { buildLotBanner, lotBannerSignature } from "./lotBanners";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import { tierAt } from "@/lib/continent";
+import { frameSeconds } from "@/lib/frameTime";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -140,6 +141,8 @@ function touchDist(t: TouchList): number {
 export class WorldScene extends Phaser.Scene {
   private snapshot: Snapshot | null = null;
   private meId: number | null = null;
+  /** The previous frame's timestamp (update's `time`), for real frame time. */
+  private lastFrameAt: number | null = null;
   private player: CharEnt | null = null;
   private players = new Map<number, CharEnt>();
   private npcs = new Map<number, CharEnt>();
@@ -586,6 +589,7 @@ export class WorldScene extends Phaser.Scene {
         onCorrect: ({ x, y }) => {
           const p = this.player;
           if (!this.alive() || !p) return;
+          console.debug("[speed] corrected", { pulledBackPx: Math.round(Math.hypot(p.sprite.x - x, p.sprite.y - y)), mounted: !!p.mounted, running: this.playerRunning });
           p.sprite.setPosition(x, y);
           p.tx = x; p.ty = y;
           this.moveTarget = null;
@@ -1468,7 +1472,9 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- update loop ----------
   update(time: number, deltaMs: number) {
-    const dt = Math.min(0.05, deltaMs / 1000);
+    // Movement goes by the frame's real time, not Phaser's delta (src/lib/frameTime.ts).
+    const dt = frameSeconds(time, this.lastFrameAt);
+    this.lastFrameAt = time;
     if (this.player) {
       // Holding the attack key keeps swinging (fight / chop), one swing at a time.
       if (inputRouter.isHeld("player.attack") && time >= this.nextAttackAt && !(this.player.actingUntil !== undefined && time < this.player.actingUntil)) {

@@ -23,10 +23,11 @@ export type WsClientMessage =
   // Presence heartbeat: slow (1.5 s) and drives the DB lastSeenAt write.
   // `t` (both here and in `pos`): server-synced time this position was
   // current; the speed check times moves by it (src/lib/speedGuard.ts).
-  | { type: "heartbeat"; x: number; y: number; facing: Facing; mounted?: boolean; t?: number }
+  // `cs`: the last `correct` seq the client applied (stale reports are ignored).
+  | { type: "heartbeat"; x: number; y: number; facing: Facing; mounted?: boolean; t?: number; cs?: number }
   // Movement update: fast (~5 Hz), in-memory only, relayed to nearby
   // players. Never triggers a DB write.
-  | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean; t?: number }
+  | { type: "pos"; x: number; y: number; facing: Facing; /** Riding a bike. */ mounted?: boolean; t?: number; cs?: number }
   // One-shot action (attack swing), relayed to nearby players. In-memory only.
   | { type: "act"; kind: PlayerActKind; facing: Facing }
   // A dodge roll, started at server time `t` (src/lib/combat/strikes.ts).
@@ -64,7 +65,8 @@ export type WsServerMessage =
   // An attack was interrupted (its enemy was staggered or died).
   | { type: "strikeCancel"; id: number }
   // You moved faster than you can (src/lib/speedGuard.ts): you're really here.
-  | { type: "correct"; x: number; y: number }
+  // `seq` counts corrections on this connection; reports echo it back as `cs`.
+  | { type: "correct"; x: number; y: number; seq?: number }
   // A saloon game you're in changed (src/lib/saloonServer.ts): re-read it.
   | { type: "saloon"; inn: string }
   | { type: "pong"; t?: number; serverTime?: number }
