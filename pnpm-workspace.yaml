@@ -1,3 +1,7 @@
+packages:
+  # Only the app. marketing/promo-video is its own npm project (own lockfile),
+  # never installed on deploy.
+  - "."
 allowBuilds:
   esbuild: true
   sharp: true
