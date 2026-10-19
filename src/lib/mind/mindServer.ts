@@ -27,7 +27,7 @@ import { plainSpeech } from "@/lib/streamedText";
 import { askJev } from "./jev";
 import { MIND_INCOME_SCALE, MIND_INTERVAL_MS, isMindNpc, mindNpcKeys } from "./config";
 import { markGifted, regardHelped, regardScores, tierFor } from "./regard";
-import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, deliveryOf, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, sellTargets, stateText, word } from "./profile";
+import { MOODS, REQUEST_TTL_MS, URGENCY, affordableQty, count, decisionBasis, deliveryOf, errandHaul, feasibleActions, gameDayOf, incomeFor, incomeRate, needsJev, purseTarget, regardTier, requestReward, scriptedPick, sellTargets, stateText, tradeEventText, word } from "./profile";
 import { localGoods, pickBuys, stopOf } from "./caravan";
 import { buyUp, gluts, marketUnit, sellInto } from "@/lib/marketServer";
 import { buyPrice, marketOf } from "@/lib/economy";
@@ -35,6 +35,7 @@ import { TRADES, findBuyer } from "@/lib/trade";
 import { escortArrive, escortDepart, escortTick } from "@/lib/jobsServer";
 import { spawnAmbush } from "@/lib/encountersServer";
 import { profileFor } from "./profiles";
+import { itemDef } from "@/lib/itemDefs";
 import type { CaravanCandidate, MindDecision, MindIntent, MindMemory, NpcCarry, MindProfile, MindReport, MindView, NearbyPlayer, NpcStock, OpenRequest, SellDef } from "@/types/mind";
 
 export type NpcRow = typeof npcs.$inferSelect;
@@ -449,7 +450,11 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
       const sold = n > 0 && seller ? await adjustStock(seller.npcId, { [item]: -n }, cost) : true;
       if (n > 0 && sold && (await adjustStock(npc.id, { [item]: n }, -cost))) {
         await remember(npc.id, sup.supplierKey ? `They bought ${n} ${word(p, item)} at ${sup.place} for ${cost} coins.` : `They gathered ${n} ${word(p, item)} in ${sup.place}.`, now);
-        if (seller) await remember(seller.npcId, `${npc.name} came by and bought ${n} ${item.replace(/_/g, " ")} for ${cost} coins.`, now);
+        if (seller) {
+          await remember(seller.npcId, `${npc.name} came by and bought ${n} ${item.replace(/_/g, " ")} for ${cost} coins.`, now);
+          // The chain, out in the open (the visitors' ticker): villager buys from villager.
+          await logEvent("mind", tradeEventText(itemDef(item)?.icon, npc.name, false, n, word(p, item), sup.place), "npc", npc.id, pos.x, pos.y);
+        }
         await setCarry(npc, { item, qty: n }); // carried home, shown over their head
       } else if (n > 0 && seller && sold) await adjustStock(seller.npcId, { [item]: n }, -cost); // couldn't pay after all: put it back
       else if (n === 0) await remember(npc.id, sup.supplierKey ? `${sup.place} had no ${word(p, item)} to sell.` : `They found no ${word(p, item)} in ${sup.place}.`, now);
@@ -473,6 +478,7 @@ export async function think(npc: NpcRow, now = Date.now()): Promise<MindDecision
         await setCarry(npc, null);
         await remember(npc.id, `They sold ${qty} ${word(p, item)} at ${to.place} for ${coins} coins.`, now);
         if (buyer) await remember(buyer.npcId, `${npc.name} brought ${qty} ${item.replace(/_/g, " ")} and was paid ${coins} coins.`, now);
+        await logEvent("mind", tradeEventText(itemDef(item)?.icon, npc.name, true, qty, word(p, item), to.place), "npc", npc.id, pos.x, pos.y);
       } else await remember(npc.id, `${to.place} couldn't pay for their ${word(p, item)} today.`, now);
     } else if (trip.status !== "arrived") await remember(npc.id, `They couldn't reach ${to?.place ?? "the buyer"}.`, now);
     intent = "going_home";

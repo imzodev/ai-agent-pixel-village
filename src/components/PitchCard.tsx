@@ -8,6 +8,7 @@ import { bus, type Snapshot } from "@/game/bus";
 import { positionAt } from "@/lib/motion";
 import { VISITOR_VIEW as VIEW } from "@/lib/visitorView";
 import PlayNowForm from "./PlayNowForm";
+import { agoText } from "@/lib/timeAgo";
 
 const MIN_KEY = "grove.pitchMinimized";
 const TOUR_EVERY_MS = 8000;
@@ -18,9 +19,9 @@ const MARGIN = 120;
 const inView = (x: number, y: number) => x > VIEW.x0 + MARGIN && x < VIEW.x1 - MARGIN && y > VIEW.y0 + MARGIN && y < VIEW.y1 - MARGIN;
 
 const PERKS = [
-  ["🤖", "Talk to villagers who remember you", "AI villagers with moods, shops and errands of their own."],
-  ["🌾", "Farm, ranch and build your homestead", "Claim a lot, raise animals, grow vines and orchards."],
-  ["⚔", "Explore 20 towns and face lair bosses", "Bounties, treasure maps and far lands full of foes."],
+  ["🤖", "Talk to villagers who remember you", "They gossip about you, answer your chat and keep shops of their own."],
+  ["💼", "Join their economy", "Sell to them, supply their shops or get hired: courier, guard, caravan escort."],
+  ["⚔", "Explore 20 towns, build a homestead", "Lair bosses, far lands, and land of your own to farm."],
 ] as const;
 
 export default function PitchCard({ snap, onLogin }: { snap: Snapshot; onLogin: () => void }) {
@@ -90,9 +91,10 @@ export default function PitchCard({ snap, onLogin }: { snap: Snapshot; onLogin: 
         Live now · 🤖 {villagers} villagers · 👥 {playing} playing
       </div>
       <h1 className="mt-1 pr-4 text-lg font-extrabold leading-snug text-amber-900 sm:text-xl">A village run by AI villagers, and it keeps going without you.</h1>
+      <p className="mt-1 text-[13px] font-bold leading-snug text-amber-700">🌾 Rowan cuts the wheat → Hollis mills it → Marigold bakes the bread. Real stock, real coins, nobody scripting it.</p>
       {event && (
         <div key={event.id} className="mt-2 truncate rounded bg-white/70 px-2 py-1 text-[12px] text-stone-700 [animation:pitch-fade_.5s_ease-out]" title={event.text}>
-          📰 {event.text}
+          📰 {event.text} <span className="text-stone-400">· {agoText(event.at)}</span>
         </div>
       )}
       <ul className={`mt-2 space-y-1.5 ${perksOpen ? "" : "hidden sm:block"}`}>

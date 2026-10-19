@@ -40,6 +40,9 @@ const have = (s: NpcStock, k: string) => s[k] ?? 0;
 export const word = (p: MindProfile, item: string) => p.words[item] ?? item.replace(/_/g, " ");
 /** "1 stone sword", "20 arrows". */
 export const count = (p: MindProfile, n: number, item: string) => `${n} ${n === 1 ? word(p, item).replace(/s$/, "") : word(p, item)}`;
+/** A trade between villagers, for the news ticker: "🌾 Rowan sold 12 wheat to Hollis's mill." */
+export const tradeEventText = (icon: string | undefined, name: string, sold: boolean, qty: number, what: string, place: string) =>
+  `${icon ? `${icon} ` : ""}${name} ${sold ? "sold" : "bought"} ${qty} ${what} ${sold ? "to" : "at"} ${place}.`;
 
 // ── Income ────────────────────────────────────────────────────────────
 // A mind's purse refills from villagers you don't see, in step with how many
