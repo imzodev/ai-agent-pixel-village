@@ -64,6 +64,7 @@ function viewOf(row: JobRow, def: JobDef): JobView {
     status: row.status, shiftsDone: row.shiftsDone, streak: row.streak, toNextRank: toNextRank(row.shiftsDone),
     need: shiftNeed(def.shift, rank), count: p?.count ?? 0, done: p?.done ?? false, task: taskText(def, rank), pay: shiftPay(def, rank),
     ...(p?.letters ? { letters: p.letters } : {}),
+    ...(def.kind === "escort" && p?.leg !== undefined && !p.done ? { riding: true } : {}),
   };
 }
 

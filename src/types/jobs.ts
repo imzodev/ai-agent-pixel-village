@@ -67,6 +67,8 @@ export type JobView = {
   /** What a full shift pays at your rank (about). */
   pay: number;
   letters?: JobLetter[];
+  /** Escort: signed on for today's leg (the wagon has set off with you). */
+  riding?: boolean;
 };
 
 /** An employer's offer, as the Jobs panel shows it. */

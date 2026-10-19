@@ -37,6 +37,10 @@ export const LETTER_TILES = 25;
 /** Escorts: within this of the wagon counts as riding along, for ESCORT_SHARE of the way. */
 export const ESCORT_PX = 12 * 16;
 export const ESCORT_SHARE = 0.6;
+/** A leg with guards riding along is ambushed this long after setting off, by AMBUSH_MIN–AMBUSH_MAX beasts. */
+export const AMBUSH_AFTER_MS = 2 * 60_000;
+export const AMBUSH_MIN = 2;
+export const AMBUSH_MAX = 4;
 /** Guards keep the roads within this many tiles of their town. */
 export const GUARD_RADIUS = 80;
 
@@ -134,7 +138,7 @@ export function taskText(def: JobDef, rank: number): string {
   if (s.kind === "supply") return `Bring ${n} ${s.items.length > 3 ? "fish" : s.items.map((k) => k.replace(/_/g, " ")).join(" or ")} to ${npcDef(def.employerKey)?.name ?? "them"}`;
   if (s.kind === "guard") return `Defeat ${n} wild beasts within ${s.radius} tiles of ${s.place}`;
   if (s.kind === "letters") return `Pick up ${n} letters from ${npcDef(def.employerKey)?.name ?? "the post"} and deliver them`;
-  return "Ride along with the caravan for one leg of its road";
+  return `Be by ${npcDef(def.employerKey)?.name ?? "the caravan"}'s wagon when it leaves town, stay close, beat the ambush and arrive with it`;
 }
 
 // ── Hired, kept and let go ─────────────────────────────────────────────

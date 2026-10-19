@@ -7,7 +7,7 @@ import { Section, Table, Tip } from "@/components/GuideSection";
 import { CONTROLS } from "@/lib/controls";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import {
-  FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
+  ESCORT_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
   animalRows, bossRows, buildRows, fishRows, furnitureNames, jobRows, parcelRows, perkRows, repRows, rootkingWhen, saplingRows, townRows,
 } from "@/lib/guide";
 
@@ -44,7 +44,7 @@ export default function GuidePage() {
           ))}
         </nav>
 
-        <article className="leading-relaxed [&_a]:text-amber-300 [&_a]:underline [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-white [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">
+        <article className="leading-relaxed [&_a]:text-amber-300 [&_a]:underline [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-white [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5 [&_h4]:mt-4 [&_h4]:font-bold [&_h4]:text-white [&_ol]:mt-2 [&_ol]:list-decimal [&_ol]:pl-5">
           <Link href="/" className="text-lg font-extrabold text-amber-300 no-underline lg:hidden">🌳 thegroove</Link>
           <h1 className="mt-2 text-4xl font-extrabold text-white">The player&apos;s guide</h1>
           <p className="text-lg text-stone-300">thegroove is a pixel world where the villagers think for themselves: they keep shops with real stock, run errands, trade with each other, gossip about you, and remember you. This is everything you can do in it.</p>
@@ -95,6 +95,14 @@ export default function GuidePage() {
             <p>Look for <b>💼 Jobs</b> on a villager&apos;s card. Work a shift a day for a wage; the more shifts you do, the higher you rise (promotions after {RANK_AT[1]} and {RANK_AT[2]} shifts, with better pay). You can hold {MAX_JOBS} jobs at once. Miss {FIRE_AFTER_DAYS} days in a row and you&apos;re let go (they&apos;ll take you back the next day). Days are real days, counted in UTC.</p>
             <Table head={["Job", "Who hires", "Each day", "Ranks", "A shift pays"]} rows={jobRows()} />
             <Tip>Suppliers are paid more for their goods than any market pays, and the goods go into the employer&apos;s real stock: the wheat you bring Hollis becomes his flour.</Tip>
+            <h4>🐎 How a caravan escort works</h4>
+            <p>Tamsin&apos;s wagon goes round the grove, Hollowmere, Brightwater and Coralwick, trading about {ESCORT_FACTS.stopMin} minutes in each before moving on. A shift is one leg of that road:</p>
+            <ol>
+              <li><b>Be there when she sets off</b>, within {ESCORT_FACTS.nearTiles} tiles of the wagon (she calls out &ldquo;Wagon&apos;s packed!&rdquo;). Only the guards beside her then are signed on; catching up on the road doesn&apos;t count, so wait for her in town.</li>
+              <li><b>Stay close</b> for at least {ESCORT_FACTS.sharePct}% of the way. Don&apos;t run far ahead or fall behind.</li>
+              <li><b>Beat the ambush</b>: about {ESCORT_FACTS.ambushMin} minutes into a leg with guards, {ESCORT_FACTS.ambushBeasts} beasts jump the wagon. The far legs bring tougher ones.</li>
+              <li><b>Arrive with her.</b> She pays you at the next town and thanks you by name.</li>
+            </ol>
             <h3>🌾 Gathering, woodcutting and fishing</h3>
             <ul>
               <li>Gather <b>wheat</b> in the Common Field, and <b>herbs, berries, mushrooms and stones</b> in the wild. Each wild patch comes back for you after a while, so nobody strips an area bare.</li>

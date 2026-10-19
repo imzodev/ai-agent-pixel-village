@@ -33,6 +33,7 @@ import { buyUp, gluts, marketUnit, sellInto } from "@/lib/marketServer";
 import { buyPrice, marketOf } from "@/lib/economy";
 import { TRADES, findBuyer } from "@/lib/trade";
 import { escortArrive, escortDepart, escortTick } from "@/lib/jobsServer";
+import { AMBUSH_AFTER_MS, AMBUSH_MAX, AMBUSH_MIN } from "@/lib/jobs";
 import { spawnAmbush } from "@/lib/encountersServer";
 import { profileFor } from "./profiles";
 import { itemDef } from "@/lib/itemDefs";
@@ -325,14 +326,13 @@ async function act(npc: NpcRow, p: MindProfile, action: string, v: MindView, urg
 /** The road a caravan is on with escorts (tickd's memory: a restart just skips that leg's ambush). */
 const rides = new Map<number, { leg: number; at: number; ambushed: boolean }>();
 /** The ambush springs this long after setting off. */
-const AMBUSH_AFTER_MS = 2 * 60_000;
 
 async function roadTick(npc: NpcRow, leg: number, pos: { x: number; y: number }, now: number): Promise<void> {
   const riders = await escortTick(pos, leg, now);
   const ride = rides.get(npc.id);
   if (!riders || !ride || ride.leg !== leg || ride.ambushed || now - ride.at < AMBUSH_AFTER_MS) return;
   ride.ambushed = true;
-  const n = await spawnAmbush(pos, 2 + Math.floor(Math.random() * 3));
+  const n = await spawnAmbush(pos, AMBUSH_MIN + Math.floor(Math.random() * (AMBUSH_MAX - AMBUSH_MIN + 1)));
   if (n) await speak(npc, await say(npc, "Beasts are leaping out at your wagon on the road! Call to your guards.", "Ambush! Guards, to the wagon!"), pos, `${npc.name}'s caravan was ambushed on the road.`);
 }
 

@@ -2,7 +2,8 @@
 // here from the game's own data, so the guide can't drift from the game.
 // Pure (no db); src/app/guide/page.tsx lays it out.
 
-import { JOB_DEFS, MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, shiftPay, taskText } from "./jobs";
+import { AMBUSH_AFTER_MS, AMBUSH_MAX, AMBUSH_MIN, ESCORT_PX, ESCORT_SHARE, JOB_DEFS, MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, shiftPay, taskText } from "./jobs";
+import { STOP_LINGER_MS } from "./mind/caravan";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -19,6 +20,15 @@ import { TRAVEL_COST } from "./worldAtlas";
 
 export { MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, PARCEL_PRICE, TRAVEL_COST };
 export const STARTER_PARCELS = STARTER.length;
+
+/** The caravan escort's rules, in the guide's words (from the game's own numbers). */
+export const ESCORT_FACTS = {
+  nearTiles: ESCORT_PX / 16,
+  sharePct: Math.round(ESCORT_SHARE * 100),
+  ambushMin: AMBUSH_AFTER_MS / 60_000,
+  ambushBeasts: `${AMBUSH_MIN}–${AMBUSH_MAX}`,
+  stopMin: STOP_LINGER_MS / 60_000,
+};
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");
 const who = (key: string) => npcDef(key)?.name ?? key;

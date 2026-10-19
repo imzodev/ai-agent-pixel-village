@@ -10,7 +10,7 @@ function hint(j: JobView): string {
   if (j.kind === "courier") return j.letters?.length ? `Deliver to ${j.letters.filter((l) => !l.delivered).map((l) => l.toName).join(", ")}` : `Pick up letters from ${j.employerName}`;
   if (j.kind === "supplier") return `Bring them to ${j.employerName}`;
   if (j.kind === "guard") return j.task.replace(/^Defeat \d+ /, "Defeat ");
-  return "Ride along with the caravan";
+  return j.riding ? `Stay by ${j.employerName}'s wagon until it arrives` : `Be by ${j.employerName}'s wagon when it leaves town`;
 }
 
 export default function JobsTracker({ list }: { list: JobView[] }) {
