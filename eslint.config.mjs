@@ -9,7 +9,7 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 export default defineConfig([
   ...nextCoreWebVitals,
   // public/ holds game assets (e.g. Tiled .tsx tilesets), not app code.
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "public/**", "marketing/**"]),
   {
     files: ["src/game/**/*.ts", "!src/game/worldStream.ts"],
     rules: {

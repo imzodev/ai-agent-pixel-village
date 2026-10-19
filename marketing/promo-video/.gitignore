@@ -1,0 +1,10 @@
+node_modules/
+raw/
+footage/
+audio/
+out/
+# made by build.mjs: the compositions, links to the shared footage, HyperFrames' snapshots
+wide/
+tall/
+wide40/
+tall40/
