@@ -22,6 +22,8 @@ export type Events = {
   poke: undefined;
   /** Emitted by WorldScene when E/Space is pressed on an actionable selection. */
   primaryAction: Selection;
+  /** The attack key on an enemy or something to chop: act on it at once, without opening its card. */
+  toolAction: Selection;
   /** Toggle one of the UI panels / routes. */
   toggle: "bag" | "shop" | "map" | "quests" | "friends";
   /** True while any modal is open that should block canvas interaction. */

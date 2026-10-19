@@ -1061,9 +1061,12 @@ export default function Hud() {
       if (farmLot && menuShownFor.current === selectionKey(s)) { setFarmMenu({ lotKey: farmLot, target: s }); return; }
       if (eDecision({ inReach: s.distance <= 160, instant: isChopTarget(s), menuOpenForIt: menuShownFor.current === selectionKey(s) }) === "act") commitSelection(s);
     });
+    // The attack key: hit or chop at once, never through the card (E opens that).
+    const offTool = bus.on("toolAction", (s) => commitSelection(s));
     return () => {
       for (const d of disposers) d();
       offPrimary();
+      offTool();
     };
   }, [talk, trade, craft, inspect, panel, building, sel, snap, me, openCraft, openTrade, commitSelection, close]);
 

@@ -1785,13 +1785,12 @@ export class WorldScene extends Phaser.Scene {
     }
     if (target) {
       const sel: Selection = { type: "enemy", id: target.id, kind: target.kind, hp: target.hp, maxHp: target.maxHp, distance: best };
-      this.select(sel);
-      bus.emit("primaryAction", sel); // HUD attacks: swing + server hit
+      bus.emit("toolAction", sel); // HUD attacks: swing + server hit (no card: that's what E is for)
       return;
     }
     // No enemy in reach: chop what's in front (the HUD swings the axe, or says you need one).
     const chop = bow ? null : this.nearestCandidate(isChopTarget);
-    if (chop) { this.select(chop); bus.emit("primaryAction", chop); return; }
+    if (chop) { bus.emit("toolAction", chop); return; }
     if (bow) { this.playShoot(p, p.facing); this.stream?.sendAct("shoot", p.facing); return; } // a shot at nothing
     this.playSlash(p, p.facing);
     this.stream?.sendAct("slash", p.facing);
