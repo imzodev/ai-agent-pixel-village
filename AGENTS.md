@@ -452,6 +452,49 @@ row lock (`locked`), so double clicks can't pay twice.
 - Employers know you work for them (`jobNoteFor` in the talk prompt); promotions
   and firings are `job` world events, so gossip.
 
+## Billboards (in-world ads)
+
+Anyone (an indie game, a shop, a streamer; sponsors too) can rent a billboard
+at `/advertise`: a poster of their own on a board in the world, billed monthly.
+
+- **Spots** (`src/lib/billboards.ts`, `billboardSpotsData.json` from
+  `scripts/gen-billboard-spots.ts`): two by the village plaza, one by every
+  town's square, a few along the King's Road, each on clear ground (no
+  buildings, decor, paths, roads, water or homestead sites). **Pinned** like
+  towns: rentals hang off their keys, a re-run only adds missing spots. Priced
+  by tier (`BILLBOARD_TIERS`: plaza $49, town $19, roadside $9). A board's base
+  row blocks (`billboardBlocks`, registered on server and client).
+- **Renting** (`src/lib/billboardServer.ts`, `/api/billboards`): a
+  `billboard_rentals` row holds the spot (an unpaid checkout only for
+  `PENDING_HOLD_MS`), then Stripe Checkout in subscription mode. Without a Stripe
+  key outside production (the sandbox) it goes straight to review.
+- **Review**: every poster, title and link waits in `pending_*` until an admin
+  approves it (`/api/admin/billboards`, the review list on the stats page). A
+  first rejection cancels and refunds; a rejected change leaves the live poster
+  up. Advertisers manage theirs by owner token at `/advertise/dashboard`
+  (change poster or link, cancel at period end).
+- **Posters** (`src/lib/billboardPoster.ts`): PNG/JPEG/WebP up to 2 MB, decoded
+  and drawn again as a 192×96 PNG with `sharp` (a runtime dependency), so no
+  metadata or hidden payload survives. Stored by content hash in `BILLBOARD_DIR`
+  (default `.data/billboards`; back it up with the database). Served by
+  `/api/billboards/poster/<hash>.png`: live ones publicly, pending ones only
+  to their owner's token or an admin.
+- **Links** go through `/api/billboards/click/<id>` (a redirect to the stored,
+  checked link: `cleanAdLink`, `rel="nofollow sponsored"`), which counts one
+  click per visitor per poster every 10 minutes. **Views** are counted by the
+  client (`src/game/billboardImpressions.ts`: 2 s within 160 px, once per poster
+  every 30 min) and sent in batches to `/api/billboards/events`.
+- **One Stripe webhook** (`src/lib/stripeWebhook.ts`): gems, sponsors and
+  billboards share a dispatcher that routes by checkout metadata (`packKey`,
+  `sponsorId`, `billboardRentalId`); `/api/{gems,sponsors,billboards}/webhook`
+  are all wrappers, so register any one of them in Stripe, with
+  `checkout.session.completed`, `customer.subscription.updated` and
+  `customer.subscription.deleted`. A billboard checkout never carries
+  `sponsorId` (it would open or close that sponsor). Every handler is idempotent;
+  gem credits are unique per Stripe session (`gem_transactions_stripe_session_idx`).
+- **Revenue** is on the stats page (`statsView().revenue`): MRR from sponsors'
+  rent and paid billboards, spots held per tier, gem sales, ad views and clicks.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

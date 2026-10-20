@@ -33,6 +33,7 @@ import type {
   GemTransaction,
 } from "@/types/cosmetic";
 import type { SponsorEvent } from "@/types/sponsor";
+import type { BillboardStatus, BillboardTier } from "@/types/billboard";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { ParcelUse } from "@/types/homestead";
@@ -1035,7 +1036,59 @@ export const gemTransactions = pgTable("gem_transactions", {
   packKey: text("pack_key"),
   stripeSessionId: text("stripe_session_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+// One credit per Stripe checkout (a redelivered webhook finds it there). Spends carry no session id; NULLs never clash.
+(t) => [uniqueIndex("gem_transactions_stripe_session_idx").on(t.stripeSessionId)],
+);
+
+// ---------- Billboards (in-world ads; src/lib/billboardServer.ts) ----------
+// A rental of one spot (src/lib/billboards.ts): a monthly Stripe subscription,
+// a poster an admin approved (image_path / title / link_url) and changes
+// waiting for review (pending_*). The owner manages it by owner_token.
+export const billboardRentals = pgTable(
+  "billboard_rentals",
+  {
+    id: serial("id").primaryKey(),
+    spotKey: text("spot_key").notNull(),
+    tier: text("tier").$type<BillboardTier>().notNull(),
+    priceCents: integer("price_cents").notNull(),
+    status: text("status").$type<BillboardStatus>().notNull().default("pending"),
+    ownerToken: text("owner_token").notNull().unique(),
+    contactEmail: text("contact_email").notNull(),
+    sponsorId: integer("sponsor_id"),
+    title: text("title"),
+    linkUrl: text("link_url"),
+    imagePath: text("image_path"),
+    pendingTitle: text("pending_title"),
+    pendingLinkUrl: text("pending_link_url"),
+    pendingImagePath: text("pending_image_path"),
+    rejectReason: text("reject_reason"),
+    stripeCheckoutId: text("stripe_checkout_id").unique(),
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    impressions: integer("impressions").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    paidAt: timestamp("paid_at"),
+    approvedAt: timestamp("approved_at"),
+    cancelledAt: timestamp("cancelled_at"),
+  },
+  (t) => [index("billboard_rentals_spot_idx").on(t.spotKey), index("billboard_rentals_status_idx").on(t.status)],
+);
+
+/** Impressions and clicks per rental per UTC day (the advertiser's chart). */
+export const billboardDaily = pgTable(
+  "billboard_daily",
+  {
+    rentalId: integer("rental_id").notNull(),
+    day: text("day").notNull(),
+    impressions: integer("impressions").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+  },
+  (t) => [uniqueIndex("billboard_daily_pk").on(t.rentalId, t.day)],
+);
 
 // ---------- Sponsor attribution ----------
 export const sponsorEvents = pgTable(

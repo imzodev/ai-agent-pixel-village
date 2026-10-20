@@ -44,6 +44,7 @@ import { CROP_KINDS } from "@/lib/crops";
 import { moveOfRow } from "@/lib/motion";
 import { lotsInBox } from "@/lib/lots";
 import { breadTables } from "@/lib/bakeryServer";
+import { billboardsInBox } from "@/lib/billboardServer";
 import { shopDisplays } from "@/lib/shopDisplayServer";
 import { SHOP_DISPLAYS } from "@/lib/shopDisplay";
 import type { EnemySnapshot, WorldSnapshot } from "@/lib/protocol";
@@ -288,6 +289,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
   const spById = new Map<number, SponsorLite>(sponsorRows.map((s) => [s.id, s]));
   const lotRows = await lotsInBox({ xMin, xMax, yMin, yMax });
   const tables = (await breadTables()).filter((t) => t.x >= xMin && t.x < xMax && t.y >= yMin && t.y < yMax);
+  const billboards = await billboardsInBox({ xMin, xMax, yMin, yMax });
   const near = new Set(SHOP_DISPLAYS.filter((d) => { const x = d.buildingTx * 16 + 192, y = d.buildingTy * 16 + 200; return x >= xMin && x < xMax && y >= yMin && y < yMax; }).map((d) => d.key));
   const displays = near.size ? (await shopDisplays()).filter((d) => near.has(d.key)) : [];
   const doors = await getBuildingDoors();
@@ -351,6 +353,7 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     lots: lotRows,
     breadTables: tables,
     displays,
+    billboards,
     enemies: enemyRows,
     chat,
     events,
@@ -451,6 +454,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
     lots: raw.lots,
     breadTables: raw.breadTables,
     displays: raw.displays,
+    billboards: raw.billboards,
     enemies: raw.enemies.map(enemySnapshotOf),
     chat: raw.chat.map((c) => ({
       id: c.id,

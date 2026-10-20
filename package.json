@@ -29,6 +29,7 @@
     "pino": "^10.3.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "sharp": "0.34.5",
     "stripe": "^22.6.1"
   },
   "devDependencies": {
@@ -43,7 +44,6 @@
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "postcss": "8.5.8",
-    "sharp": "0.34.5",
     "tailwindcss": "4.1.17",
     "tsx": "^4.23.15",
     "typescript": "5.9.3",

@@ -5,6 +5,7 @@
 // ADMIN_PAGE_PATH (src/app/[slug]/page.tsx).
 
 import { useCallback, useEffect, useState } from "react";
+import AdminBillboards from "./AdminBillboards";
 import type { DayCount, StatsView } from "@/types/analytics";
 
 const TOKEN_KEY = "grove_admin_token";
@@ -64,6 +65,11 @@ export default function StatsDashboard() {
         </div>
         <p className="text-sm text-stone-400">Last 30 days · {new Date(s.generatedAt).toLocaleString()}</p>
 
+        {s.revenue && <Revenue r={s.revenue} />}
+        <h2 className="mt-8 text-lg font-extrabold text-amber-300">Billboards to review</h2>
+        <AdminBillboards token={token} />
+
+        <h2 className="mt-8 text-lg font-extrabold text-amber-300">Players</h2>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Players, all time" v={s.totals.players} />
           <Stat label="New players (30 days)" v={s.totals.signups30d} />
@@ -125,6 +131,43 @@ export default function StatsDashboard() {
       </div>
     </main>
   );
+}
+
+const usd = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+
+/** MRR first (the goal), then what makes it up, then one-off gem sales. */
+function Revenue({ r }: { r: StatsView["revenue"] }) {
+  const ctr = r.ads30d.impressions ? `${((100 * r.ads30d.clicks) / r.ads30d.impressions).toFixed(1)}% click rate` : "no views yet";
+  return (
+    <>
+      <h2 className="mt-6 text-lg font-extrabold text-amber-300">Revenue</h2>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Money label="MRR" v={usd(r.mrrCents)} sub={r.cancellingCents ? `${usd(r.cancellingCents)} ending` : `ARR ${usd(r.mrrCents * 12)}`} />
+        <Money label="Sponsors" v={usd(r.sponsors.mrrCents)} sub={`${r.sponsors.active} active`} />
+        <Money label="Billboards" v={usd(r.billboards.mrrCents)} sub={`${r.billboards.paid} paid · ${r.billboards.inReview} in review`} />
+        <Money label="Gems (30 days)" v={usd(r.gems30d.cents)} sub={`${r.gems30d.purchases} buys · ${r.gems30d.payers} payers`} />
+      </div>
+      <div className="mt-2 grid gap-4 lg:grid-cols-3">
+        <Bars title="Gem sales a day (cents)" data={r.gemDaily} color="bg-fuchsia-400" />
+        <div className="rounded-lg bg-white/5 p-3 text-sm">
+          <div className="font-bold">Billboard spots held</div>
+          {r.billboards.byTier.map((t) => <div key={t.tier} className="mt-1 flex justify-between"><span>{t.tier} · {usd(t.priceCents)}/mo</span><span>{t.held} / {t.total}</span></div>)}
+          <div className="mt-2 text-[11px] text-stone-400">Full: {usd(r.billboards.byTier.reduce((s, t) => s + t.total * t.priceCents, 0))}/mo</div>
+        </div>
+        <div className="rounded-lg bg-white/5 p-3 text-sm">
+          <div className="font-bold">Ads, last 30 days</div>
+          <div className="mt-1">{r.ads30d.impressions.toLocaleString()} views · {r.ads30d.clicks.toLocaleString()} clicks</div>
+          <div className="text-[11px] text-stone-400">{ctr}</div>
+          <div className="mt-2 font-bold">Lead fees (30 days)</div>
+          <div>{usd(r.leadFees30dCents)} <span className="text-[11px] text-stone-400">tracked, not billed</span></div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Money({ label, v, sub }: { label: string; v: string; sub?: string }) {
+  return <div className="rounded-lg bg-white/5 p-3"><div className="text-[11px] uppercase tracking-wider text-stone-400">{label}</div><div className="text-2xl font-extrabold">{v}</div>{sub && <div className="text-[11px] text-stone-400">{sub}</div>}</div>;
 }
 
 function Stat({ label, v, sub }: { label: string; v: number; sub?: string }) {

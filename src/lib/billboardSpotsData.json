@@ -1,0 +1,184 @@
+[
+ {
+  "key": "plaza_west",
+  "name": "Village plaza (west)",
+  "tier": "plaza",
+  "tx": 10,
+  "ty": 9
+ },
+ {
+  "key": "plaza_east",
+  "name": "Village plaza (east)",
+  "tier": "plaza",
+  "tx": 52,
+  "ty": 26
+ },
+ {
+  "key": "town_coralwick",
+  "name": "Coralwick square",
+  "tier": "town",
+  "tx": -34,
+  "ty": 326
+ },
+ {
+  "key": "town_sunrest",
+  "name": "Sunrest square",
+  "tier": "town",
+  "tx": -310,
+  "ty": 317
+ },
+ {
+  "key": "town_icefall",
+  "name": "Icefall square",
+  "tier": "town",
+  "tx": -130,
+  "ty": -286
+ },
+ {
+  "key": "town_reedhollow",
+  "name": "Reedhollow square",
+  "tier": "town",
+  "tx": -850,
+  "ty": -196
+ },
+ {
+  "key": "town_shadewood",
+  "name": "Shadewood square",
+  "tier": "town",
+  "tx": -790,
+  "ty": -70
+ },
+ {
+  "key": "town_cloverhill",
+  "name": "Cloverhill square",
+  "tier": "town",
+  "tx": -634,
+  "ty": -259
+ },
+ {
+  "key": "town_tidemouth",
+  "name": "Tidemouth square",
+  "tier": "town",
+  "tx": 702,
+  "ty": -451
+ },
+ {
+  "key": "town_miragespring",
+  "name": "Miragespring square",
+  "tier": "town",
+  "tx": 522,
+  "ty": 569
+ },
+ {
+  "key": "town_frosthold",
+  "name": "Frosthold square",
+  "tier": "town",
+  "tx": -418,
+  "ty": -601
+ },
+ {
+  "key": "town_toadmoor",
+  "name": "Toadmoor square",
+  "tier": "town",
+  "tx": -1578,
+  "ty": -211
+ },
+ {
+  "key": "town_nightdell",
+  "name": "Nightdell square",
+  "tier": "town",
+  "tx": -1138,
+  "ty": -541
+ },
+ {
+  "key": "town_larkfield",
+  "name": "Larkfield square",
+  "tier": "town",
+  "tx": -1578,
+  "ty": 239
+ },
+ {
+  "key": "town_coralhaven",
+  "name": "Coralhaven square",
+  "tier": "town",
+  "tx": -1518,
+  "ty": 659
+ },
+ {
+  "key": "town_scorchrest",
+  "name": "Scorchrest square",
+  "tier": "town",
+  "tx": -618,
+  "ty": 659
+ },
+ {
+  "key": "town_icewatch",
+  "name": "Icewatch square",
+  "tier": "town",
+  "tx": -818,
+  "ty": -841
+ },
+ {
+  "key": "town_reedmoor",
+  "name": "Reedmoor square",
+  "tier": "town",
+  "tx": -2118,
+  "ty": -31
+ },
+ {
+  "key": "town_thorncrook",
+  "name": "Thorncrook square",
+  "tier": "town",
+  "tx": 282,
+  "ty": -676
+ },
+ {
+  "key": "town_amberton",
+  "name": "Amberton square",
+  "tier": "town",
+  "tx": -86,
+  "ty": 703
+ },
+ {
+  "key": "town_tidecove",
+  "name": "Tidecove square",
+  "tier": "town",
+  "tx": -858,
+  "ty": 1034
+ },
+ {
+  "key": "town_sunspring",
+  "name": "Sunspring square",
+  "tier": "town",
+  "tx": 362,
+  "ty": 959
+ },
+ {
+  "key": "road_gate",
+  "name": "Roadside board",
+  "tier": "roadside",
+  "tx": -61,
+  "ty": -2
+ },
+ {
+  "key": "road_mill",
+  "name": "Roadside board",
+  "tier": "roadside",
+  "tx": -121,
+  "ty": 12
+ },
+ {
+  "key": "road_mid",
+  "name": "Roadside board",
+  "tier": "roadside",
+  "tx": -300,
+  "ty": 13
+ },
+ {
+  "key": "road_west",
+  "name": "Roadside board",
+  "tier": "roadside",
+  "tx": -630,
+  "ty": 13
+ }
+]

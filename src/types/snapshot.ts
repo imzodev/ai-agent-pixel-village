@@ -5,6 +5,7 @@
 
 import type { BreadTableSnapshot } from "./bakery";
 import type { ShopDisplaySnapshot } from "./shopDisplay";
+import type { BillboardSnapshot } from "./billboard";
 import type {
   animals,
   buildings,
@@ -67,6 +68,8 @@ export type RawSnapshot = {
   breadTables: BreadTableSnapshot[];
   /** Shop displays in the proximity box (src/lib/shopDisplay.ts). */
   displays: ShopDisplaySnapshot[];
+  /** Billboards in the proximity box, with their posters (src/lib/billboards.ts). */
+  billboards: BillboardSnapshot[];
   enemies: Array<typeof enemies.$inferSelect>;
   chat: Array<typeof worldChat.$inferSelect>;
   events: Array<typeof worldEvents.$inferSelect>;

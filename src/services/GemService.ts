@@ -36,10 +36,11 @@ export class GemService {
   }
 
   /** Fulfill a Stripe webhook (or sandbox callback) by crediting the gems. */
-  async fulfill(input: { characterId: number; packKey: GemPackKey; stripeSessionId: string | null; userId?: number }): Promise<{ balance: number }> {
+  async fulfill(input: { characterId: number; packKey: GemPackKey; stripeSessionId: string | null; userId?: number }): Promise<{ balance: number; duplicate: boolean }> {
     const pack = GEM_PACKS.find((p) => p.key === input.packKey);
     if (!pack) throw new Error(`unknown pack ${input.packKey}`);
     const res = await this.gems.credit(input.characterId, pack.gems, "purchase", input.packKey, input.stripeSessionId);
+    if (res.duplicate) return res;
     this.analytics.track(
       "gem_purchase_fulfilled",
       { packKey: input.packKey, gems: pack.gems, balance: res.balance },

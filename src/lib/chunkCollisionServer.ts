@@ -11,12 +11,17 @@ import {
   chunkRegistered,
   isWalkableAt,
   registerChunk,
+  setDynamicBlocks,
   FOOT_CORNERS,
 } from "./chunkCollision";
+import { billboardBlocks } from "./billboards";
 import { defaultChunk } from "./chunkGen";
 import { stampBuildingCollisions } from "./buildingStampsServer";
 import { ensureFelledLoaded } from "./treesServer";
 import { refreshHomesteadBlocks } from "./homesteadServer";
+
+// Billboards' bases block (the client registers the same tiles: WorldScene).
+setDynamicBlocks("billboards", billboardBlocks());
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   await ensureFelledLoaded(); // generated trees players have felled

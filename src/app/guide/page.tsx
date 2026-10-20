@@ -7,7 +7,7 @@ import { Section, Table, Tip } from "@/components/GuideSection";
 import { CONTROLS } from "@/lib/controls";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import {
-  ESCORT_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
+  BILLBOARD_FACTS, ESCORT_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
   animalRows, bossRows, buildRows, fishRows, furnitureNames, jobRows, parcelRows, perkRows, repRows, rootkingWhen, saplingRows, townRows,
 } from "@/lib/guide";
 
@@ -167,6 +167,7 @@ export default function GuidePage() {
               <li><b>Moments</b>: your proudest milestones become cards to share, and your profile has its own page.</li>
               <li><b>Friends</b> see when you&apos;re online; everyone shares the world <b>chat</b>.</li>
               <li>The <Link href="/shop">shop</Link> has outfits and accessories for your character.</li>
+              <li><b>Billboards</b> stand by the village plaza, by every town&apos;s square and along the King&apos;s Road. A poster on one is an ad from a real game, shop or creator: tap it to visit them. An empty board can be rented by anyone at <Link href="/advertise">/advertise</Link>.</li>
               <li>Be a good neighbour: the few rules are in the <Link href="/terms">terms</Link>.</li>
             </ul>
           </Section>
@@ -180,6 +181,8 @@ export default function GuidePage() {
             <p>You missed {FIRE_AFTER_DAYS} days in a row. You can be hired again the next day (you start over at the bottom).</p>
             <h3>Where do I get fruit tree saplings?</h3>
             <p>Apple saplings from Pip; the others from the general stores of the towns whose land suits them (see the table under Your homestead), or Tamsin&apos;s caravan brings their fruit.</p>
+            <h3>Can I put my game, shop or channel on a billboard?</h3>
+            <p>Yes. There are {BILLBOARD_FACTS.spots} billboards, from ${BILLBOARD_FACTS.from} to ${BILLBOARD_FACTS.to} a month depending on how busy the spot is. Upload a poster at <Link href="/advertise">/advertise</Link>; every poster is reviewed before it goes up, and refunded if it isn&apos;t approved. You see its views and clicks day by day.</p>
             <h3>Is it free?</h3>
             <p>Yes. Gems (for outfits) are the only thing you can buy, and they&apos;re never needed to play.</p>
           </Section>

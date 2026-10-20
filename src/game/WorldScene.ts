@@ -56,6 +56,7 @@ import type { EnemySnapshot } from "@/lib/protocol";
 import type { BreadTableSnapshot } from "@/types/bakery";
 import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 import type { LotSnapshot } from "@/types/garden";
+import type { BillboardSnapshot } from "@/types/billboard";
 import { drawHomestead, homesteadPlotPoints, homesteadSig, registerParcelFrames, signPoint } from "./homesteadArt";
 import { buildingTiles } from "@/lib/homestead";
 import { siteByKey } from "@/lib/homesteadSites";
@@ -63,6 +64,9 @@ import { positionAt } from "@/lib/motion";
 import { ANIMAL_SPRITES, animKey, frameIndex, sheetKey } from "./animalSprites";
 import { gameFont } from "./gameFont";
 import { buildLotBanner, lotBannerSignature } from "./lotBanners";
+import { billboardSig, buildBillboard, registerBillboardFrames } from "./billboardArt";
+import { ImpressionTracker } from "./billboardImpressions";
+import { billboardBlocks, spotByKey, spotPoint } from "@/lib/billboards";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import { tierAt } from "@/lib/continent";
 import { frameSeconds } from "@/lib/frameTime";
@@ -165,6 +169,10 @@ export class WorldScene extends Phaser.Scene {
   private homesteads = new Map<string, { sig: string; objs: Phaser.GameObjects.GameObject[] }>();
   /** Banner and name sign of each owned lot, with what it was drawn from. */
   private lotBanners = new Map<string, { sig: string; obj: Phaser.GameObjects.Container }>();
+  /** Billboards drawn (src/game/billboardArt.ts), with what they were drawn from. */
+  private billboards = new Map<string, { sig: string; objs: Phaser.GameObjects.GameObject[] }>();
+  /** Posters you've walked past, sent to /api/billboards/events in batches. */
+  private impressions = new ImpressionTracker();
   /** The goods on each shop display, per item. */
   private displayPieces = new Map<string, Map<string, Phaser.GameObjects.Image[]>>();
   /** Relics we've already pointed out ("something glints nearby"). */
@@ -261,6 +269,8 @@ export class WorldScene extends Phaser.Scene {
   // before create()'s awaits. Idempotent.
   private readonly teardown = (): void => {
     this.destroyed = true;
+    this.flushImpressions(true);
+    window.removeEventListener("pagehide", this.onPageHide);
     this.stream?.stop();
     this.stream = null;
     this.unsub.forEach((u) => u());
@@ -312,6 +322,13 @@ export class WorldScene extends Phaser.Scene {
     // name. Must run after preload, hence here in create().
     registerCropFrames(this);
     registerParcelFrames(this);
+    registerBillboardFrames(this);
+    // Billboards' bases block, as on the server (src/lib/chunkCollisionServer.ts).
+    setDynamicBlocks("billboards", billboardBlocks());
+    // Who walked past which poster: checked every second, sent every 30 s and on leaving.
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => this.watchBillboards() });
+    this.time.addEvent({ delay: 30_000, loop: true, callback: () => this.flushImpressions(false) });
+    window.addEventListener("pagehide", this.onPageHide);
     // One animation per species × action × direction, from the registry.
     for (const [species, def] of Object.entries(ANIMAL_SPRITES)) {
       for (const [action, a] of Object.entries(def.actions)) {
@@ -714,6 +731,7 @@ export class WorldScene extends Phaser.Scene {
     this.syncDisplays(s.displays ?? []);
     this.syncHomesteads(s.lots ?? []);
     this.syncLotBanners(s.lots ?? []);
+    this.syncBillboards(s.billboards ?? []);
     // buildings — visuals come from the stamped templates; the snapshot only
     // contributes DB identity (selection), door position and sponsor glow.
     for (const b of s.buildings) {
@@ -1184,6 +1202,58 @@ export class WorldScene extends Phaser.Scene {
     for (const [key, h] of this.homesteads) if (!live.has(key)) { for (const o of h.objs) o.destroy(); this.homesteads.delete(key); setDynamicBlocks(key, []); }
   }
 
+  /** Billboards near you: drawn when they appear or their poster changes, removed out of range. */
+  private syncBillboards(list: readonly BillboardSnapshot[]): void {
+    const live = new Set<string>();
+    for (const b of list) {
+      const def = spotByKey(b.key);
+      if (!def) continue;
+      live.add(b.key);
+      const sig = billboardSig(b);
+      if (this.billboards.get(b.key)?.sig === sig) continue;
+      for (const o of this.billboards.get(b.key)?.objs ?? []) o.destroy();
+      const entry = { sig, objs: [] as Phaser.GameObjects.GameObject[] };
+      entry.objs = buildBillboard(this, def, b, () => this.billboards.get(b.key) === entry);
+      const at = spotPoint(def);
+      const zone = this.add.zone(def.tx * 16, def.ty * 16, 112, 80).setOrigin(0, 0).setDepth(DEPTH_CHAR_BASE + at.y).setInteractive({ useHandCursor: true });
+      zone.on("pointerdown", () => { if (!this.modalOpen) this.select(this.billboardSelection(b.key, this.distTo(at.x, at.y))); });
+      entry.objs.push(zone);
+      this.billboards.set(b.key, entry);
+    }
+    for (const [key, h] of this.billboards) if (!live.has(key)) { for (const o of h.objs) o.destroy(); this.billboards.delete(key); }
+  }
+
+  /** The selection for a billboard, from what the latest snapshot says is on it. */
+  private billboardSelection(key: string, distance: number): Selection {
+    const b = this.snapshot?.billboards?.find((x) => x.key === key);
+    const def = spotByKey(key);
+    const at = def ? spotPoint(def) : { x: 0, y: 0 };
+    return { type: "billboard", key, rentalId: b?.rentalId ?? null, name: def?.name ?? "Billboard", title: b?.title ?? null, x: at.x, y: at.y, distance };
+  }
+
+  /** Count the posters you're standing by (src/game/billboardImpressions.ts). */
+  private watchBillboards(): void {
+    const me = this.player?.sprite;
+    const list = this.snapshot?.billboards;
+    if (!me || !list?.length || document.hidden) return;
+    const boards = list.flatMap((b) => {
+      const def = b.rentalId ? spotByKey(b.key) : undefined;
+      return def && b.rentalId ? [{ rentalId: b.rentalId, ...spotPoint(def) }] : [];
+    });
+    this.impressions.observe(boards, me, Date.now());
+  }
+
+  private readonly onPageHide = (): void => this.flushImpressions(true);
+
+  /** Send the views collected so far; `leaving` uses a beacon (the page is going away). */
+  private flushImpressions(leaving: boolean): void {
+    const views = this.impressions.drain();
+    if (!views.length) return;
+    const body = JSON.stringify({ views });
+    if (leaving && navigator.sendBeacon) navigator.sendBeacon("/api/billboards/events", body);
+    else void fetch("/api/billboards/events", { method: "POST", body, keepalive: true }).catch(() => undefined);
+  }
+
   /** A building just went up where you stand: step out below it, onto open ground. */
   private stepOutOfBuildings(): void {
     const s = this.player?.sprite;
@@ -1420,6 +1490,8 @@ export class WorldScene extends Phaser.Scene {
       const at = signPoint(l.key);
       if (at) add(at.x, at.y, (d) => ({ type: "homestead", key: l.key, name: l.owner ? `${l.owner.id === this.meId ? "Your" : `${l.owner.name}'s`} homestead` : "Homestead for sale", x: at.x, y: at.y, distance: d }));
     }
+    // Billboards: read the poster (and follow its link), or rent the space.
+    for (const b of s.billboards ?? []) { const def = spotByKey(b.key); if (def) { const at = spotPoint(def); add(at.x, at.y, (d) => this.billboardSelection(b.key, d)); } }
     // Town bounty boards.
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
@@ -1467,6 +1539,7 @@ export class WorldScene extends Phaser.Scene {
       case "bread": return { x: sel.x, y: sel.y - 26 };
       case "plot": return { x: sel.x, y: sel.y - 14 };
       case "homestead": return { x: sel.x, y: sel.y - 44 };
+      case "billboard": return { x: sel.x, y: sel.y - 90 };
     }
   }
 

@@ -4,7 +4,7 @@
 export const SPONSOR_PLACEMENT_TYPES = [
   "npc", // base: the NPC at the reserved building
   "quest_line", // daily quest line that mentions sponsor
-  "billboard", // two large posters on main street
+  "billboard", // sold on its own now: /advertise (src/lib/billboards.ts)
   "event", // weekly tournament sponsorship
   "cosmetic_drop", // brand hat granted on first visit
   "home_perk", // sponsor-paying players get extra home visitor slots

@@ -18,7 +18,8 @@ export type PlacementHandler = {
 const REGISTRY: Record<SponsorPlacementType, PlacementHandler> = {
   npc: { priceCents: 4900, label: "Sponsored NPC (base)", defaultEnabled: true },
   quest_line: { priceCents: 2000, label: "Sponsored quest line", defaultEnabled: false },
-  billboard: { priceCents: 1500, label: "Billboard posters", defaultEnabled: false },
+  // Billboards are rented on their own at /advertise (src/lib/billboards.ts), priced by spot.
+  billboard: { priceCents: 900, label: "Billboard (from $9/mo at /advertise)", defaultEnabled: false },
   event: { priceCents: 3000, label: "Event sponsorship", defaultEnabled: false },
   cosmetic_drop: { priceCents: 2500, label: "Brand cosmetic drop", defaultEnabled: true },
   home_perk: { priceCents: 4000, label: "Premium home perk", defaultEnabled: false },

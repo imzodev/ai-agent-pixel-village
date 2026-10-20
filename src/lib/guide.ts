@@ -17,6 +17,7 @@ import { FURNITURE_ITEMS } from "./furniture";
 import { itemDef } from "./itemDefs";
 import { npcDef } from "./npcDefs";
 import { TRAVEL_COST } from "./worldAtlas";
+import { BILLBOARD_SPOTS, BILLBOARD_TIERS } from "./billboards";
 
 export { MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, PARCEL_PRICE, TRAVEL_COST };
 export const STARTER_PARCELS = STARTER.length;
@@ -28,6 +29,13 @@ export const ESCORT_FACTS = {
   ambushMin: AMBUSH_AFTER_MS / 60_000,
   ambushBeasts: `${AMBUSH_MIN}–${AMBUSH_MAX}`,
   stopMin: STOP_LINGER_MS / 60_000,
+};
+
+/** Billboards: where they stand and what renting one costs a month. */
+export const BILLBOARD_FACTS = {
+  spots: BILLBOARD_SPOTS.length,
+  from: Math.min(...Object.values(BILLBOARD_TIERS).map((t) => t.priceCents)) / 100,
+  to: Math.max(...Object.values(BILLBOARD_TIERS).map((t) => t.priceCents)) / 100,
 };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

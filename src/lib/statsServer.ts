@@ -5,7 +5,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS } from "@/lib/tutorial";
-import type { DayCount, SourceRow, StatsView } from "@/types/analytics";
+import { BILLBOARD_SPOTS, BILLBOARD_TIERS } from "@/lib/billboards";
+import { GEM_PACKS } from "@/types/cosmetic";
+import type { BillboardTier } from "@/types/billboard";
+import type { DayCount, RevenueView, SourceRow, StatsView } from "@/types/analytics";
 
 const DAY_MS = 86_400_000;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -83,5 +86,54 @@ export async function statsView(now = Date.now()): Promise<StatsView> {
     tutorial,
     sharing: { momentsCreated: sum("moment_created"), shareClicks, profileViews: sum("profile_view"), momentViews: sum("moment_view"), signupsFromShares: num(fromShares?.n) },
     bySource,
+    revenue: await revenueView(now),
+  };
+}
+
+/** Recurring revenue (sponsors' rent, billboards) and the last 30 days' gem sales. */
+async function revenueView(now: number): Promise<RevenueView> {
+  const since30 = new Date(now - 30 * DAY_MS);
+  const [sp] = await rows(sql`select count(*) as n, coalesce(sum(rent_cents), 0) as cents from sponsors where status = 'active'`);
+  const bb = await rows(sql`
+    select tier, status, count(*) as n, coalesce(sum(price_cents), 0) as cents,
+      count(*) filter (where pending_image_path is not null or pending_title is not null or pending_link_url is not null) as changes,
+      coalesce(sum(price_cents) filter (where cancel_at_period_end), 0) as cancelling
+    from billboard_rentals where status in ('review', 'active') group by 1, 2`);
+  const [leads] = await rows(sql`select coalesce(sum(fee_cents), 0) as cents from leads where created_at >= ${since30}`);
+  // Real purchases only: the dev sandbox logs credits without a Stripe session.
+  const packs = await rows(sql`
+    select pack_key, count(*) as n, count(distinct character_id) as payers from gem_transactions
+    where source = 'purchase' and stripe_session_id is not null and created_at >= ${since30} group by 1`);
+  const [payers] = await rows(sql`select count(distinct character_id) as n from gem_transactions where source = 'purchase' and stripe_session_id is not null and created_at >= ${since30}`);
+  const gemDays = await rows(sql`
+    select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD') as day, pack_key, count(*) as n from gem_transactions
+    where source = 'purchase' and stripe_session_id is not null and created_at >= ${since30} group by 1, 2`);
+  const [ads] = await rows(sql`select coalesce(sum(impressions), 0) as i, coalesce(sum(clicks), 0) as c from billboard_daily where day >= ${dayOf(now - 30 * DAY_MS)}`);
+
+  const price = (key: unknown) => GEM_PACKS.find((p) => p.key === key)?.priceCents ?? 0;
+  const byPack = packs.map((r) => ({ packKey: String(r.pack_key), n: num(r.n), cents: num(r.n) * price(r.pack_key) }));
+  const centsByDay = new Map<string, number>();
+  for (const r of gemDays) centsByDay.set(String(r.day), (centsByDay.get(String(r.day)) ?? 0) + num(r.n) * price(r.pack_key));
+  const bbCents = bb.reduce((s, r) => s + num(r.cents), 0);
+  const tiers = Object.keys(BILLBOARD_TIERS) as BillboardTier[];
+  return {
+    mrrCents: num(sp?.cents) + bbCents,
+    cancellingCents: bb.reduce((s, r) => s + num(r.cancelling), 0), // sponsors end at once, so only billboards
+    sponsors: { active: num(sp?.n), mrrCents: num(sp?.cents) },
+    billboards: {
+      paid: bb.reduce((s, r) => s + num(r.n), 0),
+      inReview: bb.filter((r) => r.status === "review").reduce((s, r) => s + num(r.n), 0),
+      changesWaiting: bb.filter((r) => r.status === "active").reduce((s, r) => s + num(r.changes), 0),
+      mrrCents: bbCents,
+      byTier: tiers.map((tier) => ({
+        tier, priceCents: BILLBOARD_TIERS[tier].priceCents,
+        held: bb.filter((r) => r.tier === tier).reduce((s, r) => s + num(r.n), 0),
+        total: BILLBOARD_SPOTS.filter((s) => s.tier === tier).length,
+      })),
+    },
+    leadFees30dCents: num(leads?.cents),
+    gems30d: { cents: byPack.reduce((s, p) => s + p.cents, 0), purchases: byPack.reduce((s, p) => s + p.n, 0), payers: num(payers?.n), byPack },
+    gemDaily: series([...centsByDay].map(([day, n]) => ({ day, n })), 30, now),
+    ads30d: { impressions: num(ads?.i), clicks: num(ads?.c) },
   };
 }

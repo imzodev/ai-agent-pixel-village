@@ -198,6 +198,7 @@ function Dashboard() {
               <div className="font-bold">Billing</div>
               <div className="text-[12px] text-stone-600">{d.billing.plan}</div>
               <div className="text-[12px] text-stone-600">{d.paymentsConfigured ? "Charged monthly via Stripe." : "Sandbox mode: no card on file on this deployment."}</div>
+              {s.status === "active" && <Link href="/advertise" className="mt-2 mr-2 inline-block rounded-lg bg-orange-100 px-3 py-1 text-[12px] text-orange-900 hover:bg-orange-200">🪧 Add a billboard (paste your token there)</Link>}
               {s.status !== "cancelled" && <button onClick={() => { if (confirm("Cancel your reservation? Your sign comes down and your agent leaves.")) void save({ status: "cancelled" }); }} className="mt-2 rounded-lg bg-stone-200 px-3 py-1 text-[12px] hover:bg-red-100">Cancel reservation</button>}
             </div>
           </section>

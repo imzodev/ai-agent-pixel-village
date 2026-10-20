@@ -50,5 +50,8 @@ describe("selection options", () => {
   it("the same target keeps the same key", () => {
     expect(selectionKey(npc(4, "a"))).toBe(selectionKey({ ...npc(4, "a"), distance: 99 }));
     expect(selectionKey(npc(4))).not.toBe(selectionKey(npc(5)));
+    const bb = (key: string, distance: number) => ({ type: "billboard" as const, key, rentalId: 3, name: "Board", title: "Ad", x: 0, y: 0, distance });
+    expect(selectionKey(bb("plaza_west", 1))).toBe(selectionKey(bb("plaza_west", 50)));
+    expect(selectionKey(bb("plaza_west", 1))).not.toBe(selectionKey(bb("plaza_east", 1)));
   });
 });

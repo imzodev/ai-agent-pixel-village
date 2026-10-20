@@ -41,3 +41,16 @@ ALTER TABLE lots DROP COLUMN IF EXISTS price;
 ALTER TABLE lots DROP COLUMN IF EXISTS for_sale;
 ALTER TABLE ranch_state DROP COLUMN IF EXISTS coop_level;
 ALTER TABLE ranch_state DROP COLUMN IF EXISTS barn_level;
+
+-- gem_transactions.stripe_session_id became unique (one credit per Stripe
+-- checkout; a redelivered webhook used to credit the gems again). Any repeat
+-- already there would stop the index from being built, so every copy but the
+-- first gets a ':dup<id>' suffix. The audit rows themselves are kept.
+DO $$ BEGIN
+  IF to_regclass('public.gem_transactions') IS NOT NULL THEN
+    UPDATE gem_transactions g SET stripe_session_id = g.stripe_session_id || ':dup' || g.id
+    WHERE g.stripe_session_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM gem_transactions o
+                  WHERE o.stripe_session_id = g.stripe_session_id AND o.id < g.id);
+  END IF;
+END $$;

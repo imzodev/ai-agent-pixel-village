@@ -1,13 +1,13 @@
 // Cosmetic service. Catalog lookup, ownership grants (auto-grant on sponsor
 // NPC visit, manual grant on purchase), and equip/unequip.
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { CharacterRepository } from "@/types/ports";
 import type { AnalyticsPort } from "@/types/ports";
 import type { DrizzleCosmeticRepo } from "@/db/repos/cosmetic";
 import type { CosmeticItem, CosmeticSlot } from "@/types/cosmetic";
-import { characters, cosmeticItems, cosmeticOwnerships } from "@/db/schema";
+import { characters, cosmeticItems, cosmeticOwnerships, gemTransactions } from "@/db/schema";
 
 export type ShopView = {
   item: CosmeticItem;
@@ -52,12 +52,15 @@ export class CosmeticService {
     if (await this.repo.owns(characterId, itemKey)) throw new Error("already owned");
     if (!this.db) throw new Error("CosmeticService requires a Drizzle db handle");
     return await this.db.transaction(async (tx) => {
-      const [ch] = await tx.select({ coins: characters.coins }).from(characters).where(eq(characters.id, characterId)).limit(1);
-      if (!ch || ch.coins < item.coinPrice) throw new Error("insufficient coins");
-      await tx.update(characters).set({ coins: ch.coins - item.coinPrice }).where(eq(characters.id, characterId));
+      const [ch] = await tx
+        .update(characters)
+        .set({ coins: sql`${characters.coins} - ${item.coinPrice}` })
+        .where(and(eq(characters.id, characterId), gte(characters.coins, item.coinPrice)))
+        .returning({ coins: characters.coins });
+      if (!ch) throw new Error("insufficient coins");
       await tx.insert(cosmeticOwnerships).values({ characterId, itemKey, source: "coin" });
       this.analytics.track("cosmetic_bought_coins", { itemKey, price: item.coinPrice }, userId);
-      return { newBalance: ch.coins - item.coinPrice };
+      return { newBalance: ch.coins };
     });
   }
 
@@ -68,12 +71,17 @@ export class CosmeticService {
     if (await this.repo.owns(characterId, itemKey)) throw new Error("already owned");
     if (!this.db) throw new Error("CosmeticService requires a Drizzle db handle");
     return await this.db.transaction(async (tx) => {
-      const [ch] = await tx.select({ coins: characters.coins, gems: characters.gems }).from(characters).where(eq(characters.id, characterId)).limit(1);
-      if (!ch || ch.gems < item.gemPrice) throw new Error("insufficient gems");
-      await tx.update(characters).set({ gems: ch.gems - item.gemPrice }).where(eq(characters.id, characterId));
+      // One guarded UPDATE: two buys at once can't both spend the same gems.
+      const [ch] = await tx
+        .update(characters)
+        .set({ gems: sql`${characters.gems} - ${item.gemPrice}` })
+        .where(and(eq(characters.id, characterId), gte(characters.gems, item.gemPrice)))
+        .returning({ gems: characters.gems });
+      if (!ch) throw new Error("insufficient gems");
       await tx.insert(cosmeticOwnerships).values({ characterId, itemKey, source: "gem" });
+      await tx.insert(gemTransactions).values({ characterId, delta: -item.gemPrice, source: "spend", packKey: null, stripeSessionId: null });
       this.analytics.track("cosmetic_bought_gems", { itemKey, price: item.gemPrice }, userId);
-      return { newBalance: ch.gems - item.gemPrice };
+      return { newBalance: ch.gems };
     });
   }
 

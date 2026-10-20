@@ -65,6 +65,7 @@ export function makeCreatureTextures(scene: Scene) {
 
 import { CROP_KINDS, NODE_SHEETS } from "@/lib/crops";
 import { PARCELS_SHEET, PARCELS_TEXTURE } from "./homesteadArt";
+import { BILLBOARD_SHEET, BILLBOARD_TEXTURE } from "./billboardArt";
 
 const LPC_CROPS_KEY = "lpc_crops";
 
@@ -78,6 +79,8 @@ export function loadPropSprites(scene: Scene): void {
   scene.load.spritesheet(FURNITURE_TEXTURE, FURNITURE_SHEET, { frameWidth: FURNITURE_CELL, frameHeight: FURNITURE_CELL });
   // Homestead parcels, fences and signposts (src/game/homesteadArt.ts).
   scene.load.image(PARCELS_TEXTURE, PARCELS_SHEET);
+  // Billboards: frames and the "your ad here" notice (src/game/billboardArt.ts).
+  scene.load.image(BILLBOARD_TEXTURE, BILLBOARD_SHEET);
 }
 
 /**

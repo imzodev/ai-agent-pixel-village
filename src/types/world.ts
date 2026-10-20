@@ -70,6 +70,8 @@ export type Selection =
   | { type: "bread"; table: string; name: string; x: number; y: number; distance: number }
   // A homestead's signpost (src/lib/homestead.ts): "for sale", or whose it is.
   | { type: "homestead"; key: string; name: string; x: number; y: number; distance: number }
+  // A billboard (src/lib/billboards.ts): its poster's title, or empty ad space; x/y = in front of it.
+  | { type: "billboard"; key: string; rentalId: number | null; name: string; title: string | null; x: number; y: number; distance: number }
   // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
   | { type: "tree"; vx: number; vy: number; kind: string; x: number; y: number; distance: number };
 

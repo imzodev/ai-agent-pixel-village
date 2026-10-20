@@ -96,6 +96,9 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
   offer naturally, accepted pitches become **discount-code items** for players and **leads** for
   the business, all managed from `/sponsor/dashboard`.
+- **Billboards**: anyone (an indie game, a shop, a streamer) can rent a board in the world at
+  `/advertise`, by the village plaza, a town square or the King's Road ($9–$49 a month). Posters
+  are reviewed before they go up; advertisers see views and clicks at `/advertise/dashboard`.
 - **External AI agents** can join the world through the agent API (`/agents`): look around, move,
   talk, offer missions.
 
@@ -130,13 +133,16 @@ works in the code, see `AGENTS.md`.
 | `src/app/api/act` | pet / gather / attack / enter / chat |
 | `src/app/api/items` | pickup / drop / equip / use / place (home decor) |
 | `src/app/api/inspect` | "what's that sheep doing?" — real data about any entity |
-| `src/app/api/sponsors` | reserve a building (Stripe Checkout subscription when configured), dashboard, edits, cancel; `/webhook` for Stripe |
+| `src/app/api/sponsors` | reserve a building (Stripe Checkout subscription when configured), dashboard, edits, cancel |
+| `src/app/api/billboards` | rent a billboard (poster upload, Stripe subscription), dashboard, poster changes, cancel; `/poster`, `/click`, `/events` (views) |
+| `src/lib/stripeWebhook.ts` | the one Stripe webhook (gems, sponsors, billboards); `/api/{gems,sponsors,billboards}/webhook` all point here |
 | `src/app/api/agents` | external AI agents: register, look, move/say/offerMission/dropItem, webhook conversations |
 | `src/game/WorldScene.ts` | the Phaser scene |
 | `src/game/worldStream.ts` | browser WS client with jittered reconnect |
 | `src/components/Hud.tsx` | React overlay: dialogue, bag, missions, home decorator, world log, inspect |
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
+| `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
 | `/agents` | agent API docs |
 
 ## Process topology
@@ -185,7 +191,8 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
   - If port 5432 is already taken by another local Postgres, just `CREATE DATABASE app_db;` on it (or run `docker compose up -d` after remapping the host port in `docker-compose.yml`).
 - `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (**optional**) — Redis is **off the hot path**. Snapshots and player presence are served from in-process memory and Postgres, so a normal run issues zero Upstash commands. Redis is only used when you opt in with `SNAPSHOT_REDIS_CACHE=1` (cross-process snapshot cache) or `ENABLE_REDIS_PUBSUB=1` (the `world_changes` bridge). With no URL set, the in-process memory client is used and nothing is billed.
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode (reservations activate instantly).
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode outside production (reservations activate instantly, billboards go straight to review). Register **one** webhook endpoint in Stripe (any of `/api/{gems,sponsors,billboards}/webhook`) with `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`.
+- `BILLBOARD_DIR` (optional) — where billboard posters are stored (default `.data/billboards`). Back it up with the database.
 - `MINIMAX_API_KEY`, `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` (+ `<KEY>_MODEL`, `<KEY>_BASE_URL`, `LLM_PROVIDER`, `LLM_FALLBACK`) — LLM-driven NPC dialogue and conversations (see `AGENTS.md`). Without any, the scripted brain runs.
 - `MIND_NPCS` — which NPCs have a mind (real stock, purse, errands); `TYPESAFE_API_KEY` lets Jev pick their actions (a scripted policy otherwise).
 

@@ -11,6 +11,7 @@ import type { Move, ScheduledMove } from "@/types/motion";
 import type { LotSnapshot } from "@/types/garden";
 import type { BreadTableSnapshot } from "@/types/bakery";
 import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
+import type { BillboardSnapshot } from "@/types/billboard";
 
 // Re-exported for callers that already import protocol types together.
 export type { Facing, Move, ScheduledMove };
@@ -99,6 +100,8 @@ export type WorldSnapshot = {
   breadTables: BreadTableSnapshot[];
   /** Shop displays nearby: pieces of each good on show. */
   displays: ShopDisplaySnapshot[];
+  /** Billboards nearby: each one's poster, or empty ad space. */
+  billboards: BillboardSnapshot[];
   enemies: EnemySnapshot[];
   chat: ChatSnapshot[];
   events: EventSnapshot[];

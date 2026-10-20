@@ -55,3 +55,6 @@ public/lpc/*.png
 /*.png
 dev-*.err
 dev-*.log
+
+# billboard posters (BILLBOARD_DIR)
+.data/

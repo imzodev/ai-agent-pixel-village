@@ -37,6 +37,7 @@ import { TEND_RANGE_PX, atLot, insideLot } from "@/lib/lotReach";
 import FurnitureSprite from "./FurnitureSprite";
 import { msToRipe, plantablesFor, plotHint, ripeIn } from "@/lib/vineyard";
 import { spotOfPlot } from "@/lib/homestead";
+import { BILLBOARD_TIERS, spotByKey } from "@/lib/billboards";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
@@ -832,6 +833,8 @@ export default function Hud() {
    * there's exactly one place that defines "what does this entity do".
    */
   const commitSelection = (s: Selection): void => {
+    // A billboard opens its advertiser's site (or the page to rent it), for visitors too.
+    if (s.type === "billboard") { window.open(billboardHref(s), "_blank", "noopener"); setSel(null); return; }
     if (!loggedIn) return;
     if (!snap) return;
     const pos = entityPos(snap, s);
@@ -1344,7 +1347,11 @@ export default function Hud() {
             if (lot.owner) return <><span className="text-[11px] text-stone-600">{L.icon} {L.of} {lot.owner.name}</span><Btn on={() => void lotAction("cheer", lot.key)} subtle>👏 Cheer</Btn></>;
             return <Btn on={() => void lotAction("acquire", lot.key)}>{L.icon} {L.claim}</Btn>;
           })()}
-          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && sel.type !== "homestead" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type === "billboard" && (
+            <a href={billboardHref(sel)} target="_blank" rel={sel.rentalId ? "nofollow sponsored noopener noreferrer" : "noopener"} onClick={() => setSel(null)}
+              className="rounded-lg bg-orange-500 px-3 py-1 text-[12px] font-bold text-white hover:bg-orange-400">{sel.rentalId ? "↗ Visit" : "🪧 Advertise here"} {interactHint}</a>
+          )}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && sel.type !== "homestead" && sel.type !== "billboard" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -1599,8 +1606,16 @@ function selTitle(sel: Selection) {
     case "relic": return "✨ Something glinting on the ground";
     case "bread": return `🍞 ${sel.name} · fresh from the oven, one each`;
     case "homestead": return `🏡 ${sel.name}`;
+    case "billboard": {
+      if (sel.title) return `🪧 ${sel.title} · ad`;
+      const tier = BILLBOARD_TIERS[spotByKey(sel.key)?.tier ?? "roadside"];
+      return `🪧 Ad space · ${tier.label} · $${tier.priceCents / 100}/mo`;
+    }
   }
 }
+/** Where a billboard leads: its advertiser (counted as a click), or the page to rent it. */
+const billboardHref = (sel: { key: string; rentalId: number | null }) =>
+  sel.rentalId ? `/api/billboards/click/${sel.rentalId}` : `/advertise?spot=${encodeURIComponent(sel.key)}`;
 /** Pick a perk (one point every 5 levels) and see the ones you have. */
 function PerksPanel({ me, onPick }: { me: Me; onPick: (perk: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false);
@@ -1690,7 +1705,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread" || sel.type === "homestead") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread" || sel.type === "homestead" || sel.type === "billboard") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

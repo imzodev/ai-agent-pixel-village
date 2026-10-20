@@ -40,4 +40,29 @@ export type StatsView = {
   sharing: { momentsCreated: number; shareClicks: Record<string, number>; profileViews: number; momentViews: number; signupsFromShares: number };
   /** Last 30 days, by where people came from (busiest first). */
   bySource: SourceRow[];
+  revenue: RevenueView;
+};
+
+/** Money: what recurs each month, and the last 30 days' one-off sales. */
+export type RevenueView = {
+  /** Monthly recurring revenue: active sponsors' rent + paid billboards (live or in review). */
+  mrrCents: number;
+  /** Of that, billboards set to end at the close of their paid month. */
+  cancellingCents: number;
+  sponsors: { active: number; mrrCents: number };
+  billboards: {
+    paid: number;
+    inReview: number;
+    changesWaiting: number;
+    mrrCents: number;
+    byTier: { tier: string; held: number; total: number; priceCents: number }[];
+  };
+  /** Lead fees sponsors' codes earned in the last 30 days (not billed yet). */
+  leadFees30dCents: number;
+  /** Gem packs bought through Stripe in the last 30 days. */
+  gems30d: { cents: number; purchases: number; payers: number; byPack: { packKey: string; n: number; cents: number }[] };
+  /** Gem sales a day, in cents. */
+  gemDaily: DayCount[];
+  /** Billboard views and clicks in the last 30 days. */
+  ads30d: { impressions: number; clicks: number };
 };
