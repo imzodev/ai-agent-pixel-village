@@ -479,6 +479,45 @@ row lock (`locked`), so double clicks can't pay twice.
   and members' MRR are on the stats page. The services' purchase events are kept
   in `events` (`src/lib/adapters/analytics.ts`, `MONEY_EVENTS`).
 
+## Whistle (the herding minigame)
+
+A 75-second skill game for the X campaign: you're the shepherd's whistle; a tap
+sends a sound wave that pushes the flock away from that spot. Get 30 sheep into the
+pen past the wolves. `/whistle` (playable without signing in) and the sheepfold in
+the village plaza (`WhistleModal`, the same game).
+
+- **The game is deterministic** (`src/lib/whistle/`: `rules.ts` every number,
+  `sim.ts`, `course.ts`, `rng.ts`). The browser plays it at a fixed 30 ticks a second
+  and records only the taps that whistled; the server **replays the taps and stores its
+  own score**, never the browser's. So `sim.ts`, `course.ts` and `rng.ts` use only
+  `+ − × ÷` and `Math.sqrt` (no `sin`/`cos`/`pow`/`hypot`/`Math.random`, which can differ
+  between engines; `whistle.test.ts` checks), their own mulberry32 state, and a fixed
+  order. Changing the rules changes every stored run's replay: the golden test's hash
+  says so. Constants are copied into locals in `sim.ts` (import bindings are slow there).
+- **The daily course** (`courseFor(day, salt)`): one of four layouts from the day's
+  seed, checked reachable (a flood fill) or rolled again; wolves 1–3 through the week.
+  The server salts it with its secret (`courseOf`), so tomorrow's course can't be
+  worked out from the client code, and hands the course to the browser
+  (`/api/whistle`, `/api/whistle/start`).
+- **Runs** (`src/lib/whistleServer.ts`, `whistle_runs`): `start` gives a signed token
+  (start time, character or 0); `submit` checks it (15 min, used once), that the run
+  didn't finish faster than it plays, replays, stores. Submitting needs a character: the
+  page makes a "Play now" one from a name. Boards: the day's best run per player; the
+  week (Monday, UTC) is the sum of each day's best. Admins hide runs
+  (`/api/admin/whistle`, the stats page's top runs).
+- **Prizes**: tickd's `maybeAwardWhistle` (hourly) awards last week's top three once
+  (`whistle_prizes`, unique per week and rank): `WEEKLY_PRIZE_GEMS`, the hat
+  (`prize_shepherd_hat`, never sold), a `whistle_champion` moment, and the
+  `PRIZE_TITLE` title (`whistleTitles` in `unlockedTitles`). In-game only.
+- **Sharing**: `/whistle/r/<id>` replays the run in the browser (`WhistleReplay`) with a
+  card (`src/lib/cards/whistleCard.ts`); `/whistle/course.png?day=` is the day's course
+  for posts. Both cached in `.cache/cards`. The replay page credits the runner's invites.
+- **The sheepfold** (`src/lib/whistle/fold.ts`, `foldData.json` from
+  `scripts/gen-sheepfold.ts`, **pinned**; art `scripts/draw-sheepfold.mjs` →
+  `public/assets/sheepfold.png`, `src/game/whistleArt.ts`): its fence blocks on both
+  sides (`setDynamicBlocks("sheepfold")`); selecting it (`{ type: "whistle" }`) opens the game.
+  `scripts/clearGround.ts` is the clear-ground test it shares with the billboard spots.
+
 ## Billboards (in-world ads)
 
 Anyone (an indie game, a shop, a streamer; sponsors too) can rent a billboard

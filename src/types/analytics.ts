@@ -24,7 +24,10 @@ export type TrackKind =
   | "cosmetic_bought_coins"
   | "membership_checkout_started"
   | "membership_started"
-  | "membership_ended";
+  | "membership_ended"
+  // Whistle, the herding minigame (src/lib/whistleServer.ts).
+  | "whistle_play"
+  | "whistle_submit";
 
 /** Where a visitor came from: a source ("x", "reddit", "direct"…) and, when tagged, a campaign. */
 export type Acquisition = { src: string; campaign: string };
@@ -50,6 +53,20 @@ export type StatsView = {
   /** Last 30 days, by where people came from (busiest first). */
   bySource: SourceRow[];
   revenue: RevenueView;
+  whistle: WhistleStats;
+};
+
+/** Whistle, the herding minigame (src/lib/whistleServer.ts). */
+export type WhistleStats = {
+  plays7d: number;
+  runs7d: number;
+  players7d: number;
+  /** New characters (30 days) made to put a Whistle score on the board. */
+  joined30d: number;
+  shares30d: number;
+  playsDaily: DayCount[];
+  /** Today's best runs, to check for anything odd (admin can hide one). */
+  topToday: { id: string; name: string; score: number; penned: number; lost: number; whistles: number }[];
 };
 
 /** Money: what recurs each month, and the last 30 days' one-off sales. */

@@ -107,6 +107,7 @@ export default function PitchCard({ snap, onLogin }: { snap: Snapshot; onLogin: 
       </ul>
       <button onClick={() => setPerksOpen((o) => !o)} className="mt-1 text-[12px] font-bold text-amber-800 underline sm:hidden">{perksOpen ? "Show less" : "What can I do here? ▾"}</button>
       <PlayNowForm onLogin={onLogin} />
+      <Link href="/whistle" className="mt-2 block rounded border-2 border-lime-700/30 bg-lime-50 px-2 py-1.5 text-[13px] font-bold text-lime-900 hover:bg-lime-100">🐑 Got a minute? Play today&apos;s Whistle: herd 30 sheep, top the weekly board →</Link>
       <div className="mt-2 text-[11px] text-stone-500"><Link href="/guide" className="underline">Player&apos;s guide</Link> · <Link href="/privacy" className="underline">Privacy</Link> · <Link href="/terms" className="underline">Terms</Link> · <Link href="/sponsor" className="underline">For businesses</Link> · <Link href="/agents" className="underline">Agent API</Link></div>
       <style>{`@keyframes pitch-fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }`}</style>
     </div>

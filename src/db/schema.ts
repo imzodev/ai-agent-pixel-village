@@ -2,6 +2,7 @@ import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloo
 import type { ShoppingRule } from "@/types/businessAgent";
 import type { MomentData, MomentKind } from "@/types/moments";
 import type { JobProgress, JobStatus } from "@/types/jobs";
+import type { WhistleInput } from "@/types/whistle";
 import {
   bigint,
   pgMaterializedView,
@@ -1360,4 +1361,38 @@ export const agentOptouts = pgTable(
     at: timestamp("at").defaultNow().notNull(),
   },
   (t) => [index("agent_optouts_char_idx").on(t.characterId)],
+);
+
+/** Whistle (src/lib/whistleServer.ts): every submitted run, scored by the server's replay of its taps. */
+export const whistleRuns = pgTable(
+  "whistle_runs",
+  {
+    /** A short random slug: the replay link is /whistle/r/<id>. */
+    id: text("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    /** The course's UTC day ("2026-10-21"). */
+    day: text("day").notNull(),
+    score: integer("score").notNull(),
+    penned: integer("penned").notNull(),
+    lost: integer("lost").notNull(),
+    ticks: integer("ticks").notNull(),
+    inputs: jsonb("inputs").$type<WhistleInput[]>().notNull(),
+    /** Taken off the boards by an admin. */
+    hidden: boolean("hidden").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("whistle_runs_day_score_idx").on(t.day, t.score), index("whistle_runs_char_day_idx").on(t.characterId, t.day)],
+);
+
+/** Whistle's weekly prizes: the top three of each week (Monday, UTC), awarded once. */
+export const whistlePrizes = pgTable(
+  "whistle_prizes",
+  {
+    week: text("week").notNull(),
+    rank: integer("rank").notNull(),
+    characterId: integer("character_id").notNull(),
+    score: integer("score").notNull(),
+    awardedAt: timestamp("awarded_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("whistle_prizes_week_rank_unique").on(t.week, t.rank), index("whistle_prizes_char_idx").on(t.characterId)],
 );

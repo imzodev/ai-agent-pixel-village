@@ -94,6 +94,10 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
 - **Membership** ($4.99/month or $39.99/year): monthly gems, a members-only outfit each month,
   a ⭐ nameplate and more villager conversations. Cosmetic and convenience only; never pay-to-win.
 - **Invites**: share your profile link; when a friend reaches level 3 you both get gems.
+- **Whistle** (`/whistle`, or the sheepfold in the plaza): a 75-second herding game. Tap to whistle
+  and push the flock away from that spot; get 30 sheep into the pen past the wolves. One course a
+  day for everyone, daily and weekly boards, replay links to share on X, and weekly prizes in the
+  game (gems, the Champion Shepherd title and a hat).
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -146,6 +150,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
+| `/whistle` | Whistle, the herding minigame (`src/lib/whistle/` the game, `src/lib/whistleServer.ts` runs and boards, `src/components/whistle/`); `/whistle/r/<id>` a run's replay, `/whistle/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 
@@ -196,6 +201,7 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (**optional**) — Redis is **off the hot path**. Snapshots and player presence are served from in-process memory and Postgres, so a normal run issues zero Upstash commands. Redis is only used when you opt in with `SNAPSHOT_REDIS_CACHE=1` (cross-process snapshot cache) or `ENABLE_REDIS_PUBSUB=1` (the `world_changes` bridge). With no URL set, the in-process memory client is used and nothing is billed.
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode outside production (reservations activate instantly, billboards go straight to review). Register **one** webhook endpoint in Stripe (any of `/api/{gems,sponsors,billboards}/webhook`) with `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`.
+- `WHISTLE_SECRET` (optional) — signs Whistle's run tokens and salts its daily course, so courses can't be worked out ahead of their day. Falls back to `ADMIN_TOKEN`; with neither, courses are unsalted and tokens die on restart (fine in development).
 - `BILLBOARD_DIR` (optional) — where billboard posters are stored (default `.data/billboards`). Back it up with the database.
 - `MINIMAX_API_KEY`, `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` (+ `<KEY>_MODEL`, `<KEY>_BASE_URL`, `LLM_PROVIDER`, `LLM_FALLBACK`) — LLM-driven NPC dialogue and conversations (see `AGENTS.md`). Without any, the scripted brain runs.
 - `MIND_NPCS` — which NPCs have a mind (real stock, purse, errands); `TYPESAFE_API_KEY` lets Jev pick their actions (a scripted policy otherwise).

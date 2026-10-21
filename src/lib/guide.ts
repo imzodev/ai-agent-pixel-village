@@ -4,6 +4,7 @@
 
 import { AMBUSH_AFTER_MS, AMBUSH_MAX, AMBUSH_MIN, ESCORT_PX, ESCORT_SHARE, JOB_DEFS, MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, shiftPay, taskText } from "./jobs";
 import { STOP_LINGER_MS } from "./mind/caravan";
+import { PRIZE_TITLE, RUN_SECONDS, SHEEP_COUNT, WEEKLY_PRIZE_GEMS } from "./whistle/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -44,6 +45,8 @@ export const BILLBOARD_FACTS = {
 export const MEMBER_PRICE = `$${MEMBERSHIP_PLANS.monthly.priceCents / 100} a month or $${MEMBERSHIP_PLANS.yearly.priceCents / 100} a year`;
 export const MEMBER_PERKS_TEXT = `💎 ${MEMBER_MONTHLY_GEMS} every month, a members-only outfit every month, a star on your nameplate and ${MEMBER_TALK_MULT}× more conversations with the villagers`;
 export const REFERRAL_FACTS = { level: REFERRAL_LEVEL, gems: REFERRAL_GEMS };
+/** Whistle, the herding minigame: the flock, the clock and the week's prizes. */
+export const WHISTLE_FACTS = { sheep: SHEEP_COUNT, seconds: RUN_SECONDS, title: PRIZE_TITLE, gems: WEEKLY_PRIZE_GEMS.join(" / ") };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");
 const who = (key: string) => npcDef(key)?.name ?? key;

@@ -73,6 +73,10 @@ export const gatherLimiter = new SlidingWindowLimiter({ max: 5, windowMs: 3_500 
 export const castLimiter = new SlidingWindowLimiter({ max: 1, windowMs: 2_000 });
 
 // Reports (/api/report): a few an hour per player.
+// Whistle (src/lib/whistleServer.ts): runs started per IP, runs sent in per character.
+export const whistleStartLimiter = new SlidingWindowLimiter({ max: 240, windowMs: 3_600_000 });
+export const whistleSubmitLimiter = new SlidingWindowLimiter({ max: 60, windowMs: 3_600_000 });
+
 export const reportLimiter = new SlidingWindowLimiter({ max: 6, windowMs: 3_600_000 });
 
 /** The client's IP as the reverse proxy reports it; null when there's no proxy header

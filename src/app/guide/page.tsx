@@ -7,7 +7,7 @@ import { Section, Table, Tip } from "@/components/GuideSection";
 import { CONTROLS } from "@/lib/controls";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import {
-  BILLBOARD_FACTS, ESCORT_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
+  BILLBOARD_FACTS, ESCORT_FACTS, WHISTLE_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
   animalRows, bossRows, buildRows, fishRows, furnitureNames, jobRows, parcelRows, perkRows, repRows, rootkingWhen, saplingRows, townRows,
 } from "@/lib/guide";
 
@@ -185,6 +185,8 @@ export default function GuidePage() {
             <p>Yes. There are {BILLBOARD_FACTS.spots} billboards, from ${BILLBOARD_FACTS.from} to ${BILLBOARD_FACTS.to} a month depending on how busy the spot is. Upload a poster at <Link href="/advertise">/advertise</Link>; every poster is reviewed before it goes up, and refunded if it isn&apos;t approved. You see its views and clicks day by day.</p>
             <h3>Is it free?</h3>
             <p>Yes. Everything in the game can be earned by playing. You can buy gems (for outfits), or become a <Link href="/shop?tab=member">member</Link> ({MEMBER_PRICE}): {MEMBER_PERKS_TEXT}. Neither is ever needed to play, and nothing you can buy makes you stronger.</p>
+            <h3>What&apos;s Whistle?</h3>
+            <p>A {WHISTLE_FACTS.seconds}-second herding game: tap, and your whistle pushes {WHISTLE_FACTS.sheep} sheep away from that spot. Get them into the pen before the wolves pick off the stragglers. Play it at <Link href="/whistle">/whistle</Link> or at the sheepfold in the village plaza. There&apos;s a new course every day; your week is your best score each day added up, and every Monday the top three get 💎 {WHISTLE_FACTS.gems}, the {WHISTLE_FACTS.title} title and a golden hat.</p>
             <h3>How do invites work?</h3>
             <p>Send a friend your profile link (menu → 🎁 Invite). When they reach level {REFERRAL_FACTS.level}, you each get 💎 {REFERRAL_FACTS.gems}.</p>
           </Section>

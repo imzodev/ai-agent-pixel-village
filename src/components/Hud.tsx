@@ -56,6 +56,7 @@ import { jobsOfEmployer } from "@/lib/jobs";
 import type { JobView, JobsResponse } from "@/types/jobs";
 import PitchCard from "./PitchCard";
 import FarmPanel from "./FarmPanel";
+import WhistleModal from "./whistle/WhistleModal";
 import HomesteadPanel from "./HomesteadPanel";
 import { BOARD_REACH_PX, SPOT_REACH_PX, boardPoint } from "@/lib/bounties";
 import { FORAGE_COOLDOWN_MS, isForage } from "@/lib/forage";
@@ -218,6 +219,9 @@ export default function Hud() {
   const [momentsShown, setMomentsShown] = useState<ReadonlySet<string>>(new Set());
   // The farm menu (E on a plot or crop of your lot): which lot, and what E was pressed on.
   const [farmMenu, setFarmMenu] = useState<{ lotKey: string; target: Selection } | null>(null);
+  // Whistle, from the sheepfold in the plaza.
+  const [whistleOpen, setWhistleOpen] = useState(false);
+  const closeWhistle = useCallback(() => setWhistleOpen(false), []);
   /** The homestead window open (src/components/HomesteadPanel.tsx): its key. */
   const [homestead, setHomestead] = useState<string | null>(null);
   const [trade, setTrade] = useState<{ npcId: number; npcName: string; npcKey: string; rows: { trade: TradeItem; have: number }[] } | null>(null);
@@ -842,6 +846,8 @@ export default function Hud() {
   const commitSelection = (s: Selection): void => {
     // A billboard opens its advertiser's site (or the page to rent it), for visitors too.
     if (s.type === "billboard") { window.open(billboardHref(s), "_blank", "noopener"); setSel(null); return; }
+    // The sheepfold opens Whistle, for visitors too (a name puts a score on the board).
+    if (s.type === "whistle") { setWhistleOpen(true); setSel(null); return; }
     if (!loggedIn) return;
     if (!snap) return;
     const pos = entityPos(snap, s);
@@ -1366,7 +1372,8 @@ export default function Hud() {
             <a href={billboardHref(sel)} target="_blank" rel={sel.rentalId ? "nofollow sponsored noopener noreferrer" : "noopener"} onClick={() => setSel(null)}
               className="rounded-lg bg-orange-500 px-3 py-1 text-[12px] font-bold text-white hover:bg-orange-400">{sel.rentalId ? "↗ Visit" : "🪧 Advertise here"} {interactHint}</a>
           )}
-          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && sel.type !== "homestead" && sel.type !== "billboard" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
+          {sel.type === "whistle" && <Btn on={() => { setWhistleOpen(true); setSel(null); }}>🐑 Play Whistle {interactHint}</Btn>}
+          {sel.type !== "plot" && sel.type !== "tree" && sel.type !== "board" && sel.type !== "relic" && sel.type !== "bread" && sel.type !== "homestead" && sel.type !== "billboard" && sel.type !== "whistle" && <Btn on={() => doInspect(`/api/inspect?type=${sel.type}&id=${sel.id}`)} subtle>🔍 About</Btn>}
           <button className="px-2 text-stone-400 hover:text-stone-700" onClick={() => setSel(null)}>✕</button>
         </div>
       )}
@@ -1392,6 +1399,7 @@ export default function Hud() {
 
       {/* Trade modal — dedicated sell flow, no conversation required. */}
       {/* Farm menu: E on a plot or crop of your lot. */}
+      {whistleOpen && <WhistleModal onClose={closeWhistle} />}
       {farmView && <FarmMenu view={farmView} coins={coins} onClose={() => setFarmMenu(null)} />}
       {/* The homestead window: its signpost, or 🏡 while you're on your own. */}
       {homestead && (
@@ -1628,6 +1636,7 @@ function selTitle(sel: Selection) {
     case "relic": return "✨ Something glinting on the ground";
     case "bread": return `🍞 ${sel.name} · fresh from the oven, one each`;
     case "homestead": return `🏡 ${sel.name}`;
+    case "whistle": return "🐑 Whistle · herd the flock, win the week";
     case "billboard": {
       if (sel.title) return `🪧 ${sel.title} · ad`;
       const tier = BILLBOARD_TIERS[spotByKey(sel.key)?.tier ?? "roadside"];
@@ -1727,7 +1736,7 @@ function entityPos(snap: Snapshot, sel: Selection): { x: number; y: number } | n
   if (sel.type === "building") { const b = snap.buildings.find((x) => x.id === sel.id); return b ? { x: b.doorX, y: b.doorY } : null; }
   if (sel.type === "player") { const p = snap.players.find((x) => x.id === sel.id); return p ? { x: p.x, y: p.y } : null; }
   if (sel.type === "plot") return { x: sel.x, y: sel.y };
-  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread" || sel.type === "homestead" || sel.type === "billboard") return { x: sel.x, y: sel.y };
+  if (sel.type === "tree" || sel.type === "board" || sel.type === "relic" || sel.type === "bread" || sel.type === "homestead" || sel.type === "billboard" || sel.type === "whistle") return { x: sel.x, y: sel.y };
   return null;
 }
 function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {

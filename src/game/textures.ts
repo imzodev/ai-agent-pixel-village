@@ -66,6 +66,7 @@ export function makeCreatureTextures(scene: Scene) {
 import { CROP_KINDS, NODE_SHEETS } from "@/lib/crops";
 import { PARCELS_SHEET, PARCELS_TEXTURE } from "./homesteadArt";
 import { BILLBOARD_SHEET, BILLBOARD_TEXTURE } from "./billboardArt";
+import { SHEEPFOLD_IMAGE, SHEEPFOLD_TEXTURE } from "./whistleArt";
 
 const LPC_CROPS_KEY = "lpc_crops";
 
@@ -81,6 +82,8 @@ export function loadPropSprites(scene: Scene): void {
   scene.load.image(PARCELS_TEXTURE, PARCELS_SHEET);
   // Billboards: frames and the "your ad here" notice (src/game/billboardArt.ts).
   scene.load.image(BILLBOARD_TEXTURE, BILLBOARD_SHEET);
+  // Whistle's sheepfold in the plaza (src/game/whistleArt.ts).
+  scene.load.image(SHEEPFOLD_TEXTURE, SHEEPFOLD_IMAGE);
 }
 
 /**

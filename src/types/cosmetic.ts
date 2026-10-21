@@ -40,7 +40,7 @@ export type CosmeticOwnership = {
   characterId: number;
   itemKey: string;
   acquiredAt: Date;
-  source: "coin" | "gem" | "sponsor" | "starter" | "seasonal" | "admin" | "member";
+  source: "coin" | "gem" | "sponsor" | "starter" | "seasonal" | "admin" | "member" | "prize";
 };
 
 export type CharacterEquipped = {
@@ -65,7 +65,7 @@ export type GemTransaction = {
   characterId: number;
   delta: number;
   /** Positive = credit (purchase / grant), negative = debit (purchase). */
-  source: "purchase" | "spend" | "sponsor_grant" | "seasonal_grant" | "admin" | "member_grant" | "referral";
+  source: "purchase" | "spend" | "sponsor_grant" | "seasonal_grant" | "admin" | "member_grant" | "referral" | "whistle_prize";
   packKey: GemPackKey | null;
   stripeSessionId: string | null;
   createdAt: Date;

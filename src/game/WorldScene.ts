@@ -67,6 +67,8 @@ import { buildLotBanner, lotBannerSignature } from "./lotBanners";
 import { billboardSig, buildBillboard, registerBillboardFrames } from "./billboardArt";
 import { ImpressionTracker } from "./billboardImpressions";
 import { billboardBlocks, spotByKey, spotPoint } from "@/lib/billboards";
+import { buildSheepfold } from "./whistleArt";
+import { foldBlocks, foldPoint } from "@/lib/whistle/fold";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import { tierAt } from "@/lib/continent";
 import { frameSeconds } from "@/lib/frameTime";
@@ -325,6 +327,12 @@ export class WorldScene extends Phaser.Scene {
     registerBillboardFrames(this);
     // Billboards' bases block, as on the server (src/lib/chunkCollisionServer.ts).
     setDynamicBlocks("billboards", billboardBlocks());
+    // Whistle's sheepfold by the plaza: its fence blocks, and it opens the game.
+    setDynamicBlocks("sheepfold", foldBlocks());
+    buildSheepfold(this).zone.on("pointerdown", () => {
+      const at = foldPoint();
+      if (!this.modalOpen) this.select({ type: "whistle", x: at.x, y: at.y, distance: Math.round(this.distTo(at.x, at.y)) });
+    });
     // Who walked past which poster: checked every second, sent every 30 s and on leaving.
     this.time.addEvent({ delay: 1000, loop: true, callback: () => this.watchBillboards() });
     this.time.addEvent({ delay: 30_000, loop: true, callback: () => this.flushImpressions(false) });
@@ -1492,6 +1500,8 @@ export class WorldScene extends Phaser.Scene {
     }
     // Billboards: read the poster (and follow its link), or rent the space.
     for (const b of s.billboards ?? []) { const def = spotByKey(b.key); if (def) { const at = spotPoint(def); add(at.x, at.y, (d) => this.billboardSelection(b.key, d)); } }
+    // Whistle's sheepfold.
+    { const at = foldPoint(); add(at.x, at.y, (d) => ({ type: "whistle", x: at.x, y: at.y, distance: d })); }
     // Town bounty boards.
     for (const t of TOWNS) { const b = boardPoint(t.key); if (b) add(b.x, b.y, (d) => ({ type: "board", town: t.key, name: t.name, x: b.x, y: b.y, distance: d })); }
     // Terrain trees (choppable): judged by their trunk.
@@ -1540,6 +1550,7 @@ export class WorldScene extends Phaser.Scene {
       case "plot": return { x: sel.x, y: sel.y - 14 };
       case "homestead": return { x: sel.x, y: sel.y - 44 };
       case "billboard": return { x: sel.x, y: sel.y - 90 };
+      case "whistle": return { x: sel.x, y: sel.y - 88 };
     }
   }
 
