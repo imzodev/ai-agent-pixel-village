@@ -91,6 +91,9 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
   achievements and **nameplate titles**.
 - **Moments**: proud milestones become cards you can share; a public **profile** at `/u/<name>`.
 - **Friends** with online presence, world **chat**, **cosmetics** in the shop, and reporting.
+- **Membership** ($4.99/month or $39.99/year): monthly gems, a members-only outfit each month,
+  a ⭐ nameplate and more villager conversations. Cosmetic and convenience only; never pay-to-win.
+- **Invites**: share your profile link; when a friend reaches level 3 you both get gems.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -143,6 +146,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
+| `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 
 ## Process topology

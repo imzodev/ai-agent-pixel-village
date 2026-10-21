@@ -78,6 +78,16 @@ export const COSMETIC_CATALOG: CosmeticItem[] = [
     availableFrom: null,
     availableUntil: null,
   },
+  // Members only (src/lib/membership.ts MEMBER_COSMETICS): one handed out each
+  // month, never sold. Recolours of the art above.
+  ...([
+    ["member_crown", "Member's Crown", "hat", "/lpc/hat_crown.png", "#b48cff"],
+    ["member_cone", "Member's Starry Cone", "hat", "/lpc/hat_party.png", "#5ec8ff"],
+    ["member_apron", "Member's Apron", "outfit", "/lpc/outfit_apron.png", "#3fb68b"],
+  ] as const).map(([key, name, slot, assetRef, tintColor]): CosmeticItem => ({
+    key, name, slot, assetRef, tintColor, rarity: "rare", coinPrice: 0, gemPrice: 0,
+    sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
+  })),
 ];
 
 /** Look up a cosmetic by its key. */

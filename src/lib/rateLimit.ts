@@ -2,6 +2,7 @@
 // that's acceptable: the cap is budget insurance, not a security boundary.
 // Open for extension: swap policy without touching callers.
 import type { RateLimitConfig } from "./types";
+import { MEMBER_TALK_MULT } from "./membership";
 
 export class SlidingWindowLimiter {
   private readonly hits = new Map<string, number[]>();
@@ -32,6 +33,12 @@ export class SlidingWindowLimiter {
 // stays bounded. Override via NPC_LLM_RATE_PER_MIN.
 export const npcLlmLimiter = new SlidingWindowLimiter({
   max: Number(process.env.NPC_LLM_RATE_PER_MIN ?? "3"),
+  windowMs: 60_000,
+});
+
+// Members' extra replies on top, so they get MEMBER_TALK_MULT times as many (src/lib/membership.ts).
+export const memberTalkLimiter = new SlidingWindowLimiter({
+  max: Number(process.env.NPC_LLM_RATE_PER_MIN ?? "3") * (MEMBER_TALK_MULT - 1),
   windowMs: 60_000,
 });
 

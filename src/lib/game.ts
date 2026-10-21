@@ -13,6 +13,8 @@ import {
   type MissionReward,
 } from "@/db/schema";
 import { levelForXp, maxHpFor, unlocksBetween } from "./progression";
+import { reachedReferralLevel } from "./referral";
+import { rewardReferral } from "./referralServer";
 import { createMoment } from "./momentsServer";
 import { levelMilestone, levelMoment } from "./moments";
 
@@ -100,6 +102,8 @@ export async function recalcLevel(characterId: number) {
     // Every 5th level is a card to share.
     const milestone = levelMilestone(c.level, level);
     if (milestone) await createMoment(characterId, "level", levelMoment(milestone), `level:${milestone}`);
+    // An invited friend got going: they and whoever invited them are paid (src/lib/referral.ts).
+    if (reachedReferralLevel(c.level, level)) await rewardReferral(characterId).catch((e) => console.warn("[referral]", e instanceof Error ? e.message : e));
   }
 }
 

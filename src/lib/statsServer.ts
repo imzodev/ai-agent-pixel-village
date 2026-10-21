@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { TUTORIAL_DONE, TUTORIAL_SKIPPED, TUTORIAL_STEPS } from "@/lib/tutorial";
 import { BILLBOARD_SPOTS, BILLBOARD_TIERS } from "@/lib/billboards";
 import { GEM_PACKS } from "@/types/cosmetic";
+import { MEMBERSHIP_PLANS } from "@/lib/membership";
 import type { BillboardTier } from "@/types/billboard";
 import type { DayCount, RevenueView, SourceRow, StatsView } from "@/types/analytics";
 
@@ -100,6 +101,15 @@ async function revenueView(now: number): Promise<RevenueView> {
       coalesce(sum(price_cents) filter (where cancel_at_period_end), 0) as cancelling
     from billboard_rentals where status in ('review', 'active') group by 1, 2`);
   const [leads] = await rows(sql`select coalesce(sum(fee_cents), 0) as cents from leads where created_at >= ${since30}`);
+  // Members paid up now (the same test as memberNow, src/lib/membership.ts, without the grace days).
+  const mem = await rows(sql`
+    select plan, count(*) as n, count(*) filter (where cancel_at_period_end) as ending from memberships
+    where status = 'active' and (current_period_end is null or current_period_end > now()) group by 1`);
+  const [memMoves] = await rows(sql`
+    select count(*) filter (where kind = 'membership_started') as joined, count(*) filter (where kind = 'membership_ended') as ended
+    from events where at >= ${since30} and kind in ('membership_started', 'membership_ended')`);
+  const memN = (plan: string) => num(mem.find((r) => r.plan === plan)?.n);
+  const memMrr = memN("monthly") * MEMBERSHIP_PLANS.monthly.priceCents + Math.round((memN("yearly") * MEMBERSHIP_PLANS.yearly.priceCents) / 12);
   // Real purchases only: the dev sandbox logs credits without a Stripe session.
   const packs = await rows(sql`
     select pack_key, count(*) as n, count(distinct character_id) as payers from gem_transactions
@@ -109,6 +119,14 @@ async function revenueView(now: number): Promise<RevenueView> {
     select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD') as day, pack_key, count(*) as n from gem_transactions
     where source = 'purchase' and stripe_session_id is not null and created_at >= ${since30} group by 1, 2`);
   const [ads] = await rows(sql`select coalesce(sum(impressions), 0) as i, coalesce(sum(clicks), 0) as c from billboard_daily where day >= ${dayOf(now - 30 * DAY_MS)}`);
+  const funnel = await rows(sql`
+    select kind, count(distinct character_id) as n from events
+    where at >= ${since30}
+      and kind in ('shop_view', 'gem_checkout_started', 'gem_purchase_fulfilled', 'membership_checkout_started', 'membership_started')
+      and (kind <> 'gem_purchase_fulfilled' or (meta->>'cents')::int > 0)
+    group by 1`);
+  const [players30] = await rows(sql`select count(distinct character_id) as n from active_days where day >= ${dayOf(now - 30 * DAY_MS)}`);
+  const step = (kind: string) => num(funnel.find((r) => r.kind === kind)?.n);
 
   const price = (key: unknown) => GEM_PACKS.find((p) => p.key === key)?.priceCents ?? 0;
   const byPack = packs.map((r) => ({ packKey: String(r.pack_key), n: num(r.n), cents: num(r.n) * price(r.pack_key) }));
@@ -117,9 +135,10 @@ async function revenueView(now: number): Promise<RevenueView> {
   const bbCents = bb.reduce((s, r) => s + num(r.cents), 0);
   const tiers = Object.keys(BILLBOARD_TIERS) as BillboardTier[];
   return {
-    mrrCents: num(sp?.cents) + bbCents,
+    mrrCents: memMrr + num(sp?.cents) + bbCents,
     cancellingCents: bb.reduce((s, r) => s + num(r.cancelling), 0), // sponsors end at once, so only billboards
     sponsors: { active: num(sp?.n), mrrCents: num(sp?.cents) },
+    members: { active: memN("monthly") + memN("yearly"), monthly: memN("monthly"), yearly: memN("yearly"), mrrCents: memMrr, joined30d: num(memMoves?.joined), ended30d: num(memMoves?.ended) },
     billboards: {
       paid: bb.reduce((s, r) => s + num(r.n), 0),
       inReview: bb.filter((r) => r.status === "review").reduce((s, r) => s + num(r.n), 0),
@@ -135,5 +154,13 @@ async function revenueView(now: number): Promise<RevenueView> {
     gems30d: { cents: byPack.reduce((s, p) => s + p.cents, 0), purchases: byPack.reduce((s, p) => s + p.n, 0), payers: num(payers?.n), byPack },
     gemDaily: series([...centsByDay].map(([day, n]) => ({ day, n })), 30, now),
     ads30d: { impressions: num(ads?.i), clicks: num(ads?.c) },
+    funnel30d: [
+      { step: "Played", players: num(players30?.n) },
+      { step: "Opened the shop", players: step("shop_view") },
+      { step: "Started a gem checkout", players: step("gem_checkout_started") },
+      { step: "Paid for gems", players: step("gem_purchase_fulfilled") },
+      { step: "Started a membership checkout", players: step("membership_checkout_started") },
+      { step: "Became a member", players: step("membership_started") },
+    ],
   };
 }

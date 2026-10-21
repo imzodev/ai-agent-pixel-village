@@ -10,6 +10,7 @@ import { perkPoints } from "@/lib/progression";
 import { unseenMoments } from "@/lib/momentsServer";
 import { markActive } from "@/lib/track";
 import { journeyFor } from "@/lib/journeyServer";
+import { claimMonthly, isMember } from "@/lib/membershipServer";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,9 @@ export async function GET() {
       const progress = cm.status === "active" ? await missionProgressFor(me.id, m.requirement, cm.progress) : requirementTarget(m.requirement);
       missionList.push({ id: cm.id, missionId: m.id, title: m.title, description: m.description, status: cm.status, progress, target: requirementTarget(m.requirement), npcName, npcId: m.npcId, requirement: m.requirement, reward: m.reward, sponsored: !!m.sponsorId });
     }
+    // A member's gems and outfit for the month, the first time they show up in it.
+    const memberGift = await claimMonthly(me.id);
+    if (memberGift) me.gems += memberGift.gems; // `me` was read before the grant
     // Lazy-create today's 3 daily quests on first login of the day.
     const c = getContainer();
     await c.services.quest.getOrCreateTodaysQuests(me.id);
@@ -55,6 +59,8 @@ export async function GET() {
       // The journey after the tutorial: the current goal, and any just met.
       journey: journey.view,
       journeyDone: journey.done,
+      memberGift,
+      member: await isMember(me.id),
       // For the profile link (/u/<username>), and whether a "Play now"
       // character still needs a password to be saved.
       ...(await db.select({ username: users.username, hash: users.passwordHash }).from(users).where(eq(users.id, me.userId)).then(([u]) => ({ username: u?.username ?? null, unsaved: !!u && !u.hash }))),

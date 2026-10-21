@@ -15,7 +15,16 @@ export type TrackKind =
   | "moment_view"
   | "visitor"
   // Someone's first page view, with where they came from (src/lib/acquisition.ts).
-  | "landing";
+  | "landing"
+  // The money funnel (src/lib/adapters/analytics.ts keeps these from the services).
+  | "shop_view"
+  | "gem_checkout_started"
+  | "gem_purchase_fulfilled"
+  | "cosmetic_bought_gems"
+  | "cosmetic_bought_coins"
+  | "membership_checkout_started"
+  | "membership_started"
+  | "membership_ended";
 
 /** Where a visitor came from: a source ("x", "reddit", "direct"…) and, when tagged, a campaign. */
 export type Acquisition = { src: string; campaign: string };
@@ -45,11 +54,12 @@ export type StatsView = {
 
 /** Money: what recurs each month, and the last 30 days' one-off sales. */
 export type RevenueView = {
-  /** Monthly recurring revenue: active sponsors' rent + paid billboards (live or in review). */
+  /** Monthly recurring revenue: members (yearly plans as a twelfth), sponsors' rent, paid billboards. */
   mrrCents: number;
   /** Of that, billboards set to end at the close of their paid month. */
   cancellingCents: number;
   sponsors: { active: number; mrrCents: number };
+  members: { active: number; monthly: number; yearly: number; mrrCents: number; joined30d: number; ended30d: number };
   billboards: {
     paid: number;
     inReview: number;
@@ -65,4 +75,6 @@ export type RevenueView = {
   gemDaily: DayCount[];
   /** Billboard views and clicks in the last 30 days. */
   ads30d: { impressions: number; clicks: number };
+  /** Players at each step towards paying, last 30 days (each counted once per step). */
+  funnel30d: { step: string; players: number }[];
 };

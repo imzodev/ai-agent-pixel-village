@@ -34,6 +34,7 @@ import type {
 } from "@/types/cosmetic";
 import type { SponsorEvent } from "@/types/sponsor";
 import type { BillboardStatus, BillboardTier } from "@/types/billboard";
+import type { MembershipPlan, MembershipStatus } from "@/types/membership";
 import type { GridPoint } from "@/types/world";
 import type { LotKind } from "@/types/garden";
 import type { ParcelUse } from "@/types/homestead";
@@ -1039,6 +1040,49 @@ export const gemTransactions = pgTable("gem_transactions", {
 },
 // One credit per Stripe checkout (a redelivered webhook finds it there). Spends carry no session id; NULLs never clash.
 (t) => [uniqueIndex("gem_transactions_stripe_session_idx").on(t.stripeSessionId)],
+);
+
+// ---------- Referrals (src/lib/referralServer.ts) ----------
+// Who invited whom (one inviter per new character), and when both were paid.
+export const referrals = pgTable(
+  "referrals",
+  {
+    inviteeId: integer("invitee_id").primaryKey(),
+    inviterId: integer("inviter_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    rewardedAt: timestamp("rewarded_at"),
+  },
+  (t) => [index("referrals_inviter_idx").on(t.inviterId)],
+);
+
+// ---------- Membership (src/lib/membershipServer.ts) ----------
+// One row per character: its subscription, re-used when they subscribe again.
+export const memberships = pgTable("memberships", {
+  id: serial("id").primaryKey(),
+  characterId: integer("character_id").notNull().unique(),
+  plan: text("plan").$type<MembershipPlan>().notNull(),
+  status: text("status").$type<MembershipStatus>().notNull().default("pending"),
+  stripeCheckoutId: text("stripe_checkout_id"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  startedAt: timestamp("started_at"),
+  endedAt: timestamp("ended_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/** A member's monthly gems and outfit, once per calendar month (the unique index makes it once). */
+export const memberGrants = pgTable(
+  "member_grants",
+  {
+    characterId: integer("character_id").notNull(),
+    month: text("month").notNull(),
+    gems: integer("gems").notNull(),
+    itemKey: text("item_key").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("member_grants_pk").on(t.characterId, t.month)],
 );
 
 // ---------- Billboards (in-world ads; src/lib/billboardServer.ts) ----------

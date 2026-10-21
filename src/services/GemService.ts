@@ -43,7 +43,7 @@ export class GemService {
     if (res.duplicate) return res;
     this.analytics.track(
       "gem_purchase_fulfilled",
-      { packKey: input.packKey, gems: pack.gems, balance: res.balance },
+      { characterId: input.characterId, packKey: input.packKey, gems: pack.gems, cents: input.stripeSessionId ? pack.priceCents : 0 },
       input.userId,
     );
     return res;

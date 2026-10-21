@@ -13,6 +13,7 @@ import { clientIp, loginFailLimiter, loginIpLimiter, signupIpLimiter } from "@/l
 import { cookies } from "next/headers";
 import { track, markActive } from "@/lib/track";
 import { REF_COOKIE, SRC_COOKIE } from "@/lib/site";
+import { recordReferral } from "@/lib/referralServer";
 import { decodeAcquisition } from "@/lib/acquisition";
 import type { Acquisition } from "@/types/analytics";
 
@@ -85,6 +86,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
     if (!user) return Response.json({ error: "Couldn't make your character, please try again." }, { status: 500 });
     const { ch, ref, from } = await createCharacter(user.id, name, randomAppearance(), QUICK_SESSION_DAYS);
     track("signup", ch.id, { quick: true, ...(ref ? { ref } : {}), ...sourceMeta(from) });
+    await recordReferral(ch.id, user.id, ref).catch((e) => console.warn("[referral]", e instanceof Error ? e.message : e));
     markActive(ch.id);
     return Response.json({ ok: true, character: ch });
   }
@@ -126,6 +128,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
     const [user] = await db.insert(users).values({ username, passwordHash: hashPassword(password) }).returning();
     const { ch, ref, from } = await createCharacter(user.id, name, cleanAppearance(body.appearance));
     track("signup", ch.id, { ...(ref ? { ref } : {}), ...sourceMeta(from) });
+    await recordReferral(ch.id, user.id, ref).catch((e) => console.warn("[referral]", e instanceof Error ? e.message : e));
     markActive(ch.id);
     return Response.json({ ok: true, character: ch });
   }

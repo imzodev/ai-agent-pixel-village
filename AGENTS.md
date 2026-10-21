@@ -452,6 +452,33 @@ row lock (`locked`), so double clicks can't pay twice.
 - Employers know you work for them (`jobNoteFor` in the talk prompt); promotions
   and firings are `job` world events, so gossip.
 
+## Membership and invites
+
+- **Membership** (`src/lib/membership.ts` rules, `src/lib/membershipServer.ts`,
+  `/api/membership`, the ⭐ Membership tab in `/shop`): $4.99 a month or $39.99 a
+  year, a Stripe subscription (metadata `membershipCharacterId`, through the one
+  webhook dispatcher). **Cosmetic and convenience only**: never anything that
+  wins fights or touches the coin economy. Perks: `MEMBER_MONTHLY_GEMS` and a
+  members-only outfit (`MEMBER_COSMETICS`, recolours in `cosmetics.ts`, one per
+  month in turn) handed over the first time a member shows up each UTC month
+  (`claimMonthly`, once per `member_grants` row); a ⭐ on the nameplate
+  (`memberTitle` in the snapshot); `MEMBER_TALK_MULT`× the AI-reply rate
+  (`memberTalkLimiter`). Only saved characters can join. Perks last to the
+  period end plus `MEMBER_GRACE_MS` (`memberNow`). Without a Stripe key outside
+  production it starts at once (the sandbox). `memberships` and `member_grants`
+  are kept when a character is deleted (payment records).
+- **Manage billing**: `/api/billing/portal` opens the Stripe Customer Portal for a
+  member, a sponsor or a billboard (card, invoices, cancel). Turn the portal on
+  in the Stripe dashboard.
+- **Invites** (`src/lib/referral.ts`, `referralServer.ts`, `referrals`): a
+  new character who arrived through someone's profile or shared moment (the
+  `grove_ref` cookie, `RefMark`) is theirs; when it reaches `REFERRAL_LEVEL`
+  (`recalcLevel`) both get `REFERRAL_GEMS`, once, the inviter at most
+  `REFERRAL_MONTHLY_CAP` times a month. The HUD's 🎁 Invite copies the profile link.
+- **The money funnel** (played → shop → checkout → paid, gems and membership)
+  and members' MRR are on the stats page. The services' purchase events are kept
+  in `events` (`src/lib/adapters/analytics.ts`, `MONEY_EVENTS`).
+
 ## Billboards (in-world ads)
 
 Anyone (an indie game, a shop, a streamer; sponsors too) can rent a billboard
@@ -484,9 +511,9 @@ at `/advertise`: a poster of their own on a board in the world, billed monthly.
   click per visitor per poster every 10 minutes. **Views** are counted by the
   client (`src/game/billboardImpressions.ts`: 2 s within 160 px, once per poster
   every 30 min) and sent in batches to `/api/billboards/events`.
-- **One Stripe webhook** (`src/lib/stripeWebhook.ts`): gems, sponsors and
+- **One Stripe webhook** (`src/lib/stripeWebhook.ts`): gems, memberships, sponsors and
   billboards share a dispatcher that routes by checkout metadata (`packKey`,
-  `sponsorId`, `billboardRentalId`); `/api/{gems,sponsors,billboards}/webhook`
+  `membershipCharacterId`, `sponsorId`, `billboardRentalId`); `/api/{gems,sponsors,billboards}/webhook`
   are all wrappers, so register any one of them in Stripe, with
   `checkout.session.completed`, `customer.subscription.updated` and
   `customer.subscription.deleted`. A billboard checkout never carries

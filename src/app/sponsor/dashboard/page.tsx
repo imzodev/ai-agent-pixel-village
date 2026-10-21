@@ -2,6 +2,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { manageBilling } from "@/lib/billingClient";
 
 type Dash = {
   sponsor: { id: number; businessName: string; status: string; brandColor: string; tagline: string; pitch: string; persona: string; discountCode: string; discountText: string; website: string | null; agentName: string; plan: string };
@@ -199,6 +200,7 @@ function Dashboard() {
               <div className="text-[12px] text-stone-600">{d.billing.plan}</div>
               <div className="text-[12px] text-stone-600">{d.paymentsConfigured ? "Charged monthly via Stripe." : "Sandbox mode: no card on file on this deployment."}</div>
               {s.status === "active" && <Link href="/advertise" className="mt-2 mr-2 inline-block rounded-lg bg-orange-100 px-3 py-1 text-[12px] text-orange-900 hover:bg-orange-200">🪧 Add a billboard (paste your token there)</Link>}
+              {d.paymentsConfigured && s.status === "active" && <button onClick={() => void manageBilling("sponsor", token, setErr)} className="mt-2 mr-2 rounded-lg bg-stone-200 px-3 py-1 text-[12px] hover:bg-stone-300">Manage billing</button>}
               {s.status !== "cancelled" && <button onClick={() => { if (confirm("Cancel your reservation? Your sign comes down and your agent leaves.")) void save({ status: "cancelled" }); }} className="mt-2 rounded-lg bg-stone-200 px-3 py-1 text-[12px] hover:bg-red-100">Cancel reservation</button>}
             </div>
           </section>

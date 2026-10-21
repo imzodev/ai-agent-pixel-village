@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { posterUrl } from "@/lib/billboards";
+import { manageBilling } from "@/lib/billingClient";
 import type { BillboardDashboard, BillboardStatus } from "@/types/billboard";
 
 const STATUS: Record<BillboardStatus, { label: string; tone: string; note: string }> = {
@@ -130,6 +131,7 @@ function Dashboard() {
                 <div className="flex flex-wrap gap-2">
                   <button disabled={busy || (!file && !edit.title && !edit.link)} className="rounded-lg bg-orange-500 px-4 py-1.5 font-bold text-white disabled:opacity-50">Send for review</button>
                   <div className="flex-1" />
+                  {d.paymentsConfigured && <button type="button" onClick={() => void manageBilling("billboard", token, setMsg)} className="rounded-lg border-2 border-stone-300 px-3 py-1.5">Manage billing</button>}
                   {!d.cancelAtPeriodEnd && <button type="button" onClick={cancel} disabled={busy} className="rounded-lg border-2 border-red-300 px-3 py-1.5 text-red-700">Cancel billboard</button>}
                 </div>
                 {msg && <div className="rounded-lg bg-stone-100 px-3 py-2 text-[13px]">{msg}</div>}

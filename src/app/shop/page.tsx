@@ -5,6 +5,7 @@ import { COSMETIC_RARITIES, COSMETIC_SLOTS, type CosmeticRarity, type CosmeticSl
 import type { Appearance } from "@/db/schema";
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import { drawPreview } from "@/game/lpc";
+import MembershipPanel from "@/components/MembershipPanel";
 
 type Item = {
   item: {
@@ -33,7 +34,7 @@ export default function ShopPage() {
   const [gemsOpen, setGemsOpen] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [filter, setFilter] = useState<CosmeticSlot | "all">("all");
-  const [tab, setTab] = useState<"cosmetics" | "gems">("cosmetics");
+  const [tab, setTab] = useState<"member" | "cosmetics" | "gems">("cosmetics");
   // The current character + their equipped cosmetics. Used to render each
   // cosmetic card preview against the player's own appearance. Loaded from
   // /api/me and refreshed after equip/unequip.
@@ -46,6 +47,8 @@ export default function ShopPage() {
     fetch("/api/me").then((r) => r.json()).catch(() => null),
   ]);
   const applyShop = ([s, p, meRes]: Awaited<ReturnType<typeof fetchShop>>) => {
+    // Arriving from a "become a member" link (or back from its checkout): open that tab.
+    if (!view && new URLSearchParams(window.location.search).get("tab") === "member") setTab("member");
     setView(s);
     setPacks(p.packs);
     setGemsOpen(p.open !== false);
@@ -163,10 +166,12 @@ export default function ShopPage() {
         </div>
       </header>
       <nav style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <Tab active={tab === "member"} onClick={() => setTab("member")}>⭐ Membership</Tab>
         <Tab active={tab === "cosmetics"} onClick={() => setTab("cosmetics")}>Cosmetics</Tab>
         <Tab active={tab === "gems"} onClick={() => setTab("gems")}>Gems</Tab>
       </nav>
 
+      {tab === "member" && <MembershipPanel onChange={() => void reload()} />}
       {tab === "cosmetics" && (
         <>
           <nav style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto" }}>
@@ -207,6 +212,8 @@ export default function ShopPage() {
                     </button>
                   ) : r.gemPrice > 0 ? (
                     <button disabled={busy === r.key || !row.canAffordGems} onClick={() => buyGemsItem(r.key)} style={!row.canAffordGems ? btnDisabled : btnPrimary}>💎 {r.gemPrice}</button>
+                  ) : r.key.startsWith("member_") ? (
+                    <button onClick={() => setTab("member")} style={btnPrimary}>⭐ members</button>
                   ) : (
                     <Badge color="#ffd166">sponsor gift</Badge>
                   )}

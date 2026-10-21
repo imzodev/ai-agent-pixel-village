@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { getContainer } from "@/lib/container";
 import { requireCharacter, handleApiError } from "@/lib/auth";
 import { getLivePlayerPosition, markWorldDirty } from "@/lib/world-stream";
+import { track } from "@/lib/track";
 
 /** Fire-and-forget daily-quest event for shop spending. */
 function daily(characterId: number, kind: "spend_coins", payload: Record<string, number | string>, amount: number): void {
@@ -24,6 +25,7 @@ export async function GET() {
     const ch = await requireCharacter();
     const c = getContainer();
     const view = await c.services.cosmetic.getShopView(ch.id);
+    track("shop_view", ch.id);
     return NextResponse.json({ items: view, balance: { coins: ch.coins, gems: ch.gems } });
   } catch (e) {
     return handleApiError(e);

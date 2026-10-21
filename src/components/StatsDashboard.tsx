@@ -141,8 +141,9 @@ function Revenue({ r }: { r: StatsView["revenue"] }) {
   return (
     <>
       <h2 className="mt-6 text-lg font-extrabold text-amber-300">Revenue</h2>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Money label="MRR" v={usd(r.mrrCents)} sub={r.cancellingCents ? `${usd(r.cancellingCents)} ending` : `ARR ${usd(r.mrrCents * 12)}`} />
+        <Money label="Members" v={usd(r.members?.mrrCents ?? 0)} sub={`${r.members?.active ?? 0} (${r.members?.yearly ?? 0} yearly) · +${r.members?.joined30d ?? 0} / −${r.members?.ended30d ?? 0} in 30 days`} />
         <Money label="Sponsors" v={usd(r.sponsors.mrrCents)} sub={`${r.sponsors.active} active`} />
         <Money label="Billboards" v={usd(r.billboards.mrrCents)} sub={`${r.billboards.paid} paid · ${r.billboards.inReview} in review`} />
         <Money label="Gems (30 days)" v={usd(r.gems30d.cents)} sub={`${r.gems30d.purchases} buys · ${r.gems30d.payers} payers`} />
@@ -158,6 +159,10 @@ function Revenue({ r }: { r: StatsView["revenue"] }) {
           <div className="font-bold">Ads, last 30 days</div>
           <div className="mt-1">{r.ads30d.impressions.toLocaleString()} views · {r.ads30d.clicks.toLocaleString()} clicks</div>
           <div className="text-[11px] text-stone-400">{ctr}</div>
+          <div className="mt-2 font-bold">Towards paying (30 days)</div>
+          {(r.funnel30d ?? []).map((f, i, all) => (
+            <div key={f.step} className="flex justify-between text-[12px]"><span>{f.step}</span><span>{f.players}{i > 0 && all[0].players ? ` · ${((100 * f.players) / all[0].players).toFixed(1)}%` : ""}</span></div>
+          ))}
           <div className="mt-2 font-bold">Lead fees (30 days)</div>
           <div>{usd(r.leadFees30dCents)} <span className="text-[11px] text-stone-400">tracked, not billed</span></div>
         </div>

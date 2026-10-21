@@ -38,6 +38,7 @@ import FurnitureSprite from "./FurnitureSprite";
 import { msToRipe, plantablesFor, plotHint, ripeIn } from "@/lib/vineyard";
 import { spotOfPlot } from "@/lib/homestead";
 import { BILLBOARD_TIERS, spotByKey } from "@/lib/billboards";
+import { REFERRAL_GEMS, REFERRAL_LEVEL, inviteLink } from "@/lib/referral";
 import MapPanel from "./MapPanel";
 import BountyPanel from "./BountyPanel";
 import TreasureMapView from "./TreasureMapView";
@@ -75,7 +76,7 @@ import BossCountdown from "./BossCountdown";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[] };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[]; memberGift?: { gems: number; itemName: string } | null; member?: boolean };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -195,6 +196,11 @@ export default function Hud() {
   // A "Play now" character with no password yet: the save window ("leaving" when opened from Sign out).
   const [saveOpen, setSaveOpen] = useState<null | "save" | "leaving">(null);
   const [saveNudgeHidden, setSaveNudgeHidden] = useState(false);
+  // "Become a member" is suggested once a week at most (src/lib/membership.ts).
+  const [memberNudgeHidden, setMemberNudgeHidden] = useState(() => {
+    try { return typeof window === "undefined" || Date.now() - Number(localStorage.getItem("grove_member_nudge") ?? 0) < 7 * 86_400_000; } catch { return true; }
+  });
+  const hideMemberNudge = () => { setMemberNudgeHidden(true); try { localStorage.setItem("grove_member_nudge", String(Date.now())); } catch { /* private mode */ } };
   // Mission markers (! and ?) for the scene; resent when it (re)starts.
   const [missionMarks, setMissionMarks] = useState<Record<number, "!" | "?">>({});
   useEffect(() => {
@@ -273,6 +279,7 @@ export default function Hud() {
     setMe(m);
     if (m.me) setCoinsLive(m.me.coins);
     for (const msg of m.journeyDone ?? []) toast(msg, "good"); // journey goals just met
+    if (m.memberGift) toast(`⭐ Your member gifts for this month: 💎 ${m.memberGift.gems} and the ${m.memberGift.itemName} (in the shop to wear).`, "good");
     if (m.me) loadMarks();
   }, [toast, loadMarks]);
   const loadBounties = useCallback(async () => {
@@ -1108,6 +1115,14 @@ export default function Hud() {
           <TopBtn on={() => { pick(); togglePanel("book"); }} active={panel === "book"}>📖 Book</TopBtn>
           {me?.unsaved && <TopBtn on={() => { pick(); setSaveOpen("save"); }} active={saveOpen === "save"}>💾 Save character</TopBtn>}
           {me?.username && <a href={`/u/${me.username}`} target="_blank" rel="noopener" onClick={pick} className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-white hover:bg-amber-400">🪪 Profile</a>}
+          {me?.username && !me.unsaved && (
+            <TopBtn on={() => {
+              pick();
+              const link = inviteLink(location.origin, me.username!);
+              const done = () => toast(`🎁 Invite link copied: ${link}. When your friend reaches level ${REFERRAL_LEVEL}, you both get 💎 ${REFERRAL_GEMS}.`, "good");
+              void navigator.clipboard?.writeText(link).then(done, () => toast(`🎁 Send friends ${link}: when they reach level ${REFERRAL_LEVEL}, you both get 💎 ${REFERRAL_GEMS}.`, "info"));
+            }}>🎁 Invite</TopBtn>
+          )}
           <Link href="/shop" className="rounded-lg bg-violet-500 px-2 py-1 font-bold text-white hover:bg-violet-400">🛍️ Shop</Link>
         </>
       ) : null}
@@ -1177,7 +1192,7 @@ export default function Hud() {
                   <span className="whitespace-nowrap">❤️ {hp}</span>
                 </>
               );
-            })()}<span className="whitespace-nowrap">🪙 {coins}</span><span className="hidden sm:inline">💎 {gems}</span>
+            })()}<span className="whitespace-nowrap">🪙 {coins}</span><Link href="/shop?tab=member" title="Get gems" className="hidden hover:text-amber-200 sm:inline">💎 {gems} <span className="rounded bg-white/20 px-1 text-[10px]">+</span></Link>
             {xpInfo && (
               <span className="hidden items-center gap-1 sm:flex" title={xpInfo.hint}>
                 ✨<span className="h-2 w-16 overflow-hidden rounded bg-black/50"><span className="block h-full bg-amber-300" style={{ width: `${xpInfo.pct}%` }} /></span>
@@ -1405,6 +1420,13 @@ export default function Hud() {
           <span className="truncate">💾 Save {me.me.name} with a password</span>
           <button onClick={() => setSaveOpen("save")} className="rounded-full bg-emerald-600 px-3 py-0.5 font-bold text-white hover:bg-emerald-500">Save</button>
           <button onClick={() => setSaveNudgeHidden(true)} className="px-1.5 text-stone-500 hover:text-stone-800" aria-label="Later">✕</button>
+        </div>
+      )}
+      {loggedIn && me?.me && !me.unsaved && me.member === false && !memberNudgeHidden && !saveOpen && !sel && !talk && me.me.level >= 5 && (
+        <div className={`pointer-events-auto absolute ${isTouch ? "bottom-[176px]" : "bottom-[4.5rem]"} left-1/2 z-10 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-amber-50/95 py-1 pl-3 pr-1 text-sm text-amber-950 shadow-lg ring-2 ring-amber-700/40`}>
+          <span className="truncate">⭐ Enjoying the village? Members get 💎 every month and a new outfit</span>
+          <Link href="/shop?tab=member" onClick={hideMemberNudge} className="rounded-full bg-amber-500 px-3 py-0.5 font-bold text-white hover:bg-amber-400">See</Link>
+          <button onClick={hideMemberNudge} className="px-1.5 text-stone-500 hover:text-stone-800" aria-label="Later">✕</button>
         </div>
       )}
       {reporting && <ReportModal who={reporting} onDone={(msg, ok) => { toast(msg, ok ? "good" : "bad"); setReporting(null); }} onClose={() => setReporting(null)} />}

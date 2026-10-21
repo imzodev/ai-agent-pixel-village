@@ -30,6 +30,12 @@ export default function TermsPage() {
       <h2>Coins, gems and items</h2>
       <p>Coins, gems, items, land and everything else in the game are part of the game. They have no value outside it and can&apos;t be exchanged for money. Gems you buy are delivered to your account right away, and purchases are final, except where the law of your country gives you a right to a refund.</p>
 
+      <h2>Membership</h2>
+      <p>A membership renews every month or year until you cancel. You can cancel any time from the shop (“Manage billing”); you keep the perks until the end of the period you&apos;ve paid for, and we don&apos;t refund part-used periods except where the law of your country requires it. Members&apos; monthly gems and outfits are theirs to keep. We may change the perks; if we change the price, we&apos;ll tell members before it applies to them.</p>
+      <h2>Invites</h2>
+      <p>Invite rewards are for real friends who play. Accounts made to collect them may lose the reward or be suspended.</p>
+      <h2>Billboards and sponsors</h2>
+      <p>Billboards and sponsored buildings show ads from real businesses and creators. We review every poster before it goes up, but the advertiser is responsible for what they offer, and their site has its own terms. Advertisers agree that what they upload is theirs to use and contains no adult content, hate, scams, gambling or anything unlawful; we may take an ad down if it breaks that (without a refund) and refund any we don&apos;t approve.</p>
       <h2>The game changes</h2>
       <p>thegroove is a living game: we rebalance it, change things and sometimes reset parts of the world. We do our best to keep it running and your progress safe, but it&apos;s provided as is, without guarantees, and we can&apos;t be liable for lost progress or downtime beyond what the law requires.</p>
 

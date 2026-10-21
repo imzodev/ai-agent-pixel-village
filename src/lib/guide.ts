@@ -18,6 +18,8 @@ import { itemDef } from "./itemDefs";
 import { npcDef } from "./npcDefs";
 import { TRAVEL_COST } from "./worldAtlas";
 import { BILLBOARD_SPOTS, BILLBOARD_TIERS } from "./billboards";
+import { MEMBERSHIP_PLANS, MEMBER_MONTHLY_GEMS, MEMBER_TALK_MULT } from "./membership";
+import { REFERRAL_GEMS, REFERRAL_LEVEL } from "./referral";
 
 export { MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, PARCEL_PRICE, TRAVEL_COST };
 export const STARTER_PARCELS = STARTER.length;
@@ -37,6 +39,11 @@ export const BILLBOARD_FACTS = {
   from: Math.min(...Object.values(BILLBOARD_TIERS).map((t) => t.priceCents)) / 100,
   to: Math.max(...Object.values(BILLBOARD_TIERS).map((t) => t.priceCents)) / 100,
 };
+
+/** Membership, in the guide's words. */
+export const MEMBER_PRICE = `$${MEMBERSHIP_PLANS.monthly.priceCents / 100} a month or $${MEMBERSHIP_PLANS.yearly.priceCents / 100} a year`;
+export const MEMBER_PERKS_TEXT = `💎 ${MEMBER_MONTHLY_GEMS} every month, a members-only outfit every month, a star on your nameplate and ${MEMBER_TALK_MULT}× more conversations with the villagers`;
+export const REFERRAL_FACTS = { level: REFERRAL_LEVEL, gems: REFERRAL_GEMS };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");
 const who = (key: string) => npcDef(key)?.name ?? key;

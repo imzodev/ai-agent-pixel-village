@@ -59,7 +59,7 @@ export class CosmeticService {
         .returning({ coins: characters.coins });
       if (!ch) throw new Error("insufficient coins");
       await tx.insert(cosmeticOwnerships).values({ characterId, itemKey, source: "coin" });
-      this.analytics.track("cosmetic_bought_coins", { itemKey, price: item.coinPrice }, userId);
+      this.analytics.track("cosmetic_bought_coins", { characterId, itemKey, price: item.coinPrice }, userId);
       return { newBalance: ch.coins };
     });
   }
@@ -80,7 +80,7 @@ export class CosmeticService {
       if (!ch) throw new Error("insufficient gems");
       await tx.insert(cosmeticOwnerships).values({ characterId, itemKey, source: "gem" });
       await tx.insert(gemTransactions).values({ characterId, delta: -item.gemPrice, source: "spend", packKey: null, stripeSessionId: null });
-      this.analytics.track("cosmetic_bought_gems", { itemKey, price: item.gemPrice }, userId);
+      this.analytics.track("cosmetic_bought_gems", { characterId, itemKey, price: item.gemPrice }, userId);
       return { newBalance: ch.gems };
     });
   }

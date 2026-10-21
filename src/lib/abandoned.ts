@@ -13,7 +13,7 @@ export const ABANDONED_MAX_LEVEL = Number(process.env.ABANDONED_MAX_LEVEL ?? 3);
 /** At most this many per run, so one sweep never holds the database for long. */
 const BATCH = 500;
 /** Records kept after a character is gone: payments, moderation and analytics. */
-const KEEP = new Set(["gem_transactions", "reports", "events", "active_days"]);
+const KEEP = new Set(["gem_transactions", "memberships", "member_grants", "reports", "events", "active_days"]);
 
 let characterTables: string[] | null = null;
 
@@ -44,6 +44,7 @@ export async function deleteCharacters(ids: number[], { keepRecords = true } = {
   await del(`DELETE FROM resource_nodes WHERE owner_id = ANY($1)`, [ids]);
   await del(`DELETE FROM animals WHERE owner_id = ANY($1)`, [ids]);
   await del(`DELETE FROM lot_cheers WHERE owner_id = ANY($1) OR cheerer_id = ANY($1)`, [ids]);
+  await del(`DELETE FROM referrals WHERE invitee_id = ANY($1) OR inviter_id = ANY($1)`, [ids]);
   await del(`DELETE FROM sessions WHERE user_id = ANY($1)`, [users]);
   await del(`DELETE FROM characters WHERE id = ANY($1)`, [ids]);
   await del(`DELETE FROM users WHERE id = ANY($1)`, [users]);

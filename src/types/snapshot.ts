@@ -80,6 +80,8 @@ export type RawSnapshot = {
   cosmeticsByChar: Map<number, { slot: string; itemKey: string }[]>;
   /** Nameplate titles of the players shipped. */
   titleByChar: Map<number, string | null>;
+  /** Players with a membership (a star on their nameplate). */
+  members: Set<number>;
   spById: Record<string, SponsorLite>;
 };
 

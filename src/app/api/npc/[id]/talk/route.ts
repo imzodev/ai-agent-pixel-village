@@ -5,7 +5,8 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { generateReply, HISTORY_LINES } from "@/lib/agent";
 import { knowledgeFor } from "@/lib/npcKnowledge";
 import { memoryOf, refreshNote } from "@/lib/npcNotes";
-import { npcLlmLimiter } from "@/lib/rateLimit";
+import { memberTalkLimiter, npcLlmLimiter } from "@/lib/rateLimit";
+import { isMember } from "@/lib/membershipServer";
 import { buildOffers, loadSponsor } from "@/lib/offers";
 import { emitLead, progressMissions } from "@/lib/game";
 import { gameHour } from "@/lib/worldmap";
@@ -104,7 +105,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Soft rate limit on LLM-powered replies per character. The player
     // still gets an answer (scripted) once the cap is hit — this protects
     // the bill, not the gameplay.
-    const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString());
+    // Members get MEMBER_TALK_MULT times as many (src/lib/membership.ts).
+    const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString())
+      && !((await isMember(character.id)) && memberTalkLimiter.allow(character.id.toString()));
     const knowledge = knowledgeFor(npc.key, (k) => names.get(k) ?? k.replace(/_/g, " "));
     const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory, gossip };
 

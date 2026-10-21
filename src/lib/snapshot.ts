@@ -45,6 +45,8 @@ import { moveOfRow } from "@/lib/motion";
 import { lotsInBox } from "@/lib/lots";
 import { breadTables } from "@/lib/bakeryServer";
 import { billboardsInBox } from "@/lib/billboardServer";
+import { membersAmong } from "@/lib/membershipServer";
+import { memberTitle } from "@/lib/membership";
 import { shopDisplays } from "@/lib/shopDisplayServer";
 import { SHOP_DISPLAYS } from "@/lib/shopDisplay";
 import type { EnemySnapshot, WorldSnapshot } from "@/lib/protocol";
@@ -339,11 +341,13 @@ async function buildRawSnapshot(playerX: number, playerY: number): Promise<RawSn
     ? await rdb.select({ id: characters.id, title: characters.title }).from(characters).where(inArray(characters.id, playerIds))
     : [];
   const titleByChar = new Map(titleRows.map((r) => [r.id, r.title]));
+  const members = playerIds.length > 0 ? await membersAmong(playerIds) : new Set<number>();
 
   return {
     world: ws,
     players,
     titleByChar,
+    members,
     npcs: npcRows,
     animals: animalRows,
     buildings: buildingRows,
@@ -385,7 +389,7 @@ function formatSnapshot(raw: RawSnapshot, version: number): WorldSnapshot {
       ...p,
       equipped: raw.equippedByChar.get(p.id) ?? [],
       cosmetics: raw.cosmeticsByChar.get(p.id) ?? [],
-      title: raw.titleByChar.get(p.id) ?? null,
+      title: memberTitle(raw.titleByChar.get(p.id) ?? null, raw.members.has(p.id)),
     })),
     npcs: raw.npcs.map((n) => {
       const sp = n.sponsorId != null ? spById[String(n.sponsorId)] : null;

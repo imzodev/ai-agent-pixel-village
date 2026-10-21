@@ -1,7 +1,7 @@
 // One Stripe webhook for everything that's paid for. A Stripe endpoint has a
-// single signing secret, so gems, sponsors and billboards share this
-// dispatcher, routed by the checkout's metadata (packKey / sponsorId /
-// billboardRentalId). Each route under /api/*/webhook is a thin wrapper, so
+// single signing secret, so gems, memberships, sponsors and billboards share
+// this dispatcher, routed by the checkout's metadata (packKey /
+// membershipCharacterId / billboardRentalId / sponsorId). Each route under /api/*/webhook is a thin wrapper, so
 // whichever URL is registered in Stripe handles them all. Every handler is
 // idempotent: a redelivered event changes nothing.
 
@@ -9,6 +9,7 @@ import Stripe from "stripe";
 import { getContainer } from "./container";
 import { sponsorEnded, sponsorPaid } from "./sponsorBilling";
 import { markPaid, syncSubscription } from "./billboardServer";
+import { memberPaid, memberSubscription } from "./membershipServer";
 import { GEM_PACKS, type GemPackKey } from "@/types/cosmetic";
 
 /** The verified event, or the response to send back. */
@@ -36,6 +37,8 @@ async function dispatch(event: Stripe.Event): Promise<void> {
       if (GEM_PACKS.some((p) => p.key === packKey)) {
         await getContainer().services.gem.fulfill({ characterId: Number(md.characterId), packKey, stripeSessionId: s.id });
       }
+    } else if (md.membershipCharacterId) {
+      await memberPaid(Number(md.membershipCharacterId), s);
     } else if (md.billboardRentalId) {
       await markPaid(Number(md.billboardRentalId), s);
     } else if (md.sponsorId) {
@@ -45,7 +48,8 @@ async function dispatch(event: Stripe.Event): Promise<void> {
   }
   if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
     const sub = event.data.object;
-    if (sub.metadata?.billboardRentalId) await syncSubscription(sub, event.type === "customer.subscription.deleted");
+    if (sub.metadata?.membershipCharacterId) await memberSubscription(sub, event.type === "customer.subscription.deleted");
+    else if (sub.metadata?.billboardRentalId) await syncSubscription(sub, event.type === "customer.subscription.deleted");
     else if (sub.metadata?.sponsorId && event.type === "customer.subscription.deleted") await sponsorEnded(Number(sub.metadata.sponsorId));
   }
 }
