@@ -2,7 +2,7 @@ import type { ArmMatchState, BlackjackHand, DiceTableState } from "@/types/saloo
 import type { ShoppingRule } from "@/types/businessAgent";
 import type { MomentData, MomentKind } from "@/types/moments";
 import type { JobProgress, JobStatus } from "@/types/jobs";
-import type { WhistleInput } from "@/types/whistle";
+import type { ArcadeGameKey } from "@/types/arcade";
 import {
   bigint,
   pgMaterializedView,
@@ -1363,36 +1363,41 @@ export const agentOptouts = pgTable(
   (t) => [index("agent_optouts_char_idx").on(t.characterId)],
 );
 
-/** Whistle (src/lib/whistleServer.ts): every submitted run, scored by the server's replay of its taps. */
-export const whistleRuns = pgTable(
-  "whistle_runs",
+/**
+ * The arcade's runs (src/lib/arcadeServer.ts): every submitted run of every
+ * minigame, scored by the server's own replay of its inputs. (Was whistle_runs.)
+ */
+export const arcadeRuns = pgTable(
+  "arcade_runs",
   {
-    /** A short random slug: the replay link is /whistle/r/<id>. */
+    /** A short random slug: the replay link is /<game>/r/<id>. */
     id: text("id").primaryKey(),
+    game: text("game").$type<ArcadeGameKey>().notNull(),
     characterId: integer("character_id").notNull(),
     /** The course's UTC day ("2026-10-21"). */
     day: text("day").notNull(),
     score: integer("score").notNull(),
-    penned: integer("penned").notNull(),
-    lost: integer("lost").notNull(),
+    /** The game's own counts ({ penned, lost }, { delivered, broken, lost }). */
+    detail: jsonb("detail").$type<Record<string, number>>().notNull().default({}),
     ticks: integer("ticks").notNull(),
-    inputs: jsonb("inputs").$type<WhistleInput[]>().notNull(),
+    inputs: jsonb("inputs").$type<unknown[]>().notNull(),
     /** Taken off the boards by an admin. */
     hidden: boolean("hidden").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [index("whistle_runs_day_score_idx").on(t.day, t.score), index("whistle_runs_char_day_idx").on(t.characterId, t.day)],
+  (t) => [index("arcade_runs_game_day_score_idx").on(t.game, t.day, t.score), index("arcade_runs_char_game_day_idx").on(t.characterId, t.game, t.day)],
 );
 
-/** Whistle's weekly prizes: the top three of each week (Monday, UTC), awarded once. */
-export const whistlePrizes = pgTable(
-  "whistle_prizes",
+/** The arcade's weekly prizes: each game's top three of each week (Monday, UTC), awarded once. (Was whistle_prizes.) */
+export const arcadePrizes = pgTable(
+  "arcade_prizes",
   {
+    game: text("game").$type<ArcadeGameKey>().notNull(),
     week: text("week").notNull(),
     rank: integer("rank").notNull(),
     characterId: integer("character_id").notNull(),
     score: integer("score").notNull(),
     awardedAt: timestamp("awarded_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("whistle_prizes_week_rank_unique").on(t.week, t.rank), index("whistle_prizes_char_idx").on(t.characterId)],
+  (t) => [uniqueIndex("arcade_prizes_game_week_rank_unique").on(t.game, t.week, t.rank), index("arcade_prizes_char_idx").on(t.characterId)],
 );

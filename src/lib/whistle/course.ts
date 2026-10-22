@@ -5,27 +5,18 @@
 // (reachable), or the layout is rolled again. Pure.
 
 import { FIELD_H, FIELD_W, SHEEP_COUNT, SHEEP_R, WHISTLE_EPOCH } from "./rules";
-import { hashSeed, makeRng } from "./rng";
+import { hashSeed, makeRng } from "../arcade/rng";
+import { dayNumber } from "../arcade/days";
 import type { Course, CourseTemplate, WPoint, WRect } from "@/types/whistle";
 
-const DAY_MS = 86_400_000;
 const TEMPLATES: readonly CourseTemplate[] = ["meadow", "river", "lanes", "pond"];
 const PEN_W = 84, PEN_H = 52, WALL = 4, GATE = 36;
 /** Obstacles stay between the pen and the start. */
 const TOP = 110, BOTTOM = 390;
 
-/** "2026-10-21" for a time. */
-export const whistleDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+export { arcadeDay as whistleDay, msToNextCourse, weekOf } from "../arcade/days";
 /** "Whistle #N": 1 on WHISTLE_EPOCH. */
-export const whistleNumber = (day: string): number => Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${WHISTLE_EPOCH}T00:00:00Z`)) / DAY_MS) + 1;
-/** ms until the next course starts. */
-export const msToNextCourse = (ms: number): number => DAY_MS - (ms % DAY_MS);
-/** The Monday (UTC) a day's week starts on. */
-export function weekOf(day: string): string {
-  const t = Date.parse(`${day}T00:00:00Z`);
-  const dow = (new Date(t).getUTCDay() + 6) % 7;
-  return whistleDay(t - dow * DAY_MS);
-}
+export const whistleNumber = (day: string): number => dayNumber(WHISTLE_EPOCH, day);
 
 const overlaps = (a: WRect, b: WRect, pad = 0): boolean =>
   a.x - pad < b.x + b.w && a.x + a.w + pad > b.x && a.y - pad < b.y + b.h && a.y + a.h + pad > b.y;
@@ -120,7 +111,7 @@ export function reachable(c: Pick<Course, "start" | "pen" | "walls" | "water">):
 const wolvesOn = (day: string): number => 1 + Math.floor(((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) / 3);
 
 /**
- * The day's course. `salt` is the server's secret (whistleServer.ts courseOf),
+ * The day's course. `salt` is the server's secret (arcadeServer.ts courseOf),
  * so nobody can work out tomorrow's course from this code and practise it early.
  */
 export function courseFor(day: string, salt = ""): Course {

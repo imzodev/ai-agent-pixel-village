@@ -65,7 +65,7 @@ export type GemTransaction = {
   characterId: number;
   delta: number;
   /** Positive = credit (purchase / grant), negative = debit (purchase). */
-  source: "purchase" | "spend" | "sponsor_grant" | "seasonal_grant" | "admin" | "member_grant" | "referral" | "whistle_prize";
+  source: "purchase" | "spend" | "sponsor_grant" | "seasonal_grant" | "admin" | "member_grant" | "referral" | "arcade_prize";
   packKey: GemPackKey | null;
   stripeSessionId: string | null;
   createdAt: Date;

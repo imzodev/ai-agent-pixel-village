@@ -215,7 +215,7 @@ export default function ShopPage() {
                   ) : r.key.startsWith("member_") ? (
                     <button onClick={() => setTab("member")} style={btnPrimary}>⭐ members</button>
                   ) : r.key.startsWith("prize_") ? (
-                    <Link href="/whistle"><Badge color="#ffd166">🏆 Whistle prize</Badge></Link>
+                    <Link href="/play"><Badge color="#ffd166">🏆 arcade prize</Badge></Link>
                   ) : (
                     <Badge color="#ffd166">sponsor gift</Badge>
                   )}

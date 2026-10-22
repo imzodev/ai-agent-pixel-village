@@ -70,11 +70,9 @@ export const PERFECT_BONUS = 500;
 /** A run's taps are capped (a whistle every MIN_GAP ticks is at most MAX_TICKS / MIN_GAP). */
 export const MAX_INPUTS = 400;
 
-// ── The weekly prizes (src/lib/whistleServer.ts awardWeek) ──
+// ── The weekly prizes (src/lib/arcadeServer.ts awardWeek) ──
 /** Gems for the week's first, second and third. */
 export const WEEKLY_PRIZE_GEMS = [500, 300, 150] as const;
 /** The top three's title and hat (cosmetics.ts). */
 export const PRIZE_TITLE = "Champion Shepherd";
 export const PRIZE_COSMETIC = "prize_shepherd_hat";
-/** A run's token is good for this long after it starts. */
-export const RUN_TOKEN_MS = 15 * 60_000;

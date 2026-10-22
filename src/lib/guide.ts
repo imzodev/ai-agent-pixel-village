@@ -5,6 +5,7 @@
 import { AMBUSH_AFTER_MS, AMBUSH_MAX, AMBUSH_MIN, ESCORT_PX, ESCORT_SHARE, JOB_DEFS, MAX_JOBS, FIRE_AFTER_DAYS, RANK_AT, shiftPay, taskText } from "./jobs";
 import { STOP_LINGER_MS } from "./mind/caravan";
 import { PRIZE_TITLE, RUN_SECONDS, SHEEP_COUNT, WEEKLY_PRIZE_GEMS } from "./whistle/rules";
+import * as haulRules from "./haul/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -47,6 +48,8 @@ export const MEMBER_PERKS_TEXT = `💎 ${MEMBER_MONTHLY_GEMS} every month, a mem
 export const REFERRAL_FACTS = { level: REFERRAL_LEVEL, gems: REFERRAL_GEMS };
 /** Whistle, the herding minigame: the flock, the clock and the week's prizes. */
 export const WHISTLE_FACTS = { sheep: SHEEP_COUNT, seconds: RUN_SECONDS, title: PRIZE_TITLE, gems: WEEKLY_PRIZE_GEMS.join(" / ") };
+/** Harvest Haul, the stacking minigame: the load's worth and the week's prizes. */
+export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");
 const who = (key: string) => npcDef(key)?.name ?? key;

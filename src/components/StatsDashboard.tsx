@@ -68,7 +68,7 @@ export default function StatsDashboard() {
         {s.revenue && <Revenue r={s.revenue} />}
         <h2 className="mt-8 text-lg font-extrabold text-amber-300">Billboards to review</h2>
         <AdminBillboards token={token} />
-        {s.whistle && <Whistle w={s.whistle} token={token} onChange={() => void load(token)} />}
+        {(s.arcade ?? []).map((a) => <Arcade key={a.game} w={a} token={token} onChange={() => void load(token)} />)}
 
         <h2 className="mt-8 text-lg font-extrabold text-amber-300">Players</h2>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -137,8 +137,8 @@ export default function StatsDashboard() {
 const usd = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 
 /** MRR first (the goal), then what makes it up, then one-off gem sales. */
-/** Whistle: is the campaign game played, does it bring players, anything odd at the top? */
-function Whistle({ w, token, onChange }: { w: StatsView["whistle"]; token: string; onChange: () => void }) {
+/** An arcade game: is it played, does it bring players, anything odd at the top? */
+function Arcade({ w, token, onChange }: { w: StatsView["arcade"][number]; token: string; onChange: () => void }) {
   const hide = async (id: string) => {
     if (!confirm("Take this run off the boards?")) return;
     await fetch("/api/admin/whistle", { method: "POST", headers: { "x-admin-token": token, "content-type": "application/json" }, body: JSON.stringify({ runId: id, hide: true }) });
@@ -146,7 +146,7 @@ function Whistle({ w, token, onChange }: { w: StatsView["whistle"]; token: strin
   };
   return (
     <>
-      <h2 className="mt-8 text-lg font-extrabold text-amber-300">🐑 Whistle</h2>
+      <h2 className="mt-8 text-lg font-extrabold text-amber-300">{w.emoji} {w.name}</h2>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Stat label="Plays (7 days)" v={w.plays7d} />
         <Stat label="Runs sent in (7 days)" v={w.runs7d} />
@@ -161,8 +161,8 @@ function Whistle({ w, token, onChange }: { w: StatsView["whistle"]; token: strin
           {w.topToday.length === 0 && <div className="text-stone-400">None yet.</div>}
           {w.topToday.map((r) => (
             <div key={r.id} className="mt-1 flex items-center gap-2 text-[12px]">
-              <a href={`/whistle/r/${r.id}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate underline">{r.name}</a>
-              <span className="tabular-nums">{r.score.toLocaleString()} · {r.penned} in · {r.lost} lost · {r.whistles} whistles</span>
+              <a href={`/${w.game}/r/${r.id}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate underline">{r.name}</a>
+              <span className="tabular-nums">{r.score.toLocaleString()} · {Object.entries(r.detail).map(([k, v]) => `${v} ${k}`).join(" · ")} · {r.inputs} inputs</span>
               <button onClick={() => void hide(r.id)} className="text-red-300 underline">hide</button>
             </div>
           ))}

@@ -3,30 +3,21 @@
 // tick and draws it in between. "play": taps on the field whistle, and the
 // taps that took effect are recorded for the server to replay. "replay": the
 // stored taps are played back, so the run comes out exactly as it was.
+// The arcade shell (src/components/arcade/ArcadeShell.tsx) hosts it.
 
 import { useEffect, useRef } from "react";
 import { FIELD_H, FIELD_W, TICK_MS, TICKS_PER_SEC, MAX_TICKS } from "@/lib/whistle/rules";
-import { canWhistle, initRun, solidsOf, step } from "@/lib/whistle/sim";
+import { canWhistle, initRun, scoreOf, solidsOf, step } from "@/lib/whistle/sim";
+import { whistleResult } from "@/lib/arcade/games";
 import { breathWhistles, drawField, loadSprites } from "./draw";
-import { dryWhistleSound, lostSound, pennedSound, unlockSound, whistleSound } from "./sound";
-import type { Course, RunState, WhistleFx, WhistleHud, WhistleInput, WhistlePrev, WhistleSprites } from "@/types/whistle";
+import { dryWhistleSound, lostSound, pennedSound, unlockSound, whistleSound } from "../arcade/sound";
+import type { Course, WhistleFx, WhistleInput, WhistlePrev, WhistleSprites } from "@/types/whistle";
+import type { ArcadeFieldProps } from "@/types/arcade";
 
 let spritesOnce: Promise<WhistleSprites> | null = null;
 
-export default function WhistleField({ course, mode, running, inputs, sound = true, speed = 1, onHud, onDone, runKey = 0 }: {
-  course: Course;
-  mode: "play" | "replay";
-  /** play: the run goes once this is true; replay: plays while true. */
-  running: boolean;
-  /** replay: the run's taps. */
-  inputs?: readonly WhistleInput[];
-  sound?: boolean;
-  speed?: number;
-  onHud?: (h: WhistleHud) => void;
-  onDone?: (inputs: WhistleInput[], st: RunState) => void;
-  /** Change it to start over. */
-  runKey?: number;
-}) {
+export default function WhistleField({ course: anyCourse, mode, running, inputs: anyInputs, sound = true, speed = 1, onHud, onDone, runKey = 0 }: ArcadeFieldProps) {
+  const course = anyCourse as Course, inputs = anyInputs as readonly WhistleInput[] | undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const live = useRef({ running, sound, speed, onHud, onDone });
   useEffect(() => { live.current = { running, sound, speed, onHud, onDone }; });
@@ -115,11 +106,19 @@ export default function WhistleField({ course, mode, running, inputs, sound = tr
       drawField(ctx, course, st, going ? prev : null, going ? Math.min(1, acc / TICK_MS) : 1, sprites, fx, now);
       if (now - hudAt > 100 || st.done) {
         hudAt = now;
-        live.current.onHud?.({ seconds: Math.ceil((MAX_TICKS - st.tick) / TICKS_PER_SEC), penned: st.penned, lost: st.lost, breath: breathWhistles(st), total: st.sheep.length });
+        const breath = breathWhistles(st);
+        live.current.onHud?.({
+          seconds: Math.ceil((MAX_TICKS - st.tick) / TICKS_PER_SEC),
+          chips: [
+            { icon: "🏠", text: `${st.penned}/${st.sheep.length}`, title: "Penned" },
+            { icon: "🐺", text: String(st.lost), title: "Taken by wolves", warn: st.lost > 0 },
+          ],
+          pips: [0, 1, 2].map((i) => Math.max(0, Math.min(1, breath - i))),
+        });
       }
       if (st.done && !finished) {
         finished = true;
-        live.current.onDone?.(recorded, st);
+        live.current.onDone?.(recorded, whistleResult(scoreOf(st)));
       }
     };
     raf = requestAnimationFrame(frame);

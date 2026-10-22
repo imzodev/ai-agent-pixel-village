@@ -44,7 +44,7 @@ import { metrics } from "@/lib/metrics";
 import { installCrashLogging, log } from "@/lib/logger";
 import { sendAlert } from "@/lib/alerts";
 import { pruneAbandoned } from "@/lib/abandoned";
-import { awardLastWeek } from "@/lib/whistleServer";
+import { awardLastWeek } from "@/lib/arcadeServer";
 
 const LOCK_WAIT_MS = Number(process.env.TICKD_LOCK_WAIT_MS ?? 8000);
 const LOCK_POLL_MS = 250;
@@ -163,17 +163,17 @@ async function main(): Promise<void> {
     }
   };
 
-  // Whistle's weekly prizes (src/lib/whistleServer.ts): last week's top three, hourly until awarded.
-  let lastWhistleAward = 0;
-  const maybeAwardWhistle = async (): Promise<void> => {
+  // The arcade's weekly prizes (src/lib/arcadeServer.ts): each game's last week's top three, hourly until awarded.
+  let lastArcadeAward = 0;
+  const maybeAwardArcade = async (): Promise<void> => {
     const now = Date.now();
-    if (now - lastWhistleAward < LOT_SWEEP_MS) return;
-    lastWhistleAward = now;
+    if (now - lastArcadeAward < LOT_SWEEP_MS) return;
+    lastArcadeAward = now;
     try {
       const n = await awardLastWeek(now);
-      if (n > 0) log.info({ n }, "awarded whistle prizes");
+      if (n > 0) log.info({ n }, "awarded arcade prizes");
     } catch (err) {
-      log.error({ err }, "whistle prizes failed");
+      log.error({ err }, "arcade prizes failed");
     }
   };
 
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
     await maybeReleaseInactiveLots();
     await maybePruneWebhookLogs();
     await maybePruneAbandoned();
-    await maybeAwardWhistle();
+    await maybeAwardArcade();
   }
 }
 

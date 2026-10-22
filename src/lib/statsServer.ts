@@ -9,7 +9,9 @@ import { BILLBOARD_SPOTS, BILLBOARD_TIERS } from "@/lib/billboards";
 import { GEM_PACKS } from "@/types/cosmetic";
 import { MEMBERSHIP_PLANS } from "@/lib/membership";
 import type { BillboardTier } from "@/types/billboard";
-import type { DayCount, RevenueView, SourceRow, StatsView, WhistleStats } from "@/types/analytics";
+import { ARCADE_GAMES, ARCADE_KEYS } from "./arcade/games";
+import type { ArcadeStats, DayCount, RevenueView, SourceRow, StatsView } from "@/types/analytics";
+import type { ArcadeGameKey } from "@/types/arcade";
 
 const DAY_MS = 86_400_000;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -88,28 +90,30 @@ export async function statsView(now = Date.now()): Promise<StatsView> {
     sharing: { momentsCreated: sum("moment_created"), shareClicks, profileViews: sum("profile_view"), momentViews: sum("moment_view"), signupsFromShares: num(fromShares?.n) },
     bySource,
     revenue: await revenueView(now),
-    whistle: await whistleStats(now),
+    arcade: await Promise.all(ARCADE_KEYS.map((g) => arcadeStats(g, now))),
   };
 }
 
-/** Whistle: plays, runs sent in, who joined through it, and today's top runs. */
-async function whistleStats(now: number): Promise<WhistleStats> {
+/** An arcade game: plays, runs sent in, who joined through it, and today's top runs. */
+async function arcadeStats(game: ArcadeGameKey, now: number): Promise<ArcadeStats> {
   const since7 = new Date(now - 7 * DAY_MS), since30 = new Date(now - 30 * DAY_MS);
   const [t] = await rows(sql`
-    select (select count(*) from events where kind = 'whistle_play' and at >= ${since7}) as plays,
-           (select count(*) from whistle_runs where created_at >= ${since7}) as runs,
-           (select count(distinct character_id) from whistle_runs where created_at >= ${since7}) as players,
+    select (select count(*) from events where kind = 'arcade_play' and meta->>'game' = ${game} and at >= ${since7}) as plays,
+           (select count(*) from arcade_runs where game = ${game} and created_at >= ${since7}) as runs,
+           (select count(distinct character_id) from arcade_runs where game = ${game} and created_at >= ${since7}) as players,
            (select count(*) from characters c where c.created_at >= ${since30}
-              and exists (select 1 from whistle_runs r where r.character_id = c.id and r.created_at < c.created_at + interval '15 minutes')) as joined,
-           (select count(*) from events where kind = 'share_click' and meta->>'page' = 'whistle' and at >= ${since30}) as shares`);
-  const daily = await rows(sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n from events where kind = 'whistle_play' and at >= ${since30} group by 1`);
+              and exists (select 1 from arcade_runs r where r.game = ${game} and r.character_id = c.id and r.created_at < c.created_at + interval '15 minutes')) as joined,
+           (select count(*) from events where kind = 'share_click' and meta->>'page' = ${game} and at >= ${since30}) as shares`);
+  const daily = await rows(sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD') as day, count(*) as n from events where kind = 'arcade_play' and meta->>'game' = ${game} and at >= ${since30} group by 1`);
   const top = await rows(sql`
-    select r.id, c.name, r.score, r.penned, r.lost, jsonb_array_length(r.inputs) as whistles from whistle_runs r
-    join characters c on c.id = r.character_id where r.day = ${dayOf(now)} and not r.hidden order by r.score desc limit 10`);
+    select r.id, c.name, r.score, r.detail, jsonb_array_length(r.inputs) as inputs from arcade_runs r
+    join characters c on c.id = r.character_id where r.game = ${game} and r.day = ${dayOf(now)} and not r.hidden order by r.score desc limit 10`);
+  const g = ARCADE_GAMES[game];
   return {
+    game, name: g.name, emoji: g.emoji,
     plays7d: num(t?.plays), runs7d: num(t?.runs), players7d: num(t?.players), joined30d: num(t?.joined), shares30d: num(t?.shares),
     playsDaily: series(daily, 30, now),
-    topToday: top.map((r) => ({ id: String(r.id), name: String(r.name), score: num(r.score), penned: num(r.penned), lost: num(r.lost), whistles: num(r.whistles) })),
+    topToday: top.map((r) => ({ id: String(r.id), name: String(r.name), score: num(r.score), detail: (r.detail as Record<string, number>) ?? {}, inputs: num(r.inputs) })),
   };
 }
 

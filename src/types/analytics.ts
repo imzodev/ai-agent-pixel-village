@@ -1,6 +1,8 @@
 // Analytics events and the admin stats view (src/lib/track.ts,
 // src/lib/statsServer.ts). Types only.
 
+import type { ArcadeGameKey } from "./arcade";
+
 export type TrackKind =
   | "signup"
   | "login"
@@ -25,9 +27,9 @@ export type TrackKind =
   | "membership_checkout_started"
   | "membership_started"
   | "membership_ended"
-  // Whistle, the herding minigame (src/lib/whistleServer.ts).
-  | "whistle_play"
-  | "whistle_submit";
+  // The arcade's minigames (src/lib/arcadeServer.ts), with meta.game.
+  | "arcade_play"
+  | "arcade_submit";
 
 /** Where a visitor came from: a source ("x", "reddit", "direct"…) and, when tagged, a campaign. */
 export type Acquisition = { src: string; campaign: string };
@@ -53,20 +55,24 @@ export type StatsView = {
   /** Last 30 days, by where people came from (busiest first). */
   bySource: SourceRow[];
   revenue: RevenueView;
-  whistle: WhistleStats;
+  /** One per arcade game (src/lib/arcadeServer.ts). */
+  arcade: ArcadeStats[];
 };
 
-/** Whistle, the herding minigame (src/lib/whistleServer.ts). */
-export type WhistleStats = {
+/** An arcade game: is it played, does it bring players, anything odd at the top? */
+export type ArcadeStats = {
+  game: ArcadeGameKey;
+  name: string;
+  emoji: string;
   plays7d: number;
   runs7d: number;
   players7d: number;
-  /** New characters (30 days) made to put a Whistle score on the board. */
+  /** New characters (30 days) made to put a score on this game's board. */
   joined30d: number;
   shares30d: number;
   playsDaily: DayCount[];
   /** Today's best runs, to check for anything odd (admin can hide one). */
-  topToday: { id: string; name: string; score: number; penned: number; lost: number; whistles: number }[];
+  topToday: { id: string; name: string; score: number; detail: Record<string, number>; inputs: number }[];
 };
 
 /** Money: what recurs each month, and the last 30 days' one-off sales. */

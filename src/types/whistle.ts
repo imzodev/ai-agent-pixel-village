@@ -62,39 +62,9 @@ export type RunState = {
 
 export type RunResult = { score: number; penned: number; lost: number; ticks: number; perfect: boolean };
 
-/** A leaderboard line. */
-export type WhistleBoardRow = { rank: number; name: string; score: number; penned?: number; runId?: string; me?: boolean };
-
-/** GET /api/whistle. */
-export type WhistleView = {
-  day: string;
-  number: number;
-  course: Course;
-  /** ms until the next course. */
-  nextInMs: number;
-  today: WhistleBoardRow[];
-  week: WhistleBoardRow[];
-  /** Last week's top three (the plaza's trophy board). */
-  champions: WhistleBoardRow[];
-  me: { name: string; best: number | null; rank: number | null; weekRank: number | null } | null;
-};
-
-/** POST /api/whistle/start. */
-export type WhistleStart = { day: string; course: Course; token: string };
-
-/** POST /api/whistle/submit. */
-export type WhistleSubmitResult = RunResult & { runId: string; rank: number; best: number; shareUrl: string };
-
-/** A stored run, for its replay page. */
-export type WhistleRunView = { id: string; day: string; number: number; course: Course; name: string; username: string | null; score: number; penned: number; lost: number; inputs: WhistleInput[] };
-
 /** The images the field is drawn with (src/components/whistle/draw.ts). */
 export type WhistleSprites = { sheep: HTMLImageElement; wolf: HTMLImageElement };
 /** Positions before the last tick, to draw in between ticks. */
 export type WhistlePrev = { sheep: WPoint[]; wolves: WPoint[] };
 /** A puff where something happened (a sheep penned or taken), for a few frames. */
 export type WhistleFx = { x: number; y: number; kind: "penned" | "lost" | "dry"; at: number };
-/** What the HUD shows, refreshed a few times a second. */
-export type WhistleHud = { seconds: number; penned: number; lost: number; breath: number; total: number };
-/** What a finished run hands to its page. */
-export type WhistleFinished = { inputs: WhistleInput[]; result: RunResult; day: string; token: string };

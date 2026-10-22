@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Whistle's sheepfold (src/lib/whistle/fold.ts): a sign on two posts over a
+// Whistle's sheepfold (src/lib/arcade/spots.ts): a sign on two posts over a
 // little fenced pen with straw, its gate swung open at the bottom, and two
 // sheep from the world's sheet inside.
 //
 //   node scripts/draw-sheepfold.mjs
 //
-// Writes public/assets/sheepfold.png (src/game/whistleArt.ts): 96×80 (6×5
+// Writes public/assets/sheepfold.png (src/game/arcadeArt.ts): 96×80 (6×5
 // tiles). The sign's face is 80×12 at (8, 2); the game writes on it.
 
 import fs from "node:fs";

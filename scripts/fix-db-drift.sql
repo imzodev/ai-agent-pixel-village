@@ -54,3 +54,28 @@ DO $$ BEGIN
                   WHERE o.stripe_session_id = g.stripe_session_id AND o.id < g.id);
   END IF;
 END $$;
+
+-- Whistle became the first arcade game: whistle_runs → arcade_runs (with the
+-- game, and penned/lost moved into `detail`), whistle_prizes → arcade_prizes
+-- (with the game). Runs and prizes already there are kept as Whistle's.
+DO $$ BEGIN
+  IF to_regclass('public.whistle_runs') IS NOT NULL AND to_regclass('public.arcade_runs') IS NULL THEN
+    ALTER TABLE whistle_runs RENAME TO arcade_runs;
+    ALTER TABLE arcade_runs ADD COLUMN game text NOT NULL DEFAULT 'whistle';
+    ALTER TABLE arcade_runs ALTER COLUMN game DROP DEFAULT;
+    ALTER TABLE arcade_runs ADD COLUMN detail jsonb NOT NULL DEFAULT '{}'::jsonb;
+    UPDATE arcade_runs SET detail = jsonb_build_object('penned', penned, 'lost', lost);
+    ALTER TABLE arcade_runs DROP COLUMN penned;
+    ALTER TABLE arcade_runs DROP COLUMN lost;
+    DROP INDEX IF EXISTS whistle_runs_day_score_idx;
+    DROP INDEX IF EXISTS whistle_runs_char_day_idx;
+    ALTER TABLE arcade_runs RENAME CONSTRAINT whistle_runs_pkey TO arcade_runs_pkey;
+  END IF;
+  IF to_regclass('public.whistle_prizes') IS NOT NULL AND to_regclass('public.arcade_prizes') IS NULL THEN
+    ALTER TABLE whistle_prizes RENAME TO arcade_prizes;
+    ALTER TABLE arcade_prizes ADD COLUMN game text NOT NULL DEFAULT 'whistle';
+    ALTER TABLE arcade_prizes ALTER COLUMN game DROP DEFAULT;
+    DROP INDEX IF EXISTS whistle_prizes_week_rank_unique;
+    DROP INDEX IF EXISTS whistle_prizes_char_idx;
+  END IF;
+END $$;

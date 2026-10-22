@@ -4,7 +4,7 @@
 // is only for show: it never feeds back into the simulation.
 
 import { BREATH_COST, FIELD_H, FIELD_W, RING_MAX, RING_SPEED } from "@/lib/whistle/rules";
-import { makeRng } from "@/lib/whistle/rng";
+import { makeRng } from "@/lib/arcade/rng";
 import type { Course, RunState, WRect, WhistleFx, WhistlePrev, WhistleSprites } from "@/types/whistle";
 
 const SHEEP_FRAME = 128, SHEEP_K = 0.34;

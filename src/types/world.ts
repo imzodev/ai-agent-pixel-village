@@ -4,6 +4,8 @@
 // in lib/protocol.ts, lib/movement.ts, and types/input.ts. Everything
 // imports it from here.
 
+import type { ArcadeGameKey } from "./arcade";
+
 export type Facing = "up" | "down" | "left" | "right";
 
 export type Point = { x: number; y: number };
@@ -72,8 +74,8 @@ export type Selection =
   | { type: "homestead"; key: string; name: string; x: number; y: number; distance: number }
   // A billboard (src/lib/billboards.ts): its poster's title, or empty ad space; x/y = in front of it.
   | { type: "billboard"; key: string; rentalId: number | null; name: string; title: string | null; x: number; y: number; distance: number }
-  // Whistle's sheepfold in the plaza (src/lib/whistle/fold.ts): opens the game; x/y = in front of its gate.
-  | { type: "whistle"; x: number; y: number; distance: number }
+  // An arcade game's spot (src/lib/arcade/spots.ts): opens the game; x/y = in front of it.
+  | { type: "arcade"; game: ArcadeGameKey; x: number; y: number; distance: number }
   // A generated terrain tree (src/lib/trees.ts), by its lattice corner; x/y = trunk.
   | { type: "tree"; vx: number; vy: number; kind: string; x: number; y: number; distance: number };
 

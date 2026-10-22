@@ -105,8 +105,8 @@ describe("whistle simulation", () => {
   });
 
   it("uses only maths that's the same on every engine", () => {
-    for (const f of ["sim.ts", "course.ts", "rng.ts"]) {
-      const src = fs.readFileSync(path.join(__dirname, "..", "whistle", f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    for (const f of ["whistle/sim.ts", "whistle/course.ts", "arcade/rng.ts", "arcade/days.ts"]) {
+      const src = fs.readFileSync(path.join(__dirname, "..", f), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
       expect(src, f).not.toMatch(/Math\.(sin|cos|tan|asin|acos|atan2?|exp|expm1|log\w*|pow|hypot|cbrt|random|sinh|cosh|tanh)\b/);
       expect(src, f).not.toMatch(/\*\*/);
     }

@@ -34,8 +34,8 @@ export default function TermsPage() {
       <p>A membership renews every month or year until you cancel. You can cancel any time from the shop (“Manage billing”); you keep the perks until the end of the period you&apos;ve paid for, and we don&apos;t refund part-used periods except where the law of your country requires it. Members&apos; monthly gems and outfits are theirs to keep. We may change the perks; if we change the price, we&apos;ll tell members before it applies to them.</p>
       <h2>Invites</h2>
       <p>Invite rewards are for real friends who play. Accounts made to collect them may lose the reward or be suspended.</p>
-      <h2>Whistle</h2>
-      <p>Whistle&apos;s weekly prizes are in-game only (gems, a title and a hat) and have no cash value. Scores are checked by replaying each run; runs that look automated or tampered with may be taken off the boards and their prizes withheld.</p>
+      <h2>Arcade games</h2>
+      <p>The arcade games&apos; weekly prizes (Whistle, Harvest Haul) are in-game only (gems, a title and something to wear) and have no cash value. Scores are checked by replaying each run; runs that look automated or tampered with may be taken off the boards and their prizes withheld.</p>
       <h2>Billboards and sponsors</h2>
       <p>Billboards and sponsored buildings show ads from real businesses and creators. We review every poster before it goes up, but the advertiser is responsible for what they offer, and their site has its own terms. Advertisers agree that what they upload is theirs to use and contains no adult content, hate, scams, gambling or anything unlawful; we may take an ad down if it breaks that (without a refund) and refund any we don&apos;t approve.</p>
       <h2>The game changes</h2>

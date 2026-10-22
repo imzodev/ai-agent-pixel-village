@@ -4,7 +4,7 @@
 import type { Appearance } from "./domain";
 import type { EquippedCosmetics } from "./cosmetic";
 
-export type MomentKind = "lair_boss" | "rootking" | "level" | "title" | "relic_set" | "treasure" | "dear_friend" | "whistle_champion";
+export type MomentKind = "lair_boss" | "rootking" | "level" | "title" | "relic_set" | "treasure" | "dear_friend" | "arcade_champion";
 
 /** Art shown beside the character on the card: a creature's sprite or an item's icon. */
 export type MomentArt = { kind: "enemy"; key: string } | { kind: "npc"; key: string } | { kind: "level"; level: number };

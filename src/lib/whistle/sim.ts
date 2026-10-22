@@ -9,7 +9,7 @@
 
 import * as rules from "./rules";
 import { inRect } from "./course";
-import { nextState, stateValue } from "./rng";
+import { nextState, stateValue } from "../arcade/rng";
 import type { Course, RunResult, RunState, WRect, WhistleInput } from "@/types/whistle";
 
 // Copied into locals: read through an import binding, every constant costs a

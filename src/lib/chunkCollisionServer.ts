@@ -15,7 +15,7 @@ import {
   FOOT_CORNERS,
 } from "./chunkCollision";
 import { billboardBlocks } from "./billboards";
-import { foldBlocks } from "./whistle/fold";
+import { ARCADE_SPOTS, arcadeSpotBlocks } from "./arcade/spots";
 import { defaultChunk } from "./chunkGen";
 import { stampBuildingCollisions } from "./buildingStampsServer";
 import { ensureFelledLoaded } from "./treesServer";
@@ -23,7 +23,7 @@ import { refreshHomesteadBlocks } from "./homesteadServer";
 
 // Billboards' bases block (the client registers the same tiles: WorldScene).
 setDynamicBlocks("billboards", billboardBlocks());
-setDynamicBlocks("sheepfold", foldBlocks());
+for (const s of ARCADE_SPOTS) setDynamicBlocks(`arcade:${s.game}`, arcadeSpotBlocks(s));
 
 async function loadChunkJson(cx: number, cy: number): Promise<unknown> {
   await ensureFelledLoaded(); // generated trees players have felled

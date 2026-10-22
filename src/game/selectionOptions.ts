@@ -48,7 +48,7 @@ export function selectionKey(sel: Selection): string {
     case "bread": return `bread:${sel.table}`;
     case "homestead": return `homestead:${sel.key}`;
     case "billboard": return `billboard:${sel.key}`;
-    case "whistle": return "whistle";
+    case "arcade": return `arcade:${sel.game}`;
     case "plot": return `plot:${sel.lotKey}:${sel.plot}`;
     default: return `${sel.type}:${sel.id}`;
   }

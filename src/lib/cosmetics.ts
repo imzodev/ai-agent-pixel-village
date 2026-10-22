@@ -88,9 +88,13 @@ export const COSMETIC_CATALOG: CosmeticItem[] = [
     key, name, slot, assetRef, tintColor, rarity: "rare", coinPrice: 0, gemPrice: 0,
     sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
   })),
-  // Prizes, never sold: Whistle's weekly top three (src/lib/whistleServer.ts).
+  // Prizes, never sold: each arcade game's weekly top three (src/lib/arcadeServer.ts).
   {
     key: "prize_shepherd_hat", name: "Champion Shepherd's Hat", slot: "hat", assetRef: "/lpc/hat_straw.png", tintColor: "#ffd166",
+    rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
+  },
+  {
+    key: "prize_hauler_apron", name: "Master Hauler's Apron", slot: "outfit", assetRef: "/lpc/outfit_apron.png", tintColor: "#ffd166",
     rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
   },
 ];

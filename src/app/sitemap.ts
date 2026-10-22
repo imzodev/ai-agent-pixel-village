@@ -8,7 +8,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
     { url: `${BASE}/`, lastModified: now, changeFrequency: "daily", priority: 1 },
-    { url: `${BASE}/whistle`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
+    { url: `${BASE}/play`, lastModified: now, changeFrequency: "daily", priority: 0.9 },
+    { url: `${BASE}/whistle`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${BASE}/haul`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/guide`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: `${BASE}/signup`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
