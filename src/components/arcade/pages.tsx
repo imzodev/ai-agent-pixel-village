@@ -1,5 +1,5 @@
 // The arcade's pages, server side, shared by every game's routes (/whistle,
-// /haul and their replays and pictures): metadata for previews on X, the game
+// /haul, /derby and their replays and pictures): metadata for previews on X, the game
 // page, a run's replay page, and the two pictures. Each route file just names its game.
 
 import Link from "next/link";

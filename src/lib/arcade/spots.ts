@@ -1,5 +1,6 @@
 // Where the arcade's games stand in the village: Whistle's sheepfold in the
-// plaza, Harvest Haul's cart by the Village Ranch's west gate. Walking up opens
+// plaza, Harvest Haul's cart by the Village Ranch's west gate, Fishing Derby's
+// jetty by the Western Meadow pond. Walking up opens
 // the game (ArcadeModal). Spots are chosen once by scripts/gen-arcade-spots.ts
 // (spotsData.json, pinned) on clear ground; each has a sign row on top, and
 // the rows under it block, on the server and the client (setDynamicBlocks).
@@ -11,6 +12,7 @@ import type { ArcadeGameKey, ArcadeSpot } from "@/types/arcade";
 const SHAPE: Record<ArcadeGameKey, Omit<ArcadeSpot, "game" | "tx" | "ty">> = {
   whistle: { w: 6, h: 5, signRows: 1, name: "The sheepfold" },
   haul: { w: 7, h: 4, signRows: 1, name: "Della's cart" },
+  derby: { w: 6, h: 4, signRows: 1, name: "The derby jetty" },
 };
 export const SPOT_SHAPE = SHAPE;
 

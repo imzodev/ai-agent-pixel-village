@@ -1,7 +1,8 @@
 // The arcade's sounds, made on the spot with WebAudio (nothing to download or
 // license). Whistle: the whistle, a blip when a sheep is penned, a thud when a
 // wolf takes one, a breathless puff. Harvest Haul: a thump on landing, a crack,
-// a whoop when something falls off, hooves on the road.
+// a whoop when something falls off, hooves on the road. Fishing Derby: a plop as
+// the bobber lands, a ping on the bite, the reel's click, a snap, a splash.
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -40,5 +41,10 @@ export const crackSound = () => { tone(900, 300, 70, "square", 0.05); setTimeout
 export const fallSound = () => tone(600, 160, 380, "sine", 0.06);
 export const hoofSound = () => tone(320, 220, 50, "triangle", 0.035);
 export const cheerSound = () => { tone(520, 780, 160, "triangle", 0.07); setTimeout(() => tone(780, 1040, 220, "triangle", 0.07), 150); };
+export const plopSound = () => tone(380, 160, 120, "sine", 0.07);
+export const biteSound = () => { tone(1200, 1500, 70, "triangle", 0.08); setTimeout(() => tone(1500, 1800, 70, "triangle", 0.08), 80); };
+export const reelSound = () => tone(1800, 1700, 18, "square", 0.015);
+export const snapSound = () => { tone(2400, 300, 120, "sawtooth", 0.06); setTimeout(() => tone(200, 80, 200, "sine", 0.05), 100); };
+export const splashSound = () => { tone(600, 120, 220, "triangle", 0.07); setTimeout(cheerSound, 120); };
 /** Call from a tap, so the browser lets sound play afterwards. */
 export const unlockSound = () => void audio();

@@ -6,6 +6,7 @@ import { AMBUSH_AFTER_MS, AMBUSH_MAX, AMBUSH_MIN, ESCORT_PX, ESCORT_SHARE, JOB_D
 import { STOP_LINGER_MS } from "./mind/caravan";
 import { PRIZE_TITLE, RUN_SECONDS, SHEEP_COUNT, WEEKLY_PRIZE_GEMS } from "./whistle/rules";
 import * as haulRules from "./haul/rules";
+import * as derbyRules from "./derby/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -49,6 +50,8 @@ export const REFERRAL_FACTS = { level: REFERRAL_LEVEL, gems: REFERRAL_GEMS };
 /** Whistle, the herding minigame: the flock, the clock and the week's prizes. */
 export const WHISTLE_FACTS = { sheep: SHEEP_COUNT, seconds: RUN_SECONDS, title: PRIZE_TITLE, gems: WEEKLY_PRIZE_GEMS.join(" / ") };
 /** Harvest Haul, the stacking minigame: the load's worth and the week's prizes. */
+/** Fishing Derby, the pond minigame: its length, the catch bonus and the week's prizes. */
+export const DERBY_FACTS = { seconds: derbyRules.RUN_TICKS / derbyRules.TICKS_PER_SEC, bonus: derbyRules.CATCH_BONUS, title: derbyRules.PRIZE_TITLE, gems: derbyRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(derbyRules.PERFECT_BONUS * 100) };
 export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

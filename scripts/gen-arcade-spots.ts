@@ -23,6 +23,8 @@ const RANCH = { tx0: 127, tx1: 200, ty0: -16, ty1: 60 };
 const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   whistle: { ax: VILLAGE_TILE.tx + 2, ay: VILLAGE_TILE.ty + 8, r: 26 },
   haul: { ax: 121, ay: -3, r: 14 },
+  /** By the Western Meadow pond (src/lib/regions.ts PONDS: -86, 16), on its bank by the road. */
+  derby: { ax: -86, ay: 23, r: 14 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>

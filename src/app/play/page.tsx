@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "The arcade · thegroove",
-  description: "Quick skill games with a new course every day and prizes every week: herd the flock in Whistle, get the load to market in Harvest Haul. Free, in your browser.",
+  description: "Quick skill games with a new course every day and prizes every week: herd the flock in Whistle, get the load to market in Harvest Haul, land the trophy in the Fishing Derby. Free, in your browser.",
   alternates: { canonical: "/play" },
 };
 

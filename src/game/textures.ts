@@ -82,7 +82,7 @@ export function loadPropSprites(scene: Scene): void {
   scene.load.image(PARCELS_TEXTURE, PARCELS_SHEET);
   // Billboards: frames and the "your ad here" notice (src/game/billboardArt.ts).
   scene.load.image(BILLBOARD_TEXTURE, BILLBOARD_SHEET);
-  // The arcade's spots: the sheepfold, Della's cart (src/game/arcadeArt.ts).
+  // The arcade's spots: the sheepfold, Della's cart, the derby jetty (src/game/arcadeArt.ts).
   for (const a of Object.values(ARCADE_ART)) scene.load.image(a.texture, a.image);
 }
 

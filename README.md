@@ -100,6 +100,8 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
     from that spot; get 30 sheep into the pen past the wolves in 75 seconds.
   - **Harvest Haul** (`/haul`, or Della's cart by the Village Ranch): stack the day's produce on the
     cart, then lean it over the bumps to market; score what arrives whole.
+  - **Fishing Derby** (`/derby`, or the jetty by the Western Meadow pond): 75 seconds to cast, strike
+    on the bite and reel without snapping the line; score the weight landed, and the day's trophy fish.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -152,7 +154,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
-| `/play`, `/whistle`, `/haul` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/` and `src/lib/haul/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
+| `/play`, `/whistle`, `/haul`, `/derby` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/` and `src/lib/derby/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 

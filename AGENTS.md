@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -494,6 +494,16 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   engine after Box2D Lite: boxes and circles, sequential impulses with warm starting;
   `course.ts` the load and the road; `sim.ts` the run; the cart is a moving fixed body
   whose pose comes from the road under its wheels and the lean).
+- **Fishing Derby**: 75 s at the day's pond, seen from above: cast (a splash scares fish
+  right under it), strike on the bite, then reel against the line's tension: hold while
+  the fish rests, let go while it runs (over 1 snaps, slack too long throws the hook). A
+  fish scores its grams + `CATCH_BONUS`; one trophy (golden carp at dusk, storm eel in
+  rain, ghost koi at night) surfaces once and sets the course's hour and weather; the
+  regulars are the world's pond fish about then (`regularPool`, tested against
+  `fishFor`). A fish on the line at the bell may still be landed (`MAX_TICKS`).
+  `src/lib/derby/`: `rules.ts` every number and the fish, `course.ts` the pond, `sim.ts`
+  the run. The field is drawn in code (`src/components/derby/draw.ts`), no sheet. Derby
+  fish are never items or coins.
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -523,13 +533,14 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
   posts. Both cached in `.cache/cards`. The replay page credits the runner's invites.
 - **Spots** (`spots.ts`, `spotsData.json` from `scripts/gen-arcade-spots.ts`, **pinned**):
-  the sheepfold by the plaza (`scripts/draw-sheepfold.mjs`) and Della's cart outside the
+  the sheepfold by the plaza (`scripts/draw-sheepfold.mjs`), the derby jetty by the Western
+  Meadow pond (`scripts/draw-derby-jetty.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

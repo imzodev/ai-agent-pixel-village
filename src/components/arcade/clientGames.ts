@@ -3,6 +3,7 @@
 
 import WhistleField from "../whistle/WhistleField";
 import HaulField from "../haul/HaulField";
+import DerbyField from "../derby/DerbyField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -25,6 +26,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["🥚", "Eggs and the wedding cake break if they land hard: drop them gently."],
       ["◀▶", "On the road, lean the cart over bumps and hills (or ← → keys)."],
       ["📅", "A new load and road every day; the week's best win prizes in the village."],
+    ],
+  },
+  derby: {
+    Field: DerbyField,
+    pitch: "75 seconds at the day's pond. Land as much fish as you can, and the trophy if it shows.",
+    howTo: [
+      ["🎯", "Tap the water to cast, a little short of a fish: a splash on its head scares it off."],
+      ["❗", "Wait for the bobber to go under, then tap to strike. Too soon and it's gone."],
+      ["🎣", "Hold to reel. Let go while the fish runs, or the line snaps; too slack and it throws the hook."],
+      ["🏆", "One trophy fish surfaces each day. A new pond every day; the week's best win prizes."],
     ],
   },
 };

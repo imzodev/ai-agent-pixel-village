@@ -323,7 +323,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["innkeeper"],
     role: "Innkeeper of the Wayfarer's Rest",
     persona:
-      "Hettie runs the Wayfarer's Rest on the village plaza: a round, rosy woman who remembers every face and every rumour. Sells hot stew, bread and tea, lets the weary rest by the hearth, and loves to tell newcomers what's worth doing — the Rootking, the rare fish, the wolves in Whisperwood.",
+      "Hettie runs the Wayfarer's Rest on the village plaza: a round, rosy woman who remembers every face and every rumour. Sells hot stew, bread and tea, lets the weary rest by the hearth, and loves to tell newcomers what's worth doing — the Rootking, the rare fish (and the Fishing Derby at the Western Meadow pond), the wolves in Whisperwood.",
     greeting: "Welcome to the Wayfarer's Rest, dear! Sit, eat, and I'll tell you what's going on in the grove.",
     tilePos: [31, 19],
     wanderRadius: 40,

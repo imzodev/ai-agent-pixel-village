@@ -26,7 +26,7 @@ import type { ItemNameOf, KnowledgePlace, KnowledgeTopic } from "@/types/npc";
 
 /** The hand-written NPCs' places, by key prefix. */
 const HOME_PLACES: Readonly<Record<string, string>> = {
-  village: "the grove (the starting village, with the bakery, the cabins, the Wayfarer's Rest, the Common Field just to the north, a great wheat field where anyone may gather, and the Village Ranch just to the east, the village's own ranch open to everyone, where the cows, the pigs, the sheep, Paco and Luna the llamas, the ducks on their pond and the hens in their coop live; folk play the day's games there for prizes: Whistle, herding sheep at the sheepfold in the plaza, and Harvest Haul, loading Della's cart by the ranch's west gate and getting it to market whole)",
+  village: "the grove (the starting village, with the bakery, the cabins, the Wayfarer's Rest, the Common Field just to the north, a great wheat field where anyone may gather, and the Village Ranch just to the east, the village's own ranch open to everyone, where the cows, the pigs, the sheep, Paco and Luna the llamas, the ducks on their pond and the hens in their coop live; folk play the day's games there for prizes: Whistle, herding sheep at the sheepfold in the plaza, Harvest Haul, loading Della's cart by the ranch's west gate and getting it to market whole, and the Fishing Derby, 75 seconds at the jetty by the Western Meadow pond (west along the road), where a trophy fish surfaces once a day)",
   hollowmere: "Hollowmere (the woodcutters' town among the pines, with Bjorn's forge and the Sawdust & Ale inn)",
   brightwater: "Brightwater (the harbour town on the Silverrun, with the fishing dock and the Salted Gull inn)",
 };

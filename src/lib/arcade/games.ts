@@ -10,10 +10,14 @@ import * as whistle from "../whistle/rules";
 import { haulCourseFor } from "../haul/course";
 import { cleanHaulInputs, replayHaul } from "../haul/sim";
 import * as haul from "../haul/rules";
+import { derbyCourseFor } from "../derby/course";
+import { cleanDerbyInputs, replayDerby } from "../derby/sim";
+import * as derby from "../derby/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput } from "@/types/haul";
+import type { DerbyCourse, DerbyInput } from "@/types/derby";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -41,6 +45,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
       const total = n(d, "delivered") + n(d, "broken") + n(d, "lost");
       return `${n(d, "delivered")}/${total} delivered whole${n(d, "broken") ? `, ${n(d, "broken")} broken` : ""}${n(d, "lost") ? `, ${n(d, "lost")} lost on the road` : ""}`;
     },
+  },
+  derby: {
+    key: "derby", name: "Fishing Derby", emoji: "🎣", tagline: "Land the biggest catch at the day's pond", path: "/derby",
+    epoch: derby.DERBY_EPOCH, tickMs: derby.TICK_MS,
+    prize: { gems: derby.WEEKLY_PRIZE_GEMS, title: derby.PRIZE_TITLE, cosmetic: derby.PRIZE_COSMETIC },
+    courseFor: (day, salt) => derbyCourseFor(day, salt),
+    cleanInputs: (raw) => cleanDerbyInputs(raw),
+    replay: (course, inputs) => replayDerby(course as DerbyCourse, inputs as DerbyInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "caught")} fish, ${(n(d, "grams") / 1000).toFixed(1)} kg${n(d, "trophy") ? ", the trophy landed" : ""}${n(d, "lost") ? `, ${n(d, "lost")} got away` : ""}`,
   },
 };
 

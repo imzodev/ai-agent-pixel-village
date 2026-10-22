@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         <li><b>Invites:</b> if you joined through someone&apos;s profile or shared moment, which player invited you, so you can both get the invite reward.</li>
         <li><b>Advertisers:</b> if you rent a billboard, your email, the poster you upload, its title and link, and how many players saw and clicked it. The poster (and its title and link) are public once approved. Uploaded images are re-drawn, so photo details like location are removed.</li>
         <li><b>Billboard views and clicks:</b> the game counts when a player stands by a billboard and when one is clicked, as totals for the advertiser. They don&apos;t learn who you are.</li>
-        <li><b>Arcade runs</b> (Whistle, Harvest Haul): each run you send in (what you did and when, and its score), so it can be checked and replayed. Your character&apos;s name and best scores show on the public boards, and a run&apos;s replay page is public.</li>
+        <li><b>Arcade runs</b> (Whistle, Harvest Haul, Fishing Derby): each run you send in (what you did and when, and its score), so it can be checked and replayed. Your character&apos;s name and best scores show on the public boards, and a run&apos;s replay page is public.</li>
         <li><b>Technical logs:</b> your IP address appears briefly in server logs and is used to stop abuse (for example, too many sign-in attempts).</li>
       </ul>
 

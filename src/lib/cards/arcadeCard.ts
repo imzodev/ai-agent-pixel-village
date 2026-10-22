@@ -2,7 +2,8 @@
 // the words on the right. A day's course (/<game>/course.png) and a run's
 // card (/<game>/r/<id>/card.png), written once to .cache/cards: neither ever
 // changes. Whistle's picture is the field with the flock; Harvest Haul's is the
-// cart with its load (as it arrived, for a run).
+// cart with its load (as it arrived, for a run); Fishing Derby's is the pond with
+// its fish (for a run, the catch laid out by the dock).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -12,12 +13,15 @@ import { initRun, replay } from "@/lib/whistle/sim";
 import { HAUL_ITEMS, ROAD_STEP } from "@/lib/haul/rules";
 import { marketX } from "@/lib/haul/course";
 import { CART_PARTS, initHaul, replayHaul } from "@/lib/haul/sim";
+import { DERBY_FISH, DOCK, FIELD_H as POND_H, FIELD_W as POND_W } from "@/lib/derby/rules";
+import { initDerby, replayDerby } from "@/lib/derby/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
 import type { ArcadeGameKey, ArcadeRunView } from "@/types/arcade";
 import type { Course, RunState, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput, HaulState } from "@/types/haul";
+import type { DerbyCourse, DerbyInput, DerbyState } from "@/types/derby";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -68,11 +72,46 @@ function haulSvg(course: HaulCourse, st: HaulState): string {
     <polygon points="-10,${PIC_H} ${pts.join(" ")} ${PIC_W + 10},${PIC_H}" fill="#9a7348" stroke="#6a4a2a" stroke-width="3"/>${shapes.join("")}</svg>`;
 }
 
+const POND_COLORS = { day: ["#7cb850", "#3d86c0"], dusk: ["#8aa848", "#4a7aa8"], night: ["#3a5a3a", "#1e3e62"] } as const;
+
+/** Fishing Derby: the pond from above; the fish where they swim, or (a run) the catch laid out by the dock, the trophy in gold. */
+function derbySvg(course: DerbyCourse, st: DerbyState, run: boolean): string {
+  const K = PIC_H / POND_H, w = Math.round(POND_W * K);
+  const r = (x: number) => (x * K).toFixed(1);
+  const [bank, water] = POND_COLORS[course.time];
+  const trophy = course.fish.length - 1;
+  const fish = (x: number, y: number, i: number, k = 1) => {
+    const cf = course.fish[i], len = (8 + Math.sqrt(cf.grams) / 3.2) * k;
+    const glow = i === trophy ? `<ellipse cx="${r(x)}" cy="${r(y)}" rx="${r(len * 0.8)}" ry="${r(len * 0.5)}" fill="#ffd166" opacity="0.45"/>` : "";
+    return `${glow}<ellipse cx="${r(x)}" cy="${r(y)}" rx="${r(len / 2)}" ry="${r(len * 0.18)}" fill="${DERBY_FISH[cf.key].color}" stroke="#1a1410" stroke-width="1.5"/>`;
+  };
+  const shown = run
+    // The catch on the grass either side of the dock, in the order landed.
+    ? st.caught.map((i, n) => {
+        const len = (8 + Math.sqrt(course.fish[i].grams) / 3.2) * 1.4, right = n % 2 === 1;
+        return fish(right ? DOCK.x + DOCK.w + 10 + len / 2 : DOCK.x - 10 - len / 2, DOCK.y + 12 + Math.floor(n / 2) * 13, i, 1.4);
+      }).join("")
+    : course.fish.map((f, i) => (i === trophy ? "" : fish(f.x, f.y, i))).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${PIC_H}"><rect width="${w}" height="${PIC_H}" fill="${bank}"/>${[
+    ...course.pond.map((p) => `<circle cx="${r(p.x)}" cy="${r(p.y)}" r="${r(p.r + 4)}" fill="#8a7048"/>`),
+    ...course.pond.map((p) => `<circle cx="${r(p.x)}" cy="${r(p.y)}" r="${r(p.r)}" fill="${water}"/>`),
+    ...course.reeds.map((p) => `<circle cx="${r(p.x)}" cy="${r(p.y)}" r="${r(p.r)}" fill="#5a8a3a" opacity="0.7"/>`),
+    ...course.pads.map((p) => `<circle cx="${r(p.x)}" cy="${r(p.y)}" r="${r(p.r)}" fill="#3c8a46"/>`),
+    `<rect x="${r(DOCK.x)}" y="${r(DOCK.y)}" width="${r(DOCK.w)}" height="${r(DOCK.h)}" fill="#946036" stroke="#4a2c18" stroke-width="2"/>`,
+    shown,
+    course.weather === "rain" ? `<rect width="${w}" height="${PIC_H}" fill="#9fb8e0" opacity="0.15"/>` : "",
+  ].join("")}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
     const c = course as Course;
     return whistleSvg(c, inputs ? replay(c, inputs as WhistleInput[]).state : initRun(c));
+  }
+  if (game === "derby") {
+    const c = course as DerbyCourse;
+    return derbySvg(c, inputs ? replayDerby(c, inputs as DerbyInput[]).state : initDerby(c), !!inputs);
   }
   const c = course as HaulCourse;
   if (inputs) return haulSvg(c, replayHaul(c, inputs as HaulInput[]).state);
@@ -133,6 +172,14 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${TEMPLATE_NAME[c.template]}`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
       { text: `${SHEEP_COUNT} sheep · ${wolves} wolf${wolves === 1 ? "" : "s"} · 75 seconds`, font: "body", size: 32, color: "#cfd8ff", gap: 30 },
       { text: "Tap to whistle: the sound pushes the flock away. Get them all in the pen.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "derby") {
+    const c = course as DerbyCourse, t = DERBY_FISH[c.fish[c.fish.length - 1].key];
+    const when = c.weather === "rain" ? { day: "A rainy day", dusk: "Dusk, in the rain", night: "Night, in the rain" }[c.time] : { day: "A bright day", dusk: "Dusk", night: "Night" }[c.time];
+    lines = [
+      { text: `Today: ${when}`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${c.fish.length - 1} fish in the pond · the ${t.name} ${t.icon} may surface`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Cast, strike on the bite, reel without snapping the line. 75 seconds.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else {
     const c = course as HaulCourse;

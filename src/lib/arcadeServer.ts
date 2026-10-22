@@ -226,7 +226,7 @@ export async function awardWeek(game: ArcadeGameKey, week: string): Promise<numb
       headline: `${place} in ${def.name}`,
       sub: `the week of ${week} · ${r.score.toLocaleString("en-US")} points`,
       share: `I came ${place} in this week's ${def.name} on thegroove ${def.emoji}`,
-      art: { kind: "enemy", key: game === "whistle" ? "sheep" : "cow" },
+      art: { kind: "enemy", key: game === "whistle" ? "sheep" : game === "derby" ? "duck" : "cow" },
       extra: `${gems} gems and the ${def.prize.title} title`,
     }, `arcade:${game}:${week}`);
   }
