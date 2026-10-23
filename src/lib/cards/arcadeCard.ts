@@ -3,7 +3,8 @@
 // card (/<game>/r/<id>/card.png), written once to .cache/cards: neither ever
 // changes. Whistle's picture is the field with the flock; Harvest Haul's is the
 // cart with its load (as it arrived, for a run); Fishing Derby's is the pond with
-// its fish (for a run, the catch laid out by the dock).
+// its fish (for a run, the catch laid out by the dock); Marigold's Oven's is the
+// three ovens over the day's orders (for a run, what was served).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -15,6 +16,8 @@ import { marketX } from "@/lib/haul/course";
 import { CART_PARTS, initHaul, replayHaul } from "@/lib/haul/sim";
 import { DERBY_FISH, DOCK, FIELD_H as POND_H, FIELD_W as POND_W } from "@/lib/derby/rules";
 import { initDerby, replayDerby } from "@/lib/derby/sim";
+import { HOT_HEAT, OVEN_GOODS } from "@/lib/oven/rules";
+import { replayOven } from "@/lib/oven/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -22,6 +25,7 @@ import type { ArcadeGameKey, ArcadeRunView } from "@/types/arcade";
 import type { Course, RunState, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput, HaulState } from "@/types/haul";
 import type { DerbyCourse, DerbyInput, DerbyState } from "@/types/derby";
+import type { OvenCourse, OvenInput, OvenState } from "@/types/oven";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -103,11 +107,33 @@ function derbySvg(course: DerbyCourse, st: DerbyState, run: boolean): string {
   ].join("")}</svg>`;
 }
 
+/** Marigold's Oven: three brick ovens (the hot one redder) over the order tickets; for a run, each ticket green if served, red if they walked out. */
+function ovenSvg(course: OvenCourse, st: OvenState | null): string {
+  const W = PIC_W, ow = 80, gap = 12, x0 = (W - (3 * ow + 2 * gap)) / 2;
+  const ovens = course.heat.map((h, i) => {
+    const x = x0 + i * (ow + gap);
+    return `<rect x="${x}" y="40" width="${ow}" height="120" fill="${h === HOT_HEAT ? "#a84c38" : "#8a3a2c"}" stroke="#2a1410" stroke-width="3"/>
+      <path d="M${x + 12} 140 V90 a${(ow - 24) / 2} ${(ow - 24) / 2} 0 0 1 ${ow - 24} 0 V140 Z" fill="#2a1410"/>
+      <rect x="${x + 16}" y="120" width="${ow - 32}" height="12" fill="${h === HOT_HEAT ? "#ff6e28" : "#ff9a3c"}" opacity="0.8"/>`;
+  }).join("");
+  const tickets = course.tickets.map((t, i) => {
+    const col = i % 3, row = Math.floor(i / 3), x = 18 + col * 88, y = 190 + row * 64;
+    const s = st?.tickets[i].status, edge = s === "served" ? "#4aa858" : s === "left" ? "#e84858" : "#8a6a48";
+    const dots = t.items.map((g, j) => `<circle cx="${x + 14 + j * 14}" cy="${y + 30}" r="6" fill="${OVEN_GOODS[g].fill}" stroke="${OVEN_GOODS[g].crust}" stroke-width="3"/>`).join("");
+    return `<rect x="${x}" y="${y}" width="80" height="52" fill="${t.rush ? "#fff0f4" : "#fffaec"}" stroke="${edge}" stroke-width="${s ? 5 : 2}"/>${dots}`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#3a2a22"/>${ovens}${tickets}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
     const c = course as Course;
     return whistleSvg(c, inputs ? replay(c, inputs as WhistleInput[]).state : initRun(c));
+  }
+  if (game === "oven") {
+    const c = course as OvenCourse;
+    return ovenSvg(c, inputs ? replayOven(c, inputs as OvenInput[]).state : null);
   }
   if (game === "derby") {
     const c = course as DerbyCourse;
@@ -172,6 +198,13 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${TEMPLATE_NAME[c.template]}`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
       { text: `${SHEEP_COUNT} sheep · ${wolves} wolf${wolves === 1 ? "" : "s"} · 75 seconds`, font: "body", size: 32, color: "#cfd8ff", gap: 30 },
       { text: "Tap to whistle: the sound pushes the flock away. Get them all in the pen.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "oven") {
+    const c = course as OvenCourse, wanted = c.tickets.reduce((s, t) => s + t.items.length, 0);
+    lines = [
+      { text: `Today: ${OVEN_GOODS[c.pie].name.toLowerCase()} day`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${c.tickets.length} customers · ${wanted} bakes wanted${c.tickets.some((t) => t.rush) ? " · a wedding party!" : ""}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Three ovens, one minute. Take it out golden, never doughy, never burnt.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "derby") {
     const c = course as DerbyCourse, t = DERBY_FISH[c.fish[c.fish.length - 1].key];

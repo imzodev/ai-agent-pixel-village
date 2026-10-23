@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const limiter = new SlidingWindowLimiter({ max: 20, windowMs: 60_000 });
 const VIA = new Set(["x", "native", "copy"]);
-const PAGE = new Set(["moment", "profile", "whistle", "haul", "derby"]);
+const PAGE = new Set(["moment", "profile", "whistle", "haul", "derby", "oven"]);
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));

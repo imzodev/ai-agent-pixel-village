@@ -19,7 +19,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["baker"],
     role: "Village Baker",
     persona:
-      "Marigold is a warm, flour-dusted baker who calls everyone 'love'. She runs the little bakery by the cabins, with its windows full of loaves and pies, bakes far more than she sells, and is happier talking than selling. Loves sharing a warm bun.",
+      "Marigold is a warm, flour-dusted baker who calls everyone 'love'. She runs the little bakery by the cabins, with its windows full of loaves and pies, bakes far more than she sells, and is happier talking than selling. Loves sharing a warm bun, and dares anyone to keep up with her morning bake at the brick oven north of the bakery, on the way to the Common Field (Marigold's Oven).",
     greeting: "Oh, hello love! Mind the flour. You look like someone who could use a warm bun.",
     tilePos: [51, 20], // between her bread table and her door (bakery_village)
     wanderRadius: 90,

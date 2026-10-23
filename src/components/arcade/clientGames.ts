@@ -4,6 +4,7 @@
 import WhistleField from "../whistle/WhistleField";
 import HaulField from "../haul/HaulField";
 import DerbyField from "../derby/DerbyField";
+import OvenField from "../oven/OvenField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -36,6 +37,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["❗", "Wait for the bobber to go under, then tap to strike. Too soon and it's gone."],
       ["🎣", "Hold to reel. Let go while the fish runs, or the line snaps; too slack and it throws the hook."],
       ["🏆", "One trophy fish surfaces each day. A new pond every day; the week's best win prizes."],
+    ],
+  },
+  oven: {
+    Field: OvenField,
+    pitch: "A minute of Marigold's morning bake. Customers queue; three ovens; everything must come out golden.",
+    howTo: [
+      ["👆", "Tap a dough bin, then an empty oven to bake it. Tap a full oven to take it out (keys 1–3, then Q W E)."],
+      ["✨", "Take it out in the golden band: the bright middle is perfect and worth half again. Too soon is doughy; too late, burnt."],
+      ["🧾", "Golden bakes go straight to whoever's been waiting longest. Fill an order fast for a tip; keep them waiting and they walk out."],
+      ["🔥", "One oven runs hot every day. A new order book every day; the week's best win prizes."],
     ],
   },
 };

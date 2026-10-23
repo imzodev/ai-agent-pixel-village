@@ -13,11 +13,15 @@ import * as haul from "../haul/rules";
 import { derbyCourseFor } from "../derby/course";
 import { cleanDerbyInputs, replayDerby } from "../derby/sim";
 import * as derby from "../derby/rules";
+import { ovenCourseFor } from "../oven/course";
+import { cleanOvenInputs, replayOven } from "../oven/sim";
+import * as oven from "../oven/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput } from "@/types/haul";
 import type { DerbyCourse, DerbyInput } from "@/types/derby";
+import type { OvenCourse, OvenInput } from "@/types/oven";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -55,6 +59,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayDerby(course as DerbyCourse, inputs as DerbyInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "caught")} fish, ${(n(d, "grams") / 1000).toFixed(1)} kg${n(d, "trophy") ? ", the trophy landed" : ""}${n(d, "lost") ? `, ${n(d, "lost")} got away` : ""}`,
+  },
+  oven: {
+    key: "oven", name: "Marigold's Oven", emoji: "🍞", tagline: "Bake it golden, never burnt", path: "/oven",
+    epoch: oven.OVEN_EPOCH, tickMs: oven.TICK_MS,
+    prize: { gems: oven.WEEKLY_PRIZE_GEMS, title: oven.PRIZE_TITLE, cosmetic: oven.PRIZE_COSMETIC },
+    courseFor: (day, salt) => ovenCourseFor(day, salt),
+    cleanInputs: (raw) => cleanOvenInputs(raw),
+    replay: (course, inputs) => replayOven(course as OvenCourse, inputs as OvenInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "served")} served${n(d, "perfect") ? `, ${n(d, "perfect")} perfect` : ""}${n(d, "spoiled") ? `, ${n(d, "spoiled")} spoiled` : ""}${n(d, "left") ? `, ${n(d, "left")} walked out` : ""}`,
   },
 };
 

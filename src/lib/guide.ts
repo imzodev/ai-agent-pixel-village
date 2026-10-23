@@ -7,6 +7,7 @@ import { STOP_LINGER_MS } from "./mind/caravan";
 import { PRIZE_TITLE, RUN_SECONDS, SHEEP_COUNT, WEEKLY_PRIZE_GEMS } from "./whistle/rules";
 import * as haulRules from "./haul/rules";
 import * as derbyRules from "./derby/rules";
+import * as ovenRules from "./oven/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -52,6 +53,8 @@ export const WHISTLE_FACTS = { sheep: SHEEP_COUNT, seconds: RUN_SECONDS, title: 
 /** Harvest Haul, the stacking minigame: the load's worth and the week's prizes. */
 /** Fishing Derby, the pond minigame: its length, the catch bonus and the week's prizes. */
 export const DERBY_FACTS = { seconds: derbyRules.RUN_TICKS / derbyRules.TICKS_PER_SEC, bonus: derbyRules.CATCH_BONUS, title: derbyRules.PRIZE_TITLE, gems: derbyRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(derbyRules.PERFECT_BONUS * 100) };
+/** Marigold's Oven, the baking minigame: its length, the ovens and the week's prizes. */
+export const OVEN_FACTS = { seconds: ovenRules.RUN_TICKS / ovenRules.TICKS_PER_SEC, ovens: ovenRules.OVENS, title: ovenRules.PRIZE_TITLE, gems: ovenRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(ovenRules.PERFECT_BONUS * 100) };
 export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

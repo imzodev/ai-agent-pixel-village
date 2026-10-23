@@ -98,6 +98,10 @@ export const COSMETIC_CATALOG: CosmeticItem[] = [
     rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
   },
   {
+    key: "prize_baker_crown", name: "Golden Crust Crown", slot: "hat", assetRef: "/lpc/hat_crown.png", tintColor: "#e8a84a",
+    rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
+  },
+  {
     key: "prize_angler_specs", name: "Derby Champion's Specs", slot: "glasses", assetRef: "/lpc/glasses_round.png", tintColor: "#ffd166",
     rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
   },

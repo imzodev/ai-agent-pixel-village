@@ -1,7 +1,8 @@
 // The arcade's spots in the village (src/lib/arcade/spots.ts): Whistle's
 // sheepfold (public/assets/sheepfold.png, scripts/draw-sheepfold.mjs),
-// Harvest Haul's cart (public/assets/haulstall.png, scripts/draw-haul-stall.mjs)
-// and Fishing Derby's jetty (public/assets/derbyjetty.png, scripts/draw-derby-jetty.mjs),
+// Harvest Haul's cart (public/assets/haulstall.png, scripts/draw-haul-stall.mjs),
+// Fishing Derby's jetty (public/assets/derbyjetty.png, scripts/draw-derby-jetty.mjs)
+// and Marigold's oven (public/assets/ovenstall.png, scripts/draw-oven-stall.mjs),
 // each with its game's name and today's number written on its sign.
 
 import type Phaser from "phaser";
@@ -16,6 +17,7 @@ export const ARCADE_ART: Record<ArcadeGameKey, { texture: string; image: string;
   whistle: { texture: "arcade_whistle", image: "/assets/sheepfold.png", sign: "WHISTLE" },
   haul: { texture: "arcade_haul", image: "/assets/haulstall.png", sign: "HARVEST HAUL" },
   derby: { texture: "arcade_derby", image: "/assets/derbyjetty.png", sign: "FISHING DERBY" },
+  oven: { texture: "arcade_oven", image: "/assets/ovenstall.png", sign: "MARIGOLD'S OVEN" },
 };
 
 /** Draw a spot (once, at start); returns its objects and a zone to click. */

@@ -25,6 +25,8 @@ const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   haul: { ax: 121, ay: -3, r: 14 },
   /** By the Western Meadow pond (src/lib/regions.ts PONDS: -86, 16), on its bank by the road. */
   derby: { ax: -86, ay: 23, r: 14 },
+  /** North of the bakery, on the way up to the Common Field. */
+  oven: { ax: 50, ay: -3, r: 8 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>
