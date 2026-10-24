@@ -9,7 +9,11 @@
     "build": "node build.mjs",
     "render": "node build.mjs && mkdir -p out && (cd wide && hyperframes render -o ../out/thegroove-promo-1080p.mp4) && (cd tall && hyperframes render -o ../out/thegroove-promo-vertical.mp4)",
     "sound40": "DUR=40 CUTS=\"3.5 6.5 9.5 12 14.5 17.3 20.1 22.9 25.7 28.5 30.4 31.8 33.2\" CHIME=35 BEAT_FROM=0 OUT=audio/promo40.wav bash sound.sh",
-    "render40": "node build40.mjs && mkdir -p out && (cd wide40 && hyperframes render -o ../out/thegroove-promo-40s-1080p.mp4) && (cd tall40 && hyperframes render -o ../out/thegroove-promo-40s-vertical.mp4)"
+    "render40": "node build40.mjs && mkdir -p out && (cd wide40 && hyperframes render -o ../out/thegroove-promo-40s-1080p.mp4) && (cd tall40 && hyperframes render -o ../out/thegroove-promo-40s-vertical.mp4)",
+    "poster-ad": "cd ../.. && npx tsx --env-file=.env marketing/promo-video/ad-poster.ts",
+    "capture-ad": "node --env-file=../../.env capture-ad.mjs",
+    "sound-ad": "DUR=14 CUTS=\"3.5 7\" CHIME=10 OUT=audio/billboard.wav bash sound.sh",
+    "render-ad": "node build-ad.mjs && mkdir -p out && (cd wide-ad && hyperframes render -o ../out/thegroove-billboard-1080p.mp4) && (cd tall-ad && hyperframes render -o ../out/thegroove-billboard-vertical.mp4)"
   },
   "devDependencies": {
     "hyperframes": "^0.8.172",
