@@ -4,7 +4,8 @@
 // a whoop when something falls off, hooves on the road. Fishing Derby: a plop as
 // the bobber lands, a ping on the bite, the reel's click, a snap, a splash.
 // Marigold's Oven: the oven door, a ding for golden, a hiss for burnt, the
-// till for a filled order, a huff when a customer walks out.
+// till for a filled order, a huff when a customer walks out. Beehive Builder: a
+// soft tock as a piece goes down, a chime for honey (higher for more lines), a buzz.
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -53,5 +54,8 @@ export const dingSound = () => tone(1320, 1320, 160, "sine", 0.07);
 export const hissSound = () => tone(900, 400, 320, "sawtooth", 0.035);
 export const tillSound = () => { tone(1500, 1500, 60, "square", 0.04); setTimeout(() => tone(2000, 2000, 120, "triangle", 0.06), 70); };
 export const huffSound = () => tone(260, 120, 300, "square", 0.04);
+export const tockSound = () => tone(520, 380, 70, "triangle", 0.05);
+export const chimeSound = (lines: number) => { const f = 660 * (1 + 0.25 * Math.min(4, lines - 1)); tone(f, f * 1.5, 180, "sine", 0.07); setTimeout(() => tone(f * 1.5, f * 2, 220, "triangle", 0.05), 110); };
+export const buzzSound = () => tone(180, 210, 260, "sawtooth", 0.025);
 /** Call from a tap, so the browser lets sound play afterwards. */
 export const unlockSound = () => void audio();

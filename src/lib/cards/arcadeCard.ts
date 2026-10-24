@@ -4,7 +4,8 @@
 // changes. Whistle's picture is the field with the flock; Harvest Haul's is the
 // cart with its load (as it arrived, for a run); Fishing Derby's is the pond with
 // its fish (for a run, the catch laid out by the dock); Marigold's Oven's is the
-// three ovens over the day's orders (for a run, what was served).
+// three ovens over the day's orders (for a run, what was served); Beehive
+// Builder's is the comb (for a run, as it ended).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +19,8 @@ import { DERBY_FISH, DOCK, FIELD_H as POND_H, FIELD_W as POND_W } from "@/lib/de
 import { initDerby, replayDerby } from "@/lib/derby/sim";
 import { HOT_HEAT, OVEN_GOODS } from "@/lib/oven/rules";
 import { replayOven } from "@/lib/oven/sim";
+import { CELLS } from "@/lib/hive/board";
+import { initHive, replayHive } from "@/lib/hive/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -26,6 +29,7 @@ import type { Course, RunState, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput, HaulState } from "@/types/haul";
 import type { DerbyCourse, DerbyInput, DerbyState } from "@/types/derby";
 import type { OvenCourse, OvenInput, OvenState } from "@/types/oven";
+import type { HiveCourse, HiveInput, HiveState } from "@/types/hive";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -125,11 +129,31 @@ function ovenSvg(course: OvenCourse, st: OvenState | null): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#3a2a22"/>${ovens}${tickets}</svg>`;
 }
 
+/** Beehive Builder: the comb, filled cells amber (old comb darker), flowers and the royal jelly marked. */
+function hiveSvg(course: HiveCourse, st: HiveState): string {
+  // Seven cells across the widest row, with room for the frame.
+  const k = Math.sqrt(3), S = Math.floor((PIC_W - 16) / (7 * k)), cx = PIC_W / 2, cy = PIC_H / 2;
+  const corners = (x: number, y: number, s: number) => Array.from({ length: 6 }, (_, i) => { const a = (Math.PI / 3) * i - Math.PI / 6; return `${(x + s * Math.cos(a)).toFixed(1)},${(y + s * Math.sin(a)).toFixed(1)}`; }).join(" ");
+  const at = (cells: readonly (readonly number[])[], q: number, r: number) => cells.some(([a, b]) => a === q && b === r);
+  const cells = CELLS.map(([q, r], i) => {
+    const x = cx + S * k * (q + r / 2), y = cy + S * 1.5 * r;
+    const fill = st.filled[i] ? (at(course.comb, q, r) ? "#c07a20" : "#e8a830") : "#f6dca0";
+    const mark = at(course.flowers, q, r) ? `<circle cx="${x}" cy="${y}" r="7" fill="#fff" stroke="#f0c040" stroke-width="4"/>`
+      : course.jelly && course.jelly[0] === q && course.jelly[1] === r ? `<polygon points="${corners(x, y, S - 9)}" fill="none" stroke="#fff" stroke-width="4"/>` : "";
+    return `<polygon points="${corners(x, y, S + 3)}" fill="#7a5020"/><polygon points="${corners(x, y, S - 2)}" fill="${fill}" stroke="#a06a20" stroke-width="2"/>${mark}`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${PIC_W}" height="${PIC_H}"><rect width="${PIC_W}" height="${PIC_H}" fill="#6a9a3a"/>${cells}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
     const c = course as Course;
     return whistleSvg(c, inputs ? replay(c, inputs as WhistleInput[]).state : initRun(c));
+  }
+  if (game === "hive") {
+    const c = course as HiveCourse;
+    return hiveSvg(c, inputs ? replayHive(c, inputs as HiveInput[]).state : initHive(c));
   }
   if (game === "oven") {
     const c = course as OvenCourse;
@@ -198,6 +222,13 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${TEMPLATE_NAME[c.template]}`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
       { text: `${SHEEP_COUNT} sheep · ${wolves} wolf${wolves === 1 ? "" : "s"} · 75 seconds`, font: "body", size: 32, color: "#cfd8ff", gap: 30 },
       { text: "Tap to whistle: the sound pushes the flock away. Get them all in the pen.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "hive") {
+    const c = course as HiveCourse;
+    lines = [
+      { text: `Today: ${c.comb.length} cells of old comb, ${c.flowers.length} flowers${c.jelly ? ", royal jelly" : ""}`, font: "body", size: 36, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${c.pieces.length} pieces · three minutes`, font: "body", size: 32, color: "#cfd8ff", gap: 30 },
+      { text: "Fill whole lines to turn them to honey. Leave room, or the comb fills up.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "oven") {
     const c = course as OvenCourse, wanted = c.tickets.reduce((s, t) => s + t.items.length, 0);

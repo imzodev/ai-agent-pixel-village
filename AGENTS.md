@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -513,6 +513,13 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   every check stays in whole numbers); weekends bring a wedding party's big order.
   `src/lib/oven/`: `rules.ts`, `course.ts` the day's pie, hot oven and customers,
   `sim.ts` the run (its `log` is what the screen reads); drawn in code.
+- **Beehive Builder**: a honeycomb puzzle, turn-based under a light clock. A radius-3 hex
+  comb (`board.ts`: 37 cells in axial coords, 21 lines of constant q, r or s); the day's
+  36 pieces (never turned) come three to a tray. Every full line clears at once (a
+  shared cell counts once; several lines multiply, a flower line counts double, the
+  weekend's royal jelly pays once). The run ends when all are placed (time bonus),
+  nothing in the tray fits, or the 3 minutes run out. `src/lib/hive/`: `rules.ts`,
+  `board.ts`, `course.ts` (old comb, flowers, the deal), `sim.ts`.
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -542,7 +549,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -550,7 +557,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
 - **Spots** (`spots.ts`, `spotsData.json` from `scripts/gen-arcade-spots.ts`, **pinned**):
   the sheepfold by the plaza (`scripts/draw-sheepfold.mjs`), the derby jetty by the Western
   Meadow pond (`scripts/draw-derby-jetty.mjs`), Marigold's brick oven north of the bakery
-  (`scripts/draw-oven-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-oven-stall.mjs`), Della's hives outside the ranch's west fence
+  (`scripts/draw-hive-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

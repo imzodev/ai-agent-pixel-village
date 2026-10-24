@@ -16,12 +16,16 @@ import * as derby from "../derby/rules";
 import { ovenCourseFor } from "../oven/course";
 import { cleanOvenInputs, replayOven } from "../oven/sim";
 import * as oven from "../oven/rules";
+import { hiveCourseFor } from "../hive/course";
+import { cleanHiveInputs, replayHive } from "../hive/sim";
+import * as hive from "../hive/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
 import type { HaulCourse, HaulInput } from "@/types/haul";
 import type { DerbyCourse, DerbyInput } from "@/types/derby";
 import type { OvenCourse, OvenInput } from "@/types/oven";
+import type { HiveCourse, HiveInput } from "@/types/hive";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -69,6 +73,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayOven(course as OvenCourse, inputs as OvenInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "served")} served${n(d, "perfect") ? `, ${n(d, "perfect")} perfect` : ""}${n(d, "spoiled") ? `, ${n(d, "spoiled")} spoiled` : ""}${n(d, "left") ? `, ${n(d, "left")} walked out` : ""}`,
+  },
+  hive: {
+    key: "hive", name: "Beehive Builder", emoji: "🐝", tagline: "Fill the comb, make the honey", path: "/hive",
+    epoch: hive.HIVE_EPOCH, tickMs: hive.TICK_MS,
+    prize: { gems: hive.WEEKLY_PRIZE_GEMS, title: hive.PRIZE_TITLE, cosmetic: hive.PRIZE_COSMETIC },
+    courseFor: (day, salt) => hiveCourseFor(day, salt),
+    cleanInputs: (raw) => cleanHiveInputs(raw),
+    replay: (course, inputs) => replayHive(course as HiveCourse, inputs as HiveInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "honey").toLocaleString("en-US")} honey${n(d, "lines") ? `, ${n(d, "lines")} line${n(d, "lines") === 1 ? "" : "s"}` : ""}${n(d, "placed") >= hive.PIECES ? ", every piece placed" : `, ${n(d, "placed")}/${hive.PIECES} placed`}`,
   },
 };
 

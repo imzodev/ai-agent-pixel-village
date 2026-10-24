@@ -5,6 +5,7 @@ import WhistleField from "../whistle/WhistleField";
 import HaulField from "../haul/HaulField";
 import DerbyField from "../derby/DerbyField";
 import OvenField from "../oven/OvenField";
+import HiveField from "../hive/HiveField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -47,6 +48,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["✨", "Take it out in the golden band: the bright middle is perfect and worth half again. Too soon is doughy; too late, burnt."],
       ["🧾", "Golden bakes go straight to whoever's been waiting longest. Fill an order fast for a tip; keep them waiting and they walk out."],
       ["🔥", "One oven runs hot every day. A new order book every day; the week's best win prizes."],
+    ],
+  },
+  hive: {
+    Field: HiveField,
+    pitch: "Help Della fill her honeycomb: set the day's pieces down, and every full line turns to honey.",
+    howTo: [
+      ["👆", "Drag a piece from the tray onto the comb, or tap a piece and then a cell. Pieces never turn."],
+      ["🍯", "Fill a whole line (any of the three directions) and it turns to honey and clears. Several at once multiply."],
+      ["🌼", "A line through a flower counts double. Leave room: if nothing in the tray fits, the comb is full."],
+      ["🐝", "36 pieces, three minutes. A new comb every day; the week's best win prizes."],
     ],
   },
 };

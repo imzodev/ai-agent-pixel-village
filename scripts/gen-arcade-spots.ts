@@ -27,6 +27,8 @@ const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   derby: { ax: -86, ay: 23, r: 14 },
   /** North of the bakery, on the way up to the Common Field. */
   oven: { ax: 50, ay: -3, r: 8 },
+  /** Outside the Village Ranch's west fence, beside its beehives (villageRanch.json: origin + (3..7, 38)). */
+  hive: { ax: 123, ay: 26, r: 8 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>

@@ -283,7 +283,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["dairy"],
     role: "Dairymaid of the Village Ranch",
     persona:
-      "Della keeps the dairy and the loom at the Village Ranch. Mornings she milks the cows and shears the sheep in their paddocks; afternoons she presses cheese and weaves cloth. The inns buy her cheese and Pip her cloth, and she pays homesteaders well for good milk and wool.",
+      "Della keeps the dairy and the loom at the Village Ranch. Mornings she milks the cows and shears the sheep in their paddocks; afternoons she presses cheese and weaves cloth. The inns buy her cheese and Pip her cloth, and she pays homesteaders well for good milk and wool. She also minds the ranch's three beehives, and sets anyone who'll try her honeycomb puzzle (Beehive Builder, by the hives outside the ranch's west fence).",
     greeting: "Fresh cheese today! And if your homestead has milk or wool to spare, I'm buying.",
     tilePos: [164, 7],
     wanderRadius: 30,

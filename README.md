@@ -104,6 +104,8 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
     on the bite and reel without snapping the line; score the weight landed, and the day's trophy fish.
   - **Marigold's Oven** (`/oven`, or the brick oven north of the bakery): a minute of the morning bake;
     three ovens, a queue of orders, everything out golden, never doughy or burnt.
+  - **Beehive Builder** (`/hive`, or Della's hives by the Village Ranch): a honeycomb puzzle; set the day's
+    36 pieces down and fill whole lines to turn them to honey before the comb fills up.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -156,7 +158,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
-| `/play`, `/whistle`, `/haul`, `/derby`, `/oven` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/` and `src/lib/oven/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
+| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/` and `src/lib/hive/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 
