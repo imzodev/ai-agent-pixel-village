@@ -6,6 +6,7 @@
 // Marigold's Oven: the oven door, a ding for golden, a hiss for burnt, the
 // till for a filled order, a huff when a customer walks out. Beehive Builder: a
 // soft tock as a piece goes down, a chime for honey (higher for more lines), a buzz.
+// Log Flume: a plop as a log comes in, a thud on a rock, a crack, the saw.
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -57,5 +58,7 @@ export const huffSound = () => tone(260, 120, 300, "square", 0.04);
 export const tockSound = () => tone(520, 380, 70, "triangle", 0.05);
 export const chimeSound = (lines: number) => { const f = 660 * (1 + 0.25 * Math.min(4, lines - 1)); tone(f, f * 1.5, 180, "sine", 0.07); setTimeout(() => tone(f * 1.5, f * 2, 220, "triangle", 0.05), 110); };
 export const buzzSound = () => tone(180, 210, 260, "sawtooth", 0.025);
+export const thudSound = () => tone(160, 90, 110, "triangle", 0.06);
+export const sawSound = () => { tone(420, 520, 260, "sawtooth", 0.035); setTimeout(() => tone(520, 380, 220, "sawtooth", 0.03), 200); };
 /** Call from a tap, so the browser lets sound play afterwards. */
 export const unlockSound = () => void audio();

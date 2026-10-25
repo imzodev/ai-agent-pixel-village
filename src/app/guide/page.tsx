@@ -7,7 +7,7 @@ import { Section, Table, Tip } from "@/components/GuideSection";
 import { CONTROLS } from "@/lib/controls";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import {
-  BILLBOARD_FACTS, DERBY_FACTS, ESCORT_FACTS, HAUL_FACTS, HIVE_FACTS, OVEN_FACTS, WHISTLE_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
+  BILLBOARD_FACTS, DERBY_FACTS, ESCORT_FACTS, FLUME_FACTS, HAUL_FACTS, HIVE_FACTS, OVEN_FACTS, WHISTLE_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
   animalRows, bossRows, buildRows, fishRows, furnitureNames, jobRows, parcelRows, perkRows, repRows, rootkingWhen, saplingRows, townRows,
 } from "@/lib/guide";
 
@@ -195,6 +195,8 @@ export default function GuidePage() {
             <p>{OVEN_FACTS.seconds} seconds of Marigold&apos;s morning bake. Tap a dough bin (bread, honey buns or the day&apos;s pie), then an empty oven; tap the oven again to take it out. Out in the golden band it goes to whoever&apos;s been waiting longest (the bright middle is perfect and worth half again); too soon it&apos;s doughy, too late it&apos;s burnt. Fill an order quickly for a tip; keep a customer waiting too long and they walk out. One of the {OVEN_FACTS.ovens} ovens runs hot each day, and nobody walking out with nothing spoiled is worth {OVEN_FACTS.perfectPct}% more. Play it at <Link href="/oven">/oven</Link> or at the brick oven north of the bakery, on the way up to the Common Field. Each Monday the week&apos;s top three get 💎 {OVEN_FACTS.gems}, the {OVEN_FACTS.title} title and a golden crown.</p>
             <h3>What&apos;s Beehive Builder?</h3>
             <p>Della&apos;s honeycomb puzzle. Drag the day&apos;s pieces from the tray onto the comb (or tap a piece, then a cell); pieces never turn. Fill a whole line, in any of the three directions, and it turns to honey and clears; several lines at once multiply, and a line through a flower counts double. Leave room: if nothing in the tray fits, the comb is full and the run ends. {HIVE_FACTS.pieces} pieces in {HIVE_FACTS.minutes} minutes; placing them all is worth {HIVE_FACTS.perfectPct}% more. Play it at <Link href="/hive">/hive</Link> or by the beehives outside the Village Ranch&apos;s west fence. Each Monday the week&apos;s top three get 💎 {HIVE_FACTS.gems}, the {HIVE_FACTS.title} title and a honey-gold party hat.</p>
+            <h3>What&apos;s Log Flume?</h3>
+            <p>Ansel&apos;s logs come down the river, {FLUME_FACTS.logs} in {FLUME_FACTS.seconds} seconds. Press on a log and drag sideways to steer it (oak is heavy and slow to turn); let go and it drifts with the current. Rocks bounce logs and a hard hit splits one; a log stuck on a bank or a rock is beached. At the bottom two gates saw and one is a spillway, and the golden birch is worth {FLUME_FACTS.birch} through the starred saw. Milling every log is worth {FLUME_FACTS.perfectPct}% more. Play it at <Link href="/flume">/flume</Link> or at Ansel&apos;s chute in Hollowmere. Each Monday the week&apos;s top three get 💎 {FLUME_FACTS.gems}, the {FLUME_FACTS.title} title and a green logger&apos;s hat.</p>
             <h3>How do invites work?</h3>
             <p>Send a friend your profile link (menu → 🎁 Invite). When they reach level {REFERRAL_FACTS.level}, you each get 💎 {REFERRAL_FACTS.gems}.</p>
           </Section>

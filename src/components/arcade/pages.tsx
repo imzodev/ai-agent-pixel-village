@@ -1,5 +1,5 @@
 // The arcade's pages, server side, shared by every game's routes (/whistle,
-// /haul, /derby, /oven, /hive and their replays and pictures): metadata for previews on X, the game
+// /haul, /derby, /oven, /hive, /flume and their replays and pictures): metadata for previews on X, the game
 // page, a run's replay page, and the two pictures. Each route file just names its game.
 
 import Link from "next/link";
@@ -28,7 +28,7 @@ function meta(title: string, description: string, url: string, image: string, al
 
 export function gameMetadata(game: ArcadeGameKey): Metadata {
   const g = ARCADE_GAMES[game], day = arcadeDay(Date.now());
-  return meta(`${g.name} #${courseNumber(game, day)}: ${g.tagline.toLowerCase()}`, `${g.tagline}. Prizes every week. ${PITCH}`, g.path, `${g.path}/course.png?day=${day}`, `Today's ${g.name} course`);
+  return meta(`${g.name} #${courseNumber(game, day)}: ${g.tagline.charAt(0).toLowerCase() + g.tagline.slice(1)}`, `${g.tagline}. Prizes every week. ${PITCH}`, g.path, `${g.path}/course.png?day=${day}`, `Today's ${g.name} course`);
 }
 
 export async function GamePage({ game }: { game: ArcadeGameKey }) {

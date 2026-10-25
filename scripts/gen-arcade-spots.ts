@@ -29,6 +29,8 @@ const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   oven: { ax: 50, ay: -3, r: 8 },
   /** Outside the Village Ranch's west fence, beside its beehives (villageRanch.json: origin + (3..7, 38)). */
   hive: { ax: 123, ay: 26, r: 8 },
+  /** Beside Ansel the woodcutter in Hollowmere (npcDefs: hollowmere_ansel, -318, 14). */
+  flume: { ax: -316, ay: 20, r: 12 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>

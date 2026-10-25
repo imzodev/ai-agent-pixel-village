@@ -176,7 +176,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["woodcutter"],
     role: "Woodcutter of Hollowmere",
     persona:
-      "Ansel is a quiet, broad-shouldered woodcutter who spends his days in the Whisperwood with an axe over his shoulder and comes back with logs for his woodpile on the east side of town. Bjorn buys his logs for the forge; anyone else can too. Keeps an eye out for bramble boars and never walks the woods after dark.",
+      "Ansel is a quiet, broad-shouldered woodcutter who spends his days in the Whisperwood with an axe over his shoulder and comes back with logs for his woodpile on the east side of town. Bjorn buys his logs for the forge; anyone else can too. Keeps an eye out for bramble boars and never walks the woods after dark. Built a log chute beside his woodpile, and dares folk to steer his logs down it to the saw (Log Flume).",
     greeting: "Logs? Plenty on the pile. Mind the splinters.",
     tilePos: [-318, 14],
     wanderRadius: 40,

@@ -1,6 +1,6 @@
 // Where the arcade's games stand in the village: Whistle's sheepfold in the
 // plaza, Harvest Haul's cart by the Village Ranch's west gate, Fishing Derby's
-// jetty by the Western Meadow pond, Marigold's Oven north of the bakery, Beehive Builder by the ranch's hives. Walking up opens
+// jetty by the Western Meadow pond, Marigold's Oven north of the bakery, Beehive Builder by the ranch's hives, Log Flume by Ansel in Hollowmere. Walking up opens
 // the game (ArcadeModal). Spots are chosen once by scripts/gen-arcade-spots.ts
 // (spotsData.json, pinned) on clear ground; each has a sign row on top, and
 // the rows under it block, on the server and the client (setDynamicBlocks).
@@ -15,6 +15,7 @@ const SHAPE: Record<ArcadeGameKey, Omit<ArcadeSpot, "game" | "tx" | "ty">> = {
   derby: { w: 6, h: 4, signRows: 1, name: "The derby jetty" },
   oven: { w: 5, h: 4, signRows: 1, name: "Marigold's oven" },
   hive: { w: 5, h: 4, signRows: 1, name: "Della's hives" },
+  flume: { w: 6, h: 4, signRows: 1, name: "Ansel's log flume" },
 };
 export const SPOT_SHAPE = SHAPE;
 

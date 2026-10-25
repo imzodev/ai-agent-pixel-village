@@ -19,6 +19,9 @@ import * as oven from "../oven/rules";
 import { hiveCourseFor } from "../hive/course";
 import { cleanHiveInputs, replayHive } from "../hive/sim";
 import * as hive from "../hive/rules";
+import { flumeCourseFor } from "../flume/course";
+import { cleanFlumeInputs, replayFlume } from "../flume/sim";
+import * as flume from "../flume/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
@@ -26,6 +29,7 @@ import type { HaulCourse, HaulInput } from "@/types/haul";
 import type { DerbyCourse, DerbyInput } from "@/types/derby";
 import type { OvenCourse, OvenInput } from "@/types/oven";
 import type { HiveCourse, HiveInput } from "@/types/hive";
+import type { FlumeCourse, FlumeInput } from "@/types/flume";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -83,6 +87,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayHive(course as HiveCourse, inputs as HiveInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "honey").toLocaleString("en-US")} honey${n(d, "lines") ? `, ${n(d, "lines")} line${n(d, "lines") === 1 ? "" : "s"}` : ""}${n(d, "placed") >= hive.PIECES ? ", every piece placed" : `, ${n(d, "placed")}/${hive.PIECES} placed`}`,
+  },
+  flume: {
+    key: "flume", name: "Log Flume", emoji: "🪵", tagline: "Steer Ansel's logs to the saw", path: "/flume",
+    epoch: flume.FLUME_EPOCH, tickMs: flume.TICK_MS,
+    prize: { gems: flume.WEEKLY_PRIZE_GEMS, title: flume.PRIZE_TITLE, cosmetic: flume.PRIZE_COSMETIC },
+    courseFor: (day, salt) => flumeCourseFor(day, salt),
+    cleanInputs: (raw) => cleanFlumeInputs(raw),
+    replay: (course, inputs) => replayFlume(course as FlumeCourse, inputs as FlumeInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "milled")}/${flume.LOGS} milled${n(d, "split") ? `, ${n(d, "split")} split` : ""}${n(d, "birch") ? ", the golden birch" : ""}`,
   },
 };
 

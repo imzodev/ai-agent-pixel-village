@@ -6,6 +6,7 @@ import HaulField from "../haul/HaulField";
 import DerbyField from "../derby/DerbyField";
 import OvenField from "../oven/OvenField";
 import HiveField from "../hive/HiveField";
+import FlumeField from "../flume/FlumeField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -58,6 +59,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["🍯", "Fill a whole line (any of the three directions) and it turns to honey and clears. Several at once multiply."],
       ["🌼", "A line through a flower counts double. Leave room: if nothing in the tray fits, the comb is full."],
       ["🐝", "36 pieces, three minutes. A new comb every day; the week's best win prizes."],
+    ],
+  },
+  flume: {
+    Field: FlumeField,
+    pitch: "Ansel's logs are coming down the river. Steer them past the rocks and into the mill's saws.",
+    howTo: [
+      ["👆", "Press on a log and drag sideways: it slides toward your finger. Oak is heavy and slow to turn."],
+      ["🪨", "Rocks bounce logs, and a hard hit splits one. A log stuck on the bank or a rock is beached."],
+      ["🪚", "Two gates saw, one is a spillway 💦. The golden birch is worth most through the starred saw ⭐."],
+      ["📅", "24 logs, a new river every day; the week's best win prizes."],
     ],
   },
 };

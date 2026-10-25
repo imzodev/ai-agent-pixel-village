@@ -3,7 +3,8 @@
 // Harvest Haul's cart (public/assets/haulstall.png, scripts/draw-haul-stall.mjs),
 // Fishing Derby's jetty (public/assets/derbyjetty.png, scripts/draw-derby-jetty.mjs)
 // Marigold's oven (public/assets/ovenstall.png, scripts/draw-oven-stall.mjs)
-// and Della's hives (public/assets/hivestall.png, scripts/draw-hive-stall.mjs),
+// Della's hives (public/assets/hivestall.png, scripts/draw-hive-stall.mjs)
+// and Ansel's log flume (public/assets/flumestall.png, scripts/draw-flume-stall.mjs),
 // each with its game's name and today's number written on its sign.
 
 import type Phaser from "phaser";
@@ -20,6 +21,7 @@ export const ARCADE_ART: Record<ArcadeGameKey, { texture: string; image: string;
   derby: { texture: "arcade_derby", image: "/assets/derbyjetty.png", sign: "FISHING DERBY" },
   oven: { texture: "arcade_oven", image: "/assets/ovenstall.png", sign: "MARIGOLD'S OVEN" },
   hive: { texture: "arcade_hive", image: "/assets/hivestall.png", sign: "BEEHIVE BUILDER" },
+  flume: { texture: "arcade_flume", image: "/assets/flumestall.png", sign: "LOG FLUME" },
 };
 
 /** Draw a spot (once, at start); returns its objects and a zone to click. */

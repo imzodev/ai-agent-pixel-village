@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -520,6 +520,15 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   weekend's royal jelly pays once). The run ends when all are placed (time bonus),
   nothing in the tray fits, or the 3 minutes run out. `src/lib/hive/`: `rules.ts`,
   `board.ts`, `course.ts` (old comb, flowers, the deal), `sim.ts`.
+- **Log Flume**: 24 logs down a river section seen from above (70 s). Hold a log and it
+  slides toward the pointer at its kind's `latSpeed` (oak slow, pine quick). The
+  current follows the river's centreline (faster in rapids) and splits around rocks and
+  the mill's posts, away from a side that meets the bank, so logs slide off instead of
+  pinning. Rocks bounce logs or split them past `SPLIT_SPEED`; a log barely moving
+  for `BEACH_TICKS` anywhere is beached. Three gates: two saws, one spillway; the golden
+  birch pays `BIRCH_BONUS` through its starred saw. Courses always leave a channel
+  (`passable`) and never a log-trapping slot between a rock and a bank (`roomBeside`).
+  `src/lib/flume/`: `rules.ts`, `course.ts`, `sim.ts`.
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -549,7 +558,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -558,7 +567,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   the sheepfold by the plaza (`scripts/draw-sheepfold.mjs`), the derby jetty by the Western
   Meadow pond (`scripts/draw-derby-jetty.mjs`), Marigold's brick oven north of the bakery
   (`scripts/draw-oven-stall.mjs`), Della's hives outside the ranch's west fence
-  (`scripts/draw-hive-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-hive-stall.mjs`), Ansel's log chute in Hollowmere
+  (`scripts/draw-flume-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

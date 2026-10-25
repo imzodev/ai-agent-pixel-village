@@ -5,7 +5,8 @@
 // cart with its load (as it arrived, for a run); Fishing Derby's is the pond with
 // its fish (for a run, the catch laid out by the dock); Marigold's Oven's is the
 // three ovens over the day's orders (for a run, what was served); Beehive
-// Builder's is the comb (for a run, as it ended).
+// Builder's is the comb (for a run, as it ended); Log Flume's is the river with its
+// rocks and the mill (for a run, the tally at each gate).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -21,6 +22,9 @@ import { HOT_HEAT, OVEN_GOODS } from "@/lib/oven/rules";
 import { replayOven } from "@/lib/oven/sim";
 import { CELLS } from "@/lib/hive/board";
 import { initHive, replayHive } from "@/lib/hive/sim";
+import { gatesOf, riverAt } from "@/lib/flume/course";
+import { FIELD_H as RIVER_H, FIELD_W as RIVER_W, MILL_Y } from "@/lib/flume/rules";
+import { replayFlume } from "@/lib/flume/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -30,6 +34,7 @@ import type { HaulCourse, HaulInput, HaulState } from "@/types/haul";
 import type { DerbyCourse, DerbyInput, DerbyState } from "@/types/derby";
 import type { OvenCourse, OvenInput, OvenState } from "@/types/oven";
 import type { HiveCourse, HiveInput, HiveState } from "@/types/hive";
+import type { FlumeCourse, FlumeInput, FlumeState } from "@/types/flume";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -145,11 +150,36 @@ function hiveSvg(course: HiveCourse, st: HiveState): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${PIC_W}" height="${PIC_H}"><rect width="${PIC_W}" height="${PIC_H}" fill="#6a9a3a"/>${cells}</svg>`;
 }
 
+/** Log Flume: the river section from above, rocks, rapids, the mill's gates; for a run, how many logs went through each. */
+function flumeSvg(course: FlumeCourse, st: FlumeState | null): string {
+  const K = PIC_H / RIVER_H, w = Math.round(RIVER_W * K);
+  const r = (x: number) => (x * K).toFixed(1);
+  const left: string[] = [], right: string[] = [];
+  for (let y = 0; y <= RIVER_H; y += 10) { const { cx, hw } = riverAt(course.river, y); left.push(`${r(cx - hw)},${r(y)}`); right.unshift(`${r(cx + hw)},${r(y)}`); }
+  const { spans } = gatesOf(course);
+  const tally = spans.map((_, g) => (st ? st.logs.filter((l) => l.gate === g).length : 0));
+  const gates = spans.map((s, g) => {
+    const spill = g === course.mill.spillway;
+    return `<rect x="${r(s.x0 + 4)}" y="${r(MILL_Y + 4)}" width="${r(s.x1 - s.x0 - 8)}" height="${r(RIVER_H - MILL_Y)}" fill="${spill ? "#3a7ab0" : "#2a1a10"}"/>` +
+      (st ? `<text x="${r((s.x0 + s.x1) / 2)}" y="${r(RIVER_H - 6)}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" text-anchor="middle">${tally[g]}</text>` : "") +
+      (g === course.mill.birchSaw ? `<circle cx="${r(s.x1 - 10)}" cy="${r(MILL_Y + 10)}" r="4" fill="#ffd166"/>` : "");
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${PIC_H}"><rect width="${w}" height="${PIC_H}" fill="#4a7a34"/>
+    <polygon points="${left.join(" ")} ${right.join(" ")}" fill="#3a7ab0" stroke="#8a7048" stroke-width="6"/>${
+    course.rapids.map((a) => `<rect x="0" y="${r(a.y0)}" width="${w}" height="${r(a.y1 - a.y0)}" fill="#c8e6ff" opacity="0.18"/>`).join("")}${
+    course.rocks.map((o) => `<circle cx="${r(o.x)}" cy="${r(o.y)}" r="${r(o.r)}" fill="#6a6a74" stroke="#fff" stroke-width="2"/>`).join("")}
+    <rect x="0" y="${r(MILL_Y + 4)}" width="${w}" height="${r(RIVER_H - MILL_Y)}" fill="#6e4426"/>${gates}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
     const c = course as Course;
     return whistleSvg(c, inputs ? replay(c, inputs as WhistleInput[]).state : initRun(c));
+  }
+  if (game === "flume") {
+    const c = course as FlumeCourse;
+    return flumeSvg(c, inputs ? replayFlume(c, inputs as FlumeInput[]).state : null);
   }
   if (game === "hive") {
     const c = course as HiveCourse;
@@ -222,6 +252,13 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${TEMPLATE_NAME[c.template]}`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
       { text: `${SHEEP_COUNT} sheep · ${wolves} wolf${wolves === 1 ? "" : "s"} · 75 seconds`, font: "body", size: 32, color: "#cfd8ff", gap: 30 },
       { text: "Tap to whistle: the sound pushes the flock away. Get them all in the pen.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "flume") {
+    const c = course as FlumeCourse, oak = c.logs.filter((l) => l.kind === "oak").length;
+    lines = [
+      { text: `Today: ${c.rocks.length} rocks, ${c.rapids.length === 1 ? "a stretch" : "two stretches"} of rapids`, font: "body", size: 38, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${c.logs.length} logs (${oak} oak, one golden birch) · 70 seconds`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Steer each log past the rocks and into a saw, not the spillway.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "hive") {
     const c = course as HiveCourse;
