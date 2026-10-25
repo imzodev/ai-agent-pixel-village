@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -529,6 +529,20 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   birch pays `BIRCH_BONUS` through its starred saw. Courses always leave a channel
   (`passable`) and never a log-trapping slot between a rock and a bank (`roomBeside`).
   `src/lib/flume/`: `rules.ts`, `course.ts`, `sim.ts`.
+- **Bjorn's Forge**: a minute at the anvil, front-on. First the prep (up to `PREP_TICKS`,
+  10 s): pick a fuel (how fast the fire heats), a hammer (timing window vs. blow) and tongs
+  (quick hands, deep reach, or quenches); the `prep` input lights the fire and the minute
+  counts from then (`startAt`; the browser sends it itself when the prep runs out). Then
+  the billet goes into the fire (`move`), heats by fuel × the day's fire strength (quarters,
+  one per `FIRE_SEG_TICKS`) × the tongs' reach, and cools on the anvil. One blow a beat
+  (`beatOf`, `lastBeat`): on the beat perfect, in the hammer's window good, else a glance;
+  outside the piece's sweet band (`bandOf`) a blow counts a step less. At or below
+  `COLD_MAX` a blow cracks the billet (start the piece again); at `HOT_MIN` a blow, or
+  reaching `HEAT_MAX` in the fire, burns it out (that commission is lost, not the run).
+  Scale every `SCALE_EVERY` blows blocks the next until knocked off. `src/lib/forgeGame/`:
+  `rules.ts` (every number, the pieces, fuels and tools), `course.ts` the day's commissions
+  (easiest first) and fire, `sim.ts` the run (its `log` is what the screen reads). Types:
+  `src/types/forgeGame.ts` (the world's own forge types stay in `src/types/forge.ts`).
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -558,7 +572,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -568,7 +582,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   Meadow pond (`scripts/draw-derby-jetty.mjs`), Marigold's brick oven north of the bakery
   (`scripts/draw-oven-stall.mjs`), Della's hives outside the ranch's west fence
   (`scripts/draw-hive-stall.mjs`), Ansel's log chute in Hollowmere
-  (`scripts/draw-flume-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-flume-stall.mjs`), Bjorn's smithy in Hollowmere
+  (`scripts/draw-forge-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

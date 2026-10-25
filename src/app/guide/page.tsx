@@ -7,7 +7,7 @@ import { Section, Table, Tip } from "@/components/GuideSection";
 import { CONTROLS } from "@/lib/controls";
 import { formatBinding, prettyKey } from "@/game/input/bindings";
 import {
-  BILLBOARD_FACTS, DERBY_FACTS, ESCORT_FACTS, FLUME_FACTS, HAUL_FACTS, HIVE_FACTS, OVEN_FACTS, WHISTLE_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
+  BILLBOARD_FACTS, DERBY_FACTS, ESCORT_FACTS, FLUME_FACTS, FORGE_FACTS, HAUL_FACTS, HIVE_FACTS, OVEN_FACTS, WHISTLE_FACTS, MEMBER_PERKS_TEXT, MEMBER_PRICE, REFERRAL_FACTS, FIRE_AFTER_DAYS, MAX_JOBS, PARCEL_PRICE, RANK_AT, STARTER_PARCELS, TRAVEL_COST,
   animalRows, bossRows, buildRows, fishRows, furnitureNames, jobRows, parcelRows, perkRows, repRows, rootkingWhen, saplingRows, townRows,
 } from "@/lib/guide";
 
@@ -197,6 +197,8 @@ export default function GuidePage() {
             <p>Della&apos;s honeycomb puzzle. Drag the day&apos;s pieces from the tray onto the comb (or tap a piece, then a cell); pieces never turn. Fill a whole line, in any of the three directions, and it turns to honey and clears; several lines at once multiply, and a line through a flower counts double. Leave room: if nothing in the tray fits, the comb is full and the run ends. {HIVE_FACTS.pieces} pieces in {HIVE_FACTS.minutes} minutes; placing them all is worth {HIVE_FACTS.perfectPct}% more. Play it at <Link href="/hive">/hive</Link> or by the beehives outside the Village Ranch&apos;s west fence. Each Monday the week&apos;s top three get 💎 {HIVE_FACTS.gems}, the {HIVE_FACTS.title} title and a honey-gold party hat.</p>
             <h3>What&apos;s Log Flume?</h3>
             <p>Ansel&apos;s logs come down the river, {FLUME_FACTS.logs} in {FLUME_FACTS.seconds} seconds. Press on a log and drag sideways to steer it (oak is heavy and slow to turn); let go and it drifts with the current. Rocks bounce logs and a hard hit splits one; a log stuck on a bank or a rock is beached. At the bottom two gates saw and one is a spillway, and the golden birch is worth {FLUME_FACTS.birch} through the starred saw. Milling every log is worth {FLUME_FACTS.perfectPct}% more. Play it at <Link href="/flume">/flume</Link> or at Ansel&apos;s chute in Hollowmere. Each Monday the week&apos;s top three get 💎 {FLUME_FACTS.gems}, the {FLUME_FACTS.title} title and a green logger&apos;s hat.</p>
+            <h3>What&apos;s Bjorn&apos;s Forge?</h3>
+            <p>Bjorn&apos;s board for the day: {FORGE_FACTS.commissions} commissions, {FORGE_FACTS.seconds} seconds at the anvil once you light the forge (you get up to {FORGE_FACTS.prep} seconds to pick your fuel, hammer and tongs). Heat the billet in the fire, pull it onto the anvil and strike when the ring closes, one blow a beat, while it glows in the piece&apos;s sweet band. Struck too cold it cracks; white hot, or left in the coals too long, it burns out, and a blow off the beat only glances. Scale comes loose as you work: knock it off before the next blow. Forging every commission without losing a billet is worth {FORGE_FACTS.perfectPct}% more. Play it at <Link href="/forge">/forge</Link> or at Bjorn&apos;s forge in Hollowmere. Each Monday the week&apos;s top three get 💎 {FORGE_FACTS.gems}, the {FORGE_FACTS.title} title and a smith&apos;s goggles.</p>
             <h3>How do invites work?</h3>
             <p>Send a friend your profile link (menu → 🎁 Invite). When they reach level {REFERRAL_FACTS.level}, you each get 💎 {REFERRAL_FACTS.gems}.</p>
           </Section>

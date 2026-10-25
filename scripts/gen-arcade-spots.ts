@@ -31,6 +31,8 @@ const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   hive: { ax: 123, ay: 26, r: 8 },
   /** Beside Ansel the woodcutter in Hollowmere (npcDefs: hollowmere_ansel, -318, 14). */
   flume: { ax: -316, ay: 20, r: 12 },
+  /** By Bjorn's forge in Hollowmere (shopDisplay: forge_hollowmere at -374, 10), on the square's north side. */
+  forge: { ax: -352, ay: -4, r: 14 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>

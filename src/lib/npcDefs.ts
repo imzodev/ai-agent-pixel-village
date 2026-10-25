@@ -137,7 +137,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["smith"],
     role: "Blacksmith of Hollowmere",
     persona:
-      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, buys the raw stuff off anyone brave enough to fetch it from Whisperwood, and at his forge on the south side of town he'll upgrade a sword, an axe or a fishing rod (up to +3) for coin and materials. Proud of Hollowmere, wary of the Greyspine caverns.",
+      "Bjorn is a broad, soot-streaked blacksmith with a booming laugh and a soft spot for good steel. He forges blades from stone, thorns and boar hide, buys the raw stuff off anyone brave enough to fetch it from Whisperwood, and at his forge on the south side of town he'll upgrade a sword, an axe or a fishing rod (up to +3) for coin and materials. Outside his smithy he keeps a board of the day's commissions, and anyone can try to beat them at his anvil (Bjorn's Forge). Proud of Hollowmere, wary of the Greyspine caverns.",
     greeting: "Hah! Another traveller off the King's Road. Need an edge on something? Step into my forge with thorns and hide and I'll make your gear sing.",
     tilePos: [-363, 24],
     wanderRadius: 70,

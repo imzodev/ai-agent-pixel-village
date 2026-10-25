@@ -6,7 +6,8 @@
 // its fish (for a run, the catch laid out by the dock); Marigold's Oven's is the
 // three ovens over the day's orders (for a run, what was served); Beehive
 // Builder's is the comb (for a run, as it ended); Log Flume's is the river with its
-// rocks and the mill (for a run, the tally at each gate).
+// rocks and the mill (for a run, the tally at each gate); Bjorn's Forge's is the
+// anvil over the heat strip (for a run, the day's board with each commission).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -25,6 +26,8 @@ import { initHive, replayHive } from "@/lib/hive/sim";
 import { gatesOf, riverAt } from "@/lib/flume/course";
 import { FIELD_H as RIVER_H, FIELD_W as RIVER_W, MILL_Y } from "@/lib/flume/rules";
 import { replayFlume } from "@/lib/flume/sim";
+import { FORGE_PIECES } from "@/lib/forgeGame/rules";
+import { replayForge } from "@/lib/forgeGame/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -35,6 +38,7 @@ import type { DerbyCourse, DerbyInput, DerbyState } from "@/types/derby";
 import type { OvenCourse, OvenInput, OvenState } from "@/types/oven";
 import type { HiveCourse, HiveInput, HiveState } from "@/types/hive";
 import type { FlumeCourse, FlumeInput, FlumeState } from "@/types/flume";
+import type { ForgeCourse, ForgeInput, ForgeState } from "@/types/forgeGame";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -171,6 +175,40 @@ function flumeSvg(course: FlumeCourse, st: FlumeState | null): string {
     <rect x="0" y="${r(MILL_Y + 4)}" width="${w}" height="${r(RIVER_H - MILL_Y)}" fill="#6e4426"/>${gates}</svg>`;
 }
 
+/** Bjorn's Forge: the forge, the anvil with the billet glowing on it, and the day's board; for a run, each commission stamped. */
+function forgeSvg(course: ForgeCourse, st: ForgeState | null): string {
+  const W = PIC_W;
+  const flames = [0, 1, 2, 3, 4].map((i) => {
+    const x = 38 + i * 16, h = 30 + ((i * 37) % 3) * 10;
+    return `<path d="M${x - 9} 214 Q${x - 4} ${214 - h * 0.6} ${x} ${214 - h} Q${x + 4} ${214 - h * 0.6} ${x + 9} 214 z" fill="#ff8a30"/>
+      <path d="M${x - 5} 214 Q${x - 2} ${214 - h * 0.4} ${x} ${214 - h * 0.65} Q${x + 2} ${214 - h * 0.4} ${x + 5} 214 z" fill="#ffe08a"/>`;
+  }).join("");
+  const forge = `<rect x="0" y="0" width="${W}" height="300" fill="#2e2420"/>
+    <circle cx="70" cy="200" r="110" fill="#ff7a28" opacity="0.18"/>
+    <path d="M18 160 h104 l-26 -90 h-52 z" fill="#4a4a54"/><rect x="40" y="0" width="60" height="72" fill="#3a3a42"/>
+    <rect x="14" y="214" width="112" height="86" fill="#8a3e2a"/><rect x="10" y="208" width="120" height="8" fill="#5a2a1c"/>
+    <rect x="24" y="194" width="92" height="20" rx="4" fill="#140a08"/>${flames}`;
+  const anvil = `<rect x="168" y="262" width="66" height="38" fill="#5a3820"/>
+    <path d="M136 232 Q150 228 160 228 h92 v12 l-14 2 -6 12 14 8 h-84 l14 -8 -6 -12 -14 -2 Q150 238 136 232 z" fill="#5a5a66" stroke="#1a1a20" stroke-width="2"/>`;
+  const heat = st ? 300 : 520;
+  const billet = `<circle cx="206" cy="222" r="30" fill="#ffb040" opacity="${st ? 0.15 : 0.35}"/>
+    <path d="M178 218 h46 l12 5 -12 5 h-46 z" fill="${heat > 400 ? "#ffb040" : "#c04a24"}" stroke="#7a2a10" stroke-width="1.5"/>`;
+  const bars = course.commissions.map((c, i) => {
+    const out = st?.outcomes[i] ?? null;
+    const [stamp, col] = out === "made" ? ["MADE", "#2f8a3a"] : out === "half" ? ["½ PAID", "#b07a10"] : out === "ruined" ? ["LOST", "#c0302a"] : ["", ""];
+    const x = 14 + (i % 2) * 136, y = 318 + Math.floor(i / 2) * 98;
+    return `<rect x="${x}" y="${y}" width="128" height="88" fill="#f2e2bc" stroke="#a0784a" stroke-width="2"/>
+      <circle cx="${x + 64}" cy="${y + 6}" r="4" fill="#b03a2a"/>
+      <text x="${x + 28}" y="${y + 50}" font-size="30" text-anchor="middle" font-family="sans-serif">${FORGE_PIECES[c.piece].icon}</text>
+      <text x="${x + 88}" y="${y + 40}" font-size="16" text-anchor="middle" font-family="sans-serif" font-weight="bold" fill="#3a2414">${c.strikes} blows</text>
+      <text x="${x + 88}" y="${y + 62}" font-size="14" text-anchor="middle" font-family="sans-serif" fill="#6a4a2a">${c.points} pts</text>${
+      stamp ? `<g transform="rotate(-14 ${x + 64} ${y + 46})"><rect x="${x + 22}" y="${y + 30}" width="84" height="30" fill="none" stroke="${col}" stroke-width="3"/>
+      <text x="${x + 64}" y="${y + 52}" font-size="18" text-anchor="middle" font-family="sans-serif" font-weight="bold" fill="${col}">${stamp}</text></g>` : ""}`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#3e2616"/>
+    ${forge}${anvil}${billet}${bars}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
@@ -188,6 +226,10 @@ function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | nu
   if (game === "oven") {
     const c = course as OvenCourse;
     return ovenSvg(c, inputs ? replayOven(c, inputs as OvenInput[]).state : null);
+  }
+  if (game === "forge") {
+    const c = course as ForgeCourse;
+    return forgeSvg(c, inputs ? replayForge(c, inputs as ForgeInput[]).state : null);
   }
   if (game === "derby") {
     const c = course as DerbyCourse;
@@ -273,6 +315,15 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${OVEN_GOODS[c.pie].name.toLowerCase()} day`, font: "body", size: 40, color: "#ffffff", bold: true, gap: 14 },
       { text: `${c.tickets.length} customers · ${wanted} bakes wanted${c.tickets.some((t) => t.rush) ? " · a wedding party!" : ""}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
       { text: "Three ovens, one minute. Take it out golden, never doughy, never burnt.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "forge") {
+    const c = course as ForgeCourse;
+    const strikes = c.commissions.reduce((s, x) => s + x.strikes, 0);
+    const roars = c.fire.filter((f) => f >= 5).length, lows = c.fire.filter((f) => f <= 3).length;
+    lines = [
+      { text: `Today: ${c.commissions.length} commissions on Bjorn's board`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${strikes} blows wanted · the fire ${roars > lows ? "runs hot" : lows > roars ? "runs low" : "keeps steady"} today`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Heat the iron, strike it true, and don't burn it out.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "derby") {
     const c = course as DerbyCourse, t = DERBY_FISH[c.fish[c.fish.length - 1].key];

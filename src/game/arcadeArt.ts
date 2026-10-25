@@ -4,7 +4,8 @@
 // Fishing Derby's jetty (public/assets/derbyjetty.png, scripts/draw-derby-jetty.mjs)
 // Marigold's oven (public/assets/ovenstall.png, scripts/draw-oven-stall.mjs)
 // Della's hives (public/assets/hivestall.png, scripts/draw-hive-stall.mjs)
-// and Ansel's log flume (public/assets/flumestall.png, scripts/draw-flume-stall.mjs),
+// Ansel's log flume (public/assets/flumestall.png, scripts/draw-flume-stall.mjs)
+// and Bjorn's forge (public/assets/forgestall.png, scripts/draw-forge-stall.mjs),
 // each with its game's name and today's number written on its sign.
 
 import type Phaser from "phaser";
@@ -22,6 +23,7 @@ export const ARCADE_ART: Record<ArcadeGameKey, { texture: string; image: string;
   oven: { texture: "arcade_oven", image: "/assets/ovenstall.png", sign: "MARIGOLD'S OVEN" },
   hive: { texture: "arcade_hive", image: "/assets/hivestall.png", sign: "BEEHIVE BUILDER" },
   flume: { texture: "arcade_flume", image: "/assets/flumestall.png", sign: "LOG FLUME" },
+  forge: { texture: "arcade_forge", image: "/assets/forgestall.png", sign: "BJORN'S FORGE" },
 };
 
 /** Draw a spot (once, at start); returns its objects and a zone to click. */

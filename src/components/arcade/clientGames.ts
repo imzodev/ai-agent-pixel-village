@@ -7,6 +7,7 @@ import DerbyField from "../derby/DerbyField";
 import OvenField from "../oven/OvenField";
 import HiveField from "../hive/HiveField";
 import FlumeField from "../flume/FlumeField";
+import ForgeField from "../forge/ForgeField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -69,6 +70,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["🪨", "Rocks bounce logs, and a hard hit splits one. A log stuck on the bank or a rock is beached."],
       ["🪚", "Two gates saw, one is a spillway 💦. The golden birch is worth most through the starred saw ⭐."],
       ["📅", "24 logs, a new river every day; the week's best win prizes."],
+    ],
+  },
+  forge: {
+    Field: ForgeField,
+    pitch: "Bjorn's board for the day: four commissions, one minute at the anvil. Heat the iron, strike it true, and don't burn it out.",
+    howTo: [
+      ["🔥", "Pick your fuel, hammer and tongs, then light the forge. Tap the fire to heat the billet, the anvil to pull it out."],
+      ["⚒️", "Strike when the ring closes on the anvil, one blow a beat, while the iron glows in the bright sweet band."],
+      ["💔", "Too cold and it cracks; white hot, or left in the coals, it burns out. Knock the scale off as it comes loose."],
+      ["📅", "A new board and fire every day; the week's best win prizes in the village."],
     ],
   },
 };

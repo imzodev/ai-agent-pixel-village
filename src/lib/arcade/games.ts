@@ -22,6 +22,9 @@ import * as hive from "../hive/rules";
 import { flumeCourseFor } from "../flume/course";
 import { cleanFlumeInputs, replayFlume } from "../flume/sim";
 import * as flume from "../flume/rules";
+import { forgeCourseFor } from "../forgeGame/course";
+import { cleanForgeInputs, replayForge } from "../forgeGame/sim";
+import * as forge from "../forgeGame/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
@@ -30,6 +33,7 @@ import type { DerbyCourse, DerbyInput } from "@/types/derby";
 import type { OvenCourse, OvenInput } from "@/types/oven";
 import type { HiveCourse, HiveInput } from "@/types/hive";
 import type { FlumeCourse, FlumeInput } from "@/types/flume";
+import type { ForgeCourse, ForgeInput } from "@/types/forgeGame";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -97,6 +101,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayFlume(course as FlumeCourse, inputs as FlumeInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "milled")}/${flume.LOGS} milled${n(d, "split") ? `, ${n(d, "split")} split` : ""}${n(d, "birch") ? ", the golden birch" : ""}`,
+  },
+  forge: {
+    key: "forge", name: "Bjorn's Forge", emoji: "⚒️", tagline: "Heat it, strike it, don't burn it out", path: "/forge",
+    epoch: forge.FORGE_EPOCH, tickMs: forge.TICK_MS,
+    prize: { gems: forge.WEEKLY_PRIZE_GEMS, title: forge.PRIZE_TITLE, cosmetic: forge.PRIZE_COSMETIC },
+    courseFor: (day, salt) => forgeCourseFor(day, salt),
+    cleanInputs: (raw) => cleanForgeInputs(raw),
+    replay: (course, inputs) => replayForge(course as ForgeCourse, inputs as ForgeInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "completed")}/${forge.COMMISSIONS} commissions forged${n(d, "perfect") ? `, ${n(d, "perfect")} perfect strikes` : ""}${n(d, "ruined") ? `, ${n(d, "ruined")} billet${n(d, "ruined") === 1 ? "" : "s"} lost` : ""}`,
   },
 };
 

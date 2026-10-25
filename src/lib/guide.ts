@@ -10,6 +10,7 @@ import * as derbyRules from "./derby/rules";
 import * as ovenRules from "./oven/rules";
 import * as hiveRules from "./hive/rules";
 import * as flumeRules from "./flume/rules";
+import * as forgeRules from "./forgeGame/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -61,6 +62,8 @@ export const OVEN_FACTS = { seconds: ovenRules.RUN_TICKS / ovenRules.TICKS_PER_S
 export const HIVE_FACTS = { pieces: hiveRules.PIECES, minutes: hiveRules.RUN_TICKS / hiveRules.TICKS_PER_SEC / 60, title: hiveRules.PRIZE_TITLE, gems: hiveRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(hiveRules.PERFECT_BONUS * 100) };
 /** Log Flume, the river game: logs, the run's length and the week's prizes. */
 export const FLUME_FACTS = { logs: flumeRules.LOGS, seconds: flumeRules.RUN_TICKS / flumeRules.TICKS_PER_SEC, birch: flumeRules.BIRCH_BONUS, title: flumeRules.PRIZE_TITLE, gems: flumeRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(flumeRules.PERFECT_BONUS * 100) };
+/** Bjorn's Forge, the smithing minigame: commissions, the run's length and the week's prizes. */
+export const FORGE_FACTS = { commissions: forgeRules.COMMISSIONS, seconds: forgeRules.RUN_TICKS / forgeRules.TICKS_PER_SEC, prep: forgeRules.PREP_TICKS / forgeRules.TICKS_PER_SEC, title: forgeRules.PRIZE_TITLE, gems: forgeRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(forgeRules.PERFECT_BONUS * 100) };
 export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

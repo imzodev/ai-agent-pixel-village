@@ -35,7 +35,7 @@ export default function TermsPage() {
       <h2>Invites</h2>
       <p>Invite rewards are for real friends who play. Accounts made to collect them may lose the reward or be suspended.</p>
       <h2>Arcade games</h2>
-      <p>The arcade games&apos; weekly prizes (Whistle, Harvest Haul, Fishing Derby, Marigold&apos;s Oven, Beehive Builder, Log Flume) are in-game only (gems, a title and something to wear) and have no cash value. Scores are checked by replaying each run; runs that look automated or tampered with may be taken off the boards and their prizes withheld.</p>
+      <p>The arcade games&apos; weekly prizes (Whistle, Harvest Haul, Fishing Derby, Marigold&apos;s Oven, Beehive Builder, Log Flume, Bjorn&apos;s Forge) are in-game only (gems, a title and something to wear) and have no cash value. Scores are checked by replaying each run; runs that look automated or tampered with may be taken off the boards and their prizes withheld.</p>
       <h2>Billboards and sponsors</h2>
       <p>Billboards and sponsored buildings show ads from real businesses and creators. We review every poster before it goes up, but the advertiser is responsible for what they offer, and their site has its own terms. Advertisers agree that what they upload is theirs to use and contains no adult content, hate, scams, gambling or anything unlawful; we may take an ad down if it breaks that (without a refund) and refund any we don&apos;t approve.</p>
       <h2>The game changes</h2>

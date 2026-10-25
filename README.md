@@ -108,6 +108,8 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
     36 pieces down and fill whole lines to turn them to honey before the comb fills up.
   - **Log Flume** (`/flume`, or Ansel's chute in Hollowmere): steer 24 logs down a river past rocks
     and into the mill's saws, not the spillway.
+  - **Bjorn's Forge** (`/forge`, or his smithy in Hollowmere): pick your fuel and tools, light the forge,
+    then heat the billet, strike it on the beat in its sweet band and knock the scale off; never let it burn.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -160,7 +162,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
-| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/` and `src/lib/flume/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
+| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/`, `src/lib/flume/` and `src/lib/forgeGame/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 
