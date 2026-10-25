@@ -13,8 +13,9 @@ import { npcDef } from "./npcDefs";
 import { employerPays } from "./mind/mindServer";
 import { regardHelped } from "./mind/regard";
 import {
-  JOB_DEFS, dayKey, escortEarned, flatWage, hireBlock, inGuardArea, jobDef, jobsOfEmployer, letGo, letterPay, nextStreak,
-  pickRecipients, rankFor, shiftNeed, shiftPay, supplyPay, taskText, toNextRank, ESCORT_PX, GUARD_PER_BEAST,
+  JOB_DEFS, dayKey, escortEarned, flatWage, hireBlock, inGuardArea, jobDef, jobsOfEmployer, letGo, letterPay,
+  letterRecipient, letterRecipientLabel, nextStreak, pickRecipients, rankFor, shiftNeed, shiftPay, supplyPay, taskText,
+  toNextRank, ESCORT_PX, GUARD_PER_BEAST,
 } from "./jobs";
 import type { JobDef, JobOffer, JobProgress, JobView } from "@/types/jobs";
 
@@ -198,10 +199,20 @@ export async function workShift(character: { id: number; x: number; y: number },
       if (p.letters?.length) return { ok: false, error: "You've got today's letters. Deliver them!" };
       const from = npcDef(def.employerKey)!.tilePos;
       const to = pickRecipients(character.id, p.day, def.employerKey, rank, s.count);
-      const letters = to.map((k) => { const t = npcDef(k)!.tilePos; return { to: k, toName: nameOf(k), pay: letterPay({ tx: from[0], ty: from[1] }, { tx: t[0], ty: t[1] }, rank), delivered: false }; });
-      for (const l of letters) await addItem(character.id, "letter", 1, { to: l.to, job: jobKey, toName: nameOf(l.to) });
+      const letters = to.map((k) => {
+        const t = npcDef(k)!.tilePos;
+        const who = letterRecipient(k);
+        return { ...who, pay: letterPay({ tx: from[0], ty: from[1] }, { tx: t[0], ty: t[1] }, rank), delivered: false };
+      });
+      for (const l of letters) await addItem(character.id, "letter", 1, { to: l.to, job: jobKey, toName: l.toName, toPlace: l.toPlace, toRole: l.toRole });
       await tx.update(jobs).set({ progress: { ...p, letters } }).where(eq(jobs.id, row.id));
-      return { ok: true, message: `Today's letters: ${letters.map((l) => `${nameOf(l.to)} (${l.pay} 🪙)`).join(", ")}.`, notices: [], gained: [{ itemKey: "letter", qty: letters.length }] };
+      const lines = letters.map((l) => `${letterRecipientLabel(l)} — ${l.pay} 🪙`);
+      return {
+        ok: true,
+        message: `Today's letters:\n${lines.map((l) => `• ${l}`).join("\n")}`,
+        notices: [],
+        gained: [{ itemKey: "letter", qty: letters.length }],
+      };
     }
     return { ok: false, error: s.kind === "guard" ? `Out on the roads: ${lower1(taskText(def, rank))}.` : "Find the caravan and ride along with it." };
   });
@@ -227,7 +238,7 @@ export async function deliverLetter(character: { id: number; x: number; y: numbe
       const notices: string[] = [];
       if (letters.every((l) => l.delivered)) notices.push(...(await finishShift(tx, j.row, d, progress, now)).notices);
       else await tx.update(jobs).set({ progress }).where(eq(jobs.id, j.row.id));
-      return { ok: true, message: `✉️ ${nameOf(npcKey)} takes the letter. +${letter.pay} 🪙`, notices };
+      return { ok: true, message: `✉️ ${letterRecipientLabel(letter)} takes the letter. +${letter.pay} 🪙`, notices };
     }
     return { ok: false, error: `You have no letter for ${nameOf(npcKey)}.` };
   });

@@ -52,7 +52,7 @@ import { RELIC_REACH_PX } from "@/lib/relics";
 import { BIKE_ITEM } from "@/lib/bike";
 import BountyTracker from "./BountyTracker";
 import JobsPanel from "./JobsPanel";
-import { jobsOfEmployer } from "@/lib/jobs";
+import { jobsOfEmployer, letterRecipientLabel } from "@/lib/jobs";
 import type { JobView, JobsResponse } from "@/types/jobs";
 import PitchCard from "./PitchCard";
 import FarmPanel from "./FarmPanel";
@@ -1762,6 +1762,15 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
+/** A letter's address on its line in the bag: who it's for, and where. */
+function letterAddress(meta: Record<string, unknown>): string | null {
+  if (typeof meta.toName !== "string") return null;
+  return letterRecipientLabel({
+    toName: meta.toName,
+    toPlace: typeof meta.toPlace === "string" ? meta.toPlace : undefined,
+    toRole: typeof meta.toRole === "string" ? meta.toRole : undefined,
+  });
+}
 function BagPanel({ me, onAction, onRead }: { me: Me | null; onAction: (b: Record<string, unknown>, m?: string) => Promise<void>; onRead: (mapId: number) => void }) {
   if (!me) return <div>Loading…</div>;
   if (me.inventory.length === 0) return <div className="text-stone-500">Empty. Pet a chicken, pick a berry, talk to a baker.</div>;
@@ -1782,7 +1791,7 @@ function BagPanel({ me, onAction, onRead }: { me: Me | null; onAction: (b: Recor
       </div>
       {me.inventory.map((i) => (
         <div key={i.id} className={`rounded-lg border-2 bg-white p-2 ${i.equipped ? "border-emerald-500" : "border-transparent"}`} style={i.itemKey === "discount" ? { borderColor: String(i.meta.color ?? "#e76f51") } : undefined}>
-          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped · {GEAR_SLOT_LABEL[slotOf(i.itemKey)]?.name.toLowerCase()}</span>}</div>{wears(i.itemKey) && <WearBar wear={wearOf(i.meta)} />}<div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.def?.description}</div></div></div>
+          <div className="flex items-center gap-2"><span className="text-xl">{i.def?.icon ?? "📦"}</span><div><div className="font-bold">{i.itemKey === "discount" ? `${i.meta.business} code` : i.itemKey === "letter" && letterAddress(i.meta) ? `✉️ Letter for ${letterAddress(i.meta)}` : withPlus(i.def?.name ?? i.itemKey, plusOf(i.meta))}{i.qty > 1 && <span className="text-stone-500"> ×{i.qty}</span>}{i.equipped && <span className="ml-1 text-[10px] text-emerald-700">equipped · {GEAR_SLOT_LABEL[slotOf(i.itemKey)]?.name.toLowerCase()}</span>}</div>{wears(i.itemKey) && <WearBar wear={wearOf(i.meta)} />}<div className="text-[11px] text-stone-500">{i.itemKey === "discount" ? <span><b className="text-base tracking-widest text-orange-700">{String(i.meta.code)}</b> — {String(i.meta.text)}{typeof i.meta.website === "string" && i.meta.website ? <> · <a className="underline" href={i.meta.website} target="_blank" rel="noreferrer">redeem</a></> : null}</span> : i.itemKey === "letter" ? "Hand it to them in person." : i.def?.description}</div></div></div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {i.def?.kind === "consumable" && <Sm on={() => onAction({ action: "use", inventoryId: i.id })}>Eat</Sm>}
             {i.itemKey === "treasure_map" && typeof i.meta.mapId === "number" && <Sm on={() => onRead(i.meta.mapId as number)}>🔍 Read</Sm>}

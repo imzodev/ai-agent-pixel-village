@@ -1,5 +1,6 @@
 "use client";
 // Today's shifts at a glance (in the bottom-left tracker, above bounties).
+import { letterRecipientLabel } from "@/lib/jobs";
 import type { JobView } from "@/types/jobs";
 
 const ICON = { courier: "✉️", supplier: "📦", guard: "🛡️", escort: "🐎" } as const;
@@ -7,7 +8,10 @@ const ICON = { courier: "✉️", supplier: "📦", guard: "🛡️", escort: "�
 /** What's left to do today, in a few words. */
 function hint(j: JobView): string {
   if (j.done) return "Done for today";
-  if (j.kind === "courier") return j.letters?.length ? `Deliver to ${j.letters.filter((l) => !l.delivered).map((l) => l.toName).join(", ")}` : `Pick up letters from ${j.employerName}`;
+  if (j.kind === "courier") {
+    if (!j.letters?.length) return `Pick up letters from ${j.employerName}`;
+    return `Deliver to ${j.letters.filter((l) => !l.delivered).map((l) => letterRecipientLabel(l)).join(", ")}`;
+  }
   if (j.kind === "supplier") return `Bring them to ${j.employerName}`;
   if (j.kind === "guard") return j.task.replace(/^Defeat \d+ /, "Defeat ");
   return j.riding ? `Stay by ${j.employerName}'s wagon until it arrives` : `Be by ${j.employerName}'s wagon when it leaves town`;

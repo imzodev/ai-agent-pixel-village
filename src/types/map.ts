@@ -19,6 +19,9 @@ export type MapPlace = { kind: "inn" | "forge" | "cave" | "lair" | "homestead"; 
 /** One of your own lots (world px). */
 export type MapLot = { kind: LotKind; name: string; x: number; y: number; banner: LotBanner };
 
+/** A letter you're carrying: who it's for and where they are (world px). */
+export type MapLetter = { to: string; name: string; place?: string; x: number; y: number };
+
 /** A region name and where to print it (world px). */
 export type MapRegionLabel = { name: string; x: number; y: number };
 
@@ -32,6 +35,8 @@ export type MapMarkers = {
   regions: MapRegionLabel[];
   /** Your homestead's parcels, drawn on the map in their use's colour. */
   homestead?: { tx: number; ty: number; parcels: Parcel[] };
+  /** Where to take the letters you're carrying (couriers). */
+  letters?: MapLetter[];
 };
 
 /** Average colour (alpha-weighted RGB) and coverage (mean alpha 0–1) of each tile in a tileset image. */

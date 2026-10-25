@@ -3,9 +3,10 @@
 import { describe, expect, it } from "vitest";
 import {
   ESCORT_SHARE, FIRE_AFTER_DAYS, JOB_DEFS, MAX_JOBS, RANK_AT, REHIRE_MS, dayKey, daysBetween, escortEarned, flatWage, hireBlock, inGuardArea,
-  jobDef, letGo, letterPay, letterRecipients, nextStreak, pickRecipients, rankFor, shiftNeed, shiftPay, supplyPay, toNextRank,
+  jobDef, letGo, letterPay, letterRecipient, letterRecipientLabel, letterRecipients, nextStreak, pickRecipients, rankFor, shiftNeed, shiftPay,
+  supplyPay, toNextRank, undeliveredLetters,
 } from "@/lib/jobs";
-import { npcDef } from "@/lib/npcDefs";
+import { npcDef, placeOfNpc } from "@/lib/npcDefs";
 import { isGoods } from "@/lib/economy";
 import { ITEM_DEFS } from "@/lib/itemDefs";
 import { SHOP_STOCK, TRADES } from "@/lib/trade";
@@ -110,5 +111,51 @@ describe("couriers, guards and escorts", () => {
     expect(escortEarned(2, 5, true)).toBe(2 / 5 >= ESCORT_SHARE);
     expect(escortEarned(5, 5, false)).toBe(false);
     expect(escortEarned(0, 0, true)).toBe(false);
+  });
+});
+
+describe("a letter says where to take it", () => {
+  it("names the place and the role, so two namesakes are told apart", () => {
+    const milo = letterRecipient("coralwick_milo");
+    expect(milo.toName).toBe("Milo");
+    expect(milo.toPlace).toBe("Coralwick");
+    expect(milo.toRole).toBe("Innkeeper of Coralwick");
+    // "Milo" lives in seven towns: the place is what tells them apart.
+    const others = letterRecipients("village_hettie", 2).filter((k) => npcDef(k)?.name === "Milo");
+    expect(others.length).toBeGreaterThan(1);
+    const places = new Set(others.map((k) => placeOfNpc(k)));
+    expect(places.size).toBe(others.length);
+  });
+  it("every letter recipient has a place and a role, and the label says so", () => {
+    for (const key of letterRecipients("village_hettie", 2)) {
+      const r = letterRecipient(key);
+      expect(r.toPlace, key).toBeTruthy();
+      expect(r.toRole, key).toBeTruthy();
+      const label = letterRecipientLabel(r);
+      expect(label, key).toContain(r.toName);
+      // The label must tell two namesakes apart: it carries the place.
+      expect(label.toLowerCase(), key).toContain(r.toPlace!.toLowerCase());
+    }
+  });
+  it("a role that already names the place isn't repeated", () => {
+    expect(letterRecipientLabel({ toName: "Milo", toPlace: "Coralwick", toRole: "Innkeeper of Coralwick" })).toBe("Milo, Innkeeper of Coralwick");
+    expect(letterRecipientLabel({ toName: "Finn", toPlace: "Coralwick", toRole: "Coralwick Local" })).toBe("Finn, Coralwick Local (in Coralwick)");
+    expect(letterRecipientLabel({ toName: "Bjorn", toPlace: "Hollowmere", toRole: "Blacksmith of Hollowmere" })).toBe("Bjorn, Blacksmith of Hollowmere");
+  });
+  it("only the letters still to deliver are marked on the map", () => {
+    const rows = [
+      { progress: { letters: [
+        { to: "village_pip", toName: "Pip", toPlace: "the grove", pay: 7, delivered: false },
+        { to: "village_odo", toName: "Odo", toPlace: "the grove", pay: 6, delivered: true },
+      ] } },
+      { progress: null },
+      { progress: { letters: [{ to: "coralwick_milo", toName: "Milo", toPlace: "Coralwick", pay: 106, delivered: false }] } },
+    ];
+    const todo = undeliveredLetters(rows);
+    expect(todo.map((l) => l.to)).toEqual(["village_pip", "coralwick_milo"]);
+    expect(todo.every((l) => !l.delivered)).toBe(true);
+    // every markable recipient is a real NPC, so the map can place them
+    for (const l of todo) expect(npcDef(l.to), l.to).toBeTruthy();
+    expect(undeliveredLetters([])).toEqual([]);
   });
 });

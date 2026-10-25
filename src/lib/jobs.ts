@@ -3,11 +3,11 @@
 // real UTC calendar day (like daily quests: a game day is only 24 minutes).
 // Miss FIRE_AFTER_DAYS days in a row and you're let go. Every number is here.
 
-import { NPC_DEFS, npcDef } from "./npcDefs";
+import { NPC_DEFS, npcDef, placeOfNpc } from "./npcDefs";
 import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import { FISH_DEFS } from "./fishing";
 import { itemValue } from "./itemDefs";
-import type { JobDef, JobKind, JobShift } from "@/types/jobs";
+import type { JobDef, JobKind, JobLetter, JobShift } from "@/types/jobs";
 
 export type { JobDef, JobKind, JobLetter, JobOffer, JobProgress, JobShift, JobStatus, JobView, JobsResponse } from "@/types/jobs";
 
@@ -178,6 +178,37 @@ const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; 
 export function pickRecipients(characterId: number, day: string, employerKey: string, rank: number, count: number): string[] {
   const pool = letterRecipients(employerKey, rank).sort((a, b) => hash(`${characterId}:${day}:${a}`) - hash(`${characterId}:${day}:${b}`));
   return pool.slice(0, count);
+}
+
+/** Who a letter is for: their name, the place they live in and their role
+ *  there. Names repeat across the continent ("Milo" lives in seven towns),
+ *  so the place and the role are what tell two of them apart. */
+export function letterRecipient(npcKey: string): { to: string; toName: string; toPlace?: string; toRole?: string } {
+  const def = npcDef(npcKey);
+  const place = placeOfNpc(npcKey);
+  return {
+    to: npcKey,
+    toName: def?.name ?? npcKey,
+    ...(place ? { toPlace: place } : {}),
+    ...(def?.role ? { toRole: def.role } : {}),
+  };
+}
+
+/** How to write a letter's recipient on screen: "Milo, Innkeeper of
+ *  Coralwick" or "Finn, Coralwick Local (in Coralwick)". The place is only
+ *  dropped when the role already says what they do there ("… of Coralwick");
+ *  a generic "Coralwick Local" still needs it. */
+export function letterRecipientLabel(l: Pick<JobLetter, "toName" | "toPlace" | "toRole">): string {
+  const role = l.toRole ? `, ${l.toRole}` : "";
+  if (!l.toPlace) return `${l.toName}${role}`;
+  const place = l.toPlace.toLowerCase();
+  const saysWhatTheyDo = l.toRole ? l.toRole.toLowerCase().endsWith(`of ${place}`) : false;
+  return saysWhatTheyDo ? `${l.toName}${role}` : `${l.toName}${role} (in ${l.toPlace})`;
+}
+
+/** The letters still to deliver today, from a courier's job rows. */
+export function undeliveredLetters(rows: readonly { progress?: { letters?: JobLetter[] } | null }[]): JobLetter[] {
+  return rows.flatMap((r) => (r.progress?.letters ?? []).filter((l) => !l.delivered));
 }
 
 // ── Guards and escorts ─────────────────────────────────────────────────

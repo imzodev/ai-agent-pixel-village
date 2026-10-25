@@ -3,7 +3,7 @@
 // today's shift, and Hire / Hand in / Pick up letters / Quit.
 import { useEffect, useState } from "react";
 import { inputRouter } from "@/game/input/router";
-import { RANK_AT } from "@/lib/jobs";
+import { RANK_AT, letterRecipientLabel } from "@/lib/jobs";
 import type { JobOffer, JobsResponse } from "@/types/jobs";
 
 const ICON = { courier: "✉️", supplier: "📦", guard: "🛡️", escort: "🐎" } as const;
@@ -76,7 +76,7 @@ export default function JobsPanel({ npcKey, npcName, onMessage, onClose }: {
                       <div className="h-1.5 flex-1 overflow-hidden rounded bg-stone-200"><div className={`h-full ${m.done ? "bg-emerald-500" : "bg-sky-500"}`} style={{ width: `${(100 * Math.min(m.count, m.need)) / Math.max(1, m.need)}%` }} /></div>
                       <span>{m.done ? "Done today ✓" : `${m.count}/${m.need} today`}</span>
                     </div>
-                    {m.letters && <div className="mt-1 text-[11px] text-stone-600">Letters: {m.letters.map((l) => `${l.delivered ? "✓" : "✉️"} ${l.toName} (${l.pay} 🪙)`).join(" · ")}</div>}
+                    {m.letters && <div className="mt-1 text-[11px] text-stone-600">Letters: {m.letters.map((l) => `${l.delivered ? "✓" : "✉️"} ${letterRecipientLabel(l)} (${l.pay} 🪙)`).join(" · ")}</div>}
                     <div className="mt-1 flex gap-1 text-[10px] text-stone-500">{RANK_AT.map((at, i) => <span key={at} className={i <= m.rank ? "font-bold text-amber-800" : ""}>{i > 0 && "→ "}{["Apprentice", "Hand", "Foreman"][i]} ({at})</span>)}</div>
                   </>
                 )}

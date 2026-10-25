@@ -6,7 +6,7 @@
 // and recipes and shop rules key off trades, so any number of NPCs can
 // share one. Renamed keys are mapped in src/lib/npcKeys.ts.
 
-import { SETTLEMENT_NPCS } from "./settlements";
+import { SETTLEMENT_NPCS, TOWNS } from "./settlements";
 import type { NpcDef, NpcTrade } from "@/types/npc";
 import type { TownJob } from "@/types/settlement";
 
@@ -353,4 +353,23 @@ export function npcTrades(key: string): readonly NpcTrade[] {
 /** Every seeded NPC that does this trade. */
 export function npcsWithTrade(trade: NpcTrade): NpcDef[] {
   return NPC_DEFS.filter((n) => n.trades.includes(trade));
+}
+
+/** The hand-made places the grove, Hollowmere and Brightwater live in. */
+const HOME_PLACE_NAMES: Readonly<Record<string, string>> = {
+  village: "the grove",
+  hollowmere: "Hollowmere",
+  brightwater: "Brightwater",
+};
+
+/**
+ * The place an NPC lives in, by name ("Hollowmere", "Coralwick", "the
+ * grove"). Names repeat across the continent, so this is what tells two
+ * Milos apart. Null for an NPC with no known home.
+ */
+export function placeOfNpc(npcKey: string): string | null {
+  const townsfolk = SETTLEMENT_NPCS.find((n) => n.key === npcKey);
+  if (townsfolk) return TOWNS.find((t) => t.key === townsfolk.town)?.name ?? townsfolk.town;
+  const prefix = npcKey.split("_")[0];
+  return HOME_PLACE_NAMES[prefix] ?? null;
 }

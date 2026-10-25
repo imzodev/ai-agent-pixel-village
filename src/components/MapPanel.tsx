@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bus } from "@/game/bus";
 import { CHUNK_TILE_H, CHUNK_TILE_W } from "@/lib/chunkCollision";
 import { MAP_BOUNDS, MAP_TILE_H, MAP_TILE_W, WAYSTONE_NEAR_PX, mapTileInBounds, mapTileRect, seenChunks, travelCost } from "@/lib/worldAtlas";
-import type { MapCamera, MapFog, MapMarkers, MapWaystone } from "@/types/map";
+import type { MapCamera, MapFog, MapLetter, MapMarkers, MapWaystone } from "@/types/map";
 import type { BountyView } from "@/types/bounty";
 import type { EncounterView } from "@/types/encounter";
 import { boardPoint } from "@/lib/bounties";
@@ -89,6 +89,7 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
   /** The zoom level shown (an index into ZOOM_LEVELS), and where to keep still while easing to it. */
   const zoom = useRef<{ level: number; anchor: { sx: number; sy: number; wx: number; wy: number } | null }>({ level: OPEN_LEVEL, anchor: null });
   const [hover, setHover] = useState<MapWaystone | null>(null);
+  const [hoverLetter, setHoverLetter] = useState<MapLetter | null>(null);
   const [pick, setPick] = useState<MapWaystone | null>(null);
   const [busy, setBusy] = useState(false);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -101,6 +102,19 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
     void fetch("/api/map/markers").then((r) => r.json()).then((m: MapMarkers & { error?: string }) => { if (off || m.error) return; mapMemory.markers = m; setMarkers(m); }).catch(() => {});
     void fetch(`/api/map/seen?cx0=${b.cx0}&cx1=${b.cx1}&cy0=${b.cy0}&cy1=${b.cy1}`).then((r) => r.json()).then((s) => { if (off || !s.blocks) return; const set = seenChunks(s.blocks); mapMemory.seen = set; setSeen(set); }).catch(() => {});
     return () => { off = true; };
+  }, []);
+
+  // Letter recipients wander, and you may deliver a letter while the map is
+  // open, so ask again now and then (the map's own markers don't change).
+  useEffect(() => {
+    const id = setInterval(() => {
+      void fetch("/api/map/markers").then((r) => r.json()).then((m: MapMarkers & { error?: string }) => {
+        if (m.error) return;
+        mapMemory.markers = m;
+        setMarkers(m);
+      }).catch(() => {});
+    }, 15_000);
+    return () => clearInterval(id);
   }, []);
 
   // The fog as one small image (1 px per chunk), rebuilt only when what you've
@@ -251,6 +265,20 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
       g.fillStyle = "#e8483c"; g.fill(); g.lineWidth = 1.5; g.strokeStyle = "#3a0e0a"; g.stroke();
       g.fillStyle = "#fff"; g.beginPath(); g.arc(x, y - 12, 2.2, 0, Math.PI * 2); g.fill();
     }
+    // Your letters: where to take them (a courier's addresses). Drawn last, so
+    // an envelope is never hidden by the quest star or your own pin.
+    if (markers.letters?.length) {
+      g.font = `${scale >= 1 ? 20 : 17}px serif`;
+      for (const l of markers.letters) {
+        const x = sx(l.x), y = sy(l.y) - 8;
+        // a soft halo so the envelope shows over any ground
+        g.fillStyle = "rgba(255,240,190,0.35)";
+        g.beginPath(); g.arc(x, y, scale >= 1 ? 12 : 10, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#fffdf4"; // the envelope itself, in white
+        g.fillText("✉️", x, y);
+      }
+      g.font = `${scale >= 1 ? 16 : 13}px serif`;
+    }
   }, [markers, fog, seenAt, hover, guide, me, bounties, encounters]);
 
   // Redraw every frame while open (the star and your pin pulse).
@@ -275,6 +303,17 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
       if (!w.attuned && !seenAt(w.x, w.y)) continue;
       const px = ((w.x - x) / 16) * scale + r.width / 2 + r.left, py = ((w.y - y) / 16) * scale + r.height / 2 + r.top - 8;
       if (Math.hypot(px - clientX, py - clientY) <= 12) return w;
+    }
+    return null;
+  };
+  /** The letter marker under the cursor, if any. */
+  const letterAt = (clientX: number, clientY: number): MapLetter | null => {
+    if (!markers?.letters?.length) return null;
+    const r = wrap.current!.getBoundingClientRect();
+    const { x, y, scale } = cam.current;
+    for (const l of markers.letters) {
+      const px = ((l.x - x) / 16) * scale + r.width / 2 + r.left, py = ((l.y - y) / 16) * scale + r.height / 2 + r.top - 8;
+      if (Math.hypot(px - clientX, py - clientY) <= 14) return l;
     }
     return null;
   };
@@ -342,7 +381,7 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
             if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
             cam.current.x -= (dx / cam.current.scale) * 16; cam.current.y -= (dy / cam.current.scale) * 16;
             d.x = e.clientX; d.y = e.clientY;
-          } else setHover(stoneAt(e.clientX, e.clientY));
+          } else { setHover(stoneAt(e.clientX, e.clientY)); setHoverLetter(letterAt(e.clientX, e.clientY)); }
         }}
         onPointerUp={(e) => {
           const d = drag.current;
@@ -359,6 +398,7 @@ export default function MapPanel({ me, guide, bounties = [], encounters = [], ex
         </div>
         {!markers && <div className="absolute inset-0 flex items-center justify-center text-amber-100">Unrolling the map…</div>}
         {hover && !pick && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-white">◆ {hover.name}{hover.attuned ? ` · travel ${cost ? `${cost} 🪙` : "free"}` : " · not attuned yet"}</div>}
+        {hoverLetter && !hover && <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/70 px-2 py-1 text-xs text-white">✉️ Letter for {hoverLetter.name}{hoverLetter.place ? ` (in ${hoverLetter.place})` : ""}</div>}
         {pick && (
           <div className="absolute inset-x-0 bottom-3 mx-auto w-[min(92%,340px)] pixel-panel p-3 text-center text-sm text-amber-950">
             <div className="mb-2 font-bold">Travel to the {pick.name}?</div>

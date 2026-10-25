@@ -14,9 +14,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { and, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { characterMapSeen, characterWaystones, lots } from "@/db/schema";
+import { characterMapSeen, characterWaystones, jobs, lots, npcs } from "@/db/schema";
 import { PLACES } from "./regions";
 import { defaultChunk } from "./chunkGen";
 import { readAuthored, restyleAuthored } from "./villageRestyle";
@@ -27,8 +27,11 @@ import { nearestFirst, tileFile, tilesAt } from "./mapOverview";
 import { requestMapJob } from "./mapRenderPool";
 import { LAIR_SPOTS, lairBoss } from "./lairs";
 import { TOWNS } from "./settlements";
+import { npcDef } from "./npcDefs";
+import { undeliveredLetters } from "./jobs";
+import { rowPositionAt } from "./motion";
 import { MAP_BOUNDS, MAP_MAX_ZOOM, MAP_TILE_CHUNKS, MAP_TILE_H, MAP_TILE_W, chunkInBounds, mapTileInBounds, mapTileRect, seenMasks } from "./worldAtlas";
-import type { MapMarkers, MapPlace, MapSourceJson, MapWaystone, SeenBlock, TilesetColors } from "@/types/map";
+import type { MapLetter, MapMarkers, MapPlace, MapSourceJson, MapWaystone, SeenBlock, TilesetColors } from "@/types/map";
 
 /** Bump when the renderer changes, so cached tiles re-render. */
 const RENDER_VERSION = 1;
@@ -267,6 +270,33 @@ export async function waystoneList(): Promise<{ key: string; name: string; x: nu
 
 const PLACE_KIND: Readonly<Record<string, MapPlace["kind"]>> = { inn: "inn", forge: "forge" };
 
+/**
+ * Where to take the letters you're carrying: each recipient's live spot
+ * (their home tile if they're not in the world right now), so the map can
+ * mark them. Names repeat across the continent, so the place is carried
+ * along too.
+ */
+async function letterMarkers(characterId: number): Promise<MapLetter[]> {
+  const rows = await db.select({ progress: jobs.progress }).from(jobs)
+    .where(and(eq(jobs.characterId, characterId), eq(jobs.status, "active")));
+  const todo = undeliveredLetters(rows);
+  if (!todo.length) return [];
+  const keys = [...new Set(todo.map((l) => l.to))];
+  const found = await db.select().from(npcs).where(inArray(npcs.key, keys));
+  const byKey = new Map(found.map((n) => [n.key, n]));
+  const now = Date.now();
+  const out: MapLetter[] = [];
+  for (const l of todo) {
+    const n = byKey.get(l.to);
+    const home = npcDef(l.to)?.tilePos;
+    // Their live spot if they're here; otherwise the door they live at.
+    const pos = n ? rowPositionAt(n, now) : home ? { x: home[0] * 16 + 8, y: home[1] * 16 + 8 } : null;
+    if (!pos) continue;
+    out.push({ to: l.to, name: l.toName, ...(l.toPlace ? { place: l.toPlace } : {}), x: pos.x, y: pos.y });
+  }
+  return out;
+}
+
 /** What the map draws over its tiles, for one character. */
 export async function mapMarkers(characterId: number): Promise<MapMarkers> {
   const manifest = (await getBuildingsManifest()).buildings;
@@ -315,5 +345,6 @@ export async function mapMarkers(characterId: number): Promise<MapMarkers> {
   // Your homestead's parcels (the map pictures never show them: they're drawn over).
   const [home] = await db.select({ id: lots.id, tx: lots.tx, ty: lots.ty }).from(lots).where(and(eq(lots.ownerId, characterId), eq(lots.kind, "homestead"))).limit(1);
   const homestead = home ? { tx: home.tx, ty: home.ty, parcels: await parcelsOf(home.id) } : undefined;
-  return { version: await tilesVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions, ...(homestead ? { homestead } : {}) };
+  const letters = await letterMarkers(characterId);
+  return { version: await tilesVersion(), bounds: MAP_BOUNDS, waystones, places, lots: myLots, regions, ...(homestead ? { homestead } : {}), ...(letters.length ? { letters } : {}) };
 }

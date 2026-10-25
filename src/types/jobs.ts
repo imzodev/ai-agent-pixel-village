@@ -28,7 +28,18 @@ export type JobDef = {
 };
 
 /** A letter in a courier's bag today. */
-export type JobLetter = { to: string; toName: string; pay: number; delivered: boolean };
+export type JobLetter = {
+  /** The recipient's NPC key. */
+  to: string;
+  /** The recipient's name ("Milo") — names repeat, so read toPlace/toRole too. */
+  toName: string;
+  /** Where the recipient lives ("Coralwick", "the grove"), when known. */
+  toPlace?: string;
+  /** What the recipient does there ("Innkeeper of Coralwick"), when known. */
+  toRole?: string;
+  pay: number;
+  delivered: boolean;
+};
 
 /** Today's progress on a job (reset when the day changes). */
 export type JobProgress = {
