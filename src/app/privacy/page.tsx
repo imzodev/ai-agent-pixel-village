@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         <li><b>Your account:</b> your username and your password, stored only as a salted hash (we can&apos;t read it). We don&apos;t ask for your email or real name.</li>
         <li><b>Your game:</b> your character&apos;s name and look, where they are, what they own, their progress, friends, and the things you do in the world.</li>
         <li><b>What you write:</b> chat that other players see, and what you say to the villagers (NPCs). Chat is public in the world; reports about a player keep their recent chat so we can review it.</li>
-        <li><b>Basic play statistics:</b> things like when an account was created, which days it played, and whether the tutorial was finished, kept on our own server to understand how the game is doing. No third-party analytics.</li>
+        <li><b>Basic play statistics:</b> things like when an account was created, which days it played, and whether the tutorial was finished, kept on our own server to understand how the game is doing. Signed-in play is never sent to third-party analytics.</li>
         <li><b>Purchases and memberships:</b> what you bought, when, and your membership&apos;s plan and renewal date, so we can deliver it and help if something goes wrong.</li>
         <li><b>Invites:</b> if you joined through someone&apos;s profile or shared moment, which player invited you, so you can both get the invite reward.</li>
         <li><b>Advertisers:</b> if you rent a billboard, your email, the poster you upload, its title and link, and how many players saw and clicked it. The poster (and its title and link) are public once approved. Uploaded images are re-drawn, so photo details like location are removed.</li>
@@ -29,6 +29,7 @@ export default function PrivacyPage() {
       <ul>
         <li><b>Other players</b> see your character, its name and title, your chat, and your public profile page with your achievements. Moments you choose to share are public pages.</li>
         <li><b>AI providers:</b> the villagers&apos; replies are written by an AI service (such as MiniMax, OpenAI or DeepSeek). What you say to a villager, your character&apos;s name and a short note of past conversations are sent to it to write the reply. Don&apos;t share personal information with villagers.</li>
+        <li><b>Proof of Traction:</b> visitors who aren&apos;t signed in see a Proof of Traction badge on the home page, which counts page views for our public listing there. It sends the page address, the page you came from, your screen size and language; no cookies, and nothing about your account. It isn&apos;t loaded once you&apos;re signed in.</li>
         <li><b>Payments:</b> if you buy gems or a membership, or a business reserves a building or a billboard, the payment is handled by Stripe, which also keeps your billing email. We never see your card details; we get only a record of the payment and subscription.</li>
         <li><b>Advertisers&apos; sites:</b> when you click a billboard you leave thegroove for the advertiser&apos;s site, which has its own privacy policy. The link tells them you came from thegroove, nothing more.</li>
       </ul>
