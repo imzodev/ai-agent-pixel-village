@@ -67,8 +67,10 @@ export type { Snapshot };
 // server in src/server.ts), so the in-process cache below already
 // serves every reader. A Redis copy adds a GET per cache miss and a
 // SET per rebuild with no in-process benefit — at one rebuild every
-// WS_REFRESH_MS that alone exceeds a small Upstash plan. Enable it only
-// for a multi-process deployment that shares snapshots across processes.
+// WS_REFRESH_MS that alone exceeds a small Upstash plan. Each GET/SET
+// carries the whole snapshot JSON (tens of KB), so a handful of players
+// burns over 1 GB of Upstash bandwidth a day. Enable it only for a
+// multi-process deployment that shares snapshots across processes.
 const SNAPSHOT_REDIS_CACHE = process.env.SNAPSHOT_REDIS_CACHE === "1";
 
 // TTL for the opt-in Redis snapshot cache (seconds). Only read when
