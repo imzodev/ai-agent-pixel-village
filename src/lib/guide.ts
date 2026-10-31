@@ -11,6 +11,7 @@ import * as ovenRules from "./oven/rules";
 import * as hiveRules from "./hive/rules";
 import * as flumeRules from "./flume/rules";
 import * as forgeRules from "./forgeGame/rules";
+import * as archeryRules from "./archery/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -64,6 +65,8 @@ export const HIVE_FACTS = { pieces: hiveRules.PIECES, minutes: hiveRules.RUN_TIC
 export const FLUME_FACTS = { logs: flumeRules.LOGS, seconds: flumeRules.RUN_TICKS / flumeRules.TICKS_PER_SEC, birch: flumeRules.BIRCH_BONUS, title: flumeRules.PRIZE_TITLE, gems: flumeRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(flumeRules.PERFECT_BONUS * 100) };
 /** Bjorn's Forge, the smithing minigame: commissions, the run's length and the week's prizes. */
 export const FORGE_FACTS = { commissions: forgeRules.COMMISSIONS, seconds: forgeRules.RUN_TICKS / forgeRules.TICKS_PER_SEC, prep: forgeRules.PREP_TICKS / forgeRules.TICKS_PER_SEC, title: forgeRules.PRIZE_TITLE, gems: forgeRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(forgeRules.PERFECT_BONUS * 100) };
+/** Pip's Archery Butts, the shooting minigame: arrows, the run's length, the apple and the week's prizes. */
+export const ARCHERY_FACTS = { arrows: archeryRules.ARROWS, seconds: archeryRules.RUN_TICKS / archeryRules.TICKS_PER_SEC, chain: archeryRules.CHAIN_MAX, apple: archeryRules.APPLE_BONUS, title: archeryRules.PRIZE_TITLE, gems: archeryRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(archeryRules.PERFECT_BONUS * 100) };
 export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

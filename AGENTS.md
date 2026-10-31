@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -543,6 +543,19 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   `rules.ts` (every number, the pieces, fuels and tools), `course.ts` the day's commissions
   (easiest first) and fire, `sim.ts` the run (its `log` is what the screen reads). Types:
   `src/types/forgeGame.ts` (the world's own forge types stay in `src/types/forge.ts`).
+- **Pip's Archery Butts**: 20 arrows in 60 s down a range seen side-on. Press and drag back:
+  the pull is a whole-number vector (`dx² + dy² ≤ MAX_DRAW²`, never an angle), its length the
+  power; a loose then `NOCK_TICKS` before the next. Arrows fly by explicit Euler steps (wind ×
+  `WIND_K`, then `GRAVITY`, metres and ticks) and stop at the first thing their step crosses:
+  a butt's upright face (`RING_OUTER` either side of its centre; bull, inner, outer by height;
+  moving butts tested at both ends of the tick), the golden apple while it's on the scarecrow's
+  hat (`APPLE_BONUS`, once), or the ground. Ring points × the butt's `worth` × the run of hits
+  (up to `CHAIN_MAX`; a miss resets it). The course: a post near, a post or a hoist (rides a
+  rope up and down), Tobin's cart or another hoist (back and forth along the range, a
+  triangle wave), a far butt, and at weekends the King's butt; the wind a step at a time every
+  5 s. Arrows in the air at the bell land within `GRACE_TICKS`. `src/lib/archery/`: `rules.ts`,
+  `course.ts`, `sim.ts`; drawn in code (`src/components/archery/draw.ts`; heights drawn at a
+  bigger scale than distances so the faces read).
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -572,7 +585,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`, `prize_archer_cap`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -583,7 +596,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   (`scripts/draw-oven-stall.mjs`), Della's hives outside the ranch's west fence
   (`scripts/draw-hive-stall.mjs`), Ansel's log chute in Hollowmere
   (`scripts/draw-flume-stall.mjs`), Bjorn's smithy in Hollowmere
-  (`scripts/draw-forge-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-forge-stall.mjs`), Pip's archery butts north of Pip's cabin
+  (`scripts/draw-archery-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

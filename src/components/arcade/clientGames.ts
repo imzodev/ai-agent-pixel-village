@@ -8,6 +8,7 @@ import OvenField from "../oven/OvenField";
 import HiveField from "../hive/HiveField";
 import FlumeField from "../flume/FlumeField";
 import ForgeField from "../forge/ForgeField";
+import ArcheryField from "../archery/ArcheryField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -80,6 +81,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["⚒️", "Strike when the ring closes on the anvil, one blow a beat, while the iron glows in the bright sweet band."],
       ["💔", "Too cold and it cracks; white hot, or left in the coals, it burns out. Knock the scale off as it comes loose."],
       ["📅", "A new board and fire every day; the week's best win prizes in the village."],
+    ],
+  },
+  archery: {
+    Field: ArcheryField,
+    pitch: "Pip's range behind the cabins: twenty arrows, one minute, and the wind never quite where you left it.",
+    howTo: [
+      ["🏹", "Press anywhere and drag back to draw the bow: how far is how hard, the angle is the shot. Let go to loose."],
+      ["🎯", "Gold, red, blue: further butts pay more, and every hit in a row multiplies the next (up to ×4). A miss breaks the run."],
+      ["🍃", "Watch the pennant: the wind pushes every arrow down the range or back. The hoist rides its rope, Tobin's cart rolls."],
+      ["🍎", "For a while the golden apple sits on the scarecrow's hat. A new range every day; the week's best win prizes."],
     ],
   },
 };

@@ -25,6 +25,9 @@ import * as flume from "../flume/rules";
 import { forgeCourseFor } from "../forgeGame/course";
 import { cleanForgeInputs, replayForge } from "../forgeGame/sim";
 import * as forge from "../forgeGame/rules";
+import { archeryCourseFor } from "../archery/course";
+import { cleanArcheryInputs, replayArchery } from "../archery/sim";
+import * as archery from "../archery/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
@@ -34,6 +37,7 @@ import type { OvenCourse, OvenInput } from "@/types/oven";
 import type { HiveCourse, HiveInput } from "@/types/hive";
 import type { FlumeCourse, FlumeInput } from "@/types/flume";
 import type { ForgeCourse, ForgeInput } from "@/types/forgeGame";
+import type { ArcheryCourse, ArcheryInput } from "@/types/archery";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -111,6 +115,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayForge(course as ForgeCourse, inputs as ForgeInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "completed")}/${forge.COMMISSIONS} commissions forged${n(d, "perfect") ? `, ${n(d, "perfect")} perfect strikes` : ""}${n(d, "ruined") ? `, ${n(d, "ruined")} billet${n(d, "ruined") === 1 ? "" : "s"} lost` : ""}`,
+  },
+  archery: {
+    key: "archery", name: "Pip's Archery Butts", emoji: "🏹", tagline: "Mind the wind, split the bull", path: "/archery",
+    epoch: archery.ARCHERY_EPOCH, tickMs: archery.TICK_MS,
+    prize: { gems: archery.WEEKLY_PRIZE_GEMS, title: archery.PRIZE_TITLE, cosmetic: archery.PRIZE_COSMETIC },
+    courseFor: (day, salt) => archeryCourseFor(day, salt),
+    cleanInputs: (raw) => cleanArcheryInputs(raw),
+    replay: (course, inputs) => replayArchery(course as ArcheryCourse, inputs as ArcheryInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "hits")}/${archery.ARROWS} hits${n(d, "bulls") ? `, ${n(d, "bulls")} bull${n(d, "bulls") === 1 ? "" : "s"}` : ""}${n(d, "apple") ? ", the golden apple" : ""}`,
   },
 };
 

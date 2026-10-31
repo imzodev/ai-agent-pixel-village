@@ -7,7 +7,9 @@
 // three ovens over the day's orders (for a run, what was served); Beehive
 // Builder's is the comb (for a run, as it ended); Log Flume's is the river with its
 // rocks and the mill (for a run, the tally at each gate); Bjorn's Forge's is the
-// anvil over the heat strip (for a run, the day's board with each commission).
+// anvil over the heat strip (for a run, the day's board with each commission);
+// Pip's Archery Butts' is a target face over the day's butts (for a run, where
+// each arrow struck and the tally at each butt).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +30,8 @@ import { FIELD_H as RIVER_H, FIELD_W as RIVER_W, MILL_Y } from "@/lib/flume/rule
 import { replayFlume } from "@/lib/flume/sim";
 import { FORGE_PIECES } from "@/lib/forgeGame/rules";
 import { replayForge } from "@/lib/forgeGame/sim";
+import { RING_BULL, RING_INNER, RING_OUTER } from "@/lib/archery/rules";
+import { replayArchery } from "@/lib/archery/sim";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -39,6 +43,7 @@ import type { OvenCourse, OvenInput, OvenState } from "@/types/oven";
 import type { HiveCourse, HiveInput, HiveState } from "@/types/hive";
 import type { FlumeCourse, FlumeInput, FlumeState } from "@/types/flume";
 import type { ForgeCourse, ForgeInput, ForgeState } from "@/types/forgeGame";
+import type { ArcheryCourse, ArcheryInput, ArcheryState, ArcheryTargetKind } from "@/types/archery";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -209,6 +214,33 @@ function forgeSvg(course: ForgeCourse, st: ForgeState | null): string {
     ${forge}${anvil}${billet}${bars}</svg>`;
 }
 
+const BUTT_NAMES: Record<ArcheryTargetKind, string> = { post: "post", hoist: "hoist", cart: "cart", king: "King's" };
+
+/** Pip's Archery Butts: a target face, and the day's butts down the range; for a run, each arrow where it struck and each butt's tally. */
+function archerySvg(course: ArcheryCourse, st: ArcheryState | null): string {
+  const W = PIC_W, cx = W / 2, cy = 150, R = 118;
+  const rings = [[RING_OUTER, "#2f6fb8"], [RING_INNER, "#d24a3a"], [RING_BULL, "#f2c230"]] as const;
+  const face = `<circle cx="${cx}" cy="${cy}" r="${R + 10}" fill="#c8a45a"/><circle cx="${cx}" cy="${cy}" r="${R + 2}" fill="#f4f0e4"/>${rings
+    .map(([r, col]) => `<circle cx="${cx}" cy="${cy}" r="${Math.round((r / RING_OUTER) * R)}" fill="${col}"/>`).join("")}`;
+  // Where each arrow struck: its height on the face is real; across, spread out so they don't hide each other.
+  const holes = (st?.arrows ?? []).map((a, i) => {
+    if (a.state !== "stuck") return "";
+    const y = cy - (a.dy / RING_OUTER) * R, half = Math.sqrt(Math.max(0, R * R - (y - cy) * (y - cy)));
+    const x = cx + ((((i * 37) % 19) - 9) / 10) * half * 0.8;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="#3a2414" stroke="#f4ead0" stroke-width="1.5"/>`;
+  }).join("");
+  const rows = course.targets.map((t, i) => {
+    const y = 316 + i * 40, hits = st ? st.arrows.filter((a) => a.state === "stuck" && a.target === i).length : null;
+    const at = Math.round(Math.min(t.x0, t.x1));
+    return `<rect x="10" y="${y}" width="${W - 20}" height="34" rx="6" fill="${t.kind === "king" ? "#5a2a6a" : "#2e4a22"}"/>
+      <text x="22" y="${y + 23}" font-size="17" font-family="sans-serif" font-weight="bold" fill="#f4ead0">${at} m · ${BUTT_NAMES[t.kind]}</text>
+      <text x="${W - 22}" y="${y + 23}" font-size="17" text-anchor="end" font-family="sans-serif" font-weight="bold" fill="${GOLD}">${hits === null ? `×${t.worth}` : `${hits} hit${hits === 1 ? "" : "s"}`}</text>`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#5b9a40"/>
+    <rect width="${W}" height="300" fill="#8fc4ec"/><rect y="282" width="${W}" height="18" fill="#6fae4e"/>
+    <rect x="${cx - 4}" y="${cy + R}" width="8" height="${282 - cy - R}" fill="#7a5230"/>${face}${holes}${rows}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
@@ -230,6 +262,10 @@ function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | nu
   if (game === "forge") {
     const c = course as ForgeCourse;
     return forgeSvg(c, inputs ? replayForge(c, inputs as ForgeInput[]).state : null);
+  }
+  if (game === "archery") {
+    const c = course as ArcheryCourse;
+    return archerySvg(c, inputs ? replayArchery(c, inputs as ArcheryInput[]).state : null);
   }
   if (game === "derby") {
     const c = course as DerbyCourse;
@@ -324,6 +360,16 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${c.commissions.length} commissions on Bjorn's board`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
       { text: `${strikes} blows wanted · the fire ${roars > lows ? "runs hot" : lows > roars ? "runs low" : "keeps steady"} today`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
       { text: "Heat the iron, strike it true, and don't burn it out.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "archery") {
+    const c = course as ArcheryCourse;
+    const moving = c.targets.filter((t) => t.kind === "hoist" || t.kind === "cart").length;
+    const gusty = c.wind.filter((w) => Math.abs(w) >= 3).length;
+    const far = Math.round(Math.max(...c.targets.map((t) => Math.max(t.x0, t.x1))));
+    lines = [
+      { text: `Today: ${c.targets.length} butts out to ${far} m${c.targets.some((t) => t.kind === "king") ? ", the King's butt at the end" : ""}`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${moving ? `${moving} on the move` : "all standing still"} · ${gusty > 3 ? "a gusty day" : gusty ? "now and then a gust" : "a gentle breeze"}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Twenty arrows, one minute. Mind the wind and split the bull.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "derby") {
     const c = course as DerbyCourse, t = DERBY_FISH[c.fish[c.fish.length - 1].key];

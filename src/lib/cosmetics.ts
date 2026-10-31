@@ -117,6 +117,10 @@ export const COSMETIC_CATALOG: CosmeticItem[] = [
     key: "prize_smith_goggles", name: "Master Smith's Goggles", slot: "glasses", assetRef: "/lpc/glasses_round.png", tintColor: "#c8763a",
     rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
   },
+  {
+    key: "prize_archer_cap", name: "Sharpshooter's Cap", slot: "hat", assetRef: "/lpc/hat_straw.png", tintColor: "#c0392b",
+    rarity: "rare", coinPrice: 0, gemPrice: 0, sponsorGrantedOnly: false, sponsorId: null, availableFrom: null, availableUntil: null,
+  },
 ];
 
 /** Look up a cosmetic by its key. */

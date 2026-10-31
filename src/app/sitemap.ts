@@ -16,6 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${BASE}/hive`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/flume`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/forge`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
+    { url: `${BASE}/archery`, lastModified: now, changeFrequency: "daily", priority: 0.8 },
     { url: `${BASE}/guide`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: `${BASE}/signup`, lastModified: now, changeFrequency: "monthly", priority: 0.8 },
     { url: `${BASE}/agents`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },

@@ -45,7 +45,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["shopkeeper"],
     role: "Cabin Dweller",
     persona:
-      "Pip is a quick, curious cabin dweller who collects interesting rocks and odds. Trades small favours for small stories and is delighted by anything shiny.",
+      "Pip is a quick, curious cabin dweller who collects interesting rocks and odds. Trades small favours for small stories and is delighted by anything shiny. Sells bows and arrows, and by the cabin keeps the archery butts: a new range every day, twenty arrows a minute, and a golden apple on the scarecrow's hat for whoever can hit it (Pip's Archery Butts).",
     greeting: "Ah! A visitor. Or a neighbor. Both welcome. Do you have any interesting rocks?",
     tilePos: [16, 8],
     wanderRadius: 70,
