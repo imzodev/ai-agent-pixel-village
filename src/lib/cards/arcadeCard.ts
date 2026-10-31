@@ -9,7 +9,9 @@
 // rocks and the mill (for a run, the tally at each gate); Bjorn's Forge's is the
 // anvil over the heat strip (for a run, the day's board with each commission);
 // Pip's Archery Butts' is a target face over the day's butts (for a run, where
-// each arrow struck and the tally at each butt).
+// each arrow struck and the tally at each butt); Della's Loom's is the cloth on the
+// loom (for a course, the day's figure and a sample woven from it, never the real
+// rows; for a run, every row woven, with its snags).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -32,6 +34,9 @@ import { FORGE_PIECES } from "@/lib/forgeGame/rules";
 import { replayForge } from "@/lib/forgeGame/sim";
 import { RING_BULL, RING_INNER, RING_OUTER } from "@/lib/archery/rules";
 import { replayArchery } from "@/lib/archery/sim";
+import { GOLD as GOLD_THREAD, ROWS as LOOM_ROWS } from "@/lib/loom/rules";
+import { replayLoom } from "@/lib/loom/sim";
+import { SPOOL_COLORS } from "@/components/loom/draw";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -44,6 +49,7 @@ import type { HiveCourse, HiveInput, HiveState } from "@/types/hive";
 import type { FlumeCourse, FlumeInput, FlumeState } from "@/types/flume";
 import type { ForgeCourse, ForgeInput, ForgeState } from "@/types/forgeGame";
 import type { ArcheryCourse, ArcheryInput, ArcheryState, ArcheryTargetKind } from "@/types/archery";
+import type { LoomCourse, LoomInput, LoomState } from "@/types/loom";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -241,6 +247,29 @@ function archerySvg(course: ArcheryCourse, st: ArcheryState | null): string {
     <rect x="${cx - 4}" y="${cy + R}" width="8" height="${282 - cy - R}" fill="#7a5230"/>${face}${holes}${rows}</svg>`;
 }
 
+/** Della's Loom: the cloth on the loom, the newest row nearest the beam; for a course, the day's figure over a sample woven from it (the real rows would give the game away). */
+function loomSvg(course: LoomCourse, st: LoomState | null): string {
+  const W = PIC_W, x0 = 26, cw = W - 52, beam = 470, band = 16;
+  const f = course.figure;
+  const sample = Array.from({ length: 6 }, (_, r) => ({ threads: Array.from({ length: 8 }, (_, i) => f[(i + r) % f.length]) }));
+  const cloth = st ? course.rows : sample;
+  const woven = st ? st.row : sample.length;
+  const warp = Array.from({ length: 31 }, (_, i) => `<line x1="${(x0 + 2 + i * ((cw - 4) / 30)).toFixed(1)}" y1="64" x2="${(x0 + 2 + i * ((cw - 4) / 30)).toFixed(1)}" y2="${beam}" stroke="#e8dcc4" stroke-opacity=".5"/>`).join("");
+  const rows = cloth.slice(0, Math.min(woven, LOOM_ROWS)).map((r, i) => {
+    const y = beam - band * (i + 1), w = cw / r.threads.length;
+    return r.threads.map((c, j) => `<rect x="${(x0 + w * j).toFixed(1)}" y="${y}" width="${(w + 0.6).toFixed(1)}" height="${band - 1}" fill="${SPOOL_COLORS[c]}"${c === GOLD_THREAD ? ' stroke="#fff4c0" stroke-width="1"' : ""}/>`).join("");
+  }).join("");
+  const snags = (st?.snagged ?? []).filter((s) => s.row < woven).map((s) => {
+    const r = course.rows[s.row], w = cw / r.threads.length, slot = r.kind === "back" ? r.threads.length - 1 - s.i : s.i;
+    const x = x0 + w * slot + w / 2, y = beam - band * (s.row + 1) + 3;
+    return `<path d="M${(x - 6).toFixed(1)} ${y + 8} q6 -14 12 0" fill="none" stroke="#3a1414" stroke-width="3"/>`;
+  }).join("");
+  const figure = st ? "" : course.figure.map((c, i) => `<rect x="${W / 2 - course.figure.length * 18 + i * 36}" y="16" width="32" height="32" rx="6" fill="${SPOOL_COLORS[c]}" stroke="#2a1a10" stroke-width="2"/>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#7a5a3a"/>
+    <rect x="4" y="56" width="16" height="${beam - 40}" fill="#5a3a22"/><rect x="${W - 20}" y="56" width="16" height="${beam - 40}" fill="#5a3a22"/>
+    <rect x="0" y="52" width="${W}" height="14" fill="#7a4e2c"/>${warp}${rows}${snags}<rect x="0" y="${beam}" width="${W}" height="20" fill="#7a4e2c"/>${figure}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
@@ -266,6 +295,10 @@ function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | nu
   if (game === "archery") {
     const c = course as ArcheryCourse;
     return archerySvg(c, inputs ? replayArchery(c, inputs as ArcheryInput[]).state : null);
+  }
+  if (game === "loom") {
+    const c = course as LoomCourse;
+    return loomSvg(c, inputs ? replayLoom(c, inputs as LoomInput[]).state : null);
   }
   if (game === "derby") {
     const c = course as DerbyCourse;
@@ -370,6 +403,14 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${c.targets.length} butts out to ${far} m${c.targets.some((t) => t.kind === "king") ? ", the King's butt at the end" : ""}`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
       { text: `${moving ? `${moving} on the move` : "all standing still"} · ${gusty > 3 ? "a gusty day" : gusty ? "now and then a gust" : "a gentle breeze"}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
       { text: "Twenty arrows, one minute. Mind the wind and split the bull.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "loom") {
+    const c = course as LoomCourse;
+    const backs = c.rows.filter((r) => r.kind === "back").length, golds = c.rows.filter((r) => r.threads.includes(GOLD_THREAD)).length;
+    lines = [
+      { text: `Today: a ${c.figure.length}-thread figure in ${new Set(c.figure).size} colours, ${c.rows.length} rows`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${backs} rows "and back again"${golds ? ` · the gold thread runs through ${golds}` : ""}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "Watch the row, weave it from memory. Ninety seconds, three snags.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "derby") {
     const c = course as DerbyCourse, t = DERBY_FISH[c.fish[c.fish.length - 1].key];

@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -556,6 +556,17 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   5 s. Arrows in the air at the bell land within `GRACE_TICKS`. `src/lib/archery/`: `rules.ts`,
   `course.ts`, `sim.ts`; drawn in code (`src/components/archery/draw.ts`; heights drawn at a
   bigger scale than distances so the faces read).
+- **Della's Loom**: a memory game, 90 s, front-on. Della shows a row of the day's cloth thread by
+  thread (each spool lit `row.show` ticks, `GAP_TICKS` apart, after `LEAD_TICKS`); then you tap the
+  spools in order (`expected`: "back" rows in reverse, ×`BACK_MULT`). Ready (`k: "ready"`) ends a
+  show once a thread has lit; on a row's first show every thread not yet lit pays `MEMORY_BONUS` if
+  the row comes out clean. A wrong thread snags (the row is shown again, the clean-row run resets);
+  `SNAG_MAX` ends the run. A row pays its threads when done, a clean one `ROW_BONUS` × length × the
+  run of clean rows (up to `CHAIN_MAX`); weekends add the gold thread (`GOLD_BONUS`). The course:
+  a figure of 2–4 colours, and 24 rows built from it (repeated, mirrored, doubled or reversed, a
+  twist each), a thread longer and a little quicker to show each row. All whole numbers.
+  `src/lib/loom/`: `rules.ts`, `course.ts`, `sim.ts`; drawn in code (`src/components/loom/draw.ts`;
+  each spool has a mark and a note as well as its colour).
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -585,7 +596,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`, `prize_archer_cap`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`, `prize_archer_cap`, `prize_weaver_smock`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -597,7 +608,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   (`scripts/draw-hive-stall.mjs`), Ansel's log chute in Hollowmere
   (`scripts/draw-flume-stall.mjs`), Bjorn's smithy in Hollowmere
   (`scripts/draw-forge-stall.mjs`), Pip's archery butts north of Pip's cabin
-  (`scripts/draw-archery-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-archery-stall.mjs`), Della's loom south of her hives
+  (`scripts/draw-loom-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

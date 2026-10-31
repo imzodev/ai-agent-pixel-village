@@ -112,6 +112,8 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
     then heat the billet, strike it on the beat in its sweet band and knock the scale off; never let it burn.
   - **Pip's Archery Butts** (`/archery`, or Pip's butts by the cabins): twenty arrows in a minute down a
     range of butts, some moving, with the wind changing; hits in a row multiply, and the golden apple pays big.
+  - **Della's Loom** (`/loom`, or her loom by the ranch's west fence): Della shows a row of cloth thread by
+    thread, you weave it back from memory (some rows in reverse); say Ready early for a bonus, three snags end it.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -164,7 +166,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
-| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/`, `src/lib/flume/`, `src/lib/forgeGame/` and `src/lib/archery/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
+| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/`, `src/lib/flume/`, `src/lib/forgeGame/`, `src/lib/archery/` and `src/lib/loom/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 

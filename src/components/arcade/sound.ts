@@ -9,7 +9,9 @@
 // Log Flume: a plop as a log comes in, a thud on a rock, a crack, the saw.
 // Bjorn's Forge: a hammer on iron, a bright chime for a perfect strike, a crack
 // when the billet goes cold, a hiss when it burns, steam for a quench, the till
-// when a commission is made.
+// when a commission is made. Pip's Archery Butts: the bowstring, a thunk in the
+// straw, a creak as the bow draws. Della's Loom: a note per spool (the same
+// colour always sounds the same, which helps you remember), a snag.
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -69,4 +71,8 @@ export const twangSound = () => { tone(240, 180, 140, "sawtooth", 0.035); tone(4
 export const thunkSound = () => tone(200, 110, 80, "square", 0.05);
 export const creakSound = () => tone(140, 170, 160, "triangle", 0.02);
 /** Call from a tap, so the browser lets sound play afterwards. */
+/** A spool's note (a pentatonic step each, so any row sounds like a tune). */
+const SPOOL_NOTES = [392, 440, 523, 587, 784];
+export const noteSound = (c: number) => { const f = SPOOL_NOTES[c] ?? 440; tone(f, f, 200, "triangle", 0.06); tone(f * 2, f * 2, 120, "sine", 0.02); };
+export const snagSound = () => { tone(300, 180, 160, "sawtooth", 0.04); setTimeout(() => tone(180, 120, 200, "square", 0.03), 90); };
 export const unlockSound = () => void audio();

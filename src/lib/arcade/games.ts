@@ -28,6 +28,9 @@ import * as forge from "../forgeGame/rules";
 import { archeryCourseFor } from "../archery/course";
 import { cleanArcheryInputs, replayArchery } from "../archery/sim";
 import * as archery from "../archery/rules";
+import { loomCourseFor } from "../loom/course";
+import { cleanLoomInputs, replayLoom } from "../loom/sim";
+import * as loom from "../loom/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
@@ -38,6 +41,7 @@ import type { HiveCourse, HiveInput } from "@/types/hive";
 import type { FlumeCourse, FlumeInput } from "@/types/flume";
 import type { ForgeCourse, ForgeInput } from "@/types/forgeGame";
 import type { ArcheryCourse, ArcheryInput } from "@/types/archery";
+import type { LoomCourse, LoomInput } from "@/types/loom";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -125,6 +129,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayArchery(course as ArcheryCourse, inputs as ArcheryInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "hits")}/${archery.ARROWS} hits${n(d, "bulls") ? `, ${n(d, "bulls")} bull${n(d, "bulls") === 1 ? "" : "s"}` : ""}${n(d, "apple") ? ", the golden apple" : ""}`,
+  },
+  loom: {
+    key: "loom", name: "Della's Loom", emoji: "🧶", tagline: "Remember the pattern, weave it clean", path: "/loom",
+    epoch: loom.LOOM_EPOCH, tickMs: loom.TICK_MS,
+    prize: { gems: loom.WEEKLY_PRIZE_GEMS, title: loom.PRIZE_TITLE, cosmetic: loom.PRIZE_COSMETIC },
+    courseFor: (day, salt) => loomCourseFor(day, salt),
+    cleanInputs: (raw) => cleanLoomInputs(raw),
+    replay: (course, inputs) => replayLoom(course as LoomCourse, inputs as LoomInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "rows")} row${n(d, "rows") === 1 ? "" : "s"} woven${n(d, "chain") > 1 ? `, ${n(d, "chain")} clean in a row` : ""}${n(d, "snags") ? `, ${n(d, "snags")} snag${n(d, "snags") === 1 ? "" : "s"}` : ""}`,
   },
 };
 

@@ -9,6 +9,7 @@ import HiveField from "../hive/HiveField";
 import FlumeField from "../flume/FlumeField";
 import ForgeField from "../forge/ForgeField";
 import ArcheryField from "../archery/ArcheryField";
+import LoomField from "../loom/LoomField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -91,6 +92,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["🎯", "Gold, red, blue: further butts pay more, and every hit in a row multiplies the next (up to ×4). A miss breaks the run."],
       ["🍃", "Watch the pennant: the wind pushes every arrow down the range or back. The hoist rides its rope, Tobin's cart rolls."],
       ["🍎", "For a while the golden apple sits on the scarecrow's hat. A new range every day; the week's best win prizes."],
+    ],
+  },
+  loom: {
+    Field: LoomField,
+    pitch: "Della's loom at the ranch: she shows you a row of the cloth, thread by thread, and you weave it back from memory.",
+    howTo: [
+      ["👀", "Watch the row light up, then tap the spools in the same order (or keys 1–5). Each colour has its own mark and note."],
+      ["◀", "\"And back again\" rows go in reverse, last thread first, and pay double. Rows get longer and quicker as the cloth grows."],
+      ["🧠", "Tap \"Got it!\" before the show ends: every thread you hadn't seen pays extra if the row comes out clean."],
+      ["🪢", "A wrong thread snags the cloth and the row is shown again; three snags and it's over. Clean rows in a row multiply."],
     ],
   },
 };

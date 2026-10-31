@@ -2,7 +2,8 @@
 // plaza, Harvest Haul's cart by the Village Ranch's west gate, Fishing Derby's
 // jetty by the Western Meadow pond, Marigold's Oven north of the bakery,
 // Beehive Builder by the ranch's hives, Log Flume by Ansel in Hollowmere,
-// Bjorn's Forge at his smithy and Pip's Archery Butts by Pip's cabin. Walking up opens
+// Bjorn's Forge at his smithy, Pip's Archery Butts by Pip's cabin and Della's Loom
+// south of her hives. Walking up opens
 // the game (ArcadeModal). Spots are chosen once by scripts/gen-arcade-spots.ts
 // (spotsData.json, pinned) on clear ground; each has a sign row on top, and
 // the rows under it block, on the server and the client (setDynamicBlocks).
@@ -20,6 +21,7 @@ const SHAPE: Record<ArcadeGameKey, Omit<ArcadeSpot, "game" | "tx" | "ty">> = {
   flume: { w: 6, h: 4, signRows: 1, name: "Ansel's log flume" },
   forge: { w: 5, h: 4, signRows: 1, name: "Bjorn's forge" },
   archery: { w: 6, h: 4, signRows: 1, name: "Pip's archery butts" },
+  loom: { w: 6, h: 4, signRows: 1, name: "Della's loom" },
 };
 export const SPOT_SHAPE = SHAPE;
 

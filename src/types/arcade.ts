@@ -1,9 +1,9 @@
 // The arcade: minigames with a daily course, server-checked runs, boards and
 // weekly prizes (src/lib/arcade/, src/lib/arcadeServer.ts). Whistle, Harvest
 // Haul, Fishing Derby, Marigold's Oven, Beehive Builder, Log Flume, Bjorn's
-// Forge and Pip's Archery Butts so far; each game's own types are in src/types/<game>.ts. Types only.
+// Forge, Pip's Archery Butts and Della's Loom so far; each game's own types are in src/types/<game>.ts. Types only.
 
-export type ArcadeGameKey = "whistle" | "haul" | "derby" | "oven" | "hive" | "flume" | "forge" | "archery";
+export type ArcadeGameKey = "whistle" | "haul" | "derby" | "oven" | "hive" | "flume" | "forge" | "archery" | "loom";
 
 /** What a run came to: the score, how long it took, and the game's own counts. */
 export type ArcadeResult = { score: number; ticks: number; perfect: boolean; detail: Record<string, number> };
