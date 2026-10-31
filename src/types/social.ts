@@ -20,6 +20,13 @@ export type Friendship = {
   createdAt: Date;
 };
 
+/** Someone the player blocked (GET /api/friends). */
+export type BlockedPlayer = {
+  userId: number;
+  characterId: number | null;
+  characterName: string | null;
+};
+
 export type Presence = {
   userId: number;
   characterId: number;

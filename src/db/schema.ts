@@ -1175,6 +1175,17 @@ export const friendships = pgTable(
   (t) => [index("friendships_a_idx").on(t.userA), index("friendships_b_idx").on(t.userB)],
 );
 
+/** A player who blocked another: their chat bubbles are hidden and friend requests refused, both ways. */
+export const playerBlocks = pgTable(
+  "player_blocks",
+  {
+    blockerUserId: integer("blocker_user_id").notNull(),
+    blockedUserId: integer("blocked_user_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("player_blocks_pair_idx").on(t.blockerUserId, t.blockedUserId), index("player_blocks_blocked_idx").on(t.blockedUserId)],
+);
+
 // ---------- Daily quests ----------
 export const dailyQuests = pgTable(
   "daily_quests",

@@ -10,6 +10,7 @@
 #   shared/.env       secrets, linked into every release
 #   shared/.cache/    map tiles and nav grids, linked into every release
 #   shared/lpc/*.png  sprite sheets (public/lpc is gitignored), linked in
+#   shared/.data/     uploads (billboard posters: BILLBOARD_DIR's default), linked in
 #
 # The old release serves until the symlink swap. If the health check fails
 # after the swap, `current` goes back to the previous release.
@@ -61,6 +62,15 @@ log "building"
 pnpm build
 rm -rf "$rel/.cache"
 ln -sfn "$BASE/shared/.cache" "$rel/.cache"
+# Uploads outlive releases. Posters a release kept in its own .data (before
+# this link existed) are copied over once, never overwriting.
+mkdir -p "$BASE/shared/.data"
+live_rel="$(readlink -f "$BASE/current" 2>/dev/null || true)"
+if [ -n "$live_rel" ] && [ -d "$live_rel/.data" ] && [ ! -L "$live_rel/.data" ]; then
+  cp -an "$live_rel/.data/." "$BASE/shared/.data/"
+fi
+rm -rf "$rel/.data"
+ln -sfn "$BASE/shared/.data" "$rel/.data"
 
 # 4. Database: the drift fix, then push. drizzle-kit can't prompt without a
 #    terminal, and `timeout` stops it if it waits anyway. Never answer

@@ -216,7 +216,7 @@ Or both at once: `pnpm run dev` (uses `concurrently`).
 - `DATABASE_REPLICA_URL` (optional) — Postgres read replica for snapshot/list reads. Unset means reads go to the primary. Also `DATABASE_REPLICA_POOL_MAX`.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_BASE_URL` — real payment rails. Without a key the app runs in sandbox mode outside production (reservations activate instantly, billboards go straight to review). Register **one** webhook endpoint in Stripe (any of `/api/{gems,sponsors,billboards}/webhook`) with `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`.
 - `WHISTLE_SECRET` (optional) — signs the arcade's run tokens and salts each game's daily course, so courses can't be worked out ahead of their day. Falls back to `ADMIN_TOKEN`; with neither, courses are unsalted and tokens die on restart (fine in development).
-- `BILLBOARD_DIR` (optional) — where billboard posters are stored (default `.data/billboards`). Back it up with the database.
+- `BILLBOARD_DIR` (optional) — where billboard posters are stored (default `.data/billboards`). On the droplet it is `shared/.data/billboards` (linked into every release); `scripts/backup-db.sh` backs it up with the database.
 - `MINIMAX_API_KEY`, `OPENAI_API_KEY` or `DEEPSEEK_API_KEY` (+ `<KEY>_MODEL`, `<KEY>_BASE_URL`, `LLM_PROVIDER`, `LLM_FALLBACK`) — LLM-driven NPC dialogue and conversations (see `AGENTS.md`). Without any, the scripted brain runs.
 - `MIND_NPCS` — which NPCs have a mind (real stock, purse, errands); `TYPESAFE_API_KEY` lets Jev pick their actions (a scripted policy otherwise).
 

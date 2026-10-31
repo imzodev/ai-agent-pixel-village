@@ -71,6 +71,7 @@ import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
 import JourneyTracker from "./JourneyTracker";
 import type { JourneyView } from "@/types/journey";
+import type { BlockedPlayer, Presence } from "@/types/social";
 import HelpModal from "./HelpModal";
 import SaveCharacterModal from "./SaveCharacterModal";
 import { deviceKeys } from "@/lib/keyHints";
@@ -210,6 +211,18 @@ export default function Hud() {
     bus.emit("missionMarks", missionMarks);
     return bus.on("sceneReady", () => bus.emit("missionMarks", missionMarks));
   }, [missionMarks]);
+  // Players you blocked (character ids): the scene hides their chat bubbles.
+  const [blocked, setBlocked] = useState<number[]>([]);
+  const fetchBlocked = () => api<{ blocked?: BlockedPlayer[] }>("/api/friends");
+  const applyBlocked = (d: Awaited<ReturnType<typeof fetchBlocked>>) => { if (d.blocked) setBlocked(d.blocked.flatMap((b) => (b.characterId == null ? [] : [b.characterId]))); };
+  const loadBlocked = () => fetchBlocked().then(applyBlocked);
+  const signedIn = !!me;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (signedIn) void fetchBlocked().then(applyBlocked); }, [signedIn]);
+  useEffect(() => {
+    bus.emit("blocked", blocked);
+    return bus.on("sceneReady", () => bus.emit("blocked", blocked));
+  }, [blocked]);
   // The player's level for event handlers (danger warnings) without re-subscribing.
   const levelRef = useRef(1);
   useEffect(() => { levelRef.current = me?.me?.level ?? 1; }, [me]);
@@ -573,6 +586,13 @@ export default function Hud() {
     if (me) bus.emit("hasBike", hasBike);
     return bus.on("sceneReady", () => { if (me) bus.emit("hasBike", hasBike); });
   }, [me, hasBike]);
+
+  const blockPlayer = async (characterId: number, name: string) => {
+    const r = await api("/api/friends", { action: "block", characterId });
+    if (r.error) { toast(r.error, "bad"); return; }
+    toast(`Blocked ${name}. You won't see their chat; unblock them under Friends.`, "good");
+    await loadBlocked();
+  };
 
   const doInspect = async (q: string) => {
     const r = await api<Inspect>(q);
@@ -1282,6 +1302,7 @@ export default function Hud() {
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
           })()}
           {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && <Btn subtle on={() => setReporting({ id: sel.id, name: sel.name })}>🚩 Report</Btn>}
+          {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && !blocked.includes(sel.id) && <Btn subtle on={() => void blockPlayer(sel.id, sel.name)}>🚫 Block</Btn>}
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "item" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🫳 Pick up {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
           {loggedIn && sel.type === "node" && (() => {
@@ -1537,7 +1558,7 @@ export default function Hud() {
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
-          {panel === "friends" && <FriendsPanel />}
+          {panel === "friends" && <FriendsPanel onBlocksChanged={() => void loadBlocked()} />}
           {panel === "book" && <CollectionBook onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
           {panel === "perks" && me && <PerksPanel me={me} onPick={async (perk) => { await post("/api/perks", { perk }); }} />}
           {panel === "home" && me && <HomePanel me={me} onAction={invAction} onTheme={async (t) => { await api("/api/me", { homeTheme: t }, "PATCH"); void refreshMe(); }} />}
@@ -2399,10 +2420,9 @@ function DailyQuestsPanel() {
   );
 }
 
-function FriendsPanel() {
+function FriendsPanel({ onBlocksChanged }: { onBlocksChanged: () => void }) {
   type Incoming = { id: number; fromUserId: number; from: { username: string; characterName: string | null } | null };
-  type Friend = { username: string; characterName: string; status: "online" | "away" | "offline" };
-  const [data, setData] = useState<{ incoming: Incoming[]; friends: Friend[] } | null>(null);
+  const [data, setData] = useState<{ incoming: Incoming[]; friends: Presence[]; blocked: BlockedPlayer[] } | null>(null);
   const fetchFriends = () => fetch("/api/friends").then(async (r) => (r.ok ? r.json() : null));
   const applyFriends = (d: Awaited<ReturnType<typeof fetchFriends>>) => { if (d) setData(d); };
   const load = () => fetchFriends().then(applyFriends);
@@ -2410,6 +2430,20 @@ function FriendsPanel() {
   const respond = async (id: number, decision: "accept" | "decline") => {
     await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: decision, requestId: id }) });
     await load();
+  };
+  // Removing a friend or unblocking someone: a second tap within a few seconds confirms.
+  const [arming, setArming] = useState<string | null>(null);
+  const confirmed = (key: string) => {
+    if (arming === key) { setArming(null); return true; }
+    setArming(key);
+    setTimeout(() => setArming((a) => (a === key ? null : a)), 4000);
+    return false;
+  };
+  const byUser = async (action: "remove" | "unblock", userId: number) => {
+    if (!confirmed(`${action}:${userId}`)) return;
+    await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, userId }) });
+    await load();
+    if (action === "unblock") onBlocksChanged();
   };
   if (!data) return <div className="text-stone-500">loading…</div>;
   return (
@@ -2435,6 +2469,14 @@ function FriendsPanel() {
             <div className="text-[13px] font-bold">{f.characterName}</div>
             <div className="text-[11px] text-stone-600">@{f.username} · {f.status}</div>
           </div>
+          <button onClick={() => void byUser("remove", f.userId)} className="rounded bg-stone-200 px-2 py-1 text-[12px]">{arming === `remove:${f.userId}` ? "sure?" : "remove"}</button>
+        </div>
+      ))}
+      {data.blocked.length > 0 && <div className="text-sm font-bold text-amber-900">Blocked</div>}
+      {data.blocked.map((b) => (
+        <div key={b.userId} className="flex items-center gap-2 rounded-lg border-2 border-stone-300 bg-white/80 p-2">
+          <div className="flex-1 text-[13px] font-bold">{b.characterName ?? "a player"}</div>
+          <button onClick={() => void byUser("unblock", b.userId)} className="rounded bg-stone-200 px-2 py-1 text-[12px]">{arming === `unblock:${b.userId}` ? "sure?" : "unblock"}</button>
         </div>
       ))}
     </div>

@@ -1,11 +1,11 @@
 // Drizzle adapter for friends. Stores requests + canonical (lower,higher)
 // friendships so the (a,b) pair is unique regardless of insert order.
 
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { FriendRequest, FriendRequestStatus, Friendship, Presence } from "@/types/social";
+import type { BlockedPlayer, FriendRequest, FriendRequestStatus, Friendship, Presence } from "@/types/social";
 import { characters, users } from "@/db/schema";
-import { friendRequests, friendships } from "@/db/schema";
+import { friendRequests, friendships, playerBlocks } from "@/db/schema";
 
 const TWO_MIN = 2 * 60_000;
 const FIFTEEN_MIN = 15 * 60_000;
@@ -67,6 +67,60 @@ export class DrizzleFriendRepo {
     return rows.map((r) => (r.a === userId ? r.b : r.a));
   }
 
+  async removeFriend(userA: number, userB: number): Promise<void> {
+    const [a, b] = this.canonical(userA, userB);
+    await this.db.delete(friendships).where(and(eq(friendships.userA, a), eq(friendships.userB, b)));
+  }
+
+  /** Pending requests either way between two users become "cancelled". */
+  async cancelRequestsBetween(userA: number, userB: number): Promise<void> {
+    await this.db
+      .update(friendRequests)
+      .set({ status: "cancelled", resolvedAt: new Date() })
+      .where(and(
+        eq(friendRequests.status, "pending"),
+        or(
+          and(eq(friendRequests.fromUserId, userA), eq(friendRequests.toUserId, userB)),
+          and(eq(friendRequests.fromUserId, userB), eq(friendRequests.toUserId, userA)),
+        ),
+      ));
+  }
+
+  // --- blocks ---
+  async block(blockerUserId: number, blockedUserId: number): Promise<void> {
+    await this.db.insert(playerBlocks).values({ blockerUserId, blockedUserId }).onConflictDoNothing();
+  }
+
+  async unblock(blockerUserId: number, blockedUserId: number): Promise<void> {
+    await this.db.delete(playerBlocks).where(and(eq(playerBlocks.blockerUserId, blockerUserId), eq(playerBlocks.blockedUserId, blockedUserId)));
+  }
+
+  /** Whether either of the two blocked the other. */
+  async blockedEitherWay(userA: number, userB: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ a: playerBlocks.blockerUserId })
+      .from(playerBlocks)
+      .where(or(
+        and(eq(playerBlocks.blockerUserId, userA), eq(playerBlocks.blockedUserId, userB)),
+        and(eq(playerBlocks.blockerUserId, userB), eq(playerBlocks.blockedUserId, userA)),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  async listBlocked(userId: number): Promise<BlockedPlayer[]> {
+    return this.db
+      .select({ userId: playerBlocks.blockedUserId, characterId: characters.id, characterName: characters.name })
+      .from(playerBlocks)
+      .leftJoin(characters, eq(characters.userId, playerBlocks.blockedUserId))
+      .where(eq(playerBlocks.blockerUserId, userId));
+  }
+
+  async userOfCharacter(characterId: number): Promise<number | null> {
+    const [row] = await this.db.select({ userId: characters.userId }).from(characters).where(eq(characters.id, characterId)).limit(1);
+    return row?.userId ?? null;
+  }
+
   // --- presence ---
   async listPresence(userIds: number[]): Promise<Presence[]> {
     if (userIds.length === 0) return [];
@@ -82,7 +136,7 @@ export class DrizzleFriendRepo {
       })
       .from(characters)
       .innerJoin(users, eq(users.id, characters.userId))
-      .where(sql`${characters.userId} = ANY(${userIds})`);
+      .where(inArray(characters.userId, userIds));
     return rows.map((r) => {
       const minutes = Math.floor((Date.now() - new Date(r.lastSeenAt).getTime()) / 60_000);
       let status: Presence["status"] = "offline";
@@ -108,7 +162,7 @@ export class DrizzleFriendRepo {
     const rows = await this.db
       .select({ id: characters.userId, name: characters.name })
       .from(characters)
-      .where(sql`${characters.userId} = ANY(${userIds})`);
+      .where(inArray(characters.userId, userIds));
     return new Map(rows.map((r) => [r.id, r.name]));
   }
 

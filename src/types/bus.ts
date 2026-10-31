@@ -41,6 +41,8 @@ export type Events = {
   danger: { tier: number; prev: number | null };
   /** Mission markers by NPC id: "!" a mission to take, "?" one ready to turn in. */
   missionMarks: Record<number, "!" | "?">;
+  /** Character ids of the players the local player blocked: their chat bubbles are hidden. */
+  blocked: number[];
   /** Tutorial guide target (arrow), or null to hide it. */
   guide: { x: number; y: number; npcId?: number } | null;
   /** The local player goes through a portal and arrives at (x, y). */

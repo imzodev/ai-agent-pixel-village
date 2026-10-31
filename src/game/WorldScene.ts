@@ -204,6 +204,8 @@ export class WorldScene extends Phaser.Scene {
   private buildingZonesRects = new Map<string, { x: number; y: number; w: number; h: number }>();
   private buildingZones = new Map<string, { zone: Phaser.GameObjects.Zone; glow: Phaser.GameObjects.Arc; door: { x: number; y: number } }>();
   private shownChat = new Set<number>();
+  /** Character ids the local player blocked: their bubbles never show. */
+  private blocked = new Set<number>();
   private moveTarget: { x: number; y: number } | null = null;
   /** The most recent Selection the player has chosen (click or E). Used
    *  by the context-sensitive `interact` command handler so a second
@@ -398,6 +400,7 @@ export class WorldScene extends Phaser.Scene {
     this.guideArrow = this.add.image(0, 0, "fx_guide_arrow").setDepth(DEPTH_NIGHT + 2).setVisible(false);
     this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
     this.unsub.push(bus.on("missionMarks", (m) => { this.missionMarks = m; }));
+    this.unsub.push(bus.on("blocked", (ids) => { this.blocked = new Set(ids); }));
     this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG).setVisible(false);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
@@ -904,6 +907,7 @@ export class WorldScene extends Phaser.Scene {
       if (this.shownChat.has(c.id)) continue;
       this.shownChat.add(c.id);
       if (first && Date.now() - c.at > 8000) continue;
+      if (c.speakerType === "player" && this.blocked.has(c.speakerId)) continue;
       const ent = c.speakerType === "npc" ? this.npcs.get(c.speakerId) : c.speakerId === this.meId ? this.player : this.players.get(c.speakerId);
       if (ent) this.showBubble(ent, c.text);
     }

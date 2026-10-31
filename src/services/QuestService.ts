@@ -24,7 +24,8 @@ export class QuestService {
     const today = utcDate();
     const existing = await this.repo.listForDate(characterId, today);
     if (existing.length > 0) return existing;
-    const isNewcomer = existing.length === 0;
+    // A newcomer has never had daily quests before today ("First steps" is for them).
+    const isNewcomer = !(await this.repo.hasQuestsBefore(characterId, today));
     const picked = pickThreeQuests(isNewcomer);
     await this.repo.insertQuests(
       picked.map((tpl) => ({
@@ -116,7 +117,7 @@ export class QuestService {
   }
 }
 
-function pickThreeQuests(isNewcomer = false): QuestTemplate[] {
+export function pickThreeQuests(isNewcomer = false): QuestTemplate[] {
   const pool = [...QUEST_TEMPLATES].filter((q) => {
     if (q.starterOnly && !isNewcomer) return false;
     if (q.sponsorOnly && false /* no live sponsor gating yet */) return false;

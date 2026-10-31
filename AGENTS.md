@@ -633,7 +633,7 @@ at `/advertise`: a poster of their own on a board in the world, billed monthly.
 - **Posters** (`src/lib/billboardPoster.ts`): PNG/JPEG/WebP up to 2 MB, decoded
   and drawn again as a 192×96 PNG with `sharp` (a runtime dependency), so no
   metadata or hidden payload survives. Stored by content hash in `BILLBOARD_DIR`
-  (default `.data/billboards`; back it up with the database). Served by
+  (default `.data/billboards`, which deploys link to `shared/.data`; `scripts/backup-db.sh` backs it up). Served by
   `/api/billboards/poster/<hash>.png`: live ones publicly, pending ones only
   to their owner's token or an admin.
 - **Links** go through `/api/billboards/click/<id>` (a redirect to the stored,

@@ -1,4 +1,5 @@
-// Friends API. GET lists requests + friends + presence. POST sends/accepts/declines.
+// Friends API. GET lists requests + friends + presence + who you blocked.
+// POST sends/accepts/declines a request, removes a friend, blocks or unblocks a player.
 
 import { NextResponse } from "next/server";
 import { eq, inArray } from "drizzle-orm";
@@ -12,13 +13,14 @@ export async function GET() {
     const me = await getCurrentUser();
     if (!me) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     const c = getContainer();
-    const [incoming, outgoing, friends] = await Promise.all([
+    const [incoming, outgoing, friends, blocked] = await Promise.all([
       c.services.friend.listIncoming(me.id),
       db
         .select()
         .from(friendRequests)
         .where(eq(friendRequests.fromUserId, me.id)),
       c.services.friend.listFriendsWithPresence(me.id),
+      c.services.friend.listBlocked(me.id),
     ]);
     // Decorate incoming with fromUsername + characterName
     const fromIds = incoming.map((r) => r.fromUserId);
@@ -34,6 +36,7 @@ export async function GET() {
       incoming: incoming.map((r) => ({ ...r, from: byId.get(r.fromUserId) ?? null })),
       outgoing,
       friends,
+      blocked,
     });
   } catch (e) {
     return handleApiError(e);
@@ -45,9 +48,11 @@ export async function POST(req: Request) {
     const me = await getCurrentUser();
     if (!me) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     const body = (await req.json().catch(() => ({}))) as {
-      action: "send" | "accept" | "decline";
+      action: "send" | "accept" | "decline" | "remove" | "block" | "unblock";
       toUserId?: number;
       requestId?: number;
+      userId?: number;
+      characterId?: number;
     };
     const c = getContainer();
     if (body.action === "send") {
@@ -58,6 +63,17 @@ export async function POST(req: Request) {
     if (body.action === "accept" || body.action === "decline") {
       if (!body.requestId) return NextResponse.json({ error: "requestId required" }, { status: 400 });
       await c.services.friend.resolve(body.requestId, body.action === "accept" ? "accepted" : "declined", me.id);
+      return NextResponse.json({ ok: true });
+    }
+    if (body.action === "remove" || body.action === "unblock") {
+      if (!body.userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+      if (body.action === "remove") await c.services.friend.removeFriend(me.id, body.userId);
+      else await c.services.friend.unblock(me.id, body.userId);
+      return NextResponse.json({ ok: true });
+    }
+    if (body.action === "block") {
+      if (!body.characterId) return NextResponse.json({ error: "characterId required" }, { status: 400 });
+      await c.services.friend.block(me.id, body.characterId);
       return NextResponse.json({ ok: true });
     }
     return NextResponse.json({ error: "unknown action" }, { status: 400 });

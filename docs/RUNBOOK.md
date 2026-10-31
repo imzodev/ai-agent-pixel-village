@@ -29,14 +29,21 @@ One-time setup (not automated): create `releases/` and `shared/`, move the live 
 
 ## Backups
 
-`scripts/backup-db.sh [label]` writes a compressed `pg_dump` (custom format) to `/srv/thegroove/backups/thegroove-<label>-<UTC time>.dump`, checks it can be read, and deletes dumps older than 14 days (`RETAIN_DAYS`).
+`scripts/backup-db.sh [label]` writes a compressed `pg_dump` (custom format) to `/srv/thegroove/backups/thegroove-<label>-<UTC time>.dump`, checks it can be read, tars the billboard posters (`BILLBOARD_DIR`, by default `/srv/thegroove/shared/.data/billboards`) to `thegroove-posters-<label>-<UTC time>.tar.gz` beside it, and deletes both kinds older than 14 days (`RETAIN_DAYS`). Posters are advertisers' paid uploads; the database only holds their hashes.
 
-- **Before every deploy:** `deploy.sh` takes a `predeploy` dump before touching the schema, and stops if it fails.
+- **Before every deploy:** `deploy.sh` takes a `predeploy` backup before touching the schema, and stops if the dump fails (a failed upload doesn't stop it).
 - **Nightly** (install once on the server, `crontab -e`):
   `15 3 * * * /srv/thegroove/current/scripts/backup-db.sh nightly >> /srv/thegroove/backups/backup.log 2>&1`
-- **Off the server:** a backup on the same disk doesn't survive losing the droplet. Copy them elsewhere now and then, for example
-  `scp -i ~/.ssh/id_ed25519_thegroove 'root@159.223.121.138:/srv/thegroove/backups/thegroove-nightly-*.dump' ~/thegroove-backups/`
-  (or sync them to DigitalOcean Spaces).
+- **Off the server:** a backup on the same disk doesn't survive losing the droplet. With these in `shared/.env`, every run copies both files to an S3-compatible bucket (needs the aws CLI: `apt install awscli`):
+  ```
+  BACKUP_S3_BUCKET=thegroove-backups
+  BACKUP_S3_ENDPOINT=https://nyc3.digitaloceanspaces.com
+  BACKUP_S3_KEY=…        # a Spaces access key limited to that bucket
+  BACKUP_S3_SECRET=…
+  ```
+  Give the bucket a lifecycle rule that expires objects after 30 days (the script never deletes there). A failed copy is logged and makes a nightly run exit 3. Without a bucket, copy them by hand now and then:
+  `scp -i ~/.ssh/id_ed25519_thegroove 'root@159.223.121.138:/srv/thegroove/backups/thegroove-*nightly-*' ~/thegroove-backups/`
+- **Posters across deploys:** `deploy.sh` links `shared/.data` into every release (uploads used to live in each release's own `.data`; the first deploy with the link copies them over).
 
 **Restore** (the game is down meanwhile):
 
@@ -48,6 +55,8 @@ ls -t /srv/thegroove/backups/*.dump | head          # pick one
 pg_restore --clean --if-exists --no-owner --dbname="$DATABASE_URL" /srv/thegroove/backups/<file>.dump
 pm2 start ai-village-server ai-village-tickd
 ```
+
+Posters: `tar -xzf <thegroove-posters-….tar.gz> -C /srv/thegroove/shared/.data/billboards` (or `aws s3 cp --endpoint-url … s3://<bucket>/<file> .` first, for an off-server copy).
 
 To look inside a dump without touching the live database: `pg_restore --list <file>.dump`.
 

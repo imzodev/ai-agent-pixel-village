@@ -1,6 +1,6 @@
 // Drizzle adapter for the daily quest + streak tables.
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { DailyQuest, StreakState } from "@/types/quest";
 import { dailyQuests, streakStates } from "@/db/schema";
@@ -14,6 +14,16 @@ export class DrizzleQuestRepo {
       .select()
       .from(dailyQuests)
       .where(and(eq(dailyQuests.characterId, characterId), eq(dailyQuests.forDate, forDate)))) as DailyQuest[];
+  }
+
+  /** Whether the character had daily quests on any day before `forDate`. */
+  async hasQuestsBefore(characterId: number, forDate: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: dailyQuests.id })
+      .from(dailyQuests)
+      .where(and(eq(dailyQuests.characterId, characterId), lt(dailyQuests.forDate, forDate)))
+      .limit(1);
+    return !!row;
   }
 
   async insertQuests(rows: Array<Omit<DailyQuest, "id" | "createdAt" | "completedAt">>): Promise<void> {
