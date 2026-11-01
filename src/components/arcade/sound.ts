@@ -11,7 +11,9 @@
 // when the billet goes cold, a hiss when it burns, steam for a quench, the till
 // when a commission is made. Pip's Archery Butts: the bowstring, a thunk in the
 // straw, a creak as the bow draws. Della's Loom: a note per spool (the same
-// colour always sounds the same, which helps you remember), a snag.
+// colour always sounds the same, which helps you remember), a snag. Fenwick's
+// Orchard Catch: a plop into the basket (higher as the run of catches grows), a
+// splat, a wasp's buzz and sting, the press's glug.
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -75,4 +77,8 @@ export const creakSound = () => tone(140, 170, 160, "triangle", 0.02);
 const SPOOL_NOTES = [392, 440, 523, 587, 784];
 export const noteSound = (c: number) => { const f = SPOOL_NOTES[c] ?? 440; tone(f, f, 200, "triangle", 0.06); tone(f * 2, f * 2, 120, "sine", 0.02); };
 export const snagSound = () => { tone(300, 180, 160, "sawtooth", 0.04); setTimeout(() => tone(180, 120, 200, "square", 0.03), 90); };
+export const catchSound = (mult: number) => { const f = 420 + 80 * Math.min(4, mult); tone(f, f * 1.3, 90, "triangle", 0.06); };
+export const splatSound = () => tone(260, 90, 160, "square", 0.035);
+export const stingSound = () => { tone(900, 1100, 120, "sawtooth", 0.035); setTimeout(() => tone(500, 260, 160, "square", 0.04), 100); };
+export const glugSound = () => { tone(220, 160, 120, "sine", 0.07); setTimeout(() => tone(200, 140, 140, "sine", 0.06), 130); setTimeout(() => tone(180, 120, 160, "sine", 0.05), 270); };
 export const unlockSound = () => void audio();

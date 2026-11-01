@@ -296,7 +296,7 @@ export const NPC_DEFS: NpcDef[] = [
     trades: ["brewer"],
     role: "Brewer of the Grove",
     persona:
-      "Fenwick is a round, red-cheeked brewer with a cider press and a few barrels by the Wayfarer's Rest. He buys apples, grapes and pears from the homesteads' vineyards and orchards (and from the caravan), presses cider and makes wine, and carries the bottles to whichever inn pays best: Hettie's, Ivy's in Hollowmere or the Salted Gull in Brightwater.",
+      "Fenwick is a round, red-cheeked brewer with a cider press and a few barrels by the Wayfarer's Rest. He buys apples, grapes and pears from the homesteads' vineyards and orchards (and from the caravan), presses cider and makes wine, and carries the bottles to whichever inn pays best: Hettie's, Ivy's in Hollowmere or the Salted Gull in Brightwater. He shakes his trees for anyone quick with a basket (Fenwick's Orchard Catch).",
     greeting: "Apples? Grapes? I'll turn 'em into something worth drinking. What've you brought?",
     tilePos: [27, 22],
     wanderRadius: 25,

@@ -11,7 +11,8 @@
 // Pip's Archery Butts' is a target face over the day's butts (for a run, where
 // each arrow struck and the tally at each butt); Della's Loom's is the cloth on the
 // loom (for a course, the day's figure and a sample woven from it, never the real
-// rows; for a run, every row woven, with its snags).
+// rows; for a run, every row woven, with its snags); Fenwick's Orchard Catch's is
+// the three trees over the day's fruit (for a run, what went into the basket).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -37,6 +38,8 @@ import { replayArchery } from "@/lib/archery/sim";
 import { GOLD as GOLD_THREAD, ROWS as LOOM_ROWS } from "@/lib/loom/rules";
 import { replayLoom } from "@/lib/loom/sim";
 import { SPOOL_COLORS } from "@/components/loom/draw";
+import { replayCatch } from "@/lib/catch/sim";
+import { fruitColor } from "@/components/catch/draw";
 import { ARCADE_GAMES, courseNumber } from "@/lib/arcade/games";
 import { courseOf } from "@/lib/arcadeServer";
 import { CARD_W, renderCard, siteHost, textPng, type CardLayer } from "./cardKit";
@@ -50,6 +53,7 @@ import type { FlumeCourse, FlumeInput, FlumeState } from "@/types/flume";
 import type { ForgeCourse, ForgeInput, ForgeState } from "@/types/forgeGame";
 import type { ArcheryCourse, ArcheryInput, ArcheryState, ArcheryTargetKind } from "@/types/archery";
 import type { LoomCourse, LoomInput, LoomState } from "@/types/loom";
+import type { CatchCourse, CatchFruitKind, CatchInput, CatchState } from "@/types/catch";
 
 const CACHE = path.join(process.cwd(), ".cache", "cards");
 const GOLD = "#ffd166";
@@ -270,6 +274,28 @@ function loomSvg(course: LoomCourse, st: LoomState | null): string {
     <rect x="0" y="52" width="${W}" height="14" fill="#7a4e2c"/>${warp}${rows}${snags}<rect x="0" y="${beam}" width="${W}" height="20" fill="#7a4e2c"/>${figure}</svg>`;
 }
 
+const CATCH_ROWS: [CatchFruitKind, string][] = [["apple", "Apples"], ["pear", "Pears"], ["plum", "Plums"], ["golden", "Golden pear"], ["rotten", "Rotten"], ["wasp", "Wasps"]];
+
+/** Fenwick's Orchard Catch: three trees in fruit, then a row per kind (for a course how many fall today, for a run how many were caught, the wasps as stings). */
+function catchSvg(course: CatchCourse, st: CatchState | null): string {
+  const W = PIC_W;
+  const trees = [56, 146, 236].map((x) => `<rect x="${x - 6}" y="120" width="12" height="70" fill="#6a4426"/>
+    <circle cx="${x}" cy="96" r="44" fill="#3f8a34"/><circle cx="${x - 22}" cy="112" r="26" fill="#3f8a34"/><circle cx="${x + 22}" cy="112" r="26" fill="#3f8a34"/>
+    ${[[-18, 86, "apple"], [10, 76, "apple"], [24, 104, "pear"], [-6, 112, "plum"], [-28, 112, "apple"]].map(([dx, y, k]) => `<circle cx="${x + Number(dx)}" cy="${y}" r="5" fill="${fruitColor(k as CatchFruitKind)}"/>`).join("")}`).join("");
+  const count = (k: CatchFruitKind) => st
+    ? (k === "wasp" ? st.stings : st.fruit.filter((f) => f.kind === k && f.state === "caught").length)
+    : course.drops.filter((d) => d.kind === k).length;
+  const rows = CATCH_ROWS.map(([k, name], i) => {
+    const y = 214 + i * 46, n = count(k);
+    return `<rect x="10" y="${y}" width="${W - 20}" height="40" rx="7" fill="${k === "golden" ? "#5a4a1a" : "#2e4a22"}"/>
+      <circle cx="34" cy="${y + 20}" r="10" fill="${fruitColor(k)}"/>
+      <text x="56" y="${y + 27}" font-size="18" font-family="sans-serif" font-weight="bold" fill="#f4ead0">${name}</text>
+      <text x="${W - 22}" y="${y + 27}" font-size="18" text-anchor="end" font-family="sans-serif" font-weight="bold" fill="${GOLD}">${st && k === "wasp" ? `${n} sting${n === 1 ? "" : "s"}` : n}</text>`;
+  }).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${PIC_H}"><rect width="${W}" height="${PIC_H}" fill="#5b9a40"/>
+    <rect width="${W}" height="190" fill="#8fc8ee"/>${trees}<rect y="188" width="${W}" height="8" fill="#4e8a36"/>${rows}</svg>`;
+}
+
 /** The left picture for a game, at a state. */
 function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | null): string {
   if (game === "whistle") {
@@ -295,6 +321,10 @@ function pictureSvg(game: ArcadeGameKey, course: unknown, inputs: unknown[] | nu
   if (game === "archery") {
     const c = course as ArcheryCourse;
     return archerySvg(c, inputs ? replayArchery(c, inputs as ArcheryInput[]).state : null);
+  }
+  if (game === "catch") {
+    const c = course as CatchCourse;
+    return catchSvg(c, inputs ? replayCatch(c, inputs as CatchInput[]).state : null);
   }
   if (game === "loom") {
     const c = course as LoomCourse;
@@ -403,6 +433,15 @@ export function arcadeCoursePng(game: ArcadeGameKey, day: string): Promise<Buffe
       { text: `Today: ${c.targets.length} butts out to ${far} m${c.targets.some((t) => t.kind === "king") ? ", the King's butt at the end" : ""}`, font: "body", size: 34, color: "#ffffff", bold: true, gap: 14 },
       { text: `${moving ? `${moving} on the move` : "all standing still"} · ${gusty > 3 ? "a gusty day" : gusty ? "now and then a gust" : "a gentle breeze"}`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
       { text: "Twenty arrows, one minute. Mind the wind and split the bull.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
+    ];
+  } else if (game === "catch") {
+    const c = course as CatchCourse;
+    const good = c.drops.filter((d) => d.kind === "apple" || d.kind === "pear" || d.kind === "plum").length;
+    const gusty = c.wind.filter((w) => Math.abs(w) >= 3).length;
+    lines = [
+      { text: `Today: ${good} fruit to catch${c.weekend ? ", it's harvest day" : ""}`, font: "body", size: 36, color: "#ffffff", bold: true, gap: 14 },
+      { text: `${c.drops.filter((d) => d.kind === "wasp").length} wasps · ${gusty > 2 ? "a gusty day" : gusty ? "now and then a gust" : "a still day"} · one golden pear`, font: "body", size: 30, color: "#cfd8ff", gap: 30 },
+      { text: "A basket that holds ten, one minute. Catch the good ones, dodge the wasps.", font: "body", size: 30, color: "#ffb86b", bold: true, gap: 0 },
     ];
   } else if (game === "loom") {
     const c = course as LoomCourse;

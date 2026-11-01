@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "The arcade · thegroove",
-  description: "Quick skill games with a new course every day and prizes every week: herd the flock in Whistle, get the load to market in Harvest Haul, land the trophy in the Fishing Derby, keep up with Marigold's Oven, fill Della's honeycomb, steer Ansel's logs down the flume, forge Bjorn's commissions, shoot Pip's butts, weave Della's cloth from memory. Free, in your browser.",
+  description: "Quick skill games with a new course every day and prizes every week: herd the flock in Whistle, get the load to market in Harvest Haul, land the trophy in the Fishing Derby, keep up with Marigold's Oven, fill Della's honeycomb, steer Ansel's logs down the flume, forge Bjorn's commissions, shoot Pip's butts, weave Della's cloth from memory, catch Fenwick's falling fruit. Free, in your browser.",
   alternates: { canonical: "/play" },
 };
 
@@ -33,7 +33,7 @@ export default async function Page() {
             </Link>
           ))}
         </div>
-        <p className="mt-6 text-sm text-stone-400">You can also find them in the village: the sheepfold in the plaza, Della&apos;s cart and loom by the Village Ranch, Pip&apos;s archery butts by the cabins, and Bjorn&apos;s forge in Hollowmere. Prizes are in-game only.</p>
+        <p className="mt-6 text-sm text-stone-400">You can also find them in the village: the sheepfold in the plaza, Della&apos;s cart and loom by the Village Ranch, Pip&apos;s archery butts by the cabins, Fenwick&apos;s orchard by the Wayfarer&apos;s Rest, and Bjorn&apos;s forge in Hollowmere. Prizes are in-game only.</p>
       </div>
     </main>
   );

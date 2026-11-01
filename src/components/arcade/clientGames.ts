@@ -10,6 +10,7 @@ import FlumeField from "../flume/FlumeField";
 import ForgeField from "../forge/ForgeField";
 import ArcheryField from "../archery/ArcheryField";
 import LoomField from "../loom/LoomField";
+import CatchField from "../catch/CatchField";
 import { SHEEP_COUNT } from "@/lib/whistle/rules";
 import type { ArcadeClientGame, ArcadeGameKey } from "@/types/arcade";
 
@@ -102,6 +103,16 @@ export const CLIENT_GAMES: Record<ArcadeGameKey, ArcadeClientGame> = {
       ["◀", "\"And back again\" rows go in reverse, last thread first, and pay double. Rows get longer and quicker as the cloth grows."],
       ["🧠", "Tap \"Got it!\" before the show ends: every thread you hadn't seen pays extra if the row comes out clean."],
       ["🪢", "A wrong thread snags the cloth and the row is shown again; three snags and it's over. Clean rows in a row multiply."],
+    ],
+  },
+  catch: {
+    Field: CatchField,
+    pitch: "Fenwick's shaking the orchard for the cider press: a minute under the trees with a basket that only holds ten.",
+    howTo: [
+      ["🧺", "Move the pointer (or drag, or hold the arrow keys) and the basket follows. Catch apples, pears and plums."],
+      ["🔗", "Every five good catches in a row pay a step more, up to ×4. A dropped fruit or a rotten one breaks the run."],
+      ["🐝", "Rotten apples cost points; a wasp stings and the basket can't move for a moment. Watch the trees rustle first."],
+      ["🍐", "The basket holds ten: tip it into the press at the left. Once a day the golden pear falls. The wind blows fruit sideways."],
     ],
   },
 };

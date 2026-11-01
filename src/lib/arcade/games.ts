@@ -31,6 +31,9 @@ import * as archery from "../archery/rules";
 import { loomCourseFor } from "../loom/course";
 import { cleanLoomInputs, replayLoom } from "../loom/sim";
 import * as loom from "../loom/rules";
+import { catchCourseFor } from "../catch/course";
+import { cleanCatchInputs, replayCatch } from "../catch/sim";
+import * as orchard from "../catch/rules";
 import { dayNumber } from "./days";
 import type { ArcadeGameDef, ArcadeGameKey, ArcadeResult } from "@/types/arcade";
 import type { Course as WhistleCourse, RunResult, WhistleInput } from "@/types/whistle";
@@ -42,6 +45,7 @@ import type { FlumeCourse, FlumeInput } from "@/types/flume";
 import type { ForgeCourse, ForgeInput } from "@/types/forgeGame";
 import type { ArcheryCourse, ArcheryInput } from "@/types/archery";
 import type { LoomCourse, LoomInput } from "@/types/loom";
+import type { CatchCourse, CatchInput } from "@/types/catch";
 
 const n = (d: Record<string, number>, k: string) => d[k] ?? 0;
 
@@ -139,6 +143,16 @@ export const ARCADE_GAMES: Record<ArcadeGameKey, ArcadeGameDef> = {
     replay: (course, inputs) => replayLoom(course as LoomCourse, inputs as LoomInput[]).result,
     describe: ({ detail: d }) =>
       `${n(d, "rows")} row${n(d, "rows") === 1 ? "" : "s"} woven${n(d, "chain") > 1 ? `, ${n(d, "chain")} clean in a row` : ""}${n(d, "snags") ? `, ${n(d, "snags")} snag${n(d, "snags") === 1 ? "" : "s"}` : ""}`,
+  },
+  catch: {
+    key: "catch", name: "Fenwick's Orchard Catch", emoji: "🍎", tagline: "Catch the good ones, dodge the wasps", path: "/catch",
+    epoch: orchard.CATCH_EPOCH, tickMs: orchard.TICK_MS,
+    prize: { gems: orchard.WEEKLY_PRIZE_GEMS, title: orchard.PRIZE_TITLE, cosmetic: orchard.PRIZE_COSMETIC },
+    courseFor: (day, salt) => catchCourseFor(day, salt),
+    cleanInputs: (raw) => cleanCatchInputs(raw),
+    replay: (course, inputs) => replayCatch(course as CatchCourse, inputs as CatchInput[]).result,
+    describe: ({ detail: d }) =>
+      `${n(d, "caught")} fruit caught${n(d, "golden") ? ", the golden pear" : ""}${n(d, "stings") ? `, ${n(d, "stings")} sting${n(d, "stings") === 1 ? "" : "s"}` : ""}`,
   },
 };
 

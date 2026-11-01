@@ -483,7 +483,7 @@ row lock (`locked`), so double clicks can't pay twice.
 
 Quick skill games for X campaigns, each with **one course a day for everyone**,
 server-checked runs, daily and weekly boards, replays to share and weekly prizes.
-`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom`, playable without
+`/play` lists them; each has its page (`/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom`, `/catch`, playable without
 signing in) and a spot in the village (`ArcadeModal`, the same game).
 
 - **Whistle**: you're the shepherd's whistle; a tap sends a wave that pushes the flock
@@ -567,6 +567,16 @@ signing in) and a spot in the village (`ArcadeModal`, the same game).
   twist each), a thread longer and a little quicker to show each row. All whole numbers.
   `src/lib/loom/`: `rules.ts`, `course.ts`, `sim.ts`; drawn in code (`src/components/loom/draw.ts`;
   each spool has a mark and a note as well as its colour).
+- **Fenwick's Orchard Catch**: 60 s, side-on. Fenwick shakes one of three trees (it rustles
+  `SHAKE_TICKS` first) and fruit falls; the basket follows a target x (`{ t, k: "to", x }`, whole px,
+  at most one a tick) at up to `BASKET_SPEED`. A fruit is caught when its step crosses the rim
+  (`rimCross`) within the basket. Good fruit pays × `multOf(streak)` (a step every `CHAIN_STEP` in a
+  row, up to `CHAIN_MAX`); a miss, a rotten apple (it costs) or a wasp (it stings: `STUN_TICKS` still)
+  breaks the run. The basket holds `BASKET_CAP`; a full one bounces fruit (a miss) until it's tipped
+  into the press (`PRESS_X`). Gusts every 5 s push falling fruit sideways. All whole numbers, in
+  1/`SUB` px. The course makes every good fruit reachable from every other (`landingOf`, `reachable`);
+  one golden pear; weekends are harvest day (more pears, a tree shaken three times over).
+  `src/lib/catch/`: `rules.ts`, `course.ts`, `sim.ts`; drawn in code (`src/components/catch/draw.ts`).
 
 **The frame** (`src/lib/arcade/`): `games.ts` is the registry (each game's course,
 input check, replay, prizes, how a result reads), `days.ts` the calendar (UTC days,
@@ -596,7 +606,7 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   day's best. Admins hide runs (`/api/admin/arcade`, the stats page's top runs).
 - **Prizes**: tickd's `maybeAwardArcade` (hourly) awards each game's last week's top
   three once (`arcade_prizes`, unique per game, week and rank): the game's gems, its
-  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`, `prize_archer_cap`, `prize_weaver_smock`; never sold), an
+  prize to wear (`prize_shepherd_hat`, `prize_hauler_apron`, `prize_angler_specs`, `prize_baker_crown`, `prize_queen_cone`, `prize_logger_hat`, `prize_smith_goggles`, `prize_archer_cap`, `prize_weaver_smock`, `prize_orchard_hat`; never sold), an
   `arcade_champion` moment, and its title (`arcadeTitles` in `unlockedTitles`). In-game only.
 - **Sharing**: `/<game>/r/<id>` replays the run (`ArcadeReplay`) with a card
   (`src/lib/cards/arcadeCard.ts`); `/<game>/course.png?day=` is the day's course for
@@ -609,7 +619,8 @@ name-to-submit, sharing), the page, replays, the village window and the server p
   (`scripts/draw-flume-stall.mjs`), Bjorn's smithy in Hollowmere
   (`scripts/draw-forge-stall.mjs`), Pip's archery butts north of Pip's cabin
   (`scripts/draw-archery-stall.mjs`), Della's loom south of her hives
-  (`scripts/draw-loom-stall.mjs`) and Della's cart outside the
+  (`scripts/draw-loom-stall.mjs`), Fenwick's orchard west of the Wayfarer's Rest
+  (`scripts/draw-catch-stall.mjs`) and Della's cart outside the
   ranch's west gate (`scripts/draw-haul-stall.mjs`, from Haul's sheet `scripts/draw-haul.mjs`),
   drawn by `src/game/arcadeArt.ts`. Their rows below the sign block on both sides
   (`setDynamicBlocks("arcade:<game>")`); selecting one (`{ type: "arcade", game }`)

@@ -37,6 +37,8 @@ const WANT: Record<ArcadeGameKey, { ax: number; ay: number; r: number }> = {
   archery: { ax: 18, ay: 4, r: 30 },
   /** Outside the Village Ranch's west fence, south of Della's hives (the hive spot: 121, 22). */
   loom: { ax: 123, ay: 36, r: 14 },
+  /** By Fenwick's press near the Wayfarer's Rest (npcDefs: village_fenwick, 27, 22). */
+  catch: { ax: 22, ay: 20, r: 20 },
 };
 
 const overlaps = (ax: number, ay: number, aw: number, ah: number, bx: number, by: number, bw: number, bh: number, pad: number) =>

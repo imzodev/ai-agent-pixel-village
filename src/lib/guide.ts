@@ -13,6 +13,7 @@ import * as flumeRules from "./flume/rules";
 import * as forgeRules from "./forgeGame/rules";
 import * as archeryRules from "./archery/rules";
 import * as loomRules from "./loom/rules";
+import * as catchRules from "./catch/rules";
 import { FISH_DEFS } from "./fishing";
 import { TOWNS } from "./settlements";
 import { ORCHARD_FRUITS } from "./orchard";
@@ -70,6 +71,8 @@ export const FORGE_FACTS = { commissions: forgeRules.COMMISSIONS, seconds: forge
 export const ARCHERY_FACTS = { arrows: archeryRules.ARROWS, seconds: archeryRules.RUN_TICKS / archeryRules.TICKS_PER_SEC, chain: archeryRules.CHAIN_MAX, apple: archeryRules.APPLE_BONUS, title: archeryRules.PRIZE_TITLE, gems: archeryRules.WEEKLY_PRIZE_GEMS.join(" / "), perfectPct: Math.round(archeryRules.PERFECT_BONUS * 100) };
 /** Della's Loom, the memory minigame: the run's length, the rows, snags and the week's prizes. */
 export const LOOM_FACTS = { seconds: loomRules.RUN_TICKS / loomRules.TICKS_PER_SEC, rows: loomRules.ROWS, snags: loomRules.SNAG_MAX, chain: loomRules.CHAIN_MAX, title: loomRules.PRIZE_TITLE, gems: loomRules.WEEKLY_PRIZE_GEMS.join(" / ") };
+/** Fenwick's Orchard Catch, the catching minigame: the run's length, the basket, the golden pear and the week's prizes. */
+export const CATCH_FACTS = { seconds: catchRules.RUN_TICKS / catchRules.TICKS_PER_SEC, cap: catchRules.BASKET_CAP, step: catchRules.CHAIN_STEP, chain: catchRules.CHAIN_MAX, golden: catchRules.FRUIT.golden.points, title: catchRules.PRIZE_TITLE, gems: catchRules.WEEKLY_PRIZE_GEMS.join(" / ") };
 export const HAUL_FACTS = { title: haulRules.PRIZE_TITLE, gems: haulRules.WEEKLY_PRIZE_GEMS.join(" / "), cake: haulRules.HAUL_ITEMS.cake.value, perfectPct: Math.round(haulRules.PERFECT_BONUS * 100) };
 
 const name = (key: string) => itemDef(key)?.name ?? key.replace(/_/g, " ");

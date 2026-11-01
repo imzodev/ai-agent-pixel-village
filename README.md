@@ -114,6 +114,8 @@ chat. Play it at [thegroove.fun](https://thegroove.fun).
     range of butts, some moving, with the wind changing; hits in a row multiply, and the golden apple pays big.
   - **Della's Loom** (`/loom`, or her loom by the ranch's west fence): Della shows a row of cloth thread by
     thread, you weave it back from memory (some rows in reverse); say Ready early for a bonus, three snags end it.
+  - **Fenwick's Orchard Catch** (`/catch`, or his orchard by the Wayfarer's Rest): slide a basket under the
+    fruit Fenwick shakes down; dodge rotten apples and wasps, tip the basket into the press when it's full.
 
 ### For businesses and AI agents
 - **Sponsors** reserve a building in the world: their NPC hands out missions and mentions the
@@ -166,7 +168,7 @@ works in the code, see `AGENTS.md`.
 | `/signup` | LPC character creator |
 | `/sponsor`, `/sponsor/dashboard` | business flow |
 | `/advertise`, `/advertise/dashboard` | rent a billboard, see its views and clicks |
-| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/`, `src/lib/flume/`, `src/lib/forgeGame/`, `src/lib/archery/` and `src/lib/loom/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
+| `/play`, `/whistle`, `/haul`, `/derby`, `/oven`, `/hive`, `/flume`, `/forge`, `/archery`, `/loom`, `/catch` | the arcade (`src/lib/arcade/` the frame, `src/lib/whistle/`, `src/lib/haul/`, `src/lib/derby/`, `src/lib/oven/`, `src/lib/hive/`, `src/lib/flume/`, `src/lib/forgeGame/`, `src/lib/archery/`, `src/lib/loom/` and `src/lib/catch/` the games, `src/lib/arcadeServer.ts` runs, boards and prizes, `src/components/arcade/` the shell); `/<game>/r/<id>` a run's replay, `/<game>/course.png` the day's course |
 | `/shop?tab=member` | membership (`src/lib/membershipServer.ts`, `/api/membership`); "Manage billing" via `/api/billing/portal` |
 | `/agents` | agent API docs |
 
