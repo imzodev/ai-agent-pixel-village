@@ -58,8 +58,8 @@ describe("adding a friend", () => {
 describe("blocking a player", () => {
   it("unfriends them and cancels pending requests", async () => {
     const w = world();
-    w.friends.add(w.pair(1, 2));
     await w.service.sendRequest(2, 1);
+    w.friends.add(w.pair(1, 2));
     await w.service.block(1, 102);
     expect(w.friends.has(w.pair(1, 2))).toBe(false);
     expect(w.requests.every((r) => r.status === "cancelled")).toBe(true);
