@@ -71,7 +71,7 @@ import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
 import JourneyTracker from "./JourneyTracker";
 import type { JourneyView } from "@/types/journey";
-import type { BlockedPlayer, Presence } from "@/types/social";
+import type { BlockedPlayer, OnlinePlayer, Presence } from "@/types/social";
 import HelpModal from "./HelpModal";
 import SaveCharacterModal from "./SaveCharacterModal";
 import { deviceKeys } from "@/lib/keyHints";
@@ -2422,13 +2422,17 @@ function DailyQuestsPanel() {
 
 function FriendsPanel({ onBlocksChanged }: { onBlocksChanged: () => void }) {
   type Incoming = { id: number; fromUserId: number; from: { username: string; characterName: string | null } | null };
-  const [data, setData] = useState<{ incoming: Incoming[]; friends: Presence[]; blocked: BlockedPlayer[] } | null>(null);
+  const [data, setData] = useState<{ incoming: Incoming[]; friends: Presence[]; blocked: BlockedPlayer[]; online: OnlinePlayer[] } | null>(null);
   const fetchFriends = () => fetch("/api/friends").then(async (r) => (r.ok ? r.json() : null));
   const applyFriends = (d: Awaited<ReturnType<typeof fetchFriends>>) => { if (d) setData(d); };
   const load = () => fetchFriends().then(applyFriends);
   useEffect(() => { void fetchFriends().then(applyFriends); const i = setInterval(load, 15_000); return () => clearInterval(i); }, []);
   const respond = async (id: number, decision: "accept" | "decline") => {
     await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: decision, requestId: id }) });
+    await load();
+  };
+  const addFriend = async (toUserId: number) => {
+    await fetch("/api/friends", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "send", toUserId }) });
     await load();
   };
   // Removing a friend or unblocking someone: a second tap within a few seconds confirms.
@@ -2470,6 +2474,20 @@ function FriendsPanel({ onBlocksChanged }: { onBlocksChanged: () => void }) {
             <div className="text-[11px] text-stone-600">@{f.username} · {f.status}</div>
           </div>
           <button onClick={() => void byUser("remove", f.userId)} className="rounded bg-stone-200 px-2 py-1 text-[12px]">{arming === `remove:${f.userId}` ? "sure?" : "remove"}</button>
+        </div>
+      ))}
+      <div className="text-sm font-bold text-amber-900">Online now</div>
+      {data.online.length === 0 && <div className="text-[12px] text-stone-500">Nobody new is connected right now.</div>}
+      {data.online.map((p) => (
+        <div key={p.userId} className="flex items-center gap-2 rounded-lg border-2 border-stone-300 bg-white/80 p-2">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+          <div className="flex-1">
+            <div className="text-[13px] font-bold">{p.characterName}</div>
+            <div className="text-[11px] text-stone-600">@{p.username} · level {p.level}</div>
+          </div>
+          {p.relation === "requested"
+            ? <span className="text-[12px] text-stone-500">requested</span>
+            : <button onClick={() => void addFriend(p.userId)} className="rounded bg-emerald-500 px-2 py-1 text-[12px] text-white">{p.relation === "incoming" ? "accept" : "+ add"}</button>}
         </div>
       ))}
       {data.blocked.length > 0 && <div className="text-sm font-bold text-amber-900">Blocked</div>}

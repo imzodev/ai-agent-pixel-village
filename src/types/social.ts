@@ -27,6 +27,17 @@ export type BlockedPlayer = {
   characterName: string | null;
 };
 
+/** A connected player you could add (GET /api/friends `online`). */
+export type OnlinePlayer = {
+  userId: number;
+  characterId: number;
+  username: string;
+  characterName: string;
+  level: number;
+  /** Your relationship to them: nothing yet, you asked, or they asked you. */
+  relation: "none" | "requested" | "incoming";
+};
+
 export type Presence = {
   userId: number;
   characterId: number;

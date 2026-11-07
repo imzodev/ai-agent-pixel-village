@@ -5,7 +5,7 @@ import { FriendService } from "@/services/FriendService";
 import type { DrizzleFriendRepo } from "@/db/repos/friend";
 
 function world() {
-  const blocks = new Set<string>(), friends = new Set<string>(), requests: { from: number; to: number; status: string }[] = [];
+  const blocks = new Set<string>(), friends = new Set<string>(), requests: { id: number; fromUserId: number; toUserId: number; from: number; to: number; status: string }[] = [];
   const pair = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
   const charUser: Record<number, number> = { 101: 1, 102: 2 };
   const repo = {
@@ -18,11 +18,42 @@ function world() {
     cancelRequestsBetween: async (a: number, b: number) => {
       for (const r of requests) if (r.status === "pending" && pair(r.from, r.to) === pair(a, b)) r.status = "cancelled";
     },
-    createRequest: async (from: number, to: number) => { const r = { from, to, status: "pending" }; requests.push(r); return r; },
+    createRequest: async (from: number, to: number) => {
+      const r = { id: requests.length + 1, fromUserId: from, toUserId: to, from, to, status: "pending" };
+      requests.push(r);
+      return r;
+    },
+    areFriends: async (a: number, b: number) => friends.has(pair(a, b)),
+    findPending: async (from: number, to: number) => requests.find((r) => r.status === "pending" && r.from === from && r.to === to) ?? null,
+    findRequest: async (id: number) => requests.find((r) => r.id === id) ?? null,
+    resolveRequest: async (id: number, status: string) => { const r = requests.find((x) => x.id === id); if (r) r.status = status; },
   } as unknown as DrizzleFriendRepo;
   const service = new FriendService(repo, {} as never, { track: () => {} } as never);
   return { service, friends, requests, pair };
 }
+
+describe("adding a friend", () => {
+  it("doesn't pile up duplicate requests", async () => {
+    const w = world();
+    await w.service.sendRequest(1, 2);
+    await w.service.sendRequest(1, 2);
+    expect(w.requests).toHaveLength(1);
+  });
+
+  it("refuses someone who is already a friend", async () => {
+    const w = world();
+    w.friends.add(w.pair(1, 2));
+    await expect(w.service.sendRequest(1, 2)).rejects.toThrow("already friends");
+  });
+
+  it("asking back someone who asked you makes you friends", async () => {
+    const w = world();
+    await w.service.sendRequest(2, 1);
+    await w.service.sendRequest(1, 2);
+    expect(w.friends.has(w.pair(1, 2))).toBe(true);
+    expect(w.requests).toHaveLength(1);
+  });
+});
 
 describe("blocking a player", () => {
   it("unfriends them and cancels pending requests", async () => {

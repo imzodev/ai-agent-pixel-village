@@ -4,7 +4,7 @@
 import type { CharacterRepository } from "@/types/ports";
 import type { AnalyticsPort } from "@/types/ports";
 import type { DrizzleFriendRepo } from "@/db/repos/friend";
-import type { BlockedPlayer, FriendRequest, FriendRequestStatus, Presence } from "@/types/social";
+import type { BlockedPlayer, FriendRequest, FriendRequestStatus, OnlinePlayer, Presence } from "@/types/social";
 
 export class FriendService {
   constructor(
@@ -16,9 +16,38 @@ export class FriendService {
   async sendRequest(fromUserId: number, toUserId: number): Promise<FriendRequest> {
     if (fromUserId === toUserId) throw new Error("cannot friend self");
     if (await this.repo.blockedEitherWay(fromUserId, toUserId)) throw new Error("cannot friend this player");
+    if (await this.repo.areFriends(fromUserId, toUserId)) throw new Error("already friends");
+    // They already asked you: asking back is the same as accepting.
+    const theirs = await this.repo.findPending(toUserId, fromUserId);
+    if (theirs) {
+      await this.resolve(theirs.id, "accepted", fromUserId);
+      return { ...theirs, status: "accepted" };
+    }
+    const mine = await this.repo.findPending(fromUserId, toUserId);
+    if (mine) return mine;
     const req = await this.repo.createRequest(fromUserId, toUserId);
     this.analytics.track("friend_request_sent", { toUserId });
     return req;
+  }
+
+  /** Players connected right now that `userId` could add (not themselves, friends or blocked either way). */
+  async listOnlineToAdd(userId: number): Promise<OnlinePlayer[]> {
+    const [online, friendIds, incoming, outgoing] = await Promise.all([
+      this.repo.listOnline(60),
+      this.repo.listFriends(userId),
+      this.repo.listIncoming(userId),
+      this.repo.listOutgoing(userId),
+    ]);
+    const friends = new Set(friendIds);
+    const asked = new Set(incoming.map((r) => r.fromUserId));
+    const requested = new Set(outgoing.map((r) => r.toUserId));
+    const out: OnlinePlayer[] = [];
+    for (const p of online) {
+      if (p.userId === userId || friends.has(p.userId)) continue;
+      if (await this.repo.blockedEitherWay(userId, p.userId)) continue;
+      out.push({ ...p, relation: asked.has(p.userId) ? "incoming" : requested.has(p.userId) ? "requested" : "none" });
+    }
+    return out;
   }
 
   async resolve(requestId: number, decision: "accepted" | "declined", byUserId: number): Promise<void> {

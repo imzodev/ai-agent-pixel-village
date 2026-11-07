@@ -13,7 +13,7 @@ export async function GET() {
     const me = await getCurrentUser();
     if (!me) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     const c = getContainer();
-    const [incoming, outgoing, friends, blocked] = await Promise.all([
+    const [incoming, outgoing, friends, blocked, online] = await Promise.all([
       c.services.friend.listIncoming(me.id),
       db
         .select()
@@ -21,6 +21,7 @@ export async function GET() {
         .where(eq(friendRequests.fromUserId, me.id)),
       c.services.friend.listFriendsWithPresence(me.id),
       c.services.friend.listBlocked(me.id),
+      c.services.friend.listOnlineToAdd(me.id),
     ]);
     // Decorate incoming with fromUsername + characterName
     const fromIds = incoming.map((r) => r.fromUserId);
@@ -37,6 +38,7 @@ export async function GET() {
       outgoing,
       friends,
       blocked,
+      online,
     });
   } catch (e) {
     return handleApiError(e);

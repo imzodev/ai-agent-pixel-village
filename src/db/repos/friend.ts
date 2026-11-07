@@ -1,7 +1,7 @@
 // Drizzle adapter for friends. Stores requests + canonical (lower,higher)
 // friendships so the (a,b) pair is unique regardless of insert order.
 
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { BlockedPlayer, FriendRequest, FriendRequestStatus, Friendship, Presence } from "@/types/social";
 import { characters, users } from "@/db/schema";
@@ -121,7 +121,48 @@ export class DrizzleFriendRepo {
     return row?.userId ?? null;
   }
 
+  async areFriends(userA: number, userB: number): Promise<boolean> {
+    const [a, b] = this.canonical(userA, userB);
+    const [row] = await this.db
+      .select({ a: friendships.userA })
+      .from(friendships)
+      .where(and(eq(friendships.userA, a), eq(friendships.userB, b)))
+      .limit(1);
+    return !!row;
+  }
+
+  /** The pending request from one user to another, if any. */
+  async findPending(fromUserId: number, toUserId: number): Promise<FriendRequest | null> {
+    const [row] = await this.db
+      .select()
+      .from(friendRequests)
+      .where(and(
+        eq(friendRequests.fromUserId, fromUserId),
+        eq(friendRequests.toUserId, toUserId),
+        eq(friendRequests.status, "pending"),
+      ))
+      .limit(1);
+    return (row as FriendRequest | undefined) ?? null;
+  }
+
   // --- presence ---
+  /** Characters seen in the last two minutes, most recent first (the caller filters out friends, blocks, itself). */
+  async listOnline(limit: number): Promise<{ userId: number; characterId: number; username: string; characterName: string; level: number }[]> {
+    return this.db
+      .select({
+        userId: characters.userId,
+        characterId: characters.id,
+        username: users.username,
+        characterName: characters.name,
+        level: characters.level,
+      })
+      .from(characters)
+      .innerJoin(users, eq(users.id, characters.userId))
+      .where(gt(characters.lastSeenAt, new Date(Date.now() - TWO_MIN)))
+      .orderBy(desc(characters.lastSeenAt))
+      .limit(limit);
+  }
+
   async listPresence(userIds: number[]): Promise<Presence[]> {
     if (userIds.length === 0) return [];
     const rows = await this.db
