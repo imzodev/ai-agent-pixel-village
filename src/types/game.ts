@@ -48,6 +48,8 @@ export type CharEnt = {
   rideKey?: string | null;
   /** A short-lived emote bubble ("!", "♪", "…"). */
   emote?: { t: Phaser.GameObjects.Text; until: number };
+  /** Voice chat: shown beside the name while they talk. */
+  voiceMark?: Phaser.GameObjects.Text;
 };
 
 export type CritterEnt = {

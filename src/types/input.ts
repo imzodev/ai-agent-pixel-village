@@ -39,7 +39,9 @@ export type CommandId =
   | "move.left"
   | "move.right"
   // Held: move at run speed (Shift on keyboard, full joystick push on touch).
-  | "move.run";
+  | "move.run"
+  // Held: push-to-talk in voice chat (src/game/voice/voiceClient.ts).
+  | "voice.talk";
 
 /** "press" fires once on keydown; "hold" reports its state each frame. */
 export type BindingMode = "press" | "hold";

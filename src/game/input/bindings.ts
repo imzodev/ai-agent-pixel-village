@@ -30,6 +30,7 @@ export const DEFAULT_KEY_BINDINGS: readonly KeyBinding[] = [
   { keys: ["b"], command: "ui.bag", mode: "press" },
   { keys: ["y"], command: "ui.shop", mode: "press" },
   { keys: ["m"], command: "ui.map", mode: "press" },
+  { keys: ["t"], command: "voice.talk", mode: "hold" },
   { keys: ["escape"], command: "ui.close", mode: "press" },
 ];
 

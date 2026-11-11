@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { characters, friendRequests, users } from "@/db/schema";
 import { getContainer } from "@/lib/container";
 import { getCurrentUser, handleApiError } from "@/lib/auth";
+import { voiceBlocksChanged } from "@/lib/voiceServer";
 
 export async function GET() {
   try {
@@ -70,12 +71,16 @@ export async function POST(req: Request) {
     if (body.action === "remove" || body.action === "unblock") {
       if (!body.userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
       if (body.action === "remove") await c.services.friend.removeFriend(me.id, body.userId);
-      else await c.services.friend.unblock(me.id, body.userId);
+      else {
+        await c.services.friend.unblock(me.id, body.userId);
+        voiceBlocksChanged(me.id, { userId: body.userId }, false);
+      }
       return NextResponse.json({ ok: true });
     }
     if (body.action === "block") {
       if (!body.characterId) return NextResponse.json({ error: "characterId required" }, { status: 400 });
       await c.services.friend.block(me.id, body.characterId);
+      voiceBlocksChanged(me.id, { characterId: body.characterId }, true); // out of voice with them within a second
       return NextResponse.json({ ok: true });
     }
     return NextResponse.json({ error: "unknown action" }, { status: 400 });

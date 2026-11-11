@@ -77,6 +77,7 @@ import SaveCharacterModal from "./SaveCharacterModal";
 import { deviceKeys } from "@/lib/keyHints";
 import { dangerNotice } from "@/lib/danger";
 import BossCountdown from "./BossCountdown";
+import { VoiceButton, VoicePartySection, VoicePeerControls } from "./VoiceControls";
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
@@ -1228,6 +1229,7 @@ export default function Hud() {
             )}
           </div>
         )}
+        {loggedIn && me?.me && <VoiceButton touch={isTouch} />}
         <div className="hidden sm:contents">{navItems(() => {})}</div>
         {!loggedIn && <Link href="/signup" className="shrink-0 rounded-lg bg-emerald-500 px-2 py-1 font-bold text-white hover:bg-emerald-400 sm:hidden">Play free</Link>}
         {loggedIn && isTouch && !talk && <div className="shrink-0"><TopBtn on={() => setChatOpen((o) => !o)} active={chatOpen}>💬</TopBtn></div>}
@@ -1301,6 +1303,7 @@ export default function Hud() {
             );
             return sel.distance <= 160 ? Buttons : <WalkBtn snap={snap} sel={sel} />;
           })()}
+          {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && <VoicePeerControls id={sel.id} />}
           {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && <Btn subtle on={() => setReporting({ id: sel.id, name: sel.name })}>🚩 Report</Btn>}
           {loggedIn && sel.type === "player" && sel.id !== snap?.me?.id && !blocked.includes(sel.id) && <Btn subtle on={() => void blockPlayer(sel.id, sel.name)}>🚫 Block</Btn>}
           {loggedIn && sel.type === "animal" && (sel.distance <= 90 ? <Btn on={() => commitSelection(sel)}>🤚 Pet {interactHint}</Btn> : <WalkBtn snap={snap} sel={sel} />)}
@@ -1989,7 +1992,7 @@ function ReportModal({ who, onDone, onClose }: { who: { id: number; name: string
           <div className="flex-1 text-lg font-bold text-amber-900">🚩 Report {who.name}</div>
           <button onClick={onClose} className="-m-2 p-2 text-lg text-stone-400 hover:text-stone-700" aria-label="Close">✕</button>
         </div>
-        <div className="mt-1 text-[12px] text-stone-600">What&apos;s wrong? Their latest chat goes with the report.</div>
+        <div className="mt-1 text-[12px] text-stone-600">What&apos;s wrong? Their latest chat goes with the report, and whether you were in voice together (voice itself is never recorded).</div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {REPORT_REASONS.map((r) => <button key={r} disabled={busy} onClick={() => void send(r)} className="pixel-btn bg-white px-2 py-2 text-sm font-bold disabled:opacity-40">{r}</button>)}
         </div>
@@ -2452,6 +2455,7 @@ function FriendsPanel({ onBlocksChanged }: { onBlocksChanged: () => void }) {
   if (!data) return <div className="text-stone-500">loading…</div>;
   return (
     <div className="space-y-2">
+      <VoicePartySection friendsOnline={data.friends.filter((f) => f.status === "online").map((f) => ({ characterId: f.characterId, name: f.characterName }))} />
       <div className="text-sm font-bold text-amber-900">Friend requests</div>
       {data.incoming.length === 0 && <div className="text-[12px] text-stone-500">No new requests.</div>}
       {data.incoming.map((r) => (

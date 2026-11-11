@@ -69,6 +69,8 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   /** Suspended by an admin (src/app/api/admin/ban): can't sign in or be seen. */
   bannedAt: timestamp("banned_at"),
+  /** Barred from voice chat by an admin (src/lib/voiceServer.ts): can't turn it on. */
+  voiceBannedAt: timestamp("voice_banned_at"),
 });
 
 /** A player reported by another (src/app/api/report); admins read them at /api/admin/reports. */
@@ -1185,6 +1187,13 @@ export const playerBlocks = pgTable(
   },
   (t) => [uniqueIndex("player_blocks_pair_idx").on(t.blockerUserId, t.blockedUserId), index("player_blocks_blocked_idx").on(t.blockedUserId)],
 );
+
+/** Estimated Cloudflare TURN relay traffic per UTC month (src/lib/voiceServer.ts): voice stops at the cap, so it stays free. */
+export const voiceUsage = pgTable("voice_usage", {
+  month: text("month").primaryKey(),
+  estBytes: bigint("est_bytes", { mode: "number" }).notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 // ---------- Daily quests ----------
 export const dailyQuests = pgTable(

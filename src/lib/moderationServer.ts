@@ -7,6 +7,7 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, reports, sessions, users, worldChat } from "@/db/schema";
 import type { ReportView } from "@/types/moderation";
+import { voiceBanChanged, voicePairNote } from "@/lib/voiceServer";
 
 /** File a report. Returns an error message, or null when it's filed. */
 export async function fileReport(reporterId: number, targetId: number, reason: string): Promise<string | null> {
@@ -16,8 +17,18 @@ export async function fileReport(reporterId: number, targetId: number, reason: s
   const lines = await db.select({ text: worldChat.text }).from(worldChat)
     .where(and(eq(worldChat.speakerType, "player"), eq(worldChat.speakerId, targetId)))
     .orderBy(desc(worldChat.id)).limit(8);
-  await db.insert(reports).values({ reporterId, targetId, reason: reason.slice(0, 200), chat: lines.map((l) => l.text).reverse() });
+  // Voice isn't recorded; the server's own note of whether they were in voice together goes with it.
+  const voice = voicePairNote(reporterId, targetId);
+  await db.insert(reports).values({ reporterId, targetId, reason: reason.slice(0, 200), chat: [...lines.map((l) => l.text).reverse(), ...(voice ? [voice] : [])] });
   return null;
+}
+
+/** Bar (or allow) an account from voice chat by username. Returns what happened, or null if no such user. */
+export async function setVoiceBanned(username: string, banned: boolean): Promise<string | null> {
+  const [u] = await db.update(users).set({ voiceBannedAt: banned ? new Date() : null }).where(eq(users.username, username.toLowerCase())).returning({ id: users.id });
+  if (!u) return null;
+  voiceBanChanged(u.id, banned);
+  return banned ? `${username} can't use voice chat any more.` : `${username} can use voice chat again.`;
 }
 
 /** Open reports, newest first, with names (admin). */
@@ -48,6 +59,7 @@ export async function setBanned(username: string, banned: boolean): Promise<stri
   if (!banned) return `${username} is reinstated.`;
   const [c] = await db.select({ id: characters.id }).from(characters).where(eq(characters.userId, u.id));
   await db.delete(sessions).where(eq(sessions.userId, u.id)); // signed out everywhere
+  voiceBanChanged(u.id, true); // and out of voice now (they can't turn it on again: no session)
   if (c) {
     const gone = await db.delete(worldChat).where(and(eq(worldChat.speakerType, "player"), eq(worldChat.speakerId, c.id))).returning({ id: worldChat.id });
     await db.update(reports).set({ resolvedAt: sql`now()` }).where(and(eq(reports.targetId, c.id), isNull(reports.resolvedAt)));

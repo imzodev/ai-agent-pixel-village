@@ -72,6 +72,7 @@ import { ARCADE_SPOTS, arcadeSpotBlocks, arcadeSpotPoint } from "@/lib/arcade/sp
 import type { EquippedCosmetics } from "@/types/cosmetic";
 import { tierAt } from "@/lib/continent";
 import { frameSeconds } from "@/lib/frameTime";
+import { voiceClient } from "@/game/voice/voiceClient";
 
 // Fixed UI/effect depths relative to the canopy band, preserving the old
 // draw order (weather over lights, bubbles on top).
@@ -275,6 +276,7 @@ export class WorldScene extends Phaser.Scene {
     this.destroyed = true;
     this.flushImpressions(true);
     window.removeEventListener("pagehide", this.onPageHide);
+    voiceClient.detach();
     this.stream?.stop();
     this.stream = null;
     this.unsub.forEach((u) => u());
@@ -401,6 +403,8 @@ export class WorldScene extends Phaser.Scene {
     this.unsub.push(bus.on("guide", (g) => { this.guide = g; }));
     this.unsub.push(bus.on("missionMarks", (m) => { this.missionMarks = m; }));
     this.unsub.push(bus.on("blocked", (ids) => { this.blocked = new Set(ids); }));
+    // Voice chat: a small mark beside the name of whoever is talking (you too).
+    this.unsub.push(bus.on("voiceSpeaking", ({ id, on }) => this.markSpeaking(id == null ? this.player : this.players.get(id), on)));
     this.fog = this.add.rectangle(0, 0, 10, 10, 0xdfe6ea, 0).setOrigin(0).setScrollFactor(0).setDepth(DEPTH_FOG).setVisible(false);
     this.rain = this.add.particles(0, 0, "rain", {
       lifespan: 1200, speedY: { min: 420, max: 520 }, speedX: -60, quantity: 4, frequency: 24, alpha: { start: 0.7, end: 0.2 }, scale: { min: 0.8, max: 1.2 },
@@ -645,7 +649,10 @@ export class WorldScene extends Phaser.Scene {
           }
         },
         onTurnedAway: (why) => { this.turnedAway = true; bus.emit("busy", why); },
+        onVoice: (msg) => voiceClient.handle(msg),
+        onOpen: () => voiceClient.onOpen(),
         onClose: () => {
+          voiceClient.onClose();
           // Optional: trigger a one-off HTTP snapshot fallback. For now,
           // the stream auto-reconnects; the player sees stale state until
           // the WS recovers. Acceptable trade-off vs. building a complex
@@ -658,6 +665,13 @@ export class WorldScene extends Phaser.Scene {
       heartbeatIntervalMs: 1500,
     });
     this.stream.start();
+    voiceClient.attach(
+      { send: (m) => this.stream?.sendVoice(m) },
+      {
+        me: () => (this.player ? { x: this.player.sprite.x, y: this.player.sprite.y } : null),
+        of: (id) => { const e = this.players.get(id); return e ? { x: e.sprite.x, y: e.sprite.y } : null; },
+      },
+    );
     // Debug/testing hook: lets Playwright read camera + player state live.
     (window as unknown as Record<string, unknown>).__worldScene = this;
     (window as unknown as Record<string, unknown>).__walk = { isWalkableAt, debugRegistry, chunkAtWorldPx, registerChunk, chunkRegistered };
@@ -988,7 +1002,17 @@ export class WorldScene extends Phaser.Scene {
     return key;
   }
 
+  /** Voice chat: the speaker mark beside a name while they talk. */
+  private markSpeaking(e: CharEnt | null | undefined, on: boolean) {
+    if (!e || this.destroyed) return;
+    if (!on) { e.voiceMark?.setVisible(false); return; }
+    e.voiceMark ??= this.add.text(e.sprite.x, e.sprite.y - 50, "🔊", { fontFamily: gameFont(), fontSize: "10px" }).setOrigin(1, 1).setResolution(3);
+    e.voiceMark.setVisible(true);
+    this.placeChar(e);
+  }
+
   private destroyChar(e: CharEnt) {
+    e.voiceMark?.destroy();
     e.sprite.destroy(); e.label.destroy(); e.badge?.destroy(); e.bubble?.c.destroy(); e.glow?.destroy(); e.shadow?.destroy(); e.emote?.t.destroy(); e.titleText?.destroy(); e.questMark?.destroy();
   }
 
@@ -2055,6 +2079,7 @@ export class WorldScene extends Phaser.Scene {
       else e.emote.t.setPosition(x, y - (e.badge ? 74 : 64) - Math.abs(Math.sin(this.time.now / 160)) * 2).setDepth(DEPTH_CHAR_BASE + y + 4);
     }
     e.label.setPosition(x, y - 50).setDepth(DEPTH_CHAR_BASE + y + 2);
+    e.voiceMark?.setPosition(x - e.label.displayWidth / 2 - 2, y - 50).setDepth(DEPTH_CHAR_BASE + y + 3);
     e.badge?.setPosition(x, y - 60).setDepth(DEPTH_CHAR_BASE + y + 3);
     if (e.bubble) {
       e.bubble.c.setPosition(x, y - (e.badge ? 72 : 62));

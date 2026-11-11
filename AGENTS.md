@@ -675,6 +675,44 @@ at `/advertise`: a poster of their own on a board in the world, billed monthly.
 - **Revenue** is on the stats page (`statsView().revenue`): MRR from sponsors'
   rent and paid billboards, spots held per tier, gem sales, ad views and clicks.
 
+## Voice chat (proximity and friends' parties)
+
+`src/lib/voice.ts` (rules, every number), `src/lib/voiceServer.ts` (server),
+`src/game/voice/voiceClient.ts` (browser), `src/components/VoiceControls.tsx` (HUD).
+Every logged-in player can turn it on (opt-in; visitors never); open mic by
+default, push-to-talk (T, or the on-screen button) in its settings.
+
+- **No player ever sees another's IP.** Audio is WebRTC, **relay-only**
+  (`iceTransportPolicy: "relay"`) through Cloudflare Realtime TURN
+  (`CLOUDFLARE_TURN_KEY_ID` / `CLOUDFLARE_TURN_API_TOKEN`; 1,000 GB a month free).
+  Encrypted end to end, so the relay can't listen either. Never add STUN or
+  host candidates, and never relax the relay policy in production.
+- **The server decides pairs, the browsers carry the audio.** Once a second
+  (`voiceTick`) the WS server's live, speed-guarded positions are paired by
+  `pickPairs`: within `VOICE_JOIN_PX` (16 tiles), held to `VOICE_DROP_PX` (20),
+  at most `VOICE_MAX_NEAR` (8) each; friends in one party (`PARTY_MAX` 6) at any
+  distance; never blocked either way or voice-banned. `rtc` set-up messages pass
+  **only between paired players** (`voiceRtc`), rate-limited (`takeToken`) and
+  cleaned (`sanitizeSdp` / `sanitizeCandidate`: audio only, relay candidates
+  only, `raddr` and connection lines blanked). Browsers only connect to peers the
+  server sends in `voicePeers`.
+- **No DB reads per tick.** Blocks and the name are read when voice turns on,
+  friendship on a party invite, and the usage tally saved once a minute.
+  `/api/friends` calls `voiceBlocksChanged`, so a block drops the pair within a second.
+- **It stays free.** Each tick adds the estimated relay egress (`relayBytes`,
+  `EST_BPS` per direction) to `voice_usage`; at `VOICE_MONTHLY_GB_CAP` (800)
+  credentials stop and everyone gets `voiceOff { reason: "quota" }` until the
+  next UTC month. With `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_ANALYTICS_TOKEN` the
+  real egress is read hourly and the larger number counts. Credentials last
+  `ICE_TTL_S` (2 h), are renewed in place and revoked when voice goes off.
+- **Moderation:** nothing is recorded. Per-player mute and volume are
+  client-side; a report adds the server's note of whether the two were in voice
+  together (`voicePairNote`); admins bar voice only with `POST /api/admin/ban
+  { username, voice: true }` (`users.voice_banned_at`, cut off at once).
+- Parties live in memory (a restart dissolves them); a party nobody's in for
+  `PARTY_EMPTY_MS` goes. Without TURN keys voice is off in production; in
+  development it connects directly for testing on one machine.
+
 ## Admin endpoints
 
 Anything that lets someone steer the world (send NPCs on trips, inspect or

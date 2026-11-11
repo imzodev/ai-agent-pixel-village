@@ -68,6 +68,7 @@ import { BIKE_ITEM } from "@/lib/bike";
 import type { Connection, WsInbound, WsSharedState } from "@/types/websocket";
 import { track } from "@/lib/track";
 import { connectionIp } from "@/lib/rateLimit";
+import { startVoice, stopVoice, voiceGone, voiceParty, voiceRtc, voiceSetOn } from "@/lib/voiceServer";
 
 const WS_PATH = "/ws";
 
@@ -453,7 +454,7 @@ function parseCookie(header: string | undefined): Record<string, string> {
   return out;
 }
 
-async function authenticate(req: http.IncomingMessage): Promise<{ playerId: number; x: number; y: number } | null> {
+async function authenticate(req: http.IncomingMessage): Promise<{ playerId: number; userId: number; x: number; y: number } | null> {
   const cookies = parseCookie(req.headers.cookie);
   const token = cookies[COOKIE_NAME];
   if (!token) return null;
@@ -469,7 +470,7 @@ async function authenticate(req: http.IncomingMessage): Promise<{ playerId: numb
 
   const ch = rows[0]?.character;
   if (!ch) return null;
-  return { playerId: ch.id, x: ch.x, y: ch.y };
+  return { playerId: ch.id, userId: ch.userId, x: ch.x, y: ch.y };
 }
 
 // ── Connection lifecycle ───────────────────────────────────────────────
@@ -515,6 +516,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   const conn: Connection = {
     ws,
     playerId: auth.playerId,
+    userId: auth.userId,
     homeCx: cx,
     homeCy: cy,
     homePx: guard.x,
@@ -540,6 +542,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   // in a try/catch so frame-level errors don't tear the connection.
   ws.on("close", (code) => {
     if (conn.flushTimer) clearTimeout(conn.flushTimer);
+    if (connections.get(conn.playerId) === conn) voiceGone(conn.playerId); // not a newer socket's voice
     connections.delete(conn.playerId);
     metrics.wsConnections.dec({ shard: SHARD_ID });
     // 1008 = slow-consumer eviction (set by the sweep); anything else
@@ -550,6 +553,7 @@ async function onConnection(ws: WebSocket, req: http.IncomingMessage): Promise<v
   });
   ws.on("error", () => {
     if (conn.flushTimer) clearTimeout(conn.flushTimer);
+    if (connections.get(conn.playerId) === conn) voiceGone(conn.playerId);
     connections.delete(conn.playerId);
   });
 
@@ -619,6 +623,21 @@ function onMessage(conn: Connection, raw: string): void {
   }
 if (msg.type === "roll") {
     onRoll(conn, Number(msg.t));
+    return;
+  }
+  // Voice chat (src/lib/voiceServer.ts): on / off, WebRTC set-up between
+  // paired players only, and friends' voice parties.
+  if (msg.type === "voice") {
+    const ref = { playerId: conn.playerId, userId: conn.userId, send: (m: string) => { try { conn.ws.send(m); } catch { /* socket closed */ } }, alive: () => conn.ws.readyState === conn.ws.OPEN };
+    void voiceSetOn(ref, msg.on === true).catch((err) => log.error({ err, playerId: conn.playerId }, "voice on/off failed"));
+    return;
+  }
+  if (msg.type === "rtc") {
+    voiceRtc(conn.playerId, msg);
+    return;
+  }
+  if (msg.type === "voiceParty") {
+    void voiceParty(conn.playerId, msg).catch((err) => log.error({ err, playerId: conn.playerId }, "voice party failed"));
     return;
   }
   // Sent before the client took our last correction: it would only snap it back again.
@@ -763,12 +782,21 @@ export function startPeriodicRefresh(): void {
   startCombatClock();
   posTimer = setInterval(flushPositions, POS_FLUSH_MS);
   saveTimer = setInterval(() => void savePositions().catch((err) => log.warn({ err }, "saving live positions failed")), SAVE_POSITIONS_MS);
+  startVoice({
+    positionOf: (id) => { const c = connections.get(id); return c && c.ws.readyState === c.ws.OPEN ? { x: c.homePx, y: c.homePy } : null; },
+    sendTo: (id, m) => {
+      const c = connections.get(id);
+      if (!c || c.ws.readyState !== c.ws.OPEN) return false;
+      try { c.ws.send(m); return true; } catch { return false; }
+    },
+  });
   log.info({ beatMs: WORLD_TICK_MS, offsetMs: BROADCAST_OFFSET_MS, resyncMs: WS_RESYNC_MS }, "beat broadcaster armed");
   scheduleNextBroadcast();
 }
 
 export function stopPeriodicRefresh(): void {
   stopCombatClock();
+  stopVoice();
   if (posTimer) clearInterval(posTimer);
   if (saveTimer) clearInterval(saveTimer);
   posTimer = null;

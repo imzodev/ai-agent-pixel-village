@@ -10,11 +10,14 @@ import type { CombatState, StatusEffect, Strike } from "@/types/combat";
 import type { WebSocket } from "ws";
 import type { ScheduledMove, WorldSnapshot } from "@/lib/protocol";
 import type { Facing, PlayerActKind } from "@/types/world";
+import type { VoiceServerMessage } from "@/types/voice";
 
 /** Per-connection state held by the WS server. */
 export type Connection = {
   ws: WebSocket;
   playerId: number;
+  /** The account (blocks and voice bans are by user). */
+  userId: number;
   homeCx: number;
   homeCy: number;
   homePx: number;
@@ -86,6 +89,8 @@ export type StreamHandlers = {
   onStrikes?: (strikes: Strike[]) => void;
   onStrikeCancel?: (id: number) => void;
   onCorrect?: (data: { x: number; y: number }) => void;
+  /** Voice chat messages (src/game/voice/voiceClient.ts). */
+  onVoice?: (msg: VoiceServerMessage) => void;
   /** Moves scheduled on the last beat (all starting at `startAt`). */
   onMoves: (data: { startAt: number; moves: ScheduledMove[] }) => void;
   onOpen?: () => void;
@@ -112,7 +117,11 @@ export type StreamPosition = { x: number; y: number; facing: Facing; mounted: bo
 export type ClockSample = { offsetMs: number; rttMs: number };
 
 /** A client message as it arrives, before validation (any field may be missing). */
-export type WsInbound = { type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string; mounted?: boolean; cs?: number };
+export type WsInbound = {
+  type?: string; x?: number; y?: number; facing?: string; sessionId?: string; t?: number; kind?: string; mounted?: boolean; cs?: number;
+  /** Voice (src/lib/voiceServer.ts): on/off, who an rtc message is for and what it carries, party commands. */
+  on?: boolean; to?: unknown; sdp?: unknown; cand?: unknown; op?: unknown; characterId?: unknown; partyId?: unknown;
+};
 
 /** A player's last accepted position and how far they may still move
  *  (src/lib/speedGuard.ts). Kept per player, across reconnects. */

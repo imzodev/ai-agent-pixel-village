@@ -12,6 +12,7 @@
 import type { WsClientMessage, WsServerMessage } from "@/lib/protocol";
 import type { Facing, PlayerActKind } from "@/types/world";
 import type { ClockSample, StreamHandlers, StreamPosition, WorldStreamOptions } from "@/types/websocket";
+import type { VoiceClientMessage } from "@/types/voice";
 
 export type { StreamHandlers, WorldStreamOptions };
 
@@ -96,6 +97,11 @@ export class WorldStream {
     this.send({ type: "act", kind, facing });
   }
 
+  /** Voice chat: on/off, WebRTC set-up for a paired player, party commands (src/game/voice). */
+  sendVoice(msg: VoiceClientMessage): void {
+    this.send(msg);
+  }
+
   /** Update the player's position; sent on the next pos/heartbeat tick,
    *  stamped with when it was current (the server's speed check times moves by it). */
   setPosition(x: number, y: number, facing: Facing, mounted = false): void {
@@ -168,6 +174,8 @@ export class WorldStream {
         this.opts.handlers.onCorrect?.({ x: msg.x, y: msg.y });
       } else if (msg.type === "saloon") {
         this.opts.handlers.onSaloon?.({ inn: msg.inn });
+      } else if (msg.type === "voicePeers" || msg.type === "rtc" || msg.type === "voiceIce" || msg.type === "voiceOff" || msg.type === "voiceParty" || msg.type === "voiceInvite" || msg.type === "voiceNotice") {
+        this.opts.handlers.onVoice?.(msg);
       } else if (msg.type === "playerPositions") {
         for (const p of msg.list) this.opts.handlers.onPlayerPos(p);
       } else if (msg.type === "playerPos") {

@@ -70,6 +70,8 @@ export type Events = {
   relicPicked: { key: string; have: number; total: number };
   /** The local player was knocked out and wakes at (x, y). */
   knockout: { x: number; y: number; coinsLost: number };
+  /** Someone in voice chat started or stopped talking (id null: you). The scene marks them. */
+  voiceSpeaking: { id: number | null; on: boolean };
 };
 
 export type Handler<T> = (payload: T) => void;

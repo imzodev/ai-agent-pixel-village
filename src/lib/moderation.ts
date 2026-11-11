@@ -7,7 +7,7 @@ const URL_PATTERN = /(https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(com|net|org|io|gg|xyz
 const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/g;
 
 /** Why a player can be reported (the report window's buttons; checked by /api/report). */
-export const REPORT_REASONS: readonly string[] = ["Offensive chat", "Offensive name", "Spam or ads", "Cheating", "Harassment", "Other"];
+export const REPORT_REASONS: readonly string[] = ["Offensive chat", "Offensive voice chat", "Offensive name", "Spam or ads", "Cheating", "Harassment", "Other"];
 
 /** Unambiguous: matched anywhere, even inside other words ("xXfuckXx"). */
 const STRONG = ["fuck", "cunt", "nigger", "nigga", "faggot", "retard", "tranny", "kike", "wetback", "hitler", "kkk", "porn", "whore"];

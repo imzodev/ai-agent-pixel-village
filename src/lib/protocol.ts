@@ -12,6 +12,7 @@ import type { LotSnapshot } from "@/types/garden";
 import type { BreadTableSnapshot } from "@/types/bakery";
 import type { ShopDisplaySnapshot } from "@/types/shopDisplay";
 import type { BillboardSnapshot } from "@/types/billboard";
+import type { VoiceClientMessage, VoiceServerMessage } from "@/types/voice";
 
 // Re-exported for callers that already import protocol types together.
 export type { Facing, Move, ScheduledMove };
@@ -32,7 +33,9 @@ export type WsClientMessage =
   // One-shot action (attack swing), relayed to nearby players. In-memory only.
   | { type: "act"; kind: PlayerActKind; facing: Facing }
   // A dodge roll, started at server time `t` (src/lib/combat/strikes.ts).
-  | { type: "roll"; t: number; facing: Facing };
+  | { type: "roll"; t: number; facing: Facing }
+  // Voice chat (src/types/voice.ts): on/off, WebRTC set-up for a paired player, party commands.
+  | VoiceClientMessage;
 
 export type WsServerMessage =
   | { type: "snapshot"; data: WorldSnapshot }
@@ -71,6 +74,8 @@ export type WsServerMessage =
   // A saloon game you're in changed (src/lib/saloonServer.ts): re-read it.
   | { type: "saloon"; inn: string }
   | { type: "pong"; t?: number; serverTime?: number }
+  // Voice chat (src/lib/voiceServer.ts): who to connect to, set-up from them, relay credentials, parties.
+  | VoiceServerMessage
   | { type: "error"; message: string };
 
 // The same shape the /api/world HTTP endpoint returns. The WS path
