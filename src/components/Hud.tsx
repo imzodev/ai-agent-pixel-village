@@ -70,7 +70,11 @@ import { TUTORIAL_STEPS } from "@/lib/tutorial";
 import { plusOf, withPlus } from "@/lib/forge";
 import type { Move } from "@/types/motion";
 import JourneyTracker from "./JourneyTracker";
+import StoryTracker from "./StoryTracker";
+import StoryPanel from "./StoryPanel";
+import HeroCard from "./HeroCard";
 import type { JourneyView } from "@/types/journey";
+import type { StoryView } from "@/types/story";
 import type { BlockedPlayer, OnlinePlayer, Presence } from "@/types/social";
 import HelpModal from "./HelpModal";
 import SaveCharacterModal from "./SaveCharacterModal";
@@ -81,7 +85,7 @@ import { VoiceButton, VoicePartySection, VoicePeerControls } from "./VoiceContro
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[]; memberGift?: { gems: number; itemName: string } | null; member?: boolean };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[]; story?: StoryView | null; memberGift?: { gems: number; itemName: string } | null; member?: boolean };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -183,7 +187,7 @@ export default function Hud() {
   const [confirmRelease, setConfirmRelease] = useState<string | null>(null);
   const [bannerFor, setBannerFor] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | null>(null);
+  const [panel, setPanel] = useState<"bag" | "missions" | "log" | "home" | "quests" | "friends" | "perks" | "book" | "story" | null>(null);
   const [talk, setTalk] = useState<{ npcId: number; name: string; role: string; sponsor: { businessName: string; brandColor: string } | null; lines: TalkLine[]; offers: Offer[]; busy: boolean } | null>(null);
   const [shop, setShop] = useState<{ npcName: string; npcKey: string } | null>(null);
   const [orders, setOrders] = useState<{ npcId: number; npcName: string } | null>(null);
@@ -348,7 +352,10 @@ export default function Hud() {
         if (n) toast(n.text, n.kind);
       }),
       bus.on("region", ({ key }) => {
-        void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => { if (r.new && r.message) toast(r.message, "good"); });
+        void api<{ new?: boolean; message?: string }>("/api/collection", { action: "visit", region: key }).then((r) => {
+          if (r.new && r.message) toast(r.message, "good");
+          if (r.message && /📜|🏁/u.test(r.message)) void refreshMe(); // a story chapter was reached
+        });
       }),
       bus.on("toggle", (which) => {
         if (which === "shop") {
@@ -1137,6 +1144,7 @@ export default function Hud() {
           {((me?.perkPoints ?? 0) > 0 || (me?.perks.length ?? 0) > 0) && (
             <TopBtn on={() => { pick(); togglePanel("perks"); }} active={panel === "perks"}>⭐ Perks{(me?.perkPoints ?? 0) > 0 ? ` (${me?.perkPoints})` : ""}</TopBtn>
           )}
+          <TopBtn on={() => { pick(); togglePanel("story"); }} active={panel === "story"}>📜 Story</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("missions"); }} active={panel === "missions"}>📜 Missions{missionDone ? " ✓" : ""}</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("quests"); }} active={panel === "quests"}>⚡ Quests</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("friends"); }} active={panel === "friends"}>👥 Friends</TopBtn>
@@ -1193,7 +1201,13 @@ export default function Hud() {
       {loggedIn && mapOpen && (
         <MapPanel me={selfPos ?? snap?.me ?? null} guide={guideTarget} bounties={myBounties} encounters={nearEncounters} extraSeen={freshSeen} travelMode={mapOpen === "travel"} onClose={() => setMapOpen(null)} onMessage={(text, kind) => toast(text, kind)} />
       )}
-      {loggedIn && me?.journey && !(me.me && me.me.tutorialStep < TUTORIAL_STEPS.length) && <JourneyTracker view={me.journey} snap={snap} touch={isTouch} />}
+      {loggedIn && me?.me && me.me.tutorialStep >= TUTORIAL_STEPS.length && (
+        // After the tutorial: the story card, with the journey's under it.
+        <div className="pointer-events-none absolute left-2 top-[var(--hud-top,3.5rem)] z-10 flex w-[min(14rem,calc(50vw-0.75rem))] flex-col gap-1 sm:w-64">
+          <StoryTracker view={me.story ?? null} snap={snap} onOpen={() => setPanel("story")} />
+          {me.journey && <JourneyTracker view={me.journey} snap={snap} touch={isTouch} guide={!me.story} />}
+        </div>
+      )}
       {loggedIn && me?.me && me.me.tutorialStep < TUTORIAL_STEPS.length && (
         <QuestTracker step={me.me.tutorialStep} progress={me.me.tutorialProgress} snap={snap} touch={isTouch} onSkip={async () => { await api("/api/tutorial", { action: "skip" }); toast("Tutorial skipped. Your 🧭 Journey card shows what to do next, and ❓ Help has the controls.", "info"); void refreshMe(); }} />
       )}
@@ -1557,10 +1571,16 @@ export default function Hud() {
       {/* Side panels */}
       {panel && (
         <div className={`pointer-events-auto absolute bottom-2 left-2 right-2 top-[var(--hud-top,3.5rem)] z-20 overflow-y-auto pixel-panel p-3 shadow-2xl sm:bottom-16 sm:left-auto sm:right-3 sm:w-[min(92vw,360px)] ${isTouch ? "pb-44" : ""}`}>{/* on a phone, room to scroll the last rows up above the stick and buttons */}
-          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
+          <div className="mb-2 flex items-center"><div className="text-base font-bold text-amber-900">{panel === "bag" ? "🎒 Your bag" : panel === "missions" ? "📜 Missions" : panel === "home" ? "🏡 Your cottage" : panel === "perks" ? "⭐ Perks" : panel === "book" ? "📖 Collection book" : panel === "story" ? "📜 Your hero & story" : "🗺️ The world"}</div><div className="flex-1" /><button onClick={() => setPanel(null)} className="text-stone-400 hover:text-stone-700">✕</button></div>
           {panel === "bag" && <BagPanel me={me} onAction={invAction} onRead={(mapId) => { setReading(mapId); setPanel(null); }} />}
           {panel === "missions" && <MissionsPanel me={me} snap={snap} />}
           {panel === "quests" && <DailyQuestsPanel />}
+          {panel === "story" && (
+            <div className="space-y-3">
+              <HeroCard onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />
+              <StoryPanel onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />
+            </div>
+          )}
           {panel === "friends" && <FriendsPanel onBlocksChanged={() => void loadBlocked()} />}
           {panel === "book" && <CollectionBook onMessage={(text, kind) => { toast(text, kind); void refreshMe(); }} />}
           {panel === "perks" && me && <PerksPanel me={me} onPick={async (perk) => { await post("/api/perks", { perk }); }} />}

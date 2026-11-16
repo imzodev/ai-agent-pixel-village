@@ -46,7 +46,10 @@ import type { RanchBuildKey, RanchJob } from "@/types/ranchGrowth";
 import type { FriendRequest, Friendship } from "@/types/social";
 import type { DailyQuest, StreakState, QuestRequirement, QuestReward } from "@/types/quest";
 import type { BountyData, BountyReward } from "@/types/bounty";
+import { sql } from "drizzle-orm";
 import type { Activity, ActivityParticipant } from "@/types/activity";
+import type { StoryChapter, StoryStatus, StorySource } from "@/types/story";
+import type { TraitSource } from "@/types/traits";
 
 // Re-export domain types so existing imports of `import type { Appearance }
 // from "@/db/schema"` keep working. New code should import from
@@ -1030,6 +1033,50 @@ export const characterPerks = pgTable(
     pickedAt: timestamp("picked_at").defaultNow().notNull(),
   },
   (t) => [uniqueIndex("character_perks_pk").on(t.characterId, t.perkKey)],
+);
+
+/** Who a character is (src/lib/traits.ts): one origin row, the picked traits, and traits earned from stories. */
+export const characterTraits = pgTable(
+  "character_traits",
+  {
+    characterId: integer("character_id").notNull(),
+    /** An OriginKey for the origin row, else a TraitKey. */
+    key: text("key").notNull(),
+    kind: text("kind").$type<"origin" | TraitSource>().notNull(),
+    at: timestamp("at").defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("character_traits_pk").on(t.characterId, t.key)],
+);
+
+/** A character's storylines (src/lib/story/): at most one active at a time. */
+export const characterStories = pgTable(
+  "character_stories",
+  {
+    id: serial("id").primaryKey(),
+    characterId: integer("character_id").notNull(),
+    source: text("source").$type<StorySource>().notNull(),
+    /** The hand-written story it came from (or fell back to); null for the AI's own. */
+    templateKey: text("template_key"),
+    /** The hero line the player wrote (AI stories). */
+    prompt: text("prompt"),
+    title: text("title").notNull(),
+    premise: text("premise").notNull(),
+    ending: text("ending").notNull(),
+    heroTitle: text("hero_title").notNull(),
+    /** Chapters with their rewards, fixed when the story starts. */
+    chapters: jsonb("chapters").$type<StoryChapter[]>().notNull(),
+    step: integer("step").notNull().default(0),
+    progress: integer("progress").notNull().default(0),
+    status: text("status").$type<StoryStatus>().notNull().default("active"),
+    /** The story this one continues (a sequel). */
+    sequelOf: integer("sequel_of"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (t) => [
+    uniqueIndex("character_stories_one_active").on(t.characterId).where(sql`status = 'active'`),
+    index("character_stories_character_idx").on(t.characterId, t.createdAt),
+  ],
 );
 
 export const gemTransactions = pgTable("gem_transactions", {

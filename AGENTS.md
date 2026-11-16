@@ -452,6 +452,48 @@ row lock (`locked`), so double clicks can't pay twice.
 - Employers know you work for them (`jobNoteFor` in the talk prompt); promotions
   and firings are `job` world events, so gossip.
 
+## Storylines, traits and qualities (a hero's purpose)
+
+**Storylines** (`src/lib/story/`, `character_stories`, `/api/story`): each player lives one
+story at a time, 4–7 chapters, each one thing to do (`talk`, `deliver`, `collect`,
+`defeat`, `visit`, `fish`, `plant`, `sell`). Pick a hand-written one (`templates.ts`,
+each told once per character) or write one line about your hero ("a retired pirate…")
+and the AI writes it (`prompt.ts` → `chatWithFallback` jsonMode → `parse.ts`).
+
+- **The AI only names what's in the catalog** (`catalog.ts`: NPCs, regions, foes and
+  items a hero of that level can reach, by `storyBand`); `parseStory` drops any chapter
+  naming anything else, clamps counts (`QTY_MAX`) and refuses a story that's mostly talk
+  (`wellFormed`). **Rewards never come from the AI**: `chapterReward` (`rules.ts`) pays by
+  effort and level, the finale double. No key, an error, or two bad replies → the closest
+  template (`closestTemplate`) starts instead. `STORY_STARTS_DAILY` (3) caps starts.
+- **Progress**: `storyEvent` beside `tutorialEvent` at every event site (talk route, act
+  gather/chop/defeat/pet drops, fish, garden plant/harvest, trade sell, collection visit).
+  Guarded on the step like the tutorial; quiet until the tutorial is done. A `deliver`
+  completes on talking to the NPC with the goods in the bag (they're taken).
+- **NPCs play their part**: while the chapter is theirs, `storyNoteFor` adds the story and
+  `npcNote` to their talk prompt (`BrainInput.storyNote`).
+- The end: the hero title (`storyTitles` in `unlockedTitles`), a `story` world event
+  (gossip), a `story` moment (share card), and an earned trait. An AI story's start is a
+  moment too (the hook worth sharing). Play now and signup take the hero line (`hero`) and
+  write the story in the background (`writeStoryLater`). Sequels continue a finished story.
+- Client: `StoryTracker` (above the journey card; it drives the guide arrow), `StoryPanel`
+  (📜 Story), the profile's "Their story".
+
+**Traits** (`src/lib/traits.ts` rules, `traitsServer.ts`, `character_traits`, `/api/traits`):
+an origin (kit given once) and `TRAIT_PICKS` (2) traits, changeable for `TRAIT_CHANGE_MS`
+(a day); finishing a story teaches another (`earnedTraitFor`). Smaller than perks and
+**never a price** (economy.test's no-loop rule); membership never grants one. Effects:
+charming (regard.ts), lucky (act drops), angler (fish zone), brave (act damage, tier ≥ 3),
+animal friend (pet affection), hardy (max HP: `recalcLevel`, on pick), patient (`wearTool`),
+storyteller (story XP).
+
+**Qualities** (`src/lib/qualities.ts`, `qualitiesServer.ts`): courage, kindness, cunning,
+industry, 0–100 on a log scale of records the game already keeps (collection counts,
+bounties, regard, missions, reputation, job shifts). No new hooks. Titles at 50/80
+(`qualityTitlesFor` in `unlockedTitles`); the leading one (≥ `KNOWN_AT`) and the traits go
+into NPC talk prompts (`heroNoteFor` → `BrainInput.heroNote`). Shown in `HeroCard` and on
+the profile.
+
 ## Membership and invites
 
 - **Membership** (`src/lib/membership.ts` rules, `src/lib/membershipServer.ts`,

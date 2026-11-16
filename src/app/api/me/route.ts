@@ -10,6 +10,7 @@ import { perkPoints } from "@/lib/progression";
 import { unseenMoments } from "@/lib/momentsServer";
 import { markActive } from "@/lib/track";
 import { journeyFor } from "@/lib/journeyServer";
+import { storyViewFor } from "@/lib/story/storyServer";
 import { claimMonthly, isMember } from "@/lib/membershipServer";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,8 @@ export async function GET() {
       // The journey after the tutorial: the current goal, and any just met.
       journey: journey.view,
       journeyDone: journey.done,
+      // The player's story (src/lib/story/): the current chapter.
+      story: await storyViewFor(me.id),
       memberGift,
       member: await isMember(me.id),
       // For the profile link (/u/<username>), and whether a "Play now"

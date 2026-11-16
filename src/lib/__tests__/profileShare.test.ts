@@ -16,7 +16,8 @@ function profile(over: Partial<Profile> = {}): Profile {
       fishCaught: 0, rareFish: [], creaturesBeaten: 0, toughest: [], towns: { visited: 1, total: 20 },
       places: { visited: 0, total: 0 }, folk: { met: 0, total: 0 }, cropsHarvested: 0, chestsDug: 0, lostCache: false,
     },
-    reputation: [], lots: [], farmLevel: null, relicSets: [], dearFriends: [], moments: [],
+    reputation: [], lots: [], farmLevel: null, relicSets: [], dearFriends: [], moments: [], story: null, stories: [],
+    hero: { origin: null, traits: [], qualities: { courage: 0, kindness: 0, cunning: 0, industry: 0 } },
     ...over,
   };
 }

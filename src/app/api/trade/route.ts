@@ -10,6 +10,7 @@ import { performSell } from "@/lib/sellServer";
 import { pricesAt } from "@/lib/marketServer";
 import { addItem, logEvent } from "@/lib/game";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { storyEvent } from "@/lib/story/storyServer";
 import { REP_PER_TRADE, discounted, townName, townOfNpc } from "@/lib/reputation";
 import { addReputation, reputationWith } from "@/lib/reputationServer";
 import { getLivePlayerPosition, markWorldDirty, refreshBikeOwnership } from "@/lib/world-stream";
@@ -94,9 +95,10 @@ export async function POST(req: Request) {
       me.y,
     );
     const step = await tutorialEvent(me.id, "sell");
+    const told = await storyEvent(me.id, { kind: "sell" }, r.qty).catch(() => null);
     const sellTown = r.ok && npcKey ? townOfNpc(npcKey) : null;
     const rep = sellTown ? await addReputation(me.id, sellTown, REP_PER_TRADE) : null;
-    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, wanted: r.wanted, gained: r.gained, coins: r.coins, purse: r.purse, notices: [...(step ? [step] : []), ...(rep?.reached ? [`🏘️ ${townName(sellTown!)} now sees you as ${rep.reached}!`] : [])] });
+    return Response.json({ ok: true, soldTo: r.soldTo, itemKey: r.itemKey, qty: r.qty, wanted: r.wanted, gained: r.gained, coins: r.coins, purse: r.purse, notices: [...(step ? [step] : []), ...(told ? [told] : []), ...(rep?.reached ? [`🏘️ ${townName(sellTown!)} now sees you as ${rep.reached}!`] : [])] });
   } catch (e) {
     return handleApiError(e);
   }

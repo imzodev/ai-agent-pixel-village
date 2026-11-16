@@ -10,6 +10,8 @@ import type { CollectionBookView, CollectionCounts, CollectionKind } from "./col
 import { NPC_DEFS } from "./seed";
 import { reputationTitles } from "./reputationServer";
 import { arcadeTitles } from "./arcadeServer";
+import { storyTitles } from "./story/storyServer";
+import { qualityTitlesFor } from "./qualitiesServer";
 import { TUTORIAL_DONE } from "./tutorial";
 import { grantTreasureMap } from "./treasureServer";
 import { createMoment } from "./momentsServer";
@@ -31,7 +33,7 @@ const folk = () => NPC_DEFS.map((n) => ({ key: n.key, name: n.name, icon: "🧑"
 async function unlockedTitles(characterId: number, counts: Awaited<ReturnType<typeof collectionCounts>>, level: number, tutorialStep: number): Promise<string[]> {
   const pages = collectionPages(folk()).filter((p) => (counts.page?.[p.key] ?? 0) > 0).map((p) => p.reward.title);
   const done = achievementsDone(counts, level, tutorialStep === TUTORIAL_DONE);
-  return [...ACHIEVEMENTS.filter((a) => done.has(a.key)).map((a) => a.title), ...pages, ...(await reputationTitles(characterId)), ...(await arcadeTitles(characterId))];
+  return [...ACHIEVEMENTS.filter((a) => done.has(a.key)).map((a) => a.title), ...pages, ...(await reputationTitles(characterId)), ...(await arcadeTitles(characterId)), ...(await storyTitles(characterId)), ...(await qualityTitlesFor(characterId))];
 }
 
 export async function bookView(characterId: number): Promise<CollectionBookView> {

@@ -18,6 +18,8 @@ import { ensureSeeded } from "@/lib/seed";
 import { getContainer } from "@/lib/container";
 import { fire as recordSponsorEvent } from "@/services/attributionHooks";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { storyEvent, storyNoteFor } from "@/lib/story/storyServer";
+import { heroNoteFor } from "@/lib/qualitiesServer";
 import { recordCollection } from "@/lib/collectionServer";
 
 import { mindNoteFor } from "@/lib/mind/mindServer";
@@ -77,7 +79,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const message = String(body.message ?? "").trim().slice(0, 400);
 
     // Everything the reply needs, looked up together (none depends on another).
-    const [latest, offers, sponsor, [ws], mindNote, memory, names, gossip] = await Promise.all([
+    const [latest, offers, sponsor, [ws], mindNote, memory, names, gossip, storyNote, heroNote] = await Promise.all([
       // The latest lines (newest first, put back in order below).
       db
         .select({ role: conversations.role, text: conversations.text })
@@ -98,6 +100,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       // What they've heard from the other NPCs (src/lib/npcTalkServer.ts).
       // …plus what their town's buyers have had too much of lately (src/lib/marketServer.ts).
       Promise.all([gossipFor(npc.id, character.id), marketNews(npc.key)]).then(([g, m]) => [...g, ...m]).catch(() => [] as string[]),
+      // Their part in the player's story, if the current chapter is theirs (src/lib/story/).
+      storyNoteFor(npc.key, character.id, character.name).catch(() => null),
+      // Who the player is: origin, traits, what they're known for (src/lib/qualitiesServer.ts).
+      heroNoteFor(character.id, character.name).catch(() => null),
     ]);
     const history = latest.reverse();
     const hour = gameHour(ws.epochStart.getTime(), ws.dayLengthMinutes);
@@ -109,7 +115,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const forceScripted = npc.kind !== "remote" && !npcLlmLimiter.allow(character.id.toString())
       && !((await isMember(character.id)) && memberTalkLimiter.allow(character.id.toString()));
     const knowledge = knowledgeFor(npc.key, (k) => names.get(k) ?? k.replace(/_/g, " "));
-    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory, gossip };
+    const input = { npc, sponsor, character, message, history, offers, hour, weather: ws.weather, forceScripted, mindNote, knowledge, memory, gossip, storyNote, heroNote };
 
     // After the reply: save it and count the conversation, then the answer body.
     const finish = async (reply: BrainOutput): Promise<TalkReply> => {
@@ -129,6 +135,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const notices: string[] = [];
       const step = await tutorialEvent(character.id, "talk", { npcKey: npc.key });
       if (step) notices.push(step);
+      const told = await storyEvent(character.id, { kind: "talk", npcKey: npc.key }).catch(() => null);
+      if (told) notices.push(told);
       if (await recordCollection(character.id, "npc", npc.key)) notices.push(`📖 You met ${npc.name}.`);
       // Daily quest: talk event.
       const c = getContainer();

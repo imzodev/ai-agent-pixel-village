@@ -1,6 +1,8 @@
 // A player's public profile (/u/[username], src/lib/profileServer.ts). Types only.
 
 import type { CardLook, Moment } from "./moments";
+import type { StoryRecord, StoryView } from "./story";
+import type { Qualities } from "./qualities";
 
 /** A collection book page on the profile. */
 export type ProfileBookPage = { name: string; icon: string; found: number; total: number; claimed: boolean };
@@ -50,6 +52,11 @@ export type Profile = {
   /** NPCs who call them a dear friend. */
   dearFriends: { key: string; name: string; role: string }[];
   moments: Moment[];
+  /** The story they're living (src/lib/story/), and the ones they've finished. */
+  story: Pick<StoryView, "title" | "premise" | "step" | "total" | "source"> | null;
+  stories: StoryRecord[];
+  /** Who they are (src/lib/traits.ts) and what their deeds have made them (src/lib/qualities.ts). */
+  hero: { origin: { name: string; icon: string } | null; traits: { name: string; icon: string; earned: boolean }[]; qualities: Qualities };
 };
 
 /** What a profile share phrasing is filled with (src/lib/profileShare.ts): the facts as one clause, level, name, town count. */

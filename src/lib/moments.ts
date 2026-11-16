@@ -88,6 +88,30 @@ export function dearFriendMoment(npcName: string, npcKey: string, role: string, 
   };
 }
 
+/** A story the AI wrote from the player's own line about their hero. */
+export function storyStartMoment(title: string, premise: string, r?: number): MomentData {
+  return {
+    headline: `"${title}"`,
+    sub: "a story the village wrote for me",
+    share: oneOf([
+      `Told ${SITE} who my hero is in one line and the AI villagers wrote me a whole story: "${title}". ${premise}`,
+      `My character on ${SITE} has their own story now, written by the AI village from one line I typed: "${title}"`,
+    ], r),
+  };
+}
+
+/** A story finished: its title and the name the hero earned. */
+export function storyDoneMoment(title: string, heroTitle: string, r?: number): MomentData {
+  return {
+    headline: `"${title}"`,
+    sub: `a story finished · now ${heroTitle}`,
+    share: oneOf([
+      `Finished my story "${title}" on ${SITE}. The villagers are AI and every one of them played their part. They call me ${heroTitle} now`,
+      `"${title}": done. ${SITE}'s AI villagers acted out the whole thing and still bring it up. ${heroTitle}, that's me`,
+    ], r),
+  };
+}
+
 /** The X post composer, filled in. */
 export function xShareUrl(text: string, url: string): string {
   return `https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;

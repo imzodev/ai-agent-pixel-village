@@ -11,6 +11,7 @@ import { headers } from "next/headers";
 import { track } from "@/lib/track";
 import { getCurrentUser } from "@/lib/auth";
 import { profileShareText } from "@/lib/profileShare";
+import { QUALITIES } from "@/lib/qualities";
 import { isBot } from "@/lib/bots";
 import RefMark from "@/components/RefMark";
 import ShareLink from "@/components/ShareLink";
@@ -133,6 +134,46 @@ export default async function ProfilePage({ params }: { params: Promise<{ userna
                 </li>
               ))}
             </ul>
+          </Section>
+        )}
+
+        <Section title="🧑 Who they are">
+          {(p.hero.origin || p.hero.traits.length > 0) && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {p.hero.origin && <span className="rounded bg-amber-400/20 px-2 py-0.5 font-bold">{p.hero.origin.icon} {p.hero.origin.name}</span>}
+              {p.hero.traits.map((t) => (
+                <span key={t.name} className={`rounded px-2 py-0.5 ${t.earned ? "bg-violet-400/20 ring-1 ring-violet-300/50" : "bg-white/10"}`} title={t.earned ? "Taught by a story" : undefined}>{t.icon} {t.name}{t.earned ? " ✦" : ""}</span>
+              ))}
+            </div>
+          )}
+          <ul className="grid gap-1 sm:grid-cols-2">
+            {QUALITIES.map((d) => (
+              <li key={d.key} className="flex items-center gap-2" title={`Grows with ${d.from}`}>
+                <span className="w-24 shrink-0">{d.icon} {d.name}</span>
+                <div className="h-2 flex-1 overflow-hidden rounded bg-white/10"><div className="h-full bg-amber-300" style={{ width: `${p.hero.qualities[d.key]}%` }} /></div>
+                <span className="w-7 text-right text-sm tabular-nums text-stone-400">{p.hero.qualities[d.key]}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        {(p.story || p.stories.length > 0) && (
+          <Section title="📜 Their story">
+            <ul className="space-y-2">
+              {p.story && (
+                <li className="rounded-lg bg-violet-400/15 p-2 ring-1 ring-violet-300/40">
+                  <div className="font-bold">{p.story.title} <span className="text-sm font-normal text-stone-400">· chapter {p.story.step + 1} of {p.story.total}</span></div>
+                  <div className="text-sm text-stone-300">{p.story.premise}</div>
+                </li>
+              )}
+              {p.stories.map((s) => (
+                <li key={s.id} className="rounded-lg bg-white/5 p-2">
+                  <div className="font-bold">{s.title} <span className="text-sm font-normal text-amber-300">· {s.heroTitle}</span></div>
+                  <div className="text-sm text-stone-400">{s.premise}</div>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-sm text-stone-400">{p.stories.some((s) => s.source === "ai") || p.story?.source === "ai" ? "Written by the AI villagers from one line about their hero, and acted out by them." : "Lived among the AI villagers of the grove."}</p>
           </Section>
         )}
 

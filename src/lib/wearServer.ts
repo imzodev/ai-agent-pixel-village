@@ -7,6 +7,8 @@ import { db } from "@/db";
 import { characters, inventory, items } from "@/db/schema";
 import { WEAR_MAX, WEAR_PER_USE, mostWorn, repairCost, usedCopy, wearNotice, wearOf, wears } from "./wear";
 import { withPlus, plusOf } from "./forge";
+import { hasTrait } from "./traitsServer";
+import { PATIENT_WEAR_MULT } from "./traits";
 import type { WearUse } from "@/types/forge";
 
 type InvRow = typeof inventory.$inferSelect;
@@ -31,12 +33,14 @@ async function setOneCopy(tx: Parameters<Parameters<typeof db.transaction>[0]>[0
 /** Wear the copy of `itemKey` in use by one `use`; a notice when it just got worn or dull. */
 export async function wearTool(characterId: number, itemKey: string | null, use: WearUse): Promise<string | null> {
   if (!itemKey || !wears(itemKey)) return null;
+  // Patient hands wear their tools slower (src/lib/traits.ts).
+  const per = WEAR_PER_USE[use] * ((await hasTrait(characterId, "patient")) ? PATIENT_WEAR_MULT : 1);
   const r = await db.transaction(async (tx) => {
     const row = await lockCopy(tx, characterId, itemKey, "used");
     if (!row) return null;
     const before = wearOf(row.meta);
     if (before >= WEAR_MAX) return null;
-    const after = Math.min(WEAR_MAX, before + WEAR_PER_USE[use]);
+    const after = Math.min(WEAR_MAX, before + per);
     await setOneCopy(tx, row, { ...(row.meta as Record<string, unknown>), wear: after });
     return { before, after, plus: plusOf(row.meta) };
   });

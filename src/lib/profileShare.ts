@@ -21,6 +21,8 @@ export function shareFacts(p: Profile, own: boolean): string[] {
   const facts: string[] = [];
   const boss = p.book.toughest.find((f) => f.note === "boss");
   if (boss) facts.push(`${I} took down the ${boss.name}`);
+  const story = p.stories[0];
+  if (story) facts.push(`${I} finished ${own ? "my" : "their"} story "${story.title}" and the villagers call ${me} ${story.heroTitle} now`);
   const friend = p.dearFriends[0];
   if (friend) facts.push(`${friend.name} the ${friend.role.toLowerCase()} calls ${me} a dear friend now`);
   const legend = p.book.rareFish.find((f) => f.note === "legendary");

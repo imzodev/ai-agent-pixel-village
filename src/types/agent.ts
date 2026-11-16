@@ -24,6 +24,10 @@ export type BrainInput = {
   memory?: NpcMemory;
   /** Gossip they've heard from other NPCs (src/lib/npcTalkServer.ts gossipFor), the player's first. */
   gossip?: string[];
+  /** The player's story, while its current chapter is this NPC's part (src/lib/story/view.ts storyNote). */
+  storyNote?: string | null;
+  /** How villagers see the player: origin, traits, what they're known for (src/lib/qualitiesServer.ts heroNoteFor). */
+  heroNote?: string | null;
 };
 
 /** An NPC's memory of one player: its private note and how well they know each other. */

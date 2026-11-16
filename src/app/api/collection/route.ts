@@ -2,6 +2,7 @@ import { handleApiError, requireCharacter } from "@/lib/auth";
 import { bookView, claimPage, recordCollection } from "@/lib/collectionServer";
 import { placeByKey, regionAt } from "@/lib/regions";
 import { getLivePlayerPosition } from "@/lib/world-stream";
+import { storyEvent } from "@/lib/story/storyServer";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,9 @@ export async function POST(req: Request) {
       if (regionAt(p.x, p.y)?.key !== key) return Response.json({ ok: true, new: false });
       const isNew = await recordCollection(me.id, "region", key);
       const name = placeByKey(key)?.name.replace(/^the /, "") ?? key;
-      return Response.json({ ok: true, new: isNew, message: isNew ? `📖 New place: ${name}!` : undefined });
+      const told = await storyEvent(me.id, { kind: "visit", region: key }).catch(() => null);
+      const message = [isNew ? `📖 New place: ${name}!` : null, told].filter(Boolean).join(" ") || undefined;
+      return Response.json({ ok: true, new: isNew || !!told, message });
     }
     if (body.action === "claim") {
       const r = await claimPage(me.id, String(body.page ?? ""));

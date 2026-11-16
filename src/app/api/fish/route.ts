@@ -12,6 +12,9 @@ import { castLimiter } from "@/lib/rateLimit";
 import { wornRodZone } from "@/lib/wear";
 import { wearTool } from "@/lib/wearServer";
 import { addItem, logEvent, progressMissions, recalcLevel } from "@/lib/game";
+import { storyEvent } from "@/lib/story/storyServer";
+import { hasTrait } from "@/lib/traitsServer";
+import { ANGLER_ZONE } from "@/lib/traits";
 import { gearOf } from "@/lib/combat";
 import { BITE_MAX_MS, BITE_MIN_MS, CAST_TTL_MS, CATCH_ZONE, FISHING_ROD, fishDef, rollFish, waterInFront } from "@/lib/fishing";
 import type { FishCast } from "@/lib/fishing";
@@ -55,9 +58,11 @@ export async function POST(req: Request) {
       casts.set(me.id, cast);
       // The rod wears with each cast; a worn one gives a narrower catch zone (src/lib/wear.ts).
       const worn = await wearTool(me.id, FISHING_ROD, "cast");
+      // The Angler trait widens the zone (src/lib/traits.ts).
+      const angler = (await hasTrait(me.id, "angler")) ? ANGLER_ZONE : 0;
       return Response.json({
         ok: true, castId: cast.id, biteInMs: Math.round(cast.biteAt - now), notices: worn ? [worn] : [],
-        zone: Math.max(0.06, Math.min(0.6, CATCH_ZONE[fish.rarity] + (plus[FISHING_ROD] ?? 0) * ROD_ZONE_PER_PLUS - wornRodZone(wear[FISHING_ROD] ?? 0))), water: spot.water,
+        zone: Math.max(0.06, Math.min(0.6, CATCH_ZONE[fish.rarity] + (plus[FISHING_ROD] ?? 0) * ROD_ZONE_PER_PLUS - wornRodZone(wear[FISHING_ROD] ?? 0) + angler)), water: spot.water,
         bobber: { x: spot.tx * 16 + 8, y: spot.ty * 16 + 8 },
       });
     }
@@ -78,8 +83,9 @@ export async function POST(req: Request) {
       const rare = fish.rarity === "legendary" ? "🌟 LEGENDARY! " : fish.rarity === "rare" ? "✨ Rare! " : "";
       // Big catches make the rounds at the inns (rumour board).
       if (rare) await logEvent("catch", `${me.name} landed a ${fish.name}!`, "character", me.id, me.x, me.y);
+      const told = await storyEvent(me.id, { kind: "fish", itemKey: fish.key }).catch(() => null);
       return Response.json({
-        ok: true, caught: true,
+        ok: true, caught: true, notices: told ? [told] : [],
         message: `${rare}You caught a ${fish.name}! +${fish.xp} XP${isNew ? " · 📖 New in your book!" : ""}`,
         gained: [{ itemKey: fish.key, qty: 1 }],
       });

@@ -21,6 +21,7 @@ import { farmPlan, isRipe, rollHarvestSeeds, wateredAdvanceAt, waterCheck } from
 import type { GardenPlot, GardenResult } from "@/types/garden";
 import { perksOf } from "./combat";
 import { tutorialEvent } from "./tutorialServer";
+import { storyEvent } from "./story/storyServer";
 import { recordCollection } from "./collectionServer";
 import { GREEN_THUMB_MULT } from "./progression";
 import { afterPerennialHarvest, plantRule } from "./vineyard";
@@ -77,7 +78,8 @@ export async function plantCrop(characterId: number, lotKey: string, plot: numbe
   await db.update(characters).set({ xp: sql`${characters.xp} + ${PLANT_XP}` }).where(eq(characters.id, characterId));
   const name = crop.produceKey;
   const step = await tutorialEvent(characterId, "plant");
-  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y, notices: step ? [step] : [] };
+  const told = await storyEvent(characterId, { kind: "plant" }).catch(() => null);
+  return { ok: true, message: `Planted ${name} seeds. Water them to help them grow faster!`, x: target.x, y: target.y, notices: [step, told].filter((s): s is string => !!s) };
 }
 
 /** Water a garden crop. Anyone can help, once per growth stage. */
@@ -137,10 +139,11 @@ export async function harvestCrop(characterId: number, nodeId: number): Promise<
   await db.update(characters).set({ xp: sql`${characters.xp} + ${HARVEST_XP}` }).where(eq(characters.id, characterId));
   await recalcLevel(characterId);
   const isNew = await recordCollection(characterId, "crop", node.itemKey, node.qty);
+  const told = await storyEvent(characterId, { kind: "collect", itemKey: node.itemKey }, node.qty).catch(() => null);
   return {
     ok: true,
     message: `Harvested ${node.qty} ${node.itemKey}${node.qty > 1 ? "s" : ""}!${seeds > 0 ? ` …and saved ${seeds} seed${seeds > 1 ? "s" : ""} to replant.` : ""}`,
-    notices: isNew ? [`📖 New in your book: ${node.itemKey}!`] : [],
+    notices: [...(isNew ? [`📖 New in your book: ${node.itemKey}!`] : []), ...(told ? [told] : [])],
     gained,
     x: node.x,
     y: node.y,

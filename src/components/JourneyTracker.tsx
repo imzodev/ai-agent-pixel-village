@@ -9,22 +9,24 @@ import type { JourneyView } from "@/types/journey";
 
 const MIN_KEY = "grove_journey_min";
 
-export default function JourneyTracker({ view, snap, touch }: { view: JourneyView; snap: Snapshot | null; touch: boolean }) {
+/** `guide`: whether this card drives the guide arrow (the story's card does when there is one). */
+export default function JourneyTracker({ view, snap, touch, guide = true }: { view: JourneyView; snap: Snapshot | null; touch: boolean; guide?: boolean }) {
   const [min, setMin] = useState(() => { try { return localStorage.getItem(MIN_KEY) === "1"; } catch { return false; } });
   const toggle = () => setMin((m) => { try { localStorage.setItem(MIN_KEY, m ? "0" : "1"); } catch { /* ignore */ } return !m; });
 
-  const target = useMemo(() => (view.target && snap ? locateTarget(view.target, snap) : null), [view.target, snap]);
+  const target = useMemo(() => (guide && view.target && snap ? locateTarget(view.target, snap) : null), [guide, view.target, snap]);
   const tx = target ? Math.round(target.x / 8) : null, ty = target ? Math.round(target.y / 8) : null;
   useEffect(() => {
-    bus.emit("guide", target);
+    if (guide) bus.emit("guide", target);
     // Only re-emit when the target meaningfully moves (8 px grid).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tx, ty, target?.npcId, view.key]);
-  useEffect(() => () => bus.emit("guide", null), []);
+  }, [guide, tx, ty, target?.npcId, view.key]);
+  useEffect(() => () => { if (guide) bus.emit("guide", null); }, [guide]);
 
   const counted = view.need > 1;
+  // Placed by the HUD's tracker column (with the story card above it).
   return (
-    <div className="pointer-events-auto absolute left-2 top-[var(--hud-top,3.5rem)] z-10 w-[min(14rem,calc(50vw-0.75rem))] sm:w-64">
+    <div className="pointer-events-auto">
       <div className="pixel-panel p-2 text-amber-950">
         <div className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-emerald-800">
           <span>🧭 Journey {view.step + 1}/{view.total}</span>

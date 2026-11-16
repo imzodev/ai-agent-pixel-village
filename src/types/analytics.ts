@@ -11,6 +11,10 @@ export type TrackKind =
   | "tutorial_step"
   | "tutorial_skip"
   | "journey_step"
+  // Storylines (src/lib/story/): started (meta.source template|ai|fallback), a chapter done, finished.
+  | "story_start"
+  | "story_chapter"
+  | "story_done"
   | "moment_created"
   | "share_click"
   | "profile_view"

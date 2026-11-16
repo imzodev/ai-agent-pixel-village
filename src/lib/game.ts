@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   characterMissions,
   characterPerks,
+  characterTraits,
   characters,
   inventory,
   leads,
@@ -13,6 +14,7 @@ import {
   type MissionReward,
 } from "@/db/schema";
 import { levelForXp, maxHpFor, unlocksBetween } from "./progression";
+import { HARDY_HP } from "./traits";
 import { reachedReferralLevel } from "./referral";
 import { rewardReferral } from "./referralServer";
 import { createMoment } from "./momentsServer";
@@ -94,7 +96,9 @@ export async function recalcLevel(characterId: number) {
       .select({ k: characterPerks.perkKey })
       .from(characterPerks)
       .where(and(eq(characterPerks.characterId, characterId), eq(characterPerks.perkKey, "tough")));
-    const maxHp = maxHpFor(level, !!tough);
+    const [hardy] = await db.select({ k: characterTraits.key }).from(characterTraits)
+      .where(and(eq(characterTraits.characterId, characterId), eq(characterTraits.key, "hardy")));
+    const maxHp = maxHpFor(level, !!tough) + (hardy ? HARDY_HP : 0);
     // Levelling up heals you fully.
     await db.update(characters).set({ level, maxHp, hp: maxHp }).where(eq(characters.id, characterId));
     const unlocked = unlocksBetween(c.level, level).map((u) => u.text).join(" · ");

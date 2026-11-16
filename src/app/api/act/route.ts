@@ -20,6 +20,9 @@ import { damagePlayer, gearOf, perksOf } from "@/lib/combat";
 import { arrivalPoint } from "@/lib/chunkCollisionServer";
 import { tierAt } from "@/lib/continent";
 import { tutorialEvent } from "@/lib/tutorialServer";
+import { storyEvent } from "@/lib/story/storyServer";
+import { hasTrait, traitSet } from "@/lib/traitsServer";
+import { ANIMAL_FRIEND_AFFECTION, BRAVE_DMG_MULT, BRAVE_MIN_TIER, LUCKY_EXTRA_DROP } from "@/lib/traits";
 import { attackerFell, encounterKindOf, noteFighter } from "@/lib/encountersServer";
 import { ENCOUNTERS } from "@/lib/encounters";
 import { recordCollection } from "@/lib/collectionServer";
@@ -87,7 +90,8 @@ export async function POST(req: Request) {
       const recently = a.lastPettedAt && Date.now() - a.lastPettedAt.getTime() < 20_000;
       // Your own ranch animals grow fond of you: affection once a day (src/lib/ranchUpgrades.ts).
       const fond = a.ranchKey != null && a.ownerId === me.id && (!a.lastPettedAt || Date.now() - a.lastPettedAt.getTime() >= PET_COOLDOWN_MS);
-      const fondBy = fond && (await gearOf(me.id)).equipped.includes("fox_charm") ? FOX_CHARM_AFFECTION : PET_AFFECTION;
+      const fondBy = !fond ? PET_AFFECTION
+        : ((await gearOf(me.id)).equipped.includes("fox_charm") ? FOX_CHARM_AFFECTION : PET_AFFECTION) + ((await hasTrait(me.id, "animal_friend")) ? ANIMAL_FRIEND_AFFECTION : 0);
       await db.update(animals).set({ pets: a.pets + 1, lastPettedAt: new Date(), mood: "delighted", hunger: Math.max(0, a.hunger - 5), ...(fond ? { affection: clampAffection(a.affection + fondBy) } : {}) }).where(eq(animals.id, a.id));
       const reactions: Record<string, string[]> = {
         sheep: ["baas softly and leans into your hand", "closes its eyes and hums"],
@@ -103,6 +107,7 @@ export async function POST(req: Request) {
       };
       const touched = recently ? [] : await progressMissions(me.id, (r) => r.type === "pet" && r.species === a.species);
       const drops: { itemKey: string; qty: number }[] = [];
+      const storyNotices: string[] = [];
       if (!recently) {
         if (a.species === "chicken" && Math.random() < 0.7) drops.push({ itemKey: "egg", qty: 1 });
         if (a.species === "sheep" && Math.random() < 0.5) drops.push({ itemKey: "wool", qty: 1 });
@@ -119,10 +124,14 @@ export async function POST(req: Request) {
         // Daily quests: this pet counts, and each drop is a collect.
         daily(me.id, "pet", { species: a.species });
         for (const d of drops) daily(me.id, "collect", { itemKey: d.itemKey }, d.qty);
+        for (const d of drops) {
+          const told = await storyEvent(me.id, { kind: "collect", itemKey: d.itemKey }, d.qty).catch(() => null);
+          if (told) storyNotices.push(told);
+        }
       }
       await logEvent("pet", `${me.name} petted ${a.name} the ${a.species}.`, "animal", a.id, a.x, a.y);
       markWorldDirty(a.x, a.y);
-      return Response.json({ ok: true, message: `${a.name} ${pick(reactions[a.species] ?? ["seems pleased"])}.${drops.length ? " You got " + drops.map((d) => d.itemKey.replace("_", " ")).join(", ") + "!" : ""}`, gained: drops, missions: touched });
+      return Response.json({ ok: true, message: `${a.name} ${pick(reactions[a.species] ?? ["seems pleased"])}.${drops.length ? " You got " + drops.map((d) => d.itemKey.replace("_", " ")).join(", ") + "!" : ""}`, gained: drops, missions: touched, notices: storyNotices });
     }
 
     // Gathering and chopping at a person's pace, not a bot's (src/lib/rateLimit.ts).
@@ -191,9 +200,10 @@ export async function POST(req: Request) {
       daily(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
       markWorldDirty(n.x, n.y);
       const step = await tutorialEvent(me.id, "collect", { itemKey: n.itemKey }, yieldAmt);
+      const told = await storyEvent(me.id, { kind: "collect", itemKey: n.itemKey }, yieldAmt).catch(() => null);
       return Response.json({
         ok: true,
-        notices: [...(step ? [step] : []), ...(worn ? [worn] : [])],
+        notices: [...(step ? [step] : []), ...(told ? [told] : []), ...(worn ? [worn] : [])],
         message: `${chop ? "Chopped" : "Gathered"} ${yieldAmt} ${n.itemKey.replace("_", " ")}.${found ? ` You found ${found.replace("_seeds", "")} seeds!` : ""}`,
         gained: [{ itemKey: n.itemKey, qty: yieldAmt }, ...(found ? [{ itemKey: found, qty: 1 }] : [])],
       });
@@ -220,10 +230,11 @@ export async function POST(req: Request) {
       daily(me.id, "collect", { itemKey: "wood" }, yieldAmt);
       if (r.felled) broadcastChunkReload(r.chunks);
       const step = await tutorialEvent(me.id, "collect", { itemKey: "wood" }, yieldAmt);
+      const told = await storyEvent(me.id, { kind: "collect", itemKey: "wood" }, yieldAmt).catch(() => null);
       return Response.json({
         ok: true,
         felled: r.felled,
-        notices: [...(step ? [step] : []), ...(worn ? [worn] : [])],
+        notices: [...(step ? [step] : []), ...(told ? [told] : []), ...(worn ? [worn] : [])],
         message: r.felled ? `🌲 Timber! The tree comes down (+${yieldAmt} wood). It'll grow back in time.` : `Chopped ${yieldAmt} wood. ${r.hitsLeft} more to fell it.`,
         gained: [{ itemKey: "wood", qty: yieldAmt }],
       });
@@ -237,7 +248,7 @@ export async function POST(req: Request) {
       if (!e) return Response.json({ error: "It's gone." }, { status: 404 });
       const p = livePos(me);
       const ep = rowPositionAt(e, Date.now());
-      const [gear, perks] = await Promise.all([gearOf(me.id), perksOf(me.id)]);
+      const [gear, perks, traits] = await Promise.all([gearOf(me.id), perksOf(me.id), traitSet(me.id)]);
       const bow = ranged ? bowOf(gear.equipped) : null;
       if (ranged && !bow) return Response.json({ error: "Equip a bow to shoot." }, { status: 400 });
       if (Math.hypot(ep.x - p.x, ep.y - p.y) > (bow ? bow.rangePx : 80)) return Response.json({ error: "Out of reach." }, { status: 400 });
@@ -255,7 +266,9 @@ export async function POST(req: Request) {
       // Hit it while it's winding up an attack: the attack breaks off, it
       // reels, and the blow lands harder.
       const staggered = interruptStrike(e.id);
-      const dmg = Math.max(1, Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1) * wornDamage(toolWear)));
+      // Brave: harder blows against the tougher foes (src/lib/traits.ts).
+      const braveMult = traits.has("brave") && (def.tier === "boss" || def.tier >= BRAVE_MIN_TIER) ? BRAVE_DMG_MULT : 1;
+      const dmg = Math.max(1, Math.round(playerDamage({ level: me.level, weapon, fighter: perks.has("fighter"), roll: Math.random() }) * (staggered ? STAGGER_DMG_MULT : 1) * wornDamage(toolWear) * braveMult));
       const worn = await wearTool(me.id, tool, bow ? "shot" : "hit");
       const boss = isBossKind(e.kind); // the world boss or a lair boss: damage tallied, reward shared
       const who = String(me.id);
@@ -329,10 +342,13 @@ export async function POST(req: Request) {
       } else if (killed.length > 0) {
         // Drops go straight to the bag so a zone can be farmed without
         // chasing loot around.
-        for (const d of rollDrops(e.kind)) {
+        // Lucky: now and then the loot comes twice (src/lib/traits.ts).
+        const lucky = traits.has("lucky") && Math.random() < LUCKY_EXTRA_DROP;
+        for (const d of [...rollDrops(e.kind), ...(lucky ? rollDrops(e.kind) : [])]) {
           await addItem(me.id, d.itemKey, d.qty);
           gained.push(d);
         }
+        if (lucky && gained.length) notices.push("🍀 Lucky! It dropped a little extra.");
         // Wanted beasts are worth far more, and pay out their bounty to
         // everyone close by who carries it.
         // Tougher land, tougher beasts, more XP (src/lib/progression.ts TIER_XP_MULT).
@@ -354,6 +370,11 @@ export async function POST(req: Request) {
         if (await recordCollection(me.id, "enemy", e.kind)) notices.push(`📖 New creature in your book: ${def.name}!`);
         const step = await tutorialEvent(me.id, "defeat", { enemyKind: e.kind });
         if (step) notices.push(step);
+        // The story counts the kill, then anything it dropped.
+        for (const did of [{ kind: "defeat" as const, enemyKind: e.kind, qty: 1 }, ...gained.map((g) => ({ kind: "collect" as const, itemKey: g.itemKey, qty: g.qty }))]) {
+          const told = await storyEvent(me.id, did, did.qty).catch(() => null);
+          if (told) notices.push(told);
+        }
         await progressMissions(me.id, (r) => r.type === "defeat" && r.enemyKind === e.kind);
         await db.update(characters).set({ xp: sql`${characters.xp} + ${xp}` }).where(eq(characters.id, me.id));
         await recalcLevel(me.id);

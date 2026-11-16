@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Appearance } from "@/db/schema";
+import { STORY_PROMPT_MAX } from "@/lib/story/rules";
 import { CLOTH_COLORS, HAIR_COLORS, HAIR_STYLES, SKIN_TONES, drawPreview, randomAppearance } from "@/game/lpc";
 
 // The look and name start random, picked by the server page (so the first
@@ -13,6 +14,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hero, setHero] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null);
   const frame = useRef(0);
   const [dir, setDir] = useState<"down" | "left" | "right" | "up">("down");
@@ -31,7 +33,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr("");
-    const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, name, appearance: a }) });
+    const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, name, appearance: a, hero }) });
     const j = await res.json();
     if (!res.ok) { setErr(j.error ?? "Something went wrong"); setBusy(false); return; }
     location.href = "/";
@@ -64,7 +66,12 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
                 <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password (8+)" minLength={8} className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="new-password" />
               </div>
             </Section>
-            {err && <div className="rounded-lg bg-red-100 px-3 py-2 text-red-800">{err}</div>}
+            <Section title="✨ Who is your hero? (optional)">
+              <input value={hero} onChange={(e) => setHero(e.target.value)} maxLength={STORY_PROMPT_MAX} placeholder="e.g. a clumsy young wizard hiding from a famous family"
+                className="w-full rounded-lg border-2 border-violet-700/30 bg-white px-2 py-1.5" />
+              <p className="mt-1 text-[12px] text-stone-500">One line. The AI villagers will write your story around it, and play their parts.</p>
+            </Section>
+            {err &&<div className="rounded-lg bg-red-100 px-3 py-2 text-red-800">{err}</div>}
             <div className="flex flex-wrap items-center gap-3">
               <button disabled={busy} className="rounded-lg bg-emerald-600 px-4 py-2 text-base font-bold text-white hover:bg-emerald-500 disabled:opacity-50">{busy ? "Packing your bag…" : "Enter the grove →"}</button>
               <span className="text-stone-500">Already a villager? <Link href="/" className="underline">Sign in on the map</Link></span>

@@ -9,6 +9,8 @@ import { npcMinds, npcRegard, npcs } from "@/db/schema";
 import { createMoment } from "@/lib/momentsServer";
 import { dearFriendMoment } from "@/lib/moments";
 import { becameDear, regardTier } from "./profile";
+import { hasTrait } from "@/lib/traitsServer";
+import { CHARMING_REGARD_MULT } from "@/lib/traits";
 import type { RegardTier } from "@/types/mind";
 
 /** Free loaves in a row (without helping) before regard starts to drop. */
@@ -22,7 +24,9 @@ export async function hasMind(npcId: number): Promise<boolean> {
 
 /** The player helped: raise regard and forgive the free loaves. Becoming a
  *  dear friend is a card to share ("Marigold calls you a dear friend"). */
-export async function regardHelped(npcId: number, characterId: number, points: number): Promise<void> {
+export async function regardHelped(npcId: number, characterId: number, given: number): Promise<void> {
+  // Charming folk are liked faster (src/lib/traits.ts).
+  const points = given > 0 && (await hasTrait(characterId, "charming")) ? Math.round(given * CHARMING_REGARD_MULT) : given;
   const [row] = await db.insert(npcRegard).values({ npcId, characterId, score: points, freebies: 0 })
     .onConflictDoUpdate({ target: [npcRegard.npcId, npcRegard.characterId], set: { score: sql`${npcRegard.score} + ${points}`, freebies: 0 } })
     .returning({ score: npcRegard.score });

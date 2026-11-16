@@ -5,6 +5,10 @@
 import { and, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { characters, inventory, lots, npcRegard, npcs, ranchState, users } from "@/db/schema";
+import { storyRecords, storyViewFor } from "@/lib/story/storyServer";
+import { traitsOf } from "@/lib/traitsServer";
+import { qualitiesFor } from "@/lib/qualitiesServer";
+import { originDef, traitDef } from "@/lib/traits";
 import { LAIR_BOSSES } from "@/lib/lairs";
 import { BOSS_REWARD } from "@/lib/progression";
 import { RELICS, RELIC_SETS } from "@/lib/relics";
@@ -39,7 +43,7 @@ export async function loadProfile(username: string): Promise<Profile | null> {
   const look = await lookOf(id);
   if (!look) return null;
 
-  const [owned, book, counts, rep, myLots, found, friends, latest] = await Promise.all([
+  const [owned, book, counts, rep, myLots, found, friends, latest, story, stories, traits, qualities] = await Promise.all([
     db.select({ itemKey: inventory.itemKey }).from(inventory).where(and(eq(inventory.characterId, id), inArray(inventory.itemKey, SHELF.map((s) => s.itemKey)))),
     bookView(id),
     collectionCounts(id),
@@ -49,6 +53,10 @@ export async function loadProfile(username: string): Promise<Profile | null> {
     db.select({ key: npcs.key, name: npcs.name, role: npcs.role }).from(npcRegard).innerJoin(npcs, eq(npcs.id, npcRegard.npcId))
       .where(and(eq(npcRegard.characterId, id), gte(npcRegard.score, 10))),
     recentMoments(id, 6),
+    storyViewFor(id),
+    storyRecords(id),
+    traitsOf(id),
+    qualitiesFor(id),
   ]);
 
   const have = new Set(owned.map((o) => o.itemKey));
@@ -73,6 +81,13 @@ export async function loadProfile(username: string): Promise<Profile | null> {
     relicSets: RELIC_SETS.filter((s) => RELICS.filter((r) => r.set === s.key).every((r) => foundSet.has(r.key))).map((s) => s.name),
     dearFriends: friends,
     moments: latest,
+    story: story ? { title: story.title, premise: story.premise, step: story.step, total: story.total, source: story.source } : null,
+    stories,
+    hero: {
+      origin: traits.origin ? { name: originDef(traits.origin).name, icon: originDef(traits.origin).icon } : null,
+      traits: [...traits.picked.map((k) => ({ k, earned: false })), ...traits.earned.map((k) => ({ k, earned: true }))].map(({ k, earned }) => ({ name: traitDef(k).name, icon: traitDef(k).icon, earned })),
+      qualities,
+    },
   };
 }
 
