@@ -3,6 +3,7 @@
 // logged into anywhere (POST /api/auth/claim). Opened from the HUD nudge,
 // the menu, and Sign out (which would otherwise lose the character).
 import { useEffect, useState } from "react";
+import { EMAIL_MAX } from "@/lib/passwordReset";
 
 export default function SaveCharacterModal({ name, suggested, leaving, onClose, onSaved, onSignOut }: {
   name: string;
@@ -16,6 +17,7 @@ export default function SaveCharacterModal({ name, suggested, leaving, onClose, 
 }) {
   const [username, setUsername] = useState(suggested);
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -29,7 +31,7 @@ export default function SaveCharacterModal({ name, suggested, leaving, onClose, 
     e.preventDefault();
     setBusy(true);
     setErr(null);
-    const res = await fetch("/api/auth/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: username.trim().toLowerCase(), password }) }).catch(() => null);
+    const res = await fetch("/api/auth/claim", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: username.trim().toLowerCase(), password, email }) }).catch(() => null);
     const j = (await res?.json().catch(() => ({}))) as { error?: string; username?: string } | undefined;
     setBusy(false);
     if (!res?.ok || !j?.username) { setErr(j?.error ?? "Couldn't save, please try again."); return; }
@@ -57,6 +59,11 @@ export default function SaveCharacterModal({ name, suggested, leaving, onClose, 
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" minLength={8} required placeholder="8 characters or more"
             className="mt-1 w-full rounded border-2 border-amber-800/30 bg-white px-2 py-1.5 text-sm font-normal text-stone-800" />
         </label>
+        <label className="mt-2 block text-xs font-bold text-amber-900">Email <span className="font-normal text-amber-900/70">(optional)</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={EMAIL_MAX} placeholder="to recover your password"
+            className="mt-1 w-full rounded border-2 border-amber-800/30 bg-white px-2 py-1.5 text-sm font-normal text-stone-800" />
+        </label>
+        <div className="mt-0.5 text-[11px] text-amber-900/70">Only used to send a reset link if you forget your password. Never shown to anyone.</div>
         {err && <div className="mt-2 text-sm text-red-700">{err}</div>}
         <button type="submit" disabled={busy} className="pixel-btn mt-3 w-full bg-emerald-600 py-2 font-bold text-white hover:bg-emerald-500 disabled:opacity-60">{busy ? "Saving…" : "Save character"}</button>
         {leaving && <button type="button" onClick={onSignOut} className="mt-2 w-full text-center text-[12px] text-stone-500 underline hover:text-stone-800">Sign out anyway and lose {name}</button>}

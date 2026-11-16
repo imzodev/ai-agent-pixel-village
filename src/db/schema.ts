@@ -69,12 +69,26 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   /** Null for a "Play now" character that hasn't been saved with a password yet. */
   passwordHash: text("password_hash"),
+  /** Optional, lower-cased: only for password recovery (src/lib/passwordReset.ts). Never shown to anyone. */
+  email: text("email"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   /** Suspended by an admin (src/app/api/admin/ban): can't sign in or be seen. */
   bannedAt: timestamp("banned_at"),
   /** Barred from voice chat by an admin (src/lib/voiceServer.ts): can't turn it on. */
   voiceBannedAt: timestamp("voice_banned_at"),
-});
+}, (t) => [index("users_email_idx").on(t.email)]);
+
+/** A password reset link (src/lib/passwordResetServer.ts): only the token's hash is kept; used once, then gone. */
+export const passwordResets = pgTable(
+  "password_resets",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    userId: integer("user_id").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("password_resets_user_idx").on(t.userId)],
+);
 
 /** A player reported by another (src/app/api/report); admins read them at /api/admin/reports. */
 export const reports = pgTable(

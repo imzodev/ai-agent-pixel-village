@@ -73,6 +73,7 @@ import JourneyTracker from "./JourneyTracker";
 import StoryTracker from "./StoryTracker";
 import StoryPanel from "./StoryPanel";
 import HeroCard from "./HeroCard";
+import RecoveryEmailModal from "./RecoveryEmailModal";
 import type { JourneyView } from "@/types/journey";
 import type { StoryView } from "@/types/story";
 import type { BlockedPlayer, OnlinePlayer, Presence } from "@/types/social";
@@ -85,7 +86,7 @@ import { VoiceButton, VoicePartySection, VoicePeerControls } from "./VoiceContro
 
 type InvItem = { id: number; itemKey: string; qty: number; equipped: boolean; meta: Record<string, unknown>; def: { name: string; kind: string; description: string; icon: string; equippable: boolean; placeable: boolean } | null };
 type Mission = { id: number; missionId: number; title: string; description: string; status: string; progress: number; target: number; npcName: string; npcId: number; sponsored: boolean; reward: { coins?: number; xp?: number; items?: { itemKey: string; qty: number }[] } };
-type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; journey?: JourneyView | null; journeyDone?: string[]; story?: StoryView | null; memberGift?: { gems: number; itemName: string } | null; member?: boolean };
+type Me = { me: { id: number; name: string; coins: number; gems: number; hp: number; maxHp: number; level: number; xp: number; homeTheme: { wall: string; floor: string }; tutorialStep: number; tutorialProgress: number; title: string | null } | null; inventory: InvItem[]; missions: Mission[]; decor: { id: number; itemKey: string; gx: number; gy: number }[]; codesClaimed: number; perks: string[]; perkPoints: number; moments?: MomentNotice[]; username?: string | null; unsaved?: boolean; hasEmail?: boolean; journey?: JourneyView | null; journeyDone?: string[]; story?: StoryView | null; memberGift?: { gems: number; itemName: string } | null; member?: boolean };
 type Inspect = { title: string; subtitle?: string; lines: string[]; events?: { text: string; when: string }[]; target?: { type: string; id: number; x?: number; y?: number; key?: string; reservable?: boolean } };
 
 const WEATHER_ICON: Record<string, string> = { clear: "☀️", rain: "🌧️", fog: "🌫️", snow: "❄️" };
@@ -204,6 +205,7 @@ export default function Hud() {
   }, []);
   // A "Play now" character with no password yet: the save window ("leaving" when opened from Sign out).
   const [saveOpen, setSaveOpen] = useState<null | "save" | "leaving">(null);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [saveNudgeHidden, setSaveNudgeHidden] = useState(false);
   // "Become a member" is suggested once a week at most (src/lib/membership.ts).
   const [memberNudgeHidden, setMemberNudgeHidden] = useState(() => {
@@ -1151,6 +1153,7 @@ export default function Hud() {
           <TopBtn on={() => { pick(); togglePanel("home"); }} active={panel === "home"}>🏡 Home</TopBtn>
           <TopBtn on={() => { pick(); togglePanel("book"); }} active={panel === "book"}>📖 Book</TopBtn>
           {me?.unsaved && <TopBtn on={() => { pick(); setSaveOpen("save"); }} active={saveOpen === "save"}>💾 Save character</TopBtn>}
+          {me?.username && !me.unsaved && me.hasEmail === false && <TopBtn on={() => { pick(); setEmailOpen(true); }} active={emailOpen}>📧 Add recovery email</TopBtn>}
           {me?.username && <a href={`/u/${me.username}`} target="_blank" rel="noopener" onClick={pick} className="rounded-lg bg-amber-500 px-2 py-1 font-bold text-white hover:bg-amber-400">🪪 Profile</a>}
           {me?.username && !me.unsaved && (
             <TopBtn on={() => {
@@ -1278,6 +1281,7 @@ export default function Hud() {
 
       {/* Login */}
       {auth && <LoginModal onClose={() => setAuth(null)} />}
+      {emailOpen && <RecoveryEmailModal onClose={() => setEmailOpen(false)} onSaved={() => { setEmailOpen(false); toast("📧 Recovery email saved.", "good"); void refreshMe(); }} />}
 
       {/* Selection action bar */}
       {sel && !talk && (
@@ -1792,8 +1796,30 @@ function WalkBtn({ snap, sel }: { snap: Snapshot | null; sel: Selection }) {
 }
 function LoginModal({ onClose }: { onClose: () => void }) {
   const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
+  // "Forgot password?": ask for a reset link by email (src/lib/passwordResetServer.ts).
+  const [forgot, setForgot] = useState(false); const [email, setEmail] = useState(""); const [sent, setSent] = useState<string | null>(null);
   const userRef = useRef<HTMLInputElement>(null);
   useEffect(() => { userRef.current?.focus(); }, []);
+  if (forgot) {
+    return (
+      <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40">
+        <form className="w-[min(92vw,340px)] pixel-panel p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ message?: string }>("/api/auth/forgot", { email }); if (r.error) setErr(r.error); else { setErr(""); setSent(r.message ?? "Check your email."); } }}>
+          <div className="text-lg font-bold text-amber-900">Forgot your password?</div>
+          {sent ? <p className="mt-2 text-sm leading-snug">{sent}</p> : (
+            <>
+              <p className="mt-1 text-sm leading-snug">Enter the email you saved your character with and we&apos;ll send a link to set a new password.</p>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="email" autoComplete="email" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
+            </>
+          )}
+          {err && <div className="mt-2 text-red-700">{err}</div>}
+          <div className="mt-3 flex gap-2">
+            {!sent && <button type="submit" className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white">Send link</button>}
+            <button type="button" onClick={() => { setForgot(false); setSent(null); setErr(""); }} className="rounded-lg bg-stone-200 px-3 py-1.5">Back</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
   return (
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/40">
       <form className="w-[min(92vw,340px)] pixel-panel p-4 shadow-2xl" onSubmit={async (e) => { e.preventDefault(); const r = await api<{ ok?: boolean }>("/api/auth/login", { username: u, password: p }); if (r.error) setErr(r.error); else location.reload(); }}>
@@ -1801,6 +1827,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
         <input ref={userRef} value={u} onChange={(e) => setU(e.target.value)} placeholder="username" autoComplete="username" className="mt-3 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
         <input value={p} onChange={(e) => setP(e.target.value)} type="password" placeholder="password" autoComplete="current-password" className="mt-2 w-full rounded-lg border-2 border-amber-900/40 px-2 py-1.5" />
         {err && <div className="mt-2 text-red-700">{err}</div>}
+        <button type="button" onClick={() => { setForgot(true); setErr(""); }} className="mt-1 text-[12px] text-amber-800 underline">Forgot password?</button>
         <div className="mt-3 flex gap-2"><button type="submit" className="rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white">Sign in</button><button type="button" onClick={onClose} className="rounded-lg bg-stone-200 px-3 py-1.5">Cancel</button><Link href="/signup" className="ml-auto self-center text-amber-800 underline">New here?</Link></div>
       </form>
     </div>

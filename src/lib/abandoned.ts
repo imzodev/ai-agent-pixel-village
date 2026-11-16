@@ -46,6 +46,7 @@ export async function deleteCharacters(ids: number[], { keepRecords = true } = {
   await del(`DELETE FROM lot_cheers WHERE owner_id = ANY($1) OR cheerer_id = ANY($1)`, [ids]);
   await del(`DELETE FROM referrals WHERE invitee_id = ANY($1) OR inviter_id = ANY($1)`, [ids]);
   await del(`DELETE FROM sessions WHERE user_id = ANY($1)`, [users]);
+  await del(`DELETE FROM password_resets WHERE user_id = ANY($1)`, [users]);
   await del(`DELETE FROM characters WHERE id = ANY($1)`, [ids]);
   await del(`DELETE FROM users WHERE id = ANY($1)`, [users]);
   return n;

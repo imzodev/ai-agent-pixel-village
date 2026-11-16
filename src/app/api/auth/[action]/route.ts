@@ -9,7 +9,9 @@ import { SPAWN } from "@/lib/worldmap";
 import { addItem, logEvent } from "@/lib/game";
 import { pickShardForPosition } from "@/lib/shards";
 import { nameProblem } from "@/lib/moderation";
-import { clientIp, loginFailLimiter, loginIpLimiter, signupIpLimiter } from "@/lib/rateLimit";
+import { clientIp, loginFailLimiter, loginIpLimiter, resetIpLimiter, signupIpLimiter } from "@/lib/rateLimit";
+import { emailProblem, normalizeEmail } from "@/lib/passwordReset";
+import { requestReset, resetPassword, setEmail } from "@/lib/passwordResetServer";
 import { cookies } from "next/headers";
 import { track, markActive } from "@/lib/track";
 import { REF_COOKIE, SRC_COOKIE } from "@/lib/site";
@@ -94,13 +96,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
     return Response.json({ ok: true, character: ch });
   }
 
+  // An optional email, only for password recovery (src/lib/passwordReset.ts).
+  const email = normalizeEmail(body.email);
+  const emailBad = email ? emailProblem(email) : null;
+
+  if (action === "forgot") {
+    // Always the same answer, so nobody can learn which emails have accounts.
+    if (ip && !resetIpLimiter.allow(ip)) return slowDown();
+    await requestReset(body.email, process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin);
+    return Response.json({ ok: true, message: "If a saved character uses that email, a link to reset its password is on its way. Check your spam folder too." });
+  }
+  if (action === "reset") {
+    if (ip && !resetIpLimiter.allow(ip)) return slowDown();
+    const r = await resetPassword(body.token, password);
+    if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+    return Response.json(r);
+  }
+  if (action === "email") {
+    // Add, change or remove the recovery email on the signed-in account.
+    const me = await getCurrentUser();
+    if (!me) return Response.json({ error: "Not signed in." }, { status: 401 });
+    const r = await setEmail(me.id, body.email);
+    if (!r.ok) return Response.json({ error: r.error }, { status: 400 });
+    return Response.json(r);
+  }
+
   if (action === "claim") {
-    // Save a "Play now" character: pick a username and password.
+    // Save a "Play now" character: pick a username and password (and, if they like, an email).
     const me = await getCurrentUser();
     if (!me) return Response.json({ error: "Not signed in." }, { status: 401 });
     if (me.passwordHash) return Response.json({ error: "This character is already saved." }, { status: 409 });
     if (!USERNAME_RE.test(username)) return badUsername();
     if (password.length < 8) return shortPassword();
+    if (emailBad) return Response.json({ error: emailBad }, { status: 400 });
     const bad = nameProblem(username);
     if (bad) return Response.json({ error: bad }, { status: 400 });
     if (username !== me.username) {
@@ -108,7 +136,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
       if (taken) return Response.json({ error: "That username is taken." }, { status: 409 });
     }
     try {
-      await db.update(users).set({ username, passwordHash: hashPassword(password) }).where(and(eq(users.id, me.id), isNull(users.passwordHash)));
+      await db.update(users).set({ username, passwordHash: hashPassword(password), ...(email ? { email } : {}) }).where(and(eq(users.id, me.id), isNull(users.passwordHash)));
     } catch {
       return Response.json({ error: "That username is taken." }, { status: 409 }); // lost a race for it
     }
@@ -122,13 +150,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
   if (action === "signup") {
     if (ip && !signupIpLimiter.allow(ip)) return slowDown();
     if (password.length < 8) return shortPassword();
+    if (emailBad) return Response.json({ error: emailBad }, { status: 400 });
     const name = cleanName(body.name) || username;
     // Names show in the world, on public profiles and on share cards.
     const bad = nameProblem(username) ?? nameProblem(name);
     if (bad) return Response.json({ error: bad }, { status: 400 });
     const [existing] = await db.select().from(users).where(eq(users.username, username));
     if (existing) return Response.json({ error: "That username is taken." }, { status: 409 });
-    const [user] = await db.insert(users).values({ username, passwordHash: hashPassword(password) }).returning();
+    const [user] = await db.insert(users).values({ username, passwordHash: hashPassword(password), email }).returning();
     const { ch, ref, from } = await createCharacter(user.id, name, cleanAppearance(body.appearance));
     track("signup", ch.id, { ...(ref ? { ref } : {}), ...sourceMeta(from), ...(body.hero ? { hero: true } : {}) });
     await recordReferral(ch.id, user.id, ref).catch((e) => console.warn("[referral]", e instanceof Error ? e.message : e));

@@ -3,6 +3,7 @@
 // Open for extension: swap policy without touching callers.
 import type { RateLimitConfig } from "./types";
 import { MEMBER_TALK_MULT } from "./membership";
+import { RESET_PER_EMAIL_HOUR } from "./passwordReset";
 
 export class SlidingWindowLimiter {
   private readonly hits = new Map<string, number[]>();
@@ -61,6 +62,9 @@ export const agentRegisterLimiter = new SlidingWindowLimiter({ max: envInt("AGEN
 export const loginIpLimiter = new SlidingWindowLimiter({ max: envInt("LOGIN_PER_IP_10MIN", 10), windowMs: 600_000 });
 export const loginFailLimiter = new SlidingWindowLimiter({ max: envInt("LOGIN_FAILS_PER_USER_15MIN", 8), windowMs: 900_000 });
 export const signupIpLimiter = new SlidingWindowLimiter({ max: envInt("SIGNUP_PER_IP_10MIN", 3), windowMs: 600_000 });
+// Password reset emails (src/lib/passwordResetServer.ts): per IP asking, and per address mailed.
+export const resetIpLimiter = new SlidingWindowLimiter({ max: envInt("RESET_PER_IP_HOUR", 5), windowMs: 3_600_000 });
+export const resetEmailLimiter = new SlidingWindowLimiter({ max: RESET_PER_EMAIL_HOUR, windowMs: 3_600_000 });
 
 // Player chat (/api/act "chat"): one line every 2 s, 15 a minute.
 export const chatBurstLimiter = new SlidingWindowLimiter({ max: 1, windowMs: 2_000 });

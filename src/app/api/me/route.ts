@@ -66,7 +66,8 @@ export async function GET() {
       member: await isMember(me.id),
       // For the profile link (/u/<username>), and whether a "Play now"
       // character still needs a password to be saved.
-      ...(await db.select({ username: users.username, hash: users.passwordHash }).from(users).where(eq(users.id, me.userId)).then(([u]) => ({ username: u?.username ?? null, unsaved: !!u && !u.hash }))),
+      // …and whether a saved one has a recovery email (never the address itself).
+      ...(await db.select({ username: users.username, hash: users.passwordHash, email: users.email }).from(users).where(eq(users.id, me.userId)).then(([u]) => ({ username: u?.username ?? null, unsaved: !!u && !u.hash, hasEmail: !!u?.email }))),
     });
   } catch (e) {
     return handleApiError(e);

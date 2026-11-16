@@ -809,6 +809,18 @@ as a reminder from level 3 or after the tutorial, and instead of signing out
 (which would lose the character). Login refuses passwordless accounts with a
 message saying how to save.
 
+**Recovery email and password reset** (`src/lib/passwordReset.ts` rules,
+`passwordResetServer.ts`, `resetToken.ts`, `src/lib/adapters/mail.ts`): signup and
+"Save character" take an optional email (`users.email`, lower-cased, never shown or
+returned; `/api/me` says only `hasEmail`, and the HUD offers "📧 Add recovery email"
+until there is one). Sign in → "Forgot password?" posts `/api/auth/forgot { email }`:
+the answer is always the same (no account enumeration); saved, unbanned characters on
+that address get one email with a link each (`/reset?token=`). Only the token's sha256 is
+stored (`password_resets`), it works once for `RESET_TTL_MS` (1 h), and using it
+(`/api/auth/reset`) signs out every other session and signs in. Limits: `resetIpLimiter`,
+`resetEmailLimiter`. Mail goes through Resend's HTTP API (`RESEND_API_KEY`, `MAIL_FROM`
+on a verified domain); without a key, development prints the email, production refuses.
+
 Unsaved characters nobody came back for are deleted by tickd once a day
 (`pruneAbandoned`, `src/lib/abandoned.ts`): no password, not seen for 30 days
 and below `ABANDONED_MAX_LEVEL` (3). Their lots are given up first, as on moving

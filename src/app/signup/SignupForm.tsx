@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Appearance } from "@/db/schema";
 import { STORY_PROMPT_MAX } from "@/lib/story/rules";
+import { EMAIL_MAX } from "@/lib/passwordReset";
 import { CLOTH_COLORS, HAIR_COLORS, HAIR_STYLES, SKIN_TONES, drawPreview, randomAppearance } from "@/game/lpc";
 
 // The look and name start random, picked by the server page (so the first
@@ -15,6 +16,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [hero, setHero] = useState("");
+  const [email, setEmail] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null);
   const frame = useRef(0);
   const [dir, setDir] = useState<"down" | "left" | "right" | "up">("down");
@@ -33,7 +35,7 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true); setErr("");
-    const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, name, appearance: a, hero }) });
+    const res = await fetch("/api/auth/signup", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, name, appearance: a, hero, email }) });
     const j = await res.json();
     if (!res.ok) { setErr(j.error ?? "Something went wrong"); setBusy(false); return; }
     location.href = "/";
@@ -65,6 +67,9 @@ export default function SignupForm({ initialLook, initialName }: { initialLook: 
                 <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username (login)" className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="username" />
                 <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password (8+)" minLength={8} className="rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" required autoComplete="new-password" />
               </div>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="email (optional, to recover your password)" maxLength={EMAIL_MAX} autoComplete="email"
+                className="mt-2 w-full rounded-lg border-2 border-amber-900/40 bg-white px-2 py-1.5" />
+              <p className="mt-1 text-[12px] text-stone-500">Only used to send you a reset link if you forget your password. Never shown to anyone.</p>
             </Section>
             <Section title="✨ Who is your hero? (optional)">
               <input value={hero} onChange={(e) => setHero(e.target.value)} maxLength={STORY_PROMPT_MAX} placeholder="e.g. a clumsy young wizard hiding from a famous family"

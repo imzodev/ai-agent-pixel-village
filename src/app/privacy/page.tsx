@@ -13,7 +13,7 @@ export default function PrivacyPage() {
 
       <h2>What we keep</h2>
       <ul>
-        <li><b>Your account:</b> your username and your password, stored only as a salted hash (we can&apos;t read it). We don&apos;t ask for your email or real name.</li>
+        <li><b>Your account:</b> your username and your password, stored only as a salted hash (we can&apos;t read it). We don&apos;t ask for your real name. You may leave an email when you create or save a character: it&apos;s only used to send you a password reset link when you ask for one, is never shown to other players, and you can ask us to remove it. Reset emails are sent through our email provider (Resend).</li>
         <li><b>Your game:</b> your character&apos;s name and look, where they are, what they own, their progress, friends, and the things you do in the world.</li>
         <li><b>What you write:</b> chat that other players see, and what you say to the villagers (NPCs). Chat is public in the world; reports about a player keep their recent chat so we can review it.</li>
         <li><b>Voice chat:</b> if you turn it on, your voice goes to the players near you and to friends in your voice party. It is never recorded or stored. We keep a short note of who was in voice with whom (for about 15 minutes, in memory only), so a report can say whether two players were really talking.</li>
