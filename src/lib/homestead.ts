@@ -33,8 +33,13 @@ export const STARTER: readonly ParcelCell[] = [
 export const PARCEL_PRICE = 2000;
 /** How many homesteads a player may hold. One for now; see canClaimHomestead. */
 export const MAX_HOMESTEADS = 1;
-/** Owners away this long lose their homestead (like lots). */
-export const HOMESTEAD_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
+/** Owners away this long lose what they got for free: their home, and a homestead they never bought land for. */
+export const INACTIVE_RELEASE_MS = 15 * 24 * 60 * 60 * 1000;
+
+/** A homestead holding any parcel past the free starter ones was paid for, so it's kept however long its owner is away. */
+export function isPaidFor(parcels: readonly ParcelCell[]): boolean {
+  return parcels.some((p) => !STARTER.some((s) => s.col === p.col && s.row === p.row));
+}
 
 /** Parcels you may hold, by level: [from level, cap]. */
 export const CAP_BY_LEVEL: readonly (readonly [number, number])[] = [

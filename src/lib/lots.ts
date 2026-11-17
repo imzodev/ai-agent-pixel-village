@@ -1,8 +1,8 @@
 // Lots: what a player can own. A home is a manifest cottage and its front
 // garden (one per player, free to move in); a homestead is a site of
 // parcels (src/lib/homestead.ts, claimed through homesteadServer.ts).
-// Releasing one (or 14 days without logging in) frees it and clears what
-// grew there.
+// Releasing one (or 15 days without logging in, unless it's a homestead
+// with bought land) frees it and clears what grew there.
 
 import type { BuildingManifestEntry } from "./buildingManifest";
 import { and, eq, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
@@ -17,9 +17,10 @@ import type { GardenPlot, GardenResult, LotKind, LotSnapshot } from "@/types/gar
 import { clearRanch, ranchLooks, returnShowroom } from "./ranchServer";
 import { clearParcels, homesteadPlots, parcelsByLot, syncHomesteadLots } from "./homesteadServer";
 import { siteByKey } from "./homesteadSites";
+import { INACTIVE_RELEASE_MS, isPaidFor } from "./homestead";
 
-/** Owners who haven't logged in for this long lose their lot. */
-export const LOT_INACTIVE_RELEASE_MS = 14 * 24 * 60 * 60 * 1000;
+/** Owners who haven't logged in for this long lose their lot, unless they paid for it (isPaidFor). */
+export const LOT_INACTIVE_RELEASE_MS = INACTIVE_RELEASE_MS;
 
 /**
  * Create / refresh one lot per reservable home in the manifest, and one per
@@ -201,16 +202,22 @@ export async function signPointsOfOwner(characterId: number): Promise<{ x: numbe
   return out;
 }
 
-/** Free lots whose owners haven't been seen for LOT_INACTIVE_RELEASE_MS. */
+/**
+ * Free lots whose owners haven't been seen for LOT_INACTIVE_RELEASE_MS: homes
+ * (always free to move into) and homesteads still on their free starter
+ * parcels. A homestead its owner bought land for is never taken.
+ */
 export async function releaseInactiveLots(now = Date.now()): Promise<number> {
   const cutoff = new Date(now - LOT_INACTIVE_RELEASE_MS);
   const stale = await db
-    .select({ id: lots.id })
+    .select({ id: lots.id, kind: lots.kind })
     .from(lots)
     .innerJoin(characters, eq(characters.id, lots.ownerId))
     .where(and(isNotNull(lots.ownerId), lt(characters.lastSeenAt, cutoff)));
-  for (const { id } of stale) await clearLot(id);
-  return stale.length;
+  const parcels = await parcelsByLot(stale.filter((l) => l.kind === "homestead").map((l) => l.id));
+  const free = stale.filter((l) => l.kind !== "homestead" || !isPaidFor(parcels.get(l.id) ?? []));
+  for (const { id } of free) await clearLot(id);
+  return free.length;
 }
 
 /** Create or update the `lots` row of a manifest entry; false when it isn't a lot (only reservable homes are). */

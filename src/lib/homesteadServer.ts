@@ -2,8 +2,8 @@
 // a `lots` row of kind "homestead" keyed by its site (homesteadSites.ts), so
 // everything that works on lots works on it: crops are its resource nodes
 // (plot = plotIndex(parcel, i)), animals carry its key as ranch_key, its
-// machines live in ranch_state, and the banner, cheers and the 14-day
-// release are the lots'. What's its own: the parcels (homestead_parcels)
+// machines live in ranch_state, and the banner, cheers and the 15-day
+// release are the lots' (a homestead with bought parcels is kept: isPaidFor). What's its own: the parcels (homestead_parcels)
 // and what each one is for.
 //
 // Sites open in blocks, nearest the village first: block 0 always, the next

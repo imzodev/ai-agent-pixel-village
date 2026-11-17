@@ -85,7 +85,7 @@ workshop lots are gone: everything they did is a homestead parcel now.
 - **A homestead is a `lots` row** (`kind: "homestead"`, key = its site key), so
   crops (`resource_nodes.lot_id`, `plot = plotIndex(parcel, i)`), animals
   (`animals.ranch_key`), growth (`ranch_state.lot_key`), banners, cheers and the
-  14-day inactivity release all work as for any lot. Its own table is
+  15-day inactivity release all work as for any lot (the release skips a homestead with any bought parcel: `isPaidFor`; homes and starter-only homesteads are freed). Its own table is
   `homestead_parcels` (lot, col, row, use).
 - **Rules** (`src/lib/homestead.ts`, pure, every number in one place): a 6×6
   grid of 10×10-tile parcels; the starter 2×2 is free (two fields, two

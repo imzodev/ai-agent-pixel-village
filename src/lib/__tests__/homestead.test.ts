@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   GRID, PARCEL_PRICE, PARCEL_TILES, STARTER, adjacent, buyableCells, canAddAnimal, canBuyParcel, canClaimHomestead,
   canSetUse, capFor, nextCapAt, onParcels, parcelAtTile, pens, plotCell, plotIndex,
-  plotOffsets, spaceFree, spaceTotal, changeCost,
+  plotOffsets, spaceFree, spaceTotal, changeCost, INACTIVE_RELEASE_MS, isPaidFor,
 } from "@/lib/homestead";
 import { PARCEL_USES } from "@/lib/homestead";
 import { CROP_KINDS, GARDEN_CROPS } from "@/lib/crops";
@@ -93,5 +93,14 @@ describe("homestead parcels", () => {
     const vines = Object.values(GARDEN_CROPS).filter((c) => c.grows?.includes("vineyard")).map((c) => CROP_KINDS[c.kind]);
     const vineH = Math.max(...vines.flatMap((c) => c.frames.map((f) => f.h)));
     for (const o of plotOffsets("vineyard")) expect(o.y - vineH, `vine at ${o.x},${o.y}`).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("inactive release", () => {
+  it("takes back free land after 15 days, never land that was bought", () => {
+    expect(INACTIVE_RELEASE_MS).toBe(15 * 24 * 60 * 60 * 1000);
+    expect(isPaidFor([])).toBe(false);
+    expect(isPaidFor(starter)).toBe(false);
+    expect(isPaidFor([...starter, p(2, 0)])).toBe(true);
   });
 });

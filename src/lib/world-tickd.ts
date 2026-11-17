@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   let inFlight: Promise<void> | null = null;
   let lastViewRefresh = 0;
 
-  // Free lots whose owners haven't logged in for 14 days (hourly check).
+  // Free lots whose owners haven't logged in for 15 days, unless they bought land there (hourly check).
   let lastLotSweep = 0;
   const maybeReleaseInactiveLots = async (): Promise<void> => {
     const now = Date.now();
